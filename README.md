@@ -25,7 +25,7 @@ _config.yml  crowdin.yml  docs  gulpfile.js  languages  layout  LICENSE.md  pack
 Install module to `source/lib` directory:
 
 ```sh
-$ git clone https://github.com/theme-next/theme-next-pdf source/lib/pdf
+$ git clone https://github.com/next-theme/theme-next-pdf source/lib/pdf
 ```
 
 <h2 align="center">Step 3 &rarr; Set it up</h2>
@@ -36,7 +36,7 @@ Enable module in **NexT** `_config.yml` file:
 # PDF tag
 # NexT will try to load pdf files natively, if failed, pdf.js will be used.
 # So, you have to install the dependency of pdf.js if you want to use pdf tag and make it available to all browsers.
-# See: https://github.com/theme-next/theme-next-pdf
+# See: https://github.com/next-theme/theme-next-pdf
 pdf:
   enable: true
   # Default height
