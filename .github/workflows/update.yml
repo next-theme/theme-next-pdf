@@ -1,0 +1,36 @@
+name: Update
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
+        with:
+          path: pdf.js
+          repository: mozilla/pdf.js
+      - name: Use Node.js
+        uses: actions/setup-node@v2
+      - name: Build
+        run: |
+          cd pdf.js
+          npm install
+          npx gulp publish
+          cd ..
+          cp -r pdf.js/build/generic/* .
+      - name: Config
+        run: |
+          git config --global user.name 'Mimi'
+          git config --global user.email 'stevenjoezhang@users.noreply.github.com'
+      - name: Commit
+        run: |
+          git add .
+          git commit -m 'Update pdf.js'
+      - name: Push
+        run: |
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+          git push
