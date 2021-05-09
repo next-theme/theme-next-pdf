@@ -179,7 +179,7 @@ const defaultOptions = {
   },
   enableXfa: {
     value: false,
-    kind: OptionKind.API
+    kind: OptionKind.API + OptionKind.PREFERENCE
   },
   fontExtraProperties: {
     value: false,
@@ -1587,7 +1587,7 @@ const PDFViewerApplication = {
     }
 
     if (info.IsXFAPresent && !info.IsAcroFormPresent && !pdfDocument.isPureXfa) {
-      console.warn("Warning: XFA is not supported");
+      console.warn("Warning: XFA is not enabled");
       this.fallback(_pdfjsLib.UNSUPPORTED_FEATURES.forms);
     } else if ((info.IsAcroFormPresent || info.IsXFAPresent) && !this.pdfViewer.renderInteractiveForms) {
       console.warn("Warning: Interactive form support is not enabled");
@@ -8284,6 +8284,7 @@ class PDFScriptingManager {
     const isInPresentationMode = this._pdfViewer.isInPresentationMode || this._pdfViewer.isChangingPresentationMode;
     const {
       id,
+      siblings,
       command,
       value
     } = detail;
@@ -8337,15 +8338,19 @@ class PDFScriptingManager {
       }
     }
 
-    const element = document.getElementById(id);
+    delete detail.id;
+    const ids = siblings ? [id, ...siblings] : [id];
 
-    if (element) {
-      element.dispatchEvent(new CustomEvent("updatefromsandbox", {
-        detail
-      }));
-    } else {
-      delete detail.id;
-      this._pdfDocument?.annotationStorage.setValue(id, detail);
+    for (const elementId of ids) {
+      const element = document.getElementById(elementId);
+
+      if (element) {
+        element.dispatchEvent(new CustomEvent("updatefromsandbox", {
+          detail
+        }));
+      } else {
+        this._pdfDocument?.annotationStorage.setValue(elementId, detail);
+      }
     }
   }
 
@@ -9870,7 +9875,7 @@ class BaseViewer {
       throw new Error("Cannot initialize BaseViewer.");
     }
 
-    const viewerVersion = '2.9.193';
+    const viewerVersion = '2.9.0';
 
     if (_pdfjsLib.version !== viewerVersion) {
       throw new Error(`The API version "${_pdfjsLib.version}" does not match the Viewer version "${viewerVersion}".`);
@@ -13639,7 +13644,8 @@ class BasePreferences {
         "disableAutoFetch": false,
         "disableFontFace": false,
         "disableRange": false,
-        "disableStream": false
+        "disableStream": false,
+        "enableXfa": false
       }),
       writable: false,
       enumerable: true,
@@ -15113,8 +15119,8 @@ var _app_options = __webpack_require__(1);
 
 var _app = __webpack_require__(3);
 
-const pdfjsVersion = '2.9.193';
-const pdfjsBuild = '3f187c2c6';
+const pdfjsVersion = '2.9.0';
+const pdfjsBuild = 'a6f324d';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
