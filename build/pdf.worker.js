@@ -1655,20 +1655,21 @@ exports.EOF = EOF;
 const Name = function NameClosure() {
   let nameCache = Object.create(null);
 
-  function Name(name) {
-    this.name = name;
+  class Name {
+    constructor(name) {
+      this.name = name;
+    }
+
+    static get(name) {
+      const nameValue = nameCache[name];
+      return nameValue ? nameValue : nameCache[name] = new Name(name);
+    }
+
+    static _clearCache() {
+      nameCache = Object.create(null);
+    }
+
   }
-
-  Name.prototype = {};
-
-  Name.get = function Name_get(name) {
-    const nameValue = nameCache[name];
-    return nameValue ? nameValue : nameCache[name] = new Name(name);
-  };
-
-  Name._clearCache = function () {
-    nameCache = Object.create(null);
-  };
 
   return Name;
 }();
@@ -1678,32 +1679,33 @@ exports.Name = Name;
 const Cmd = function CmdClosure() {
   let cmdCache = Object.create(null);
 
-  function Cmd(cmd) {
-    this.cmd = cmd;
+  class Cmd {
+    constructor(cmd) {
+      this.cmd = cmd;
+    }
+
+    static get(cmd) {
+      const cmdValue = cmdCache[cmd];
+      return cmdValue ? cmdValue : cmdCache[cmd] = new Cmd(cmd);
+    }
+
+    static _clearCache() {
+      cmdCache = Object.create(null);
+    }
+
   }
-
-  Cmd.prototype = {};
-
-  Cmd.get = function Cmd_get(cmd) {
-    const cmdValue = cmdCache[cmd];
-    return cmdValue ? cmdValue : cmdCache[cmd] = new Cmd(cmd);
-  };
-
-  Cmd._clearCache = function () {
-    cmdCache = Object.create(null);
-  };
 
   return Cmd;
 }();
 
 exports.Cmd = Cmd;
 
-const Dict = function DictClosure() {
-  const nonSerializable = function nonSerializableClosure() {
-    return nonSerializable;
-  };
+const nonSerializable = function nonSerializableClosure() {
+  return nonSerializable;
+};
 
-  function Dict(xref) {
+class Dict {
+  constructor(xref = null) {
     this._map = Object.create(null);
     this.xref = xref;
     this.objId = null;
@@ -1711,104 +1713,115 @@ const Dict = function DictClosure() {
     this.__nonSerializable__ = nonSerializable;
   }
 
-  Dict.prototype = {
-    assignXref: function Dict_assignXref(newXref) {
-      this.xref = newXref;
-    },
+  assignXref(newXref) {
+    this.xref = newXref;
+  }
 
-    get size() {
-      return Object.keys(this._map).length;
-    },
+  get size() {
+    return Object.keys(this._map).length;
+  }
 
-    get(key1, key2, key3) {
-      let value = this._map[key1];
+  get(key1, key2, key3) {
+    let value = this._map[key1];
 
-      if (value === undefined && key2 !== undefined) {
-        value = this._map[key2];
+    if (value === undefined && key2 !== undefined) {
+      value = this._map[key2];
 
-        if (value === undefined && key3 !== undefined) {
-          value = this._map[key3];
-        }
+      if (value === undefined && key3 !== undefined) {
+        value = this._map[key3];
       }
+    }
 
-      if (value instanceof Ref && this.xref) {
-        return this.xref.fetch(value, this.suppressEncryption);
+    if (value instanceof Ref && this.xref) {
+      return this.xref.fetch(value, this.suppressEncryption);
+    }
+
+    return value;
+  }
+
+  async getAsync(key1, key2, key3) {
+    let value = this._map[key1];
+
+    if (value === undefined && key2 !== undefined) {
+      value = this._map[key2];
+
+      if (value === undefined && key3 !== undefined) {
+        value = this._map[key3];
       }
+    }
 
-      return value;
-    },
+    if (value instanceof Ref && this.xref) {
+      return this.xref.fetchAsync(value, this.suppressEncryption);
+    }
 
-    async getAsync(key1, key2, key3) {
-      let value = this._map[key1];
+    return value;
+  }
 
-      if (value === undefined && key2 !== undefined) {
-        value = this._map[key2];
+  getArray(key1, key2, key3) {
+    let value = this._map[key1];
 
-        if (value === undefined && key3 !== undefined) {
-          value = this._map[key3];
-        }
+    if (value === undefined && key2 !== undefined) {
+      value = this._map[key2];
+
+      if (value === undefined && key3 !== undefined) {
+        value = this._map[key3];
       }
+    }
 
-      if (value instanceof Ref && this.xref) {
-        return this.xref.fetchAsync(value, this.suppressEncryption);
-      }
+    if (value instanceof Ref && this.xref) {
+      value = this.xref.fetch(value, this.suppressEncryption);
+    }
 
-      return value;
-    },
-
-    getArray(key1, key2, key3) {
-      let value = this.get(key1, key2, key3);
-
-      if (!Array.isArray(value) || !this.xref) {
-        return value;
-      }
-
+    if (Array.isArray(value)) {
       value = value.slice();
 
       for (let i = 0, ii = value.length; i < ii; i++) {
-        if (!(value[i] instanceof Ref)) {
-          continue;
+        if (value[i] instanceof Ref && this.xref) {
+          value[i] = this.xref.fetch(value[i], this.suppressEncryption);
         }
-
-        value[i] = this.xref.fetch(value[i], this.suppressEncryption);
-      }
-
-      return value;
-    },
-
-    getRaw: function Dict_getRaw(key) {
-      return this._map[key];
-    },
-    getKeys: function Dict_getKeys() {
-      return Object.keys(this._map);
-    },
-    getRawValues: function Dict_getRawValues() {
-      return Object.values(this._map);
-    },
-    set: function Dict_set(key, value) {
-      this._map[key] = value;
-    },
-    has: function Dict_has(key) {
-      return this._map[key] !== undefined;
-    },
-    forEach: function Dict_forEach(callback) {
-      for (const key in this._map) {
-        callback(key, this.get(key));
       }
     }
-  };
 
-  Dict.empty = function () {
+    return value;
+  }
+
+  getRaw(key) {
+    return this._map[key];
+  }
+
+  getKeys() {
+    return Object.keys(this._map);
+  }
+
+  getRawValues() {
+    return Object.values(this._map);
+  }
+
+  set(key, value) {
+    this._map[key] = value;
+  }
+
+  has(key) {
+    return this._map[key] !== undefined;
+  }
+
+  forEach(callback) {
+    for (const key in this._map) {
+      callback(key, this.get(key));
+    }
+  }
+
+  static get empty() {
     const emptyDict = new Dict(null);
 
     emptyDict.set = (key, value) => {
       (0, _util.unreachable)("Should not call `set` on the empty dictionary.");
     };
 
-    return emptyDict;
-  }();
+    return (0, _util.shadow)(this, "empty", emptyDict);
+  }
 
-  Dict.merge = function ({
+  static merge({
     xref,
     dictArray,
     mergeSubDicts = false
@@ -1877,40 +1890,40 @@ const Dict = function DictClosure() {
 
     properties.clear();
     return mergedDict.size > 0 ? mergedDict : Dict.empty;
-  };
+  }
 
-  return Dict;
-}();
+}
 
 exports.Dict = Dict;
 
 const Ref = function RefClosure() {
   let refCache = Object.create(null);
 
-  function Ref(num, gen) {
-    this.num = num;
-    this.gen = gen;
-  }
+  class Ref {
+    constructor(num, gen) {
+      this.num = num;
+      this.gen = gen;
+    }
 
-  Ref.prototype = {
-    toString: function Ref_toString() {
+    toString() {
       if (this.gen === 0) {
         return `${this.num}R`;
       }
 
       return `${this.num}R${this.gen}`;
     }
-  };
 
-  Ref.get = function (num, gen) {
-    const key = gen === 0 ? `${num}R` : `${num}R${gen}`;
-    const refValue = refCache[key];
-    return refValue ? refValue : refCache[key] = new Ref(num, gen);
-  };
+    static get(num, gen) {
+      const key = gen === 0 ? `${num}R` : `${num}R${gen}`;
+      const refValue = refCache[key];
+      return refValue ? refValue : refCache[key] = new Ref(num, gen);
+    }
 
-  Ref._clearCache = function () {
-    refCache = Object.create(null);
-  };
+    static _clearCache() {
+      refCache = Object.create(null);
+    }
+
+  }
 
   return Ref;
 }();
@@ -3436,6 +3449,8 @@ var _stream = __w_pdfjs_require__(10);
 
 var _annotation = __w_pdfjs_require__(12);
 
+var _base_stream = __w_pdfjs_require__(6);
+
 var _crypto = __w_pdfjs_require__(65);
 
 var _catalog = __w_pdfjs_require__(57);
@@ -3527,7 +3542,7 @@ class Page {
   }
 
   get content() {
-    return this.pageDict.get("Contents");
+    return this.pageDict.getArray("Contents");
   }
 
   get resources() {
@@ -3611,25 +3626,17 @@ class Page {
   }
 
   getContentStream() {
-    const content = this.content;
-    let stream;
-
-    if (Array.isArray(content)) {
-      const xref = this.xref;
-      const streams = [];
-
-      for (const subStream of content) {
-        streams.push(xref.fetchIfRef(subStream));
+    return this.pdfManager.ensure(this, "content").then(content => {
+      if (content instanceof _base_stream.BaseStream) {
+        return content;
       }
 
-      stream = new _decode_stream.StreamsSequenceStream(streams);
-    } else if ((0, _primitives.isStream)(content)) {
-      stream = content;
-    } else {
-      stream = new _stream.NullStream();
-    }
+      if (Array.isArray(content)) {
+        return new _decode_stream.StreamsSequenceStream(content);
+      }
 
-    return stream;
+      return new _stream.NullStream();
+    });
   }
 
   get xfaData() {
@@ -3688,7 +3695,7 @@ class Page {
     renderInteractiveForms,
     annotationStorage
   }) {
-    const contentStreamPromise = this.pdfManager.ensure(this, "getContentStream");
+    const contentStreamPromise = this.getContentStream();
     const resourcesPromise = this.loadResources(["ColorSpace", "ExtGState", "Font", "Pattern", "Properties", "Shading", "XObject"]);
     const partialEvaluator = new _evaluator.PartialEvaluator({
       xref: this.xref,
@@ -3760,7 +3767,7 @@ class Page {
     sink,
     combineTextItems
   }) {
-    const contentStreamPromise = this.pdfManager.ensure(this, "getContentStream");
+    const contentStreamPromise = this.getContentStream();
     const resourcesPromise = this.loadResources(["ExtGState", "Font", "Properties", "XObject"]);
     const dataPromises = Promise.all([contentStreamPromise, resourcesPromise]);
     return dataPromises.then(([contentStream]) => {
@@ -8368,8 +8375,7 @@ class PartialEvaluator {
       bbox = null;
     }
 
-    let optionalContent = null,
-        groupOptions = null;
+    let optionalContent = null;
 
     if (dict.has("OC")) {
       optionalContent = await this.parseMarkedContentProps(dict.get("OC"), resources);
@@ -8379,7 +8385,7 @@ class PartialEvaluator {
     const group = dict.get("Group");
 
     if (group) {
-      groupOptions = {
+      var groupOptions = {
         matrix,
         bbox,
         smask,
@@ -9282,7 +9288,7 @@ class PartialEvaluator {
       task.ensureNotTerminated();
       timeSlotManager.reset();
       const operation = {};
-      let stop, i, ii, cs;
+      let stop, i, ii, cs, name;
 
       while (!(stop = timeSlotManager.check())) {
         operation.args = null;
@@ -9296,108 +9302,104 @@ class PartialEvaluator {
 
         switch (fn | 0) {
           case _util.OPS.paintXObject:
-            {
-              const name = args[0].name;
+            name = args[0].name;
 
-              if (name) {
-                const localImage = localImageCache.getByName(name);
+            if (name) {
+              const localImage = localImageCache.getByName(name);
+
+              if (localImage) {
+                operatorList.addOp(localImage.fn, localImage.args);
+                args = null;
+                continue;
+              }
+            }
+
+            next(new Promise(function (resolveXObject, rejectXObject) {
+              if (!name) {
+                throw new _util.FormatError("XObject must be referred to by name.");
+              }
+
+              let xobj = xobjs.getRaw(name);
+
+              if (xobj instanceof _primitives.Ref) {
+                const localImage = localImageCache.getByRef(xobj);
 
                 if (localImage) {
                   operatorList.addOp(localImage.fn, localImage.args);
-                  args = null;
-                  continue;
+                  resolveXObject();
+                  return;
                 }
+
+                const globalImage = self.globalImageCache.getData(xobj, self.pageIndex);
+
+                if (globalImage) {
+                  operatorList.addDependency(globalImage.objId);
+                  operatorList.addOp(globalImage.fn, globalImage.args);
+                  resolveXObject();
+                  return;
+                }
+
+                xobj = xref.fetch(xobj);
               }
 
-              next(new Promise(function (resolveXObject, rejectXObject) {
-                if (!name) {
-                  throw new _util.FormatError("XObject must be referred to by name.");
-                }
+              if (!(0, _primitives.isStream)(xobj)) {
+                throw new _util.FormatError("XObject should be a stream");
+              }
 
-                let xobj = xobjs.getRaw(name);
+              const type = xobj.dict.get("Subtype");
 
-                if (xobj instanceof _primitives.Ref) {
-                  const localImage = localImageCache.getByRef(xobj);
+              if (!(0, _primitives.isName)(type)) {
+                throw new _util.FormatError("XObject should have a Name subtype");
+              }
 
-                  if (localImage) {
-                    operatorList.addOp(localImage.fn, localImage.args);
-                    resolveXObject();
-                    return;
-                  }
+              if (type.name === "Form") {
+                stateManager.save();
+                self.buildFormXObject(resources, xobj, null, operatorList, task, stateManager.state.clone(), localColorSpaceCache).then(function () {
+                  stateManager.restore();
+                  resolveXObject();
+                }, rejectXObject);
+                return;
+              } else if (type.name === "Image") {
+                self.buildPaintImageXObject({
+                  resources,
+                  image: xobj,
+                  operatorList,
+                  cacheKey: name,
+                  localImageCache,
+                  localColorSpaceCache
+                }).then(resolveXObject, rejectXObject);
+                return;
+              } else if (type.name === "PS") {
+                (0, _util.info)("Ignored XObject subtype PS");
+              } else {
+                throw new _util.FormatError(`Unhandled XObject subtype ${type.name}`);
+              }
 
-                  const globalImage = self.globalImageCache.getData(xobj, self.pageIndex);
+              resolveXObject();
+            }).catch(function (reason) {
+              if (reason instanceof _util.AbortException) {
+                return;
+              }
 
-                  if (globalImage) {
-                    operatorList.addDependency(globalImage.objId);
-                    operatorList.addOp(globalImage.fn, globalImage.args);
-                    resolveXObject();
-                    return;
-                  }
+              if (self.options.ignoreErrors) {
+                self.handler.send("UnsupportedFeature", {
+                  featureId: _util.UNSUPPORTED_FEATURES.errorXObject
+                });
+                (0, _util.warn)(`getOperatorList - ignoring XObject: "${reason}".`);
+                return;
+              }
 
-                  xobj = xref.fetch(xobj);
-                }
-
-                if (!(0, _primitives.isStream)(xobj)) {
-                  throw new _util.FormatError("XObject should be a stream");
-                }
-
-                const type = xobj.dict.get("Subtype");
-
-                if (!(0, _primitives.isName)(type)) {
-                  throw new _util.FormatError("XObject should have a Name subtype");
-                }
-
-                if (type.name === "Form") {
-                  stateManager.save();
-                  self.buildFormXObject(resources, xobj, null, operatorList, task, stateManager.state.clone(), localColorSpaceCache).then(function () {
-                    stateManager.restore();
-                    resolveXObject();
-                  }, rejectXObject);
-                  return;
-                } else if (type.name === "Image") {
-                  self.buildPaintImageXObject({
-                    resources,
-                    image: xobj,
-                    operatorList,
-                    cacheKey: name,
-                    localImageCache,
-                    localColorSpaceCache
-                  }).then(resolveXObject, rejectXObject);
-                  return;
-                } else if (type.name === "PS") {
-                  (0, _util.info)("Ignored XObject subtype PS");
-                } else {
-                  throw new _util.FormatError(`Unhandled XObject subtype ${type.name}`);
-                }
-
-                resolveXObject();
-              }).catch(function (reason) {
-                if (reason instanceof _util.AbortException) {
-                  return;
-                }
-
-                if (self.options.ignoreErrors) {
-                  self.handler.send("UnsupportedFeature", {
-                    featureId: _util.UNSUPPORTED_FEATURES.errorXObject
-                  });
-                  (0, _util.warn)(`getOperatorList - ignoring XObject: "${reason}".`);
-                  return;
-                }
-
-                throw reason;
-              }));
-              return;
-            }
+              throw reason;
+            }));
+            return;
 
           case _util.OPS.setFont:
-            {
-              const fontSize = args[1];
-              next(self.handleSetFont(resources, args, null, operatorList, task, stateManager.state, fallbackFontDict).then(function (loadedName) {
-                operatorList.addDependency(loadedName);
-                operatorList.addOp(_util.OPS.setFont, [loadedName, fontSize]);
-              }));
-              return;
-            }
+            var fontSize = args[1];
+            next(self.handleSetFont(resources, args, null, operatorList, task, stateManager.state, fallbackFontDict).then(function (loadedName) {
+              operatorList.addDependency(loadedName);
+              operatorList.addOp(_util.OPS.setFont, [loadedName, fontSize]);
+            }));
+            return;
 
           case _util.OPS.beginText:
             parsingText = true;
@@ -9408,30 +9410,28 @@ class PartialEvaluator {
             break;
 
           case _util.OPS.endInlineImage:
-            {
-              const cacheKey = args[0].cacheKey;
+            var cacheKey = args[0].cacheKey;
 
-              if (cacheKey) {
-                const localImage = localImageCache.getByName(cacheKey);
+            if (cacheKey) {
+              const localImage = localImageCache.getByName(cacheKey);
 
-                if (localImage) {
-                  operatorList.addOp(localImage.fn, localImage.args);
-                  args = null;
-                  continue;
-                }
+              if (localImage) {
+                operatorList.addOp(localImage.fn, localImage.args);
+                args = null;
+                continue;
               }
-
-              next(self.buildPaintImageXObject({
-                resources,
-                image: args[0],
-                isInline: true,
-                operatorList,
-                cacheKey,
-                localImageCache,
-                localColorSpaceCache
-              }));
-              return;
             }
+
+            next(self.buildPaintImageXObject({
+              resources,
+              image: args[0],
+              isInline: true,
+              operatorList,
+              cacheKey,
+              localImageCache,
+              localColorSpaceCache
+            }));
+            return;
 
           case _util.OPS.showText:
             if (!stateManager.state.font) {
@@ -9448,10 +9448,10 @@ class PartialEvaluator {
               continue;
             }
 
-            const arr = args[0],
-                  arrLength = arr.length,
-                  combinedGlyphs = [],
-                  state = stateManager.state;
+            var arr = args[0];
+            var combinedGlyphs = [];
+            var arrLength = arr.length;
+            var state = stateManager.state;
 
             for (i = 0; i < arrLength; ++i) {
               const arrItem = arr[i];
@@ -9608,88 +9608,84 @@ class PartialEvaluator {
             break;
 
           case _util.OPS.shadingFill:
-            {
-              const shadingRes = resources.get("Shading");
+            var shadingRes = resources.get("Shading");
 
-              if (!shadingRes) {
-                throw new _util.FormatError("No shading resource found");
-              }
-
-              const shading = shadingRes.get(args[0].name);
-
-              if (!shading) {
-                throw new _util.FormatError("No shading object found");
-              }
-
-              const shadingFill = _pattern.Pattern.parseShading(shading, null, xref, resources, self.handler, self._pdfFunctionFactory, localColorSpaceCache);
-
-              const patternIR = shadingFill.getIR();
-              args = [patternIR];
-              fn = _util.OPS.shadingFill;
-              break;
+            if (!shadingRes) {
+              throw new _util.FormatError("No shading resource found");
             }
+
+            var shading = shadingRes.get(args[0].name);
+
+            if (!shading) {
+              throw new _util.FormatError("No shading object found");
+            }
+
+            var shadingFill = _pattern.Pattern.parseShading(shading, null, xref, resources, self.handler, self._pdfFunctionFactory, localColorSpaceCache);
+
+            var patternIR = shadingFill.getIR();
+            args = [patternIR];
+            fn = _util.OPS.shadingFill;
+            break;
 
           case _util.OPS.setGState:
-            {
-              const name = args[0].name;
+            name = args[0].name;
 
-              if (name) {
-                const localGStateObj = localGStateCache.getByName(name);
+            if (name) {
+              const localGStateObj = localGStateCache.getByName(name);
 
-                if (localGStateObj) {
-                  if (localGStateObj.length > 0) {
-                    operatorList.addOp(_util.OPS.setGState, [localGStateObj]);
-                  }
-
-                  args = null;
-                  continue;
+              if (localGStateObj) {
+                if (localGStateObj.length > 0) {
+                  operatorList.addOp(_util.OPS.setGState, [localGStateObj]);
                 }
+
+                args = null;
+                continue;
+              }
+            }
+
+            next(new Promise(function (resolveGState, rejectGState) {
+              if (!name) {
+                throw new _util.FormatError("GState must be referred to by name.");
               }
 
-              next(new Promise(function (resolveGState, rejectGState) {
-                if (!name) {
-                  throw new _util.FormatError("GState must be referred to by name.");
-                }
+              const extGState = resources.get("ExtGState");
 
-                const extGState = resources.get("ExtGState");
+              if (!(extGState instanceof _primitives.Dict)) {
+                throw new _util.FormatError("ExtGState should be a dictionary.");
+              }
 
-                if (!(extGState instanceof _primitives.Dict)) {
-                  throw new _util.FormatError("ExtGState should be a dictionary.");
-                }
+              const gState = extGState.get(name);
 
-                const gState = extGState.get(name);
+              if (!(gState instanceof _primitives.Dict)) {
+                throw new _util.FormatError("GState should be a dictionary.");
+              }
 
-                if (!(gState instanceof _primitives.Dict)) {
-                  throw new _util.FormatError("GState should be a dictionary.");
-                }
+              self.setGState({
+                resources,
+                gState,
+                operatorList,
+                cacheKey: name,
+                task,
+                stateManager,
+                localGStateCache,
+                localColorSpaceCache
+              }).then(resolveGState, rejectGState);
+            }).catch(function (reason) {
+              if (reason instanceof _util.AbortException) {
+                return;
+              }
 
-                self.setGState({
-                  resources,
-                  gState,
-                  operatorList,
-                  cacheKey: name,
-                  task,
-                  stateManager,
-                  localGStateCache,
-                  localColorSpaceCache
-                }).then(resolveGState, rejectGState);
-              }).catch(function (reason) {
-                if (reason instanceof _util.AbortException) {
-                  return;
-                }
+              if (self.options.ignoreErrors) {
+                self.handler.send("UnsupportedFeature", {
+                  featureId: _util.UNSUPPORTED_FEATURES.errorExtGState
+                });
+                (0, _util.warn)(`getOperatorList - ignoring ExtGState: "${reason}".`);
+                return;
+              }
 
-                if (self.options.ignoreErrors) {
-                  self.handler.send("UnsupportedFeature", {
-                    featureId: _util.UNSUPPORTED_FEATURES.errorExtGState
-                  });
-                  (0, _util.warn)(`getOperatorList - ignoring ExtGState: "${reason}".`);
-                  return;
-                }
-
-                throw reason;
-              }));
-              return;
-            }
+              throw reason;
+            }));
+            return;
 
           case _util.OPS.moveTo:
           case _util.OPS.lineTo:
@@ -10257,20 +10253,18 @@ class PartialEvaluator {
 
         switch (fn | 0) {
           case _util.OPS.setFont:
-            {
-              const fontNameArg = args[0].name,
-                    fontSizeArg = args[1];
+            var fontNameArg = args[0].name,
+                fontSizeArg = args[1];
 
-              if (textState.font && fontNameArg === textState.fontName && fontSizeArg === textState.fontSize) {
-                break;
-              }
-
-              flushTextContentItem();
-              textState.fontName = fontNameArg;
-              textState.fontSize = fontSizeArg;
-              next(handleSetFont(fontNameArg, null));
-              return;
+            if (textState.font && fontNameArg === textState.fontName && fontSizeArg === textState.fontSize) {
+              break;
             }
+
+            flushTextContentItem();
+            textState.fontName = fontNameArg;
+            textState.fontSize = fontSizeArg;
+            next(handleSetFont(fontNameArg, null));
+            return;
 
           case _util.OPS.setTextRise:
             flushTextContentItem();
@@ -10420,167 +10414,163 @@ class PartialEvaluator {
             break;
 
           case _util.OPS.paintXObject:
-            {
-              flushTextContentItem();
+            flushTextContentItem();
 
-              if (!xobjs) {
-                xobjs = resources.get("XObject") || _primitives.Dict.empty;
-              }
-
-              const name = args[0].name;
-
-              if (name && emptyXObjectCache.getByName(name)) {
-                break;
-              }
-
-              next(new Promise(function (resolveXObject, rejectXObject) {
-                if (!name) {
-                  throw new _util.FormatError("XObject must be referred to by name.");
-                }
-
-                let xobj = xobjs.getRaw(name);
-
-                if (xobj instanceof _primitives.Ref) {
-                  if (emptyXObjectCache.getByRef(xobj)) {
-                    resolveXObject();
-                    return;
-                  }
-
-                  const globalImage = self.globalImageCache.getData(xobj, self.pageIndex);
-
-                  if (globalImage) {
-                    resolveXObject();
-                    return;
-                  }
-
-                  xobj = xref.fetch(xobj);
-                }
-
-                if (!(0, _primitives.isStream)(xobj)) {
-                  throw new _util.FormatError("XObject should be a stream");
-                }
-
-                const type = xobj.dict.get("Subtype");
-
-                if (!(0, _primitives.isName)(type)) {
-                  throw new _util.FormatError("XObject should have a Name subtype");
-                }
-
-                if (type.name !== "Form") {
-                  emptyXObjectCache.set(name, xobj.dict.objId, true);
-                  resolveXObject();
-                  return;
-                }
-
-                const currentState = stateManager.state.clone();
-                const xObjStateManager = new StateManager(currentState);
-                const matrix = xobj.dict.getArray("Matrix");
-
-                if (Array.isArray(matrix) && matrix.length === 6) {
-                  xObjStateManager.transform(matrix);
-                }
-
-                enqueueChunk();
-                const sinkWrapper = {
-                  enqueueInvoked: false,
-
-                  enqueue(chunk, size) {
-                    this.enqueueInvoked = true;
-                    sink.enqueue(chunk, size);
-                  },
-
-                  get desiredSize() {
-                    return sink.desiredSize;
-                  },
-
-                  get ready() {
-                    return sink.ready;
-                  }
-
-                };
-                self.getTextContent({
-                  stream: xobj,
-                  task,
-                  resources: xobj.dict.get("Resources") || resources,
-                  stateManager: xObjStateManager,
-                  normalizeWhitespace,
-                  combineTextItems,
-                  includeMarkedContent,
-                  sink: sinkWrapper,
-                  seenStyles
-                }).then(function () {
-                  if (!sinkWrapper.enqueueInvoked) {
-                    emptyXObjectCache.set(name, xobj.dict.objId, true);
-                  }
-
-                  resolveXObject();
-                }, rejectXObject);
-              }).catch(function (reason) {
-                if (reason instanceof _util.AbortException) {
-                  return;
-                }
-
-                if (self.options.ignoreErrors) {
-                  (0, _util.warn)(`getTextContent - ignoring XObject: "${reason}".`);
-                  return;
-                }
-
-                throw reason;
-              }));
-              return;
+            if (!xobjs) {
+              xobjs = resources.get("XObject") || _primitives.Dict.empty;
             }
+
+            var name = args[0].name;
+
+            if (name && emptyXObjectCache.getByName(name)) {
+              break;
+            }
+
+            next(new Promise(function (resolveXObject, rejectXObject) {
+              if (!name) {
+                throw new _util.FormatError("XObject must be referred to by name.");
+              }
+
+              let xobj = xobjs.getRaw(name);
+
+              if (xobj instanceof _primitives.Ref) {
+                if (emptyXObjectCache.getByRef(xobj)) {
+                  resolveXObject();
+                  return;
+                }
+
+                const globalImage = self.globalImageCache.getData(xobj, self.pageIndex);
+
+                if (globalImage) {
+                  resolveXObject();
+                  return;
+                }
+
+                xobj = xref.fetch(xobj);
+              }
+
+              if (!(0, _primitives.isStream)(xobj)) {
+                throw new _util.FormatError("XObject should be a stream");
+              }
+
+              const type = xobj.dict.get("Subtype");
+
+              if (!(0, _primitives.isName)(type)) {
+                throw new _util.FormatError("XObject should have a Name subtype");
+              }
+
+              if (type.name !== "Form") {
+                emptyXObjectCache.set(name, xobj.dict.objId, true);
+                resolveXObject();
+                return;
+              }
+
+              const currentState = stateManager.state.clone();
+              const xObjStateManager = new StateManager(currentState);
+              const matrix = xobj.dict.getArray("Matrix");
+
+              if (Array.isArray(matrix) && matrix.length === 6) {
+                xObjStateManager.transform(matrix);
+              }
+
+              enqueueChunk();
+              const sinkWrapper = {
+                enqueueInvoked: false,
+
+                enqueue(chunk, size) {
+                  this.enqueueInvoked = true;
+                  sink.enqueue(chunk, size);
+                },
+
+                get desiredSize() {
+                  return sink.desiredSize;
+                },
+
+                get ready() {
+                  return sink.ready;
+                }
+
+              };
+              self.getTextContent({
+                stream: xobj,
+                task,
+                resources: xobj.dict.get("Resources") || resources,
+                stateManager: xObjStateManager,
+                normalizeWhitespace,
+                combineTextItems,
+                includeMarkedContent,
+                sink: sinkWrapper,
+                seenStyles
+              }).then(function () {
+                if (!sinkWrapper.enqueueInvoked) {
+                  emptyXObjectCache.set(name, xobj.dict.objId, true);
+                }
+
+                resolveXObject();
+              }, rejectXObject);
+            }).catch(function (reason) {
+              if (reason instanceof _util.AbortException) {
+                return;
+              }
+
+              if (self.options.ignoreErrors) {
+                (0, _util.warn)(`getTextContent - ignoring XObject: "${reason}".`);
+                return;
+              }
+
+              throw reason;
+            }));
+            return;
 
           case _util.OPS.setGState:
-            {
-              const name = args[0].name;
+            name = args[0].name;
 
-              if (name && emptyGStateCache.getByName(name)) {
-                break;
+            if (name && emptyGStateCache.getByName(name)) {
+              break;
+            }
+
+            next(new Promise(function (resolveGState, rejectGState) {
+              if (!name) {
+                throw new _util.FormatError("GState must be referred to by name.");
               }
 
-              next(new Promise(function (resolveGState, rejectGState) {
-                if (!name) {
-                  throw new _util.FormatError("GState must be referred to by name.");
-                }
+              const extGState = resources.get("ExtGState");
 
-                const extGState = resources.get("ExtGState");
+              if (!(extGState instanceof _primitives.Dict)) {
+                throw new _util.FormatError("ExtGState should be a dictionary.");
+              }
 
-                if (!(extGState instanceof _primitives.Dict)) {
-                  throw new _util.FormatError("ExtGState should be a dictionary.");
-                }
+              const gState = extGState.get(name);
 
-                const gState = extGState.get(name);
+              if (!(gState instanceof _primitives.Dict)) {
+                throw new _util.FormatError("GState should be a dictionary.");
+              }
 
-                if (!(gState instanceof _primitives.Dict)) {
-                  throw new _util.FormatError("GState should be a dictionary.");
-                }
+              const gStateFont = gState.get("Font");
 
-                const gStateFont = gState.get("Font");
+              if (!gStateFont) {
+                emptyGStateCache.set(name, gState.objId, true);
+                resolveGState();
+                return;
+              }
 
-                if (!gStateFont) {
-                  emptyGStateCache.set(name, gState.objId, true);
-                  resolveGState();
-                  return;
-                }
+              flushTextContentItem();
+              textState.fontName = null;
+              textState.fontSize = gStateFont[1];
+              handleSetFont(null, gStateFont[0]).then(resolveGState, rejectGState);
+            }).catch(function (reason) {
+              if (reason instanceof _util.AbortException) {
+                return;
+              }
 
-                flushTextContentItem();
-                textState.fontName = null;
-                textState.fontSize = gStateFont[1];
-                handleSetFont(null, gStateFont[0]).then(resolveGState, rejectGState);
-              }).catch(function (reason) {
-                if (reason instanceof _util.AbortException) {
-                  return;
-                }
+              if (self.options.ignoreErrors) {
+                (0, _util.warn)(`getTextContent - ignoring ExtGState: "${reason}".`);
+                return;
+              }
 
-                if (self.options.ignoreErrors) {
-                  (0, _util.warn)(`getTextContent - ignoring ExtGState: "${reason}".`);
-                  return;
-                }
-
-                throw reason;
-              }));
-              return;
-            }
+              throw reason;
+            }));
+            return;
 
           case _util.OPS.beginMarkedContent:
             if (includeMarkedContent) {
@@ -11369,7 +11359,7 @@ class PartialEvaluator {
       throw new _util.FormatError("invalid font name");
     }
 
-    let fontFile, subtype, length1, length2, length3;
+    let fontFile;
 
     try {
       fontFile = descriptor.get("FontFile", "FontFile2", "FontFile3");
@@ -11384,15 +11374,15 @@ class PartialEvaluator {
 
     if (fontFile) {
       if (fontFile.dict) {
-        const subtypeEntry = fontFile.dict.get("Subtype");
+        var subtype = fontFile.dict.get("Subtype");
 
-        if (subtypeEntry instanceof _primitives.Name) {
-          subtype = subtypeEntry.name;
+        if (subtype) {
+          subtype = subtype.name;
         }
 
-        length1 = fontFile.dict.get("Length1");
-        length2 = fontFile.dict.get("Length2");
-        length3 = fontFile.dict.get("Length3");
+        var length1 = fontFile.dict.get("Length1");
+        var length2 = fontFile.dict.get("Length2");
+        var length3 = fontFile.dict.get("Length3");
       }
     }
 
@@ -43068,18 +43058,12 @@ const ShadingType = {
   TENSOR_PATCH_MESH: 7
 };
 
-const Pattern = function PatternClosure() {
-  function Pattern() {
-    (0, _util.unreachable)("should not call Pattern constructor");
+class Pattern {
+  constructor() {
+    (0, _util.unreachable)("Cannot initialize Pattern.");
   }
 
-  Pattern.prototype = {
-    getPattern: function Pattern_getPattern(ctx) {
-      (0, _util.unreachable)(`Should not call Pattern.getStyle: ${ctx}`);
-    }
-  };
-
-  Pattern.parseShading = function (shading, matrix, xref, res, handler, pdfFunctionFactory, localColorSpaceCache) {
+  static parseShading(shading, matrix, xref, res, handler, pdfFunctionFactory, localColorSpaceCache) {
     const dict = (0, _primitives.isStream)(shading) ? shading.dict : shading;
     const type = dict.get("ShadingType");
 
@@ -43087,13 +43071,13 @@ const Pattern = function PatternClosure() {
       switch (type) {
         case ShadingType.AXIAL:
         case ShadingType.RADIAL:
-          return new Shadings.RadialAxial(dict, matrix, xref, res, pdfFunctionFactory, localColorSpaceCache);
+          return new RadialAxialShading(dict, matrix, xref, res, pdfFunctionFactory, localColorSpaceCache);
 
         case ShadingType.FREE_FORM_MESH:
         case ShadingType.LATTICE_FORM_MESH:
         case ShadingType.COONS_PATCH_MESH:
         case ShadingType.TENSOR_PATCH_MESH:
-          return new Shadings.Mesh(shading, matrix, xref, res, pdfFunctionFactory, localColorSpaceCache);
+          return new MeshShading(shading, matrix, xref, res, pdfFunctionFactory, localColorSpaceCache);
 
         default:
           throw new _util.FormatError("Unsupported ShadingType: " + type);
@@ -43107,23 +43091,37 @@ const Pattern = function PatternClosure() {
         featureId: _util.UNSUPPORTED_FEATURES.shadingPattern
       });
       (0, _util.warn)(ex);
-      return new Shadings.Dummy();
+      return new DummyShading();
     }
-  };
+  }
 
-  return Pattern;
-}();
+}
 
 exports.Pattern = Pattern;
-const Shadings = {};
-Shadings.SMALL_NUMBER = 1e-6;
 
-Shadings.RadialAxial = function RadialAxialClosure() {
-  function RadialAxial(dict, matrix, xref, resources, pdfFunctionFactory, localColorSpaceCache) {
+class BaseShading {
+  static get SMALL_NUMBER() {
+    return (0, _util.shadow)(this, "SMALL_NUMBER", 1e-6);
+  }
+
+  constructor() {
+    if (this.constructor === BaseShading) {
+      (0, _util.unreachable)("Cannot initialize BaseShading.");
+    }
+  }
+
+  getIR() {
+    (0, _util.unreachable)("Abstract method `getIR` called.");
+  }
+
+}
+
+class RadialAxialShading extends BaseShading {
+  constructor(dict, matrix, xref, resources, pdfFunctionFactory, localColorSpaceCache) {
+    super();
     this.matrix = matrix;
     this.coordsArr = dict.getArray("Coords");
     this.shadingType = dict.get("ShadingType");
-    this.type = "Pattern";
 
     const cs = _colorspace.ColorSpace.parse({
       cs: dict.getRaw("ColorSpace") || dict.getRaw("CS"),
@@ -43133,7 +43131,6 @@ Shadings.RadialAxial = function RadialAxialClosure() {
       localColorSpaceCache
     });
 
-    this.cs = cs;
     const bbox = dict.getArray("BBox");
 
     if (Array.isArray(bbox) && bbox.length === 4) {
@@ -43205,61 +43202,45 @@ Shadings.RadialAxial = function RadialAxialClosure() {
 
     if (!extendStart) {
       colorStops.unshift([0, background]);
-      colorStops[1][0] += Shadings.SMALL_NUMBER;
+      colorStops[1][0] += BaseShading.SMALL_NUMBER;
     }
 
     if (!extendEnd) {
-      colorStops[colorStops.length - 1][0] -= Shadings.SMALL_NUMBER;
+      colorStops[colorStops.length - 1][0] -= BaseShading.SMALL_NUMBER;
       colorStops.push([1, background]);
     }
 
     this.colorStops = colorStops;
   }
 
-  RadialAxial.prototype = {
-    getIR: function RadialAxial_getIR() {
-      const coordsArr = this.coordsArr;
-      const shadingType = this.shadingType;
-      let type, p0, p1, r0, r1;
+  getIR() {
+    const coordsArr = this.coordsArr;
+    const shadingType = this.shadingType;
+    let type, p0, p1, r0, r1;
 
-      if (shadingType === ShadingType.AXIAL) {
-        p0 = [coordsArr[0], coordsArr[1]];
-        p1 = [coordsArr[2], coordsArr[3]];
-        r0 = null;
-        r1 = null;
-        type = "axial";
-      } else if (shadingType === ShadingType.RADIAL) {
-        p0 = [coordsArr[0], coordsArr[1]];
-        p1 = [coordsArr[3], coordsArr[4]];
-        r0 = coordsArr[2];
-        r1 = coordsArr[5];
-        type = "radial";
-      } else {
-        (0, _util.unreachable)(`getPattern type unknown: ${shadingType}`);
-      }
-
-      const matrix = this.matrix;
-
-      if (matrix) {
-        p0 = _util.Util.applyTransform(p0, matrix);
-        p1 = _util.Util.applyTransform(p1, matrix);
-
-        if (shadingType === ShadingType.RADIAL) {
-          const scale = _util.Util.singularValueDecompose2dScale(matrix);
-
-          r0 *= scale[0];
-          r1 *= scale[1];
-        }
-      }
-
-      return ["RadialAxial", type, this.bbox, this.colorStops, p0, p1, r0, r1];
+    if (shadingType === ShadingType.AXIAL) {
+      p0 = [coordsArr[0], coordsArr[1]];
+      p1 = [coordsArr[2], coordsArr[3]];
+      r0 = null;
+      r1 = null;
+      type = "axial";
+    } else if (shadingType === ShadingType.RADIAL) {
+      p0 = [coordsArr[0], coordsArr[1]];
+      p1 = [coordsArr[3], coordsArr[4]];
+      r0 = coordsArr[2];
+      r1 = coordsArr[5];
+      type = "radial";
+    } else {
+      (0, _util.unreachable)(`getPattern type unknown: ${shadingType}`);
     }
-  };
-  return RadialAxial;
-}();
 
-Shadings.Mesh = function MeshClosure() {
-  function MeshStreamReader(stream, context) {
+    return ["RadialAxial", type, this.bbox, this.colorStops, p0, p1, r0, r1, this.matrix];
+  }
+
+}
+
+class MeshStreamReader {
+  constructor(stream, context) {
     this.stream = stream;
     this.context = context;
     this.buffer = 0;
@@ -43270,96 +43251,227 @@ Shadings.Mesh = function MeshClosure() {
     this.tmpCsCompsBuf = context.colorFn ? new Float32Array(csNumComps) : this.tmpCompsBuf;
   }
 
-  MeshStreamReader.prototype = {
-    get hasData() {
-      if (this.stream.end) {
-        return this.stream.pos < this.stream.end;
-      }
+  get hasData() {
+    if (this.stream.end) {
+      return this.stream.pos < this.stream.end;
+    }
 
-      if (this.bufferLength > 0) {
-        return true;
-      }
-
-      const nextByte = this.stream.getByte();
-
-      if (nextByte < 0) {
-        return false;
-      }
-
-      this.buffer = nextByte;
-      this.bufferLength = 8;
+    if (this.bufferLength > 0) {
       return true;
-    },
+    }
 
-    readBits: function MeshStreamReader_readBits(n) {
-      let buffer = this.buffer;
-      let bufferLength = this.bufferLength;
+    const nextByte = this.stream.getByte();
 
-      if (n === 32) {
-        if (bufferLength === 0) {
-          return (this.stream.getByte() << 24 | this.stream.getByte() << 16 | this.stream.getByte() << 8 | this.stream.getByte()) >>> 0;
+    if (nextByte < 0) {
+      return false;
+    }
+
+    this.buffer = nextByte;
+    this.bufferLength = 8;
+    return true;
+  }
+
+  readBits(n) {
+    let buffer = this.buffer;
+    let bufferLength = this.bufferLength;
+
+    if (n === 32) {
+      if (bufferLength === 0) {
+        return (this.stream.getByte() << 24 | this.stream.getByte() << 16 | this.stream.getByte() << 8 | this.stream.getByte()) >>> 0;
+      }
+
+      buffer = buffer << 24 | this.stream.getByte() << 16 | this.stream.getByte() << 8 | this.stream.getByte();
+      const nextByte = this.stream.getByte();
+      this.buffer = nextByte & (1 << bufferLength) - 1;
+      return (buffer << 8 - bufferLength | (nextByte & 0xff) >> bufferLength) >>> 0;
+    }
+
+    if (n === 8 && bufferLength === 0) {
+      return this.stream.getByte();
+    }
+
+    while (bufferLength < n) {
+      buffer = buffer << 8 | this.stream.getByte();
+      bufferLength += 8;
+    }
+
+    bufferLength -= n;
+    this.bufferLength = bufferLength;
+    this.buffer = buffer & (1 << bufferLength) - 1;
+    return buffer >> bufferLength;
+  }
+
+  align() {
+    this.buffer = 0;
+    this.bufferLength = 0;
+  }
+
+  readFlag() {
+    return this.readBits(this.context.bitsPerFlag);
+  }
+
+  readCoordinate() {
+    const bitsPerCoordinate = this.context.bitsPerCoordinate;
+    const xi = this.readBits(bitsPerCoordinate);
+    const yi = this.readBits(bitsPerCoordinate);
+    const decode = this.context.decode;
+    const scale = bitsPerCoordinate < 32 ? 1 / ((1 << bitsPerCoordinate) - 1) : 2.3283064365386963e-10;
+    return [xi * scale * (decode[1] - decode[0]) + decode[0], yi * scale * (decode[3] - decode[2]) + decode[2]];
+  }
+
+  readComponents() {
+    const numComps = this.context.numComps;
+    const bitsPerComponent = this.context.bitsPerComponent;
+    const scale = bitsPerComponent < 32 ? 1 / ((1 << bitsPerComponent) - 1) : 2.3283064365386963e-10;
+    const decode = this.context.decode;
+    const components = this.tmpCompsBuf;
+
+    for (let i = 0, j = 4; i < numComps; i++, j += 2) {
+      const ci = this.readBits(bitsPerComponent);
+      components[i] = ci * scale * (decode[j + 1] - decode[j]) + decode[j];
+    }
+
+    const color = this.tmpCsCompsBuf;
+
+    if (this.context.colorFn) {
+      this.context.colorFn(components, 0, color, 0);
+    }
+
+    return this.context.colorSpace.getRgb(color, 0);
+  }
+
+}
+
+const getB = function getBClosure() {
+  function buildB(count) {
+    const lut = [];
+
+    for (let i = 0; i <= count; i++) {
+      const t = i / count,
+            t_ = 1 - t;
+      lut.push(new Float32Array([t_ * t_ * t_, 3 * t * t_ * t_, 3 * t * t * t_, t * t * t]));
+    }
+
+    return lut;
+  }
+
+  const cache = [];
+  return function (count) {
+    if (!cache[count]) {
+      cache[count] = buildB(count);
+    }
+
+    return cache[count];
+  };
+}();
+
+class MeshShading extends BaseShading {
+  static get MIN_SPLIT_PATCH_CHUNKS_AMOUNT() {
+    return (0, _util.shadow)(this, "MIN_SPLIT_PATCH_CHUNKS_AMOUNT", 3);
+  }
+
+  static get MAX_SPLIT_PATCH_CHUNKS_AMOUNT() {
+    return (0, _util.shadow)(this, "MAX_SPLIT_PATCH_CHUNKS_AMOUNT", 20);
+  }
+
+  static get TRIANGLE_DENSITY() {
+    return (0, _util.shadow)(this, "TRIANGLE_DENSITY", 20);
+  }
+
+  constructor(stream, matrix, xref, resources, pdfFunctionFactory, localColorSpaceCache) {
+    super();
+
+    if (!(0, _primitives.isStream)(stream)) {
+      throw new _util.FormatError("Mesh data is not a stream");
+    }
+
+    const dict = stream.dict;
+    this.matrix = matrix;
+    this.shadingType = dict.get("ShadingType");
+    const bbox = dict.getArray("BBox");
+
+    if (Array.isArray(bbox) && bbox.length === 4) {
+      this.bbox = _util.Util.normalizeRect(bbox);
+    } else {
+      this.bbox = null;
+    }
+
+    const cs = _colorspace.ColorSpace.parse({
+      cs: dict.getRaw("ColorSpace") || dict.getRaw("CS"),
+      xref,
+      resources,
+      pdfFunctionFactory,
+      localColorSpaceCache
+    });
+
+    this.background = dict.has("Background") ? cs.getRgb(dict.get("Background"), 0) : null;
+    const fnObj = dict.getRaw("Function");
+    const fn = fnObj ? pdfFunctionFactory.createFromArray(fnObj) : null;
+    this.coords = [];
+    this.colors = [];
+    this.figures = [];
+    const decodeContext = {
+      bitsPerCoordinate: dict.get("BitsPerCoordinate"),
+      bitsPerComponent: dict.get("BitsPerComponent"),
+      bitsPerFlag: dict.get("BitsPerFlag"),
+      decode: dict.getArray("Decode"),
+      colorFn: fn,
+      colorSpace: cs,
+      numComps: fn ? 1 : cs.numComps
+    };
+    const reader = new MeshStreamReader(stream, decodeContext);
+    let patchMesh = false;
+
+    switch (this.shadingType) {
+      case ShadingType.FREE_FORM_MESH:
+        this._decodeType4Shading(reader);
+
+        break;
+
+      case ShadingType.LATTICE_FORM_MESH:
+        const verticesPerRow = dict.get("VerticesPerRow") | 0;
+
+        if (verticesPerRow < 2) {
+          throw new _util.FormatError("Invalid VerticesPerRow");
         }
 
-        buffer = buffer << 24 | this.stream.getByte() << 16 | this.stream.getByte() << 8 | this.stream.getByte();
-        const nextByte = this.stream.getByte();
-        this.buffer = nextByte & (1 << bufferLength) - 1;
-        return (buffer << 8 - bufferLength | (nextByte & 0xff) >> bufferLength) >>> 0;
-      }
+        this._decodeType5Shading(reader, verticesPerRow);
 
-      if (n === 8 && bufferLength === 0) {
-        return this.stream.getByte();
-      }
+        break;
 
-      while (bufferLength < n) {
-        buffer = buffer << 8 | this.stream.getByte();
-        bufferLength += 8;
-      }
+      case ShadingType.COONS_PATCH_MESH:
+        this._decodeType6Shading(reader);
 
-      bufferLength -= n;
-      this.bufferLength = bufferLength;
-      this.buffer = buffer & (1 << bufferLength) - 1;
-      return buffer >> bufferLength;
-    },
-    align: function MeshStreamReader_align() {
-      this.buffer = 0;
-      this.bufferLength = 0;
-    },
-    readFlag: function MeshStreamReader_readFlag() {
-      return this.readBits(this.context.bitsPerFlag);
-    },
-    readCoordinate: function MeshStreamReader_readCoordinate() {
-      const bitsPerCoordinate = this.context.bitsPerCoordinate;
-      const xi = this.readBits(bitsPerCoordinate);
-      const yi = this.readBits(bitsPerCoordinate);
-      const decode = this.context.decode;
-      const scale = bitsPerCoordinate < 32 ? 1 / ((1 << bitsPerCoordinate) - 1) : 2.3283064365386963e-10;
-      return [xi * scale * (decode[1] - decode[0]) + decode[0], yi * scale * (decode[3] - decode[2]) + decode[2]];
-    },
-    readComponents: function MeshStreamReader_readComponents() {
-      const numComps = this.context.numComps;
-      const bitsPerComponent = this.context.bitsPerComponent;
-      const scale = bitsPerComponent < 32 ? 1 / ((1 << bitsPerComponent) - 1) : 2.3283064365386963e-10;
-      const decode = this.context.decode;
-      const components = this.tmpCompsBuf;
+        patchMesh = true;
+        break;
 
-      for (let i = 0, j = 4; i < numComps; i++, j += 2) {
-        const ci = this.readBits(bitsPerComponent);
-        components[i] = ci * scale * (decode[j + 1] - decode[j]) + decode[j];
-      }
+      case ShadingType.TENSOR_PATCH_MESH:
+        this._decodeType7Shading(reader);
 
-      const color = this.tmpCsCompsBuf;
+        patchMesh = true;
+        break;
 
-      if (this.context.colorFn) {
-        this.context.colorFn(components, 0, color, 0);
-      }
-
-      return this.context.colorSpace.getRgb(color, 0);
+      default:
+        (0, _util.unreachable)("Unsupported mesh type.");
+        break;
     }
-  };
 
-  function decodeType4Shading(mesh, reader) {
-    const coords = mesh.coords;
-    const colors = mesh.colors;
+    if (patchMesh) {
+      this._updateBounds();
+
+      for (let i = 0, ii = this.figures.length; i < ii; i++) {
+        this._buildFigureFromPatch(i);
+      }
+    }
+
+    this._updateBounds();
+
+    this._packData();
+  }
+
+  _decodeType4Shading(reader) {
+    const coords = this.coords;
+    const colors = this.colors;
     const operators = [];
     const ps = [];
     let verticesLeft = 0;
@@ -43400,16 +43512,16 @@ Shadings.Mesh = function MeshClosure() {
       reader.align();
     }
 
-    mesh.figures.push({
+    this.figures.push({
       type: "triangles",
       coords: new Int32Array(ps),
       colors: new Int32Array(ps)
     });
   }
 
-  function decodeType5Shading(mesh, reader, verticesPerRow) {
-    const coords = mesh.coords;
-    const colors = mesh.colors;
+  _decodeType5Shading(reader, verticesPerRow) {
+    const coords = this.coords;
+    const colors = this.colors;
     const ps = [];
 
     while (reader.hasData) {
@@ -43420,7 +43532,7 @@ Shadings.Mesh = function MeshClosure() {
       colors.push(color);
     }
 
-    mesh.figures.push({
+    this.figures.push({
       type: "lattice",
       coords: new Int32Array(ps),
       colors: new Int32Array(ps),
@@ -43428,116 +43540,9 @@ Shadings.Mesh = function MeshClosure() {
     });
   }
 
-  const MIN_SPLIT_PATCH_CHUNKS_AMOUNT = 3;
-  const MAX_SPLIT_PATCH_CHUNKS_AMOUNT = 20;
-  const TRIANGLE_DENSITY = 20;
-
-  const getB = function getBClosure() {
-    function buildB(count) {
-      const lut = [];
-
-      for (let i = 0; i <= count; i++) {
-        const t = i / count,
-              t_ = 1 - t;
-        lut.push(new Float32Array([t_ * t_ * t_, 3 * t * t_ * t_, 3 * t * t * t_, t * t * t]));
-      }
-
-      return lut;
-    }
-
-    const cache = [];
-    return function getB(count) {
-      if (!cache[count]) {
-        cache[count] = buildB(count);
-      }
-
-      return cache[count];
-    };
-  }();
-
-  function buildFigureFromPatch(mesh, index) {
-    const figure = mesh.figures[index];
-    (0, _util.assert)(figure.type === "patch", "Unexpected patch mesh figure");
-    const coords = mesh.coords,
-          colors = mesh.colors;
-    const pi = figure.coords;
-    const ci = figure.colors;
-    const figureMinX = Math.min(coords[pi[0]][0], coords[pi[3]][0], coords[pi[12]][0], coords[pi[15]][0]);
-    const figureMinY = Math.min(coords[pi[0]][1], coords[pi[3]][1], coords[pi[12]][1], coords[pi[15]][1]);
-    const figureMaxX = Math.max(coords[pi[0]][0], coords[pi[3]][0], coords[pi[12]][0], coords[pi[15]][0]);
-    const figureMaxY = Math.max(coords[pi[0]][1], coords[pi[3]][1], coords[pi[12]][1], coords[pi[15]][1]);
-    let splitXBy = Math.ceil((figureMaxX - figureMinX) * TRIANGLE_DENSITY / (mesh.bounds[2] - mesh.bounds[0]));
-    splitXBy = Math.max(MIN_SPLIT_PATCH_CHUNKS_AMOUNT, Math.min(MAX_SPLIT_PATCH_CHUNKS_AMOUNT, splitXBy));
-    let splitYBy = Math.ceil((figureMaxY - figureMinY) * TRIANGLE_DENSITY / (mesh.bounds[3] - mesh.bounds[1]));
-    splitYBy = Math.max(MIN_SPLIT_PATCH_CHUNKS_AMOUNT, Math.min(MAX_SPLIT_PATCH_CHUNKS_AMOUNT, splitYBy));
-    const verticesPerRow = splitXBy + 1;
-    const figureCoords = new Int32Array((splitYBy + 1) * verticesPerRow);
-    const figureColors = new Int32Array((splitYBy + 1) * verticesPerRow);
-    let k = 0;
-    const cl = new Uint8Array(3),
-          cr = new Uint8Array(3);
-    const c0 = colors[ci[0]],
-          c1 = colors[ci[1]],
-          c2 = colors[ci[2]],
-          c3 = colors[ci[3]];
-    const bRow = getB(splitYBy),
-          bCol = getB(splitXBy);
-
-    for (let row = 0; row <= splitYBy; row++) {
-      cl[0] = (c0[0] * (splitYBy - row) + c2[0] * row) / splitYBy | 0;
-      cl[1] = (c0[1] * (splitYBy - row) + c2[1] * row) / splitYBy | 0;
-      cl[2] = (c0[2] * (splitYBy - row) + c2[2] * row) / splitYBy | 0;
-      cr[0] = (c1[0] * (splitYBy - row) + c3[0] * row) / splitYBy | 0;
-      cr[1] = (c1[1] * (splitYBy - row) + c3[1] * row) / splitYBy | 0;
-      cr[2] = (c1[2] * (splitYBy - row) + c3[2] * row) / splitYBy | 0;
-
-      for (let col = 0; col <= splitXBy; col++, k++) {
-        if ((row === 0 || row === splitYBy) && (col === 0 || col === splitXBy)) {
-          continue;
-        }
-
-        let x = 0,
-            y = 0;
-        let q = 0;
-
-        for (let i = 0; i <= 3; i++) {
-          for (let j = 0; j <= 3; j++, q++) {
-            const m = bRow[row][i] * bCol[col][j];
-            x += coords[pi[q]][0] * m;
-            y += coords[pi[q]][1] * m;
-          }
-        }
-
-        figureCoords[k] = coords.length;
-        coords.push([x, y]);
-        figureColors[k] = colors.length;
-        const newColor = new Uint8Array(3);
-        newColor[0] = (cl[0] * (splitXBy - col) + cr[0] * col) / splitXBy | 0;
-        newColor[1] = (cl[1] * (splitXBy - col) + cr[1] * col) / splitXBy | 0;
-        newColor[2] = (cl[2] * (splitXBy - col) + cr[2] * col) / splitXBy | 0;
-        colors.push(newColor);
-      }
-    }
-
-    figureCoords[0] = pi[0];
-    figureColors[0] = ci[0];
-    figureCoords[splitXBy] = pi[3];
-    figureColors[splitXBy] = ci[1];
-    figureCoords[verticesPerRow * splitYBy] = pi[12];
-    figureColors[verticesPerRow * splitYBy] = ci[2];
-    figureCoords[verticesPerRow * splitYBy + splitXBy] = pi[15];
-    figureColors[verticesPerRow * splitYBy + splitXBy] = ci[3];
-    mesh.figures[index] = {
-      type: "lattice",
-      coords: figureCoords,
-      colors: figureColors,
-      verticesPerRow
-    };
-  }
-
-  function decodeType6Shading(mesh, reader) {
-    const coords = mesh.coords;
-    const colors = mesh.colors;
+  _decodeType6Shading(reader) {
+    const coords = this.coords;
+    const colors = this.colors;
     const ps = new Int32Array(16);
     const cs = new Int32Array(4);
 
@@ -43657,7 +43662,7 @@ Shadings.Mesh = function MeshClosure() {
       coords.push([(-4 * coords[ps[12]][0] - coords[ps[3]][0] + 6 * (coords[ps[8]][0] + coords[ps[13]][0]) - 2 * (coords[ps[0]][0] + coords[ps[15]][0]) + 3 * (coords[ps[11]][0] + coords[ps[1]][0])) / 9, (-4 * coords[ps[12]][1] - coords[ps[3]][1] + 6 * (coords[ps[8]][1] + coords[ps[13]][1]) - 2 * (coords[ps[0]][1] + coords[ps[15]][1]) + 3 * (coords[ps[11]][1] + coords[ps[1]][1])) / 9]);
       ps[10] = coords.length;
       coords.push([(-4 * coords[ps[15]][0] - coords[ps[0]][0] + 6 * (coords[ps[11]][0] + coords[ps[14]][0]) - 2 * (coords[ps[12]][0] + coords[ps[3]][0]) + 3 * (coords[ps[2]][0] + coords[ps[8]][0])) / 9, (-4 * coords[ps[15]][1] - coords[ps[0]][1] + 6 * (coords[ps[11]][1] + coords[ps[14]][1]) - 2 * (coords[ps[12]][1] + coords[ps[3]][1]) + 3 * (coords[ps[2]][1] + coords[ps[8]][1])) / 9]);
-      mesh.figures.push({
+      this.figures.push({
         type: "patch",
         coords: new Int32Array(ps),
         colors: new Int32Array(cs)
@@ -43665,9 +43670,9 @@ Shadings.Mesh = function MeshClosure() {
     }
   }
 
-  function decodeType7Shading(mesh, reader) {
-    const coords = mesh.coords;
-    const colors = mesh.colors;
+  _decodeType7Shading(reader) {
+    const coords = this.coords;
+    const colors = this.colors;
     const ps = new Int32Array(16);
     const cs = new Int32Array(4);
 
@@ -43795,7 +43800,7 @@ Shadings.Mesh = function MeshClosure() {
           break;
       }
 
-      mesh.figures.push({
+      this.figures.push({
         type: "patch",
         coords: new Int32Array(ps),
         colors: new Int32Array(cs)
@@ -43803,27 +43808,107 @@ Shadings.Mesh = function MeshClosure() {
     }
   }
 
-  function updateBounds(mesh) {
-    let minX = mesh.coords[0][0],
-        minY = mesh.coords[0][1],
+  _buildFigureFromPatch(index) {
+    const figure = this.figures[index];
+    (0, _util.assert)(figure.type === "patch", "Unexpected patch mesh figure");
+    const coords = this.coords,
+          colors = this.colors;
+    const pi = figure.coords;
+    const ci = figure.colors;
+    const figureMinX = Math.min(coords[pi[0]][0], coords[pi[3]][0], coords[pi[12]][0], coords[pi[15]][0]);
+    const figureMinY = Math.min(coords[pi[0]][1], coords[pi[3]][1], coords[pi[12]][1], coords[pi[15]][1]);
+    const figureMaxX = Math.max(coords[pi[0]][0], coords[pi[3]][0], coords[pi[12]][0], coords[pi[15]][0]);
+    const figureMaxY = Math.max(coords[pi[0]][1], coords[pi[3]][1], coords[pi[12]][1], coords[pi[15]][1]);
+    let splitXBy = Math.ceil((figureMaxX - figureMinX) * MeshShading.TRIANGLE_DENSITY / (this.bounds[2] - this.bounds[0]));
+    splitXBy = Math.max(MeshShading.MIN_SPLIT_PATCH_CHUNKS_AMOUNT, Math.min(MeshShading.MAX_SPLIT_PATCH_CHUNKS_AMOUNT, splitXBy));
+    let splitYBy = Math.ceil((figureMaxY - figureMinY) * MeshShading.TRIANGLE_DENSITY / (this.bounds[3] - this.bounds[1]));
+    splitYBy = Math.max(MeshShading.MIN_SPLIT_PATCH_CHUNKS_AMOUNT, Math.min(MeshShading.MAX_SPLIT_PATCH_CHUNKS_AMOUNT, splitYBy));
+    const verticesPerRow = splitXBy + 1;
+    const figureCoords = new Int32Array((splitYBy + 1) * verticesPerRow);
+    const figureColors = new Int32Array((splitYBy + 1) * verticesPerRow);
+    let k = 0;
+    const cl = new Uint8Array(3),
+          cr = new Uint8Array(3);
+    const c0 = colors[ci[0]],
+          c1 = colors[ci[1]],
+          c2 = colors[ci[2]],
+          c3 = colors[ci[3]];
+    const bRow = getB(splitYBy),
+          bCol = getB(splitXBy);
+
+    for (let row = 0; row <= splitYBy; row++) {
+      cl[0] = (c0[0] * (splitYBy - row) + c2[0] * row) / splitYBy | 0;
+      cl[1] = (c0[1] * (splitYBy - row) + c2[1] * row) / splitYBy | 0;
+      cl[2] = (c0[2] * (splitYBy - row) + c2[2] * row) / splitYBy | 0;
+      cr[0] = (c1[0] * (splitYBy - row) + c3[0] * row) / splitYBy | 0;
+      cr[1] = (c1[1] * (splitYBy - row) + c3[1] * row) / splitYBy | 0;
+      cr[2] = (c1[2] * (splitYBy - row) + c3[2] * row) / splitYBy | 0;
+
+      for (let col = 0; col <= splitXBy; col++, k++) {
+        if ((row === 0 || row === splitYBy) && (col === 0 || col === splitXBy)) {
+          continue;
+        }
+
+        let x = 0,
+            y = 0;
+        let q = 0;
+
+        for (let i = 0; i <= 3; i++) {
+          for (let j = 0; j <= 3; j++, q++) {
+            const m = bRow[row][i] * bCol[col][j];
+            x += coords[pi[q]][0] * m;
+            y += coords[pi[q]][1] * m;
+          }
+        }
+
+        figureCoords[k] = coords.length;
+        coords.push([x, y]);
+        figureColors[k] = colors.length;
+        const newColor = new Uint8Array(3);
+        newColor[0] = (cl[0] * (splitXBy - col) + cr[0] * col) / splitXBy | 0;
+        newColor[1] = (cl[1] * (splitXBy - col) + cr[1] * col) / splitXBy | 0;
+        newColor[2] = (cl[2] * (splitXBy - col) + cr[2] * col) / splitXBy | 0;
+        colors.push(newColor);
+      }
+    }
+
+    figureCoords[0] = pi[0];
+    figureColors[0] = ci[0];
+    figureCoords[splitXBy] = pi[3];
+    figureColors[splitXBy] = ci[1];
+    figureCoords[verticesPerRow * splitYBy] = pi[12];
+    figureColors[verticesPerRow * splitYBy] = ci[2];
+    figureCoords[verticesPerRow * splitYBy + splitXBy] = pi[15];
+    figureColors[verticesPerRow * splitYBy + splitXBy] = ci[3];
+    this.figures[index] = {
+      type: "lattice",
+      coords: figureCoords,
+      colors: figureColors,
+      verticesPerRow
+    };
+  }
+
+  _updateBounds() {
+    let minX = this.coords[0][0],
+        minY = this.coords[0][1],
         maxX = minX,
         maxY = minY;
 
-    for (let i = 1, ii = mesh.coords.length; i < ii; i++) {
-      const x = mesh.coords[i][0],
-            y = mesh.coords[i][1];
+    for (let i = 1, ii = this.coords.length; i < ii; i++) {
+      const x = this.coords[i][0],
+            y = this.coords[i][1];
       minX = minX > x ? x : minX;
       minY = minY > y ? y : minY;
       maxX = maxX < x ? x : maxX;
       maxY = maxY < y ? y : maxY;
     }
 
-    mesh.bounds = [minX, minY, maxX, maxY];
+    this.bounds = [minX, minY, maxX, maxY];
   }
 
-  function packData(mesh) {
+  _packData() {
     let i, ii, j, jj;
-    const coords = mesh.coords;
+    const coords = this.coords;
     const coordsPacked = new Float32Array(coords.length * 2);
 
     for (i = 0, j = 0, ii = coords.length; i < ii; i++) {
@@ -43832,8 +43917,8 @@ Shadings.Mesh = function MeshClosure() {
       coordsPacked[j++] = xy[1];
     }
 
-    mesh.coords = coordsPacked;
-    const colors = mesh.colors;
+    this.coords = coordsPacked;
+    const colors = this.colors;
     const colorsPacked = new Uint8Array(colors.length * 3);
 
     for (i = 0, j = 0, ii = colors.length; i < ii; i++) {
@@ -43843,8 +43928,8 @@ Shadings.Mesh = function MeshClosure() {
       colorsPacked[j++] = c[2];
     }
 
-    mesh.colors = colorsPacked;
-    const figures = mesh.figures;
+    this.colors = colorsPacked;
+    const figures = this.figures;
 
     for (i = 0, ii = figures.length; i < ii; i++) {
       const figure = figures[i],
@@ -43858,112 +43943,18 @@ Shadings.Mesh = function MeshClosure() {
     }
   }
 
-  function Mesh(stream, matrix, xref, resources, pdfFunctionFactory, localColorSpaceCache) {
-    if (!(0, _primitives.isStream)(stream)) {
-      throw new _util.FormatError("Mesh data is not a stream");
-    }
-
-    const dict = stream.dict;
-    this.matrix = matrix;
-    this.shadingType = dict.get("ShadingType");
-    this.type = "Pattern";
-    const bbox = dict.getArray("BBox");
-
-    if (Array.isArray(bbox) && bbox.length === 4) {
-      this.bbox = _util.Util.normalizeRect(bbox);
-    } else {
-      this.bbox = null;
-    }
-
-    const cs = _colorspace.ColorSpace.parse({
-      cs: dict.getRaw("ColorSpace") || dict.getRaw("CS"),
-      xref,
-      resources,
-      pdfFunctionFactory,
-      localColorSpaceCache
-    });
-
-    this.cs = cs;
-    this.background = dict.has("Background") ? cs.getRgb(dict.get("Background"), 0) : null;
-    const fnObj = dict.getRaw("Function");
-    const fn = fnObj ? pdfFunctionFactory.createFromArray(fnObj) : null;
-    this.coords = [];
-    this.colors = [];
-    this.figures = [];
-    const decodeContext = {
-      bitsPerCoordinate: dict.get("BitsPerCoordinate"),
-      bitsPerComponent: dict.get("BitsPerComponent"),
-      bitsPerFlag: dict.get("BitsPerFlag"),
-      decode: dict.getArray("Decode"),
-      colorFn: fn,
-      colorSpace: cs,
-      numComps: fn ? 1 : cs.numComps
-    };
-    const reader = new MeshStreamReader(stream, decodeContext);
-    let patchMesh = false;
-
-    switch (this.shadingType) {
-      case ShadingType.FREE_FORM_MESH:
-        decodeType4Shading(this, reader);
-        break;
-
-      case ShadingType.LATTICE_FORM_MESH:
-        const verticesPerRow = dict.get("VerticesPerRow") | 0;
-
-        if (verticesPerRow < 2) {
-          throw new _util.FormatError("Invalid VerticesPerRow");
-        }
-
-        decodeType5Shading(this, reader, verticesPerRow);
-        break;
-
-      case ShadingType.COONS_PATCH_MESH:
-        decodeType6Shading(this, reader);
-        patchMesh = true;
-        break;
-
-      case ShadingType.TENSOR_PATCH_MESH:
-        decodeType7Shading(this, reader);
-        patchMesh = true;
-        break;
-
-      default:
-        (0, _util.unreachable)("Unsupported mesh type.");
-        break;
-    }
-
-    if (patchMesh) {
-      updateBounds(this);
-
-      for (let i = 0, ii = this.figures.length; i < ii; i++) {
-        buildFigureFromPatch(this, i);
-      }
-    }
-
-    updateBounds(this);
-    packData(this);
+  getIR() {
+    return ["Mesh", this.shadingType, this.coords, this.colors, this.figures, this.bounds, this.matrix, this.bbox, this.background];
   }
 
-  Mesh.prototype = {
-    getIR: function Mesh_getIR() {
-      return ["Mesh", this.shadingType, this.coords, this.colors, this.figures, this.bounds, this.matrix, this.bbox, this.background];
-    }
-  };
-  return Mesh;
-}();
+}
 
-Shadings.Dummy = function DummyClosure() {
-  function Dummy() {
-    this.type = "Pattern";
+class DummyShading extends BaseShading {
+  getIR() {
+    return ["Dummy"];
   }
 
-  Dummy.prototype = {
-    getIR: function Dummy_getIR() {
-      return ["Dummy"];
-    }
-  };
-  return Dummy;
-}();
+}
 
 function getTilingPatternIR(operatorList, dict, color) {
   const matrix = dict.getArray("Matrix");
@@ -66756,7 +66747,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.9.0';
-const pdfjsBuild = 'a6f324d';
+const pdfjsBuild = '438cf1e';
 })();
 
 /******/ 	return __webpack_exports__;

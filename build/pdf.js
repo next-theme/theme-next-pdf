@@ -1587,8 +1587,6 @@ var _optional_content_config = __w_pdfjs_require__(15);
 
 var _transport_stream = __w_pdfjs_require__(16);
 
-var _webgl = __w_pdfjs_require__(17);
-
 const DEFAULT_RANGE_CHUNK_SIZE = 65536;
 const RENDERING_CANCELLED_TIMEOUT = 100;
 const DefaultCanvasFactory = _is_node.isNodeJS ? _node_utils.NodeCanvasFactory : _display_utils.DOMCanvasFactory;
@@ -2153,7 +2151,6 @@ class PDFPageProxy {
     canvasContext,
     viewport,
     intent = "display",
-    enableWebGL = false,
     renderInteractiveForms = false,
     transform = null,
     imageLayer = null,
@@ -2195,9 +2192,6 @@ class PDFPageProxy {
 
     const canvasFactoryInstance = canvasFactory || new DefaultCanvasFactory({
       ownerDocument: this._ownerDocument
-    });
-    const webGLContext = new _webgl.WebGLContext({
-      enable: enableWebGL
     });
     const annotationStorage = includeAnnotationStorage ? this._transport.annotationStorage.serializable : null;
 
@@ -2262,7 +2256,6 @@ class PDFPageProxy {
       operatorList: intentState.operatorList,
       pageIndex: this._pageIndex,
       canvasFactory: canvasFactoryInstance,
-      webGLContext,
       useRequestAnimationFrame: renderingIntent !== "print",
       pdfBug: this._pdfBug
     });
@@ -3698,7 +3691,6 @@ const InternalRenderTask = function InternalRenderTaskClosure() {
       operatorList,
       pageIndex,
       canvasFactory,
-      webGLContext,
       useRequestAnimationFrame = false,
       pdfBug = false
     }) {
@@ -3710,7 +3702,6 @@ const InternalRenderTask = function InternalRenderTaskClosure() {
       this.operatorList = operatorList;
       this._pageIndex = pageIndex;
       this.canvasFactory = canvasFactory;
-      this.webGLContext = webGLContext;
       this._pdfBug = pdfBug;
       this.running = false;
       this.graphicsReadyCallback = null;
@@ -3759,7 +3750,7 @@ const InternalRenderTask = function InternalRenderTaskClosure() {
         imageLayer,
         background
       } = this.params;
-      this.gfx = new _canvas.CanvasGraphics(canvasContext, this.commonObjs, this.objs, this.canvasFactory, this.webGLContext, imageLayer, optionalContentConfig);
+      this.gfx = new _canvas.CanvasGraphics(canvasContext, this.commonObjs, this.objs, this.canvasFactory, imageLayer, optionalContentConfig);
       this.gfx.beginDrawing({
         transform,
         viewport,
@@ -3862,7 +3853,7 @@ const InternalRenderTask = function InternalRenderTaskClosure() {
 
 const version = '2.9.0';
 exports.version = version;
-const build = 'a6f324d';
+const build = '438cf1e';
 exports.build = build;
 
 /***/ }),
@@ -5178,27 +5169,11 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
     }
   }
 
-  function composeSMask(ctx, smask, layerCtx, webGLContext) {
+  function composeSMask(ctx, smask, layerCtx) {
     const mask = smask.canvas;
     const maskCtx = smask.context;
     ctx.setTransform(smask.scaleX, 0, 0, smask.scaleY, smask.offsetX, smask.offsetY);
-    const backdrop = smask.backdrop || null;
-
-    if (!smask.transferMap && webGLContext.isEnabled) {
-      const composed = webGLContext.composeSMask({
-        layer: layerCtx.canvas,
-        mask,
-        properties: {
-          subtype: smask.subtype,
-          backdrop
-        }
-      });
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.drawImage(composed, smask.offsetX, smask.offsetY);
-      return;
-    }
-
-    genericComposeSMask(maskCtx, layerCtx, mask.width, mask.height, smask.subtype, backdrop, smask.transferMap);
+    genericComposeSMask(maskCtx, layerCtx, mask.width, mask.height, smask.subtype, smask.backdrop, smask.transferMap);
     ctx.drawImage(mask, 0, 0);
   }
 
@@ -5208,7 +5183,7 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
   const EO_CLIP = {};
 
   class CanvasGraphics {
-    constructor(canvasCtx, commonObjs, objs, canvasFactory, webGLContext, imageLayer, optionalContentConfig) {
+    constructor(canvasCtx, commonObjs, objs, canvasFactory, imageLayer, optionalContentConfig) {
       this.ctx = canvasCtx;
       this.current = new CanvasExtraState();
       this.stateStack = [];
@@ -5219,7 +5194,6 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
       this.commonObjs = commonObjs;
       this.objs = objs;
       this.canvasFactory = canvasFactory;
-      this.webGLContext = webGLContext;
       this.imageLayer = imageLayer;
       this.groupStack = [];
       this.processingType3 = null;
@@ -5351,7 +5325,6 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
       }
 
       this.cachedCanvases.clear();
-      this.webGLContext.clear();
 
       if (this.imageLayer) {
         this.imageLayer.endLayout();
@@ -5489,7 +5462,7 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
       const groupCtx = this.ctx;
       this.groupLevel--;
       this.ctx = this.groupStack.pop();
-      composeSMask(this.ctx, this.current.activeSMask, groupCtx, this.webGLContext);
+      composeSMask(this.ctx, this.current.activeSMask, groupCtx);
       this.ctx.restore();
       this.ctx.save();
       copyCtxState(groupCtx, this.ctx);
@@ -5516,7 +5489,7 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
       const groupCtx = this.ctx;
       this.groupLevel--;
       this.ctx = this.groupStack.pop();
-      composeSMask(this.ctx, this.current.activeSMask, groupCtx, this.webGLContext);
+      composeSMask(this.ctx, this.current.activeSMask, groupCtx);
       this.ctx.restore();
       copyCtxState(groupCtx, this.ctx);
 
@@ -5639,22 +5612,10 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
 
       if (this.contentVisible) {
         if (typeof strokeColor === "object" && strokeColor?.getPattern) {
-          ctx.save();
-          const transform = ctx.mozCurrentTransform;
-
-          const scale = _util.Util.singularValueDecompose2dScale(transform)[0];
-
-          ctx.strokeStyle = strokeColor.getPattern(ctx, this);
           const lineWidth = this.getSinglePixelWidth();
-          const scaledLineWidth = this.current.lineWidth * scale;
-
-          if (lineWidth < 0 && -lineWidth >= scaledLineWidth) {
-            ctx.resetTransform();
-            ctx.lineWidth = Math.round(this._combinedScaleFactor);
-          } else {
-            ctx.lineWidth = Math.max(lineWidth, scaledLineWidth);
-          }
-
+          ctx.save();
+          ctx.strokeStyle = strokeColor.getPattern(ctx, this);
+          ctx.lineWidth = Math.max(lineWidth, this.current.lineWidth);
           ctx.stroke();
           ctx.restore();
         } else {
@@ -5694,11 +5655,6 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
 
       if (isPatternFill) {
         ctx.save();
-
-        if (this.baseTransform) {
-          ctx.setTransform.apply(ctx, this.baseTransform);
-        }
-
         ctx.fillStyle = fillColor.getPattern(ctx, this);
         needRestore = true;
       }
@@ -6207,7 +6163,7 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
         const baseTransform = this.baseTransform || this.ctx.mozCurrentTransform.slice();
         const canvasGraphicsFactory = {
           createCanvasGraphics: ctx => {
-            return new CanvasGraphics(ctx, this.commonObjs, this.objs, this.canvasFactory, this.webGLContext);
+            return new CanvasGraphics(ctx, this.commonObjs, this.objs, this.canvasFactory);
           }
         };
         pattern = new _pattern_helper.TilingPattern(IR, color, this.ctx, canvasGraphicsFactory, baseTransform);
@@ -6822,6 +6778,19 @@ exports.TilingPattern = void 0;
 var _util = __w_pdfjs_require__(2);
 
 const ShadingIRs = {};
+let svgElement;
+
+function createMatrix(matrix) {
+  if (typeof DOMMatrix !== "undefined") {
+    return new DOMMatrix(matrix);
+  }
+
+  if (!svgElement) {
+    svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  }
+
+  return svgElement.createSVGMatrix(matrix);
+}
 
 function applyBoundingBox(ctx, bbox) {
   if (!bbox || typeof Path2D === "undefined") {
@@ -6844,15 +6813,32 @@ ShadingIRs.RadialAxial = {
     const p1 = raw[5];
     const r0 = raw[6];
     const r1 = raw[7];
+    const matrix = raw[8];
     return {
-      getPattern: function RadialAxial_getPattern(ctx) {
-        applyBoundingBox(ctx, bbox);
+      getPattern: function RadialAxial_getPattern(ctx, owner, shadingFill) {
+        const tmpCanvas = owner.cachedCanvases.getCanvas("pattern", ctx.canvas.width, ctx.canvas.height, true);
+        const tmpCtx = tmpCanvas.context;
+        tmpCtx.clearRect(0, 0, tmpCtx.canvas.width, tmpCtx.canvas.height);
+        tmpCtx.beginPath();
+        tmpCtx.rect(0, 0, tmpCtx.canvas.width, tmpCtx.canvas.height);
+
+        if (!shadingFill) {
+          tmpCtx.setTransform.apply(tmpCtx, owner.baseTransform);
+
+          if (matrix) {
+            tmpCtx.transform.apply(tmpCtx, matrix);
+          }
+        } else {
+          tmpCtx.setTransform.apply(tmpCtx, ctx.mozCurrentTransform);
+        }
+
+        applyBoundingBox(tmpCtx, bbox);
         let grad;
 
         if (type === "axial") {
-          grad = ctx.createLinearGradient(p0[0], p0[1], p1[0], p1[1]);
+          grad = tmpCtx.createLinearGradient(p0[0], p0[1], p1[0], p1[1]);
         } else if (type === "radial") {
-          grad = ctx.createRadialGradient(p0[0], p0[1], r0, p1[0], p1[1], r1);
+          grad = tmpCtx.createRadialGradient(p0[0], p0[1], r0, p1[0], p1[1], r1);
         }
 
         for (let i = 0, ii = colorStops.length; i < ii; ++i) {
@@ -6860,7 +6846,11 @@ ShadingIRs.RadialAxial = {
           grad.addColorStop(c[0], c[1]);
         }
 
-        return grad;
+        tmpCtx.fillStyle = grad;
+        tmpCtx.fill();
+        const pattern = ctx.createPattern(tmpCanvas.canvas, "repeat");
+        pattern.setTransform(createMatrix(ctx.mozCurrentTransformInverse));
+        return pattern;
       }
     };
   }
@@ -7028,7 +7018,7 @@ const createMeshCanvas = function createMeshCanvasClosure() {
     }
   }
 
-  function createMeshCanvas(bounds, combinesScale, coords, colors, figures, backgroundColor, cachedCanvases, webGLContext) {
+  function createMeshCanvas(bounds, combinesScale, coords, colors, figures, backgroundColor, cachedCanvases) {
     const EXPECTED_SCALE = 1.1;
     const MAX_PATTERN_SIZE = 3000;
     const BORDER_SIZE = 2;
@@ -7050,43 +7040,27 @@ const createMeshCanvas = function createMeshCanvasClosure() {
     };
     const paddedWidth = width + BORDER_SIZE * 2;
     const paddedHeight = height + BORDER_SIZE * 2;
-    let canvas, tmpCanvas, i, ii;
+    const tmpCanvas = cachedCanvases.getCanvas("mesh", paddedWidth, paddedHeight, false);
+    const tmpCtx = tmpCanvas.context;
+    const data = tmpCtx.createImageData(width, height);
 
-    if (webGLContext.isEnabled) {
-      canvas = webGLContext.drawFigures({
-        width,
-        height,
-        backgroundColor,
-        figures,
-        context
-      });
-      tmpCanvas = cachedCanvases.getCanvas("mesh", paddedWidth, paddedHeight, false);
-      tmpCanvas.context.drawImage(canvas, BORDER_SIZE, BORDER_SIZE);
-      canvas = tmpCanvas.canvas;
-    } else {
-      tmpCanvas = cachedCanvases.getCanvas("mesh", paddedWidth, paddedHeight, false);
-      const tmpCtx = tmpCanvas.context;
-      const data = tmpCtx.createImageData(width, height);
+    if (backgroundColor) {
+      const bytes = data.data;
 
-      if (backgroundColor) {
-        const bytes = data.data;
-
-        for (i = 0, ii = bytes.length; i < ii; i += 4) {
-          bytes[i] = backgroundColor[0];
-          bytes[i + 1] = backgroundColor[1];
-          bytes[i + 2] = backgroundColor[2];
-          bytes[i + 3] = 255;
-        }
+      for (let i = 0, ii = bytes.length; i < ii; i += 4) {
+        bytes[i] = backgroundColor[0];
+        bytes[i + 1] = backgroundColor[1];
+        bytes[i + 2] = backgroundColor[2];
+        bytes[i + 3] = 255;
       }
-
-      for (i = 0; i < figures.length; i++) {
-        drawFigure(data, figures[i], context);
-      }
-
-      tmpCtx.putImageData(data, BORDER_SIZE, BORDER_SIZE);
-      canvas = tmpCanvas.canvas;
     }
 
+    for (let i = 0, ii = figures.length; i < ii; i++) {
+      drawFigure(data, figures[i], context);
+    }
+
+    tmpCtx.putImageData(data, BORDER_SIZE, BORDER_SIZE);
+    const canvas = tmpCanvas.canvas;
     return {
       canvas,
       offsetX: offsetX - BORDER_SIZE * scaleX,
@@ -7125,7 +7099,7 @@ ShadingIRs.Mesh = {
           }
         }
 
-        const temporaryPatternCanvas = createMeshCanvas(bounds, scale, coords, colors, figures, shadingFill ? null : background, owner.cachedCanvases, owner.webGLContext);
+        const temporaryPatternCanvas = createMeshCanvas(bounds, scale, coords, colors, figures, shadingFill ? null : background, owner.cachedCanvases);
 
         if (!shadingFill) {
           ctx.setTransform.apply(ctx, owner.baseTransform);
@@ -7212,12 +7186,15 @@ const TilingPattern = function TilingPatternClosure() {
       graphics.groupLevel = owner.groupLevel;
       this.setFillAndStrokeStyleToContext(graphics, paintType, color);
       graphics.transform(dimx.scale, 0, 0, dimy.scale, 0, 0);
-      graphics.transform(1, 0, 0, 1, -x0, -y0);
       this.clipBbox(graphics, bbox, x0, y0, x1, y1);
+      graphics.baseTransform = graphics.ctx.mozCurrentTransform.slice();
       graphics.executeOperatorList(operatorList);
-      this.ctx.transform(1, 0, 0, 1, x0, y0);
-      this.ctx.scale(1 / dimx.scale, 1 / dimy.scale);
-      return tmpCanvas.canvas;
+      graphics.endDrawing();
+      return {
+        canvas: tmpCanvas.canvas,
+        scaleX: dimx.scale,
+        scaleY: dimy.scale
+      };
     },
     getSizeAndScale: function TilingPattern_getSizeAndScale(step, realOutputSize, scale) {
       step = Math.abs(step);
@@ -7270,12 +7247,24 @@ const TilingPattern = function TilingPatternClosure() {
           throw new _util.FormatError(`Unsupported paint type: ${paintType}`);
       }
     },
-    getPattern: function TilingPattern_getPattern(ctx, owner) {
+    getPattern: function TilingPattern_getPattern(ctx, owner, shadingFill) {
       ctx = this.ctx;
-      ctx.setTransform.apply(ctx, this.baseTransform);
-      ctx.transform.apply(ctx, this.matrix);
+      let matrix = ctx.mozCurrentTransformInverse;
+
+      if (!shadingFill) {
+        matrix = _util.Util.transform(matrix, owner.baseTransform);
+
+        if (this.matrix) {
+          matrix = _util.Util.transform(matrix, this.matrix);
+        }
+      }
+
       const temporaryPatternCanvas = this.createPatternCanvas(owner);
-      return ctx.createPattern(temporaryPatternCanvas, "repeat");
+      let domMatrix = createMatrix(matrix);
+      domMatrix = domMatrix.scale(1 / temporaryPatternCanvas.scaleX, 1 / temporaryPatternCanvas.scaleY);
+      const pattern = ctx.createPattern(temporaryPatternCanvas.canvas, "repeat");
+      pattern.setTransform(domMatrix);
+      return pattern;
     }
   };
   return TilingPattern;
@@ -8416,449 +8405,6 @@ class PDFDataTransportStreamRangeReader {
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.WebGLContext = void 0;
-
-var _util = __w_pdfjs_require__(2);
-
-class WebGLContext {
-  constructor({
-    enable = false
-  }) {
-    this._enabled = enable === true;
-  }
-
-  get isEnabled() {
-    let enabled = this._enabled;
-
-    if (enabled) {
-      enabled = WebGLUtils.tryInitGL();
-    }
-
-    return (0, _util.shadow)(this, "isEnabled", enabled);
-  }
-
-  composeSMask({
-    layer,
-    mask,
-    properties
-  }) {
-    return WebGLUtils.composeSMask(layer, mask, properties);
-  }
-
-  drawFigures({
-    width,
-    height,
-    backgroundColor,
-    figures,
-    context
-  }) {
-    return WebGLUtils.drawFigures(width, height, backgroundColor, figures, context);
-  }
-
-  clear() {
-    WebGLUtils.cleanup();
-  }
-
-}
-
-exports.WebGLContext = WebGLContext;
-
-const WebGLUtils = function WebGLUtilsClosure() {
-  function loadShader(gl, code, shaderType) {
-    const shader = gl.createShader(shaderType);
-    gl.shaderSource(shader, code);
-    gl.compileShader(shader);
-    const compiled = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
-
-    if (!compiled) {
-      const errorMsg = gl.getShaderInfoLog(shader);
-      throw new Error("Error during shader compilation: " + errorMsg);
-    }
-
-    return shader;
-  }
-
-  function createVertexShader(gl, code) {
-    return loadShader(gl, code, gl.VERTEX_SHADER);
-  }
-
-  function createFragmentShader(gl, code) {
-    return loadShader(gl, code, gl.FRAGMENT_SHADER);
-  }
-
-  function createProgram(gl, shaders) {
-    const program = gl.createProgram();
-
-    for (let i = 0, ii = shaders.length; i < ii; ++i) {
-      gl.attachShader(program, shaders[i]);
-    }
-
-    gl.linkProgram(program);
-    const linked = gl.getProgramParameter(program, gl.LINK_STATUS);
-
-    if (!linked) {
-      const errorMsg = gl.getProgramInfoLog(program);
-      throw new Error("Error during program linking: " + errorMsg);
-    }
-
-    return program;
-  }
-
-  function createTexture(gl, image, textureId) {
-    gl.activeTexture(textureId);
-    const texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    return texture;
-  }
-
-  let currentGL, currentCanvas;
-
-  function generateGL() {
-    if (currentGL) {
-      return;
-    }
-
-    currentCanvas = document.createElement("canvas");
-    currentGL = currentCanvas.getContext("webgl", {
-      premultipliedalpha: false
-    });
-  }
-
-  const smaskVertexShaderCode = "\
-  attribute vec2 a_position;                                    \
-  attribute vec2 a_texCoord;                                    \
-                                                                \
-  uniform vec2 u_resolution;                                    \
-                                                                \
-  varying vec2 v_texCoord;                                      \
-                                                                \
-  void main() {                                                 \
-    vec2 clipSpace = (a_position / u_resolution) * 2.0 - 1.0;   \
-    gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);          \
-                                                                \
-    v_texCoord = a_texCoord;                                    \
-  }                                                             ";
-  const smaskFragmentShaderCode = "\
-  precision mediump float;                                      \
-                                                                \
-  uniform vec4 u_backdrop;                                      \
-  uniform int u_subtype;                                        \
-  uniform sampler2D u_image;                                    \
-  uniform sampler2D u_mask;                                     \
-                                                                \
-  varying vec2 v_texCoord;                                      \
-                                                                \
-  void main() {                                                 \
-    vec4 imageColor = texture2D(u_image, v_texCoord);           \
-    vec4 maskColor = texture2D(u_mask, v_texCoord);             \
-    if (u_backdrop.a > 0.0) {                                   \
-      maskColor.rgb = maskColor.rgb * maskColor.a +             \
-                      u_backdrop.rgb * (1.0 - maskColor.a);     \
-    }                                                           \
-    float lum;                                                  \
-    if (u_subtype == 0) {                                       \
-      lum = maskColor.a;                                        \
-    } else {                                                    \
-      lum = maskColor.r * 0.3 + maskColor.g * 0.59 +            \
-            maskColor.b * 0.11;                                 \
-    }                                                           \
-    imageColor.a *= lum;                                        \
-    imageColor.rgb *= imageColor.a;                             \
-    gl_FragColor = imageColor;                                  \
-  }                                                             ";
-  let smaskCache = null;
-
-  function initSmaskGL() {
-    generateGL();
-    const canvas = currentCanvas;
-    currentCanvas = null;
-    const gl = currentGL;
-    currentGL = null;
-    const vertexShader = createVertexShader(gl, smaskVertexShaderCode);
-    const fragmentShader = createFragmentShader(gl, smaskFragmentShaderCode);
-    const program = createProgram(gl, [vertexShader, fragmentShader]);
-    gl.useProgram(program);
-    const cache = {};
-    cache.gl = gl;
-    cache.canvas = canvas;
-    cache.resolutionLocation = gl.getUniformLocation(program, "u_resolution");
-    cache.positionLocation = gl.getAttribLocation(program, "a_position");
-    cache.backdropLocation = gl.getUniformLocation(program, "u_backdrop");
-    cache.subtypeLocation = gl.getUniformLocation(program, "u_subtype");
-    const texCoordLocation = gl.getAttribLocation(program, "a_texCoord");
-    const texLayerLocation = gl.getUniformLocation(program, "u_image");
-    const texMaskLocation = gl.getUniformLocation(program, "u_mask");
-    const texCoordBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0, 1.0]), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(texCoordLocation);
-    gl.vertexAttribPointer(texCoordLocation, 2, gl.FLOAT, false, 0, 0);
-    gl.uniform1i(texLayerLocation, 0);
-    gl.uniform1i(texMaskLocation, 1);
-    smaskCache = cache;
-  }
-
-  function composeSMask(layer, mask, properties) {
-    const width = layer.width,
-          height = layer.height;
-
-    if (!smaskCache) {
-      initSmaskGL();
-    }
-
-    const cache = smaskCache,
-          canvas = cache.canvas,
-          gl = cache.gl;
-    canvas.width = width;
-    canvas.height = height;
-    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-    gl.uniform2f(cache.resolutionLocation, width, height);
-
-    if (properties.backdrop) {
-      gl.uniform4f(cache.resolutionLocation, properties.backdrop[0], properties.backdrop[1], properties.backdrop[2], 1);
-    } else {
-      gl.uniform4f(cache.resolutionLocation, 0, 0, 0, 0);
-    }
-
-    gl.uniform1i(cache.subtypeLocation, properties.subtype === "Luminosity" ? 1 : 0);
-    const texture = createTexture(gl, layer, gl.TEXTURE0);
-    const maskTexture = createTexture(gl, mask, gl.TEXTURE1);
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, width, 0, 0, height, 0, height, width, 0, width, height]), gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(cache.positionLocation);
-    gl.vertexAttribPointer(cache.positionLocation, 2, gl.FLOAT, false, 0, 0);
-    gl.clearColor(0, 0, 0, 0);
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
-    gl.flush();
-    gl.deleteTexture(texture);
-    gl.deleteTexture(maskTexture);
-    gl.deleteBuffer(buffer);
-    return canvas;
-  }
-
-  const figuresVertexShaderCode = "\
-  attribute vec2 a_position;                                    \
-  attribute vec3 a_color;                                       \
-                                                                \
-  uniform vec2 u_resolution;                                    \
-  uniform vec2 u_scale;                                         \
-  uniform vec2 u_offset;                                        \
-                                                                \
-  varying vec4 v_color;                                         \
-                                                                \
-  void main() {                                                 \
-    vec2 position = (a_position + u_offset) * u_scale;          \
-    vec2 clipSpace = (position / u_resolution) * 2.0 - 1.0;     \
-    gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);          \
-                                                                \
-    v_color = vec4(a_color / 255.0, 1.0);                       \
-  }                                                             ";
-  const figuresFragmentShaderCode = "\
-  precision mediump float;                                      \
-                                                                \
-  varying vec4 v_color;                                         \
-                                                                \
-  void main() {                                                 \
-    gl_FragColor = v_color;                                     \
-  }                                                             ";
-  let figuresCache = null;
-
-  function initFiguresGL() {
-    generateGL();
-    const canvas = currentCanvas;
-    currentCanvas = null;
-    const gl = currentGL;
-    currentGL = null;
-    const vertexShader = createVertexShader(gl, figuresVertexShaderCode);
-    const fragmentShader = createFragmentShader(gl, figuresFragmentShaderCode);
-    const program = createProgram(gl, [vertexShader, fragmentShader]);
-    gl.useProgram(program);
-    const cache = {};
-    cache.gl = gl;
-    cache.canvas = canvas;
-    cache.resolutionLocation = gl.getUniformLocation(program, "u_resolution");
-    cache.scaleLocation = gl.getUniformLocation(program, "u_scale");
-    cache.offsetLocation = gl.getUniformLocation(program, "u_offset");
-    cache.positionLocation = gl.getAttribLocation(program, "a_position");
-    cache.colorLocation = gl.getAttribLocation(program, "a_color");
-    figuresCache = cache;
-  }
-
-  function drawFigures(width, height, backgroundColor, figures, context) {
-    if (!figuresCache) {
-      initFiguresGL();
-    }
-
-    const cache = figuresCache,
-          canvas = cache.canvas,
-          gl = cache.gl;
-    canvas.width = width;
-    canvas.height = height;
-    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-    gl.uniform2f(cache.resolutionLocation, width, height);
-    let count = 0;
-
-    for (let i = 0, ii = figures.length; i < ii; i++) {
-      switch (figures[i].type) {
-        case "lattice":
-          const rows = figures[i].coords.length / figures[i].verticesPerRow | 0;
-          count += (rows - 1) * (figures[i].verticesPerRow - 1) * 6;
-          break;
-
-        case "triangles":
-          count += figures[i].coords.length;
-          break;
-      }
-    }
-
-    const coords = new Float32Array(count * 2);
-    const colors = new Uint8Array(count * 3);
-    const coordsMap = context.coords,
-          colorsMap = context.colors;
-    let pIndex = 0,
-        cIndex = 0;
-
-    for (let i = 0, ii = figures.length; i < ii; i++) {
-      const figure = figures[i],
-            ps = figure.coords,
-            cs = figure.colors;
-
-      switch (figure.type) {
-        case "lattice":
-          const cols = figure.verticesPerRow;
-          const rows = ps.length / cols | 0;
-
-          for (let row = 1; row < rows; row++) {
-            let offset = row * cols + 1;
-
-            for (let col = 1; col < cols; col++, offset++) {
-              coords[pIndex] = coordsMap[ps[offset - cols - 1]];
-              coords[pIndex + 1] = coordsMap[ps[offset - cols - 1] + 1];
-              coords[pIndex + 2] = coordsMap[ps[offset - cols]];
-              coords[pIndex + 3] = coordsMap[ps[offset - cols] + 1];
-              coords[pIndex + 4] = coordsMap[ps[offset - 1]];
-              coords[pIndex + 5] = coordsMap[ps[offset - 1] + 1];
-              colors[cIndex] = colorsMap[cs[offset - cols - 1]];
-              colors[cIndex + 1] = colorsMap[cs[offset - cols - 1] + 1];
-              colors[cIndex + 2] = colorsMap[cs[offset - cols - 1] + 2];
-              colors[cIndex + 3] = colorsMap[cs[offset - cols]];
-              colors[cIndex + 4] = colorsMap[cs[offset - cols] + 1];
-              colors[cIndex + 5] = colorsMap[cs[offset - cols] + 2];
-              colors[cIndex + 6] = colorsMap[cs[offset - 1]];
-              colors[cIndex + 7] = colorsMap[cs[offset - 1] + 1];
-              colors[cIndex + 8] = colorsMap[cs[offset - 1] + 2];
-              coords[pIndex + 6] = coords[pIndex + 2];
-              coords[pIndex + 7] = coords[pIndex + 3];
-              coords[pIndex + 8] = coords[pIndex + 4];
-              coords[pIndex + 9] = coords[pIndex + 5];
-              coords[pIndex + 10] = coordsMap[ps[offset]];
-              coords[pIndex + 11] = coordsMap[ps[offset] + 1];
-              colors[cIndex + 9] = colors[cIndex + 3];
-              colors[cIndex + 10] = colors[cIndex + 4];
-              colors[cIndex + 11] = colors[cIndex + 5];
-              colors[cIndex + 12] = colors[cIndex + 6];
-              colors[cIndex + 13] = colors[cIndex + 7];
-              colors[cIndex + 14] = colors[cIndex + 8];
-              colors[cIndex + 15] = colorsMap[cs[offset]];
-              colors[cIndex + 16] = colorsMap[cs[offset] + 1];
-              colors[cIndex + 17] = colorsMap[cs[offset] + 2];
-              pIndex += 12;
-              cIndex += 18;
-            }
-          }
-
-          break;
-
-        case "triangles":
-          for (let j = 0, jj = ps.length; j < jj; j++) {
-            coords[pIndex] = coordsMap[ps[j]];
-            coords[pIndex + 1] = coordsMap[ps[j] + 1];
-            colors[cIndex] = colorsMap[cs[j]];
-            colors[cIndex + 1] = colorsMap[cs[j] + 1];
-            colors[cIndex + 2] = colorsMap[cs[j] + 2];
-            pIndex += 2;
-            cIndex += 3;
-          }
-
-          break;
-      }
-    }
-
-    if (backgroundColor) {
-      gl.clearColor(backgroundColor[0] / 255, backgroundColor[1] / 255, backgroundColor[2] / 255, 1.0);
-    } else {
-      gl.clearColor(0, 0, 0, 0);
-    }
-
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    const coordsBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, coordsBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, coords, gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(cache.positionLocation);
-    gl.vertexAttribPointer(cache.positionLocation, 2, gl.FLOAT, false, 0, 0);
-    const colorsBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, colorsBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
-    gl.enableVertexAttribArray(cache.colorLocation);
-    gl.vertexAttribPointer(cache.colorLocation, 3, gl.UNSIGNED_BYTE, false, 0, 0);
-    gl.uniform2f(cache.scaleLocation, context.scaleX, context.scaleY);
-    gl.uniform2f(cache.offsetLocation, context.offsetX, context.offsetY);
-    gl.drawArrays(gl.TRIANGLES, 0, count);
-    gl.flush();
-    gl.deleteBuffer(coordsBuffer);
-    gl.deleteBuffer(colorsBuffer);
-    return canvas;
-  }
-
-  return {
-    tryInitGL() {
-      try {
-        generateGL();
-        return !!currentGL;
-      } catch (ex) {}
-
-      return false;
-    },
-
-    composeSMask,
-    drawFigures,
-
-    cleanup() {
-      if (smaskCache?.canvas) {
-        smaskCache.canvas.width = 0;
-        smaskCache.canvas.height = 0;
-      }
-
-      if (figuresCache?.canvas) {
-        figuresCache.canvas.width = 0;
-        figuresCache.canvas.height = 0;
-      }
-
-      smaskCache = null;
-      figuresCache = null;
-    }
-
-  };
-}();
-
-/***/ }),
-/* 18 */
-/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
-
-
-
-Object.defineProperty(exports, "__esModule", ({
-  value: true
-}));
 exports.AnnotationLayer = void 0;
 
 var _display_utils = __w_pdfjs_require__(1);
@@ -8867,7 +8413,7 @@ var _util = __w_pdfjs_require__(2);
 
 var _annotation_storage = __w_pdfjs_require__(8);
 
-var _scripting_utils = __w_pdfjs_require__(19);
+var _scripting_utils = __w_pdfjs_require__(18);
 
 class AnnotationElementFactory {
   static create(parameters) {
@@ -10688,7 +10234,7 @@ class AnnotationLayer {
 exports.AnnotationLayer = AnnotationLayer;
 
 /***/ }),
-/* 19 */
+/* 18 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -10756,7 +10302,7 @@ class ColorConverters {
 exports.ColorConverters = ColorConverters;
 
 /***/ }),
-/* 20 */
+/* 19 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -11524,7 +11070,7 @@ function renderTextLayer(renderParameters) {
 }
 
 /***/ }),
-/* 21 */
+/* 20 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -11540,10 +11086,12 @@ var _display_utils = __w_pdfjs_require__(1);
 
 var _is_node = __w_pdfjs_require__(4);
 
-let SVGGraphics = function () {
-  throw new Error("Not implemented: SVGGraphics");
-};
+let SVGGraphics = class {
+  constructor() {
+    (0, _util.unreachable)("Not implemented: SVGGraphics");
+  }
 
+};
 exports.SVGGraphics = SVGGraphics;
 {
   const SVG_DEFAULTS = {
@@ -11873,7 +11421,7 @@ exports.SVGGraphics = SVGGraphics;
   let clipCount = 0;
   let maskCount = 0;
   let shadingCount = 0;
-  exports.SVGGraphics = SVGGraphics = class SVGGraphics {
+  exports.SVGGraphics = SVGGraphics = class {
     constructor(commonObjs, objs, forceDataSchema = false) {
       this.svgFactory = new _display_utils.DOMSVGFactory();
       this.current = new SVGExtraState();
@@ -13051,7 +12599,7 @@ exports.SVGGraphics = SVGGraphics;
 }
 
 /***/ }),
-/* 22 */
+/* 21 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -13140,7 +12688,7 @@ class XfaLayer {
 exports.XfaLayer = XfaLayer;
 
 /***/ }),
-/* 23 */
+/* 22 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -13152,7 +12700,7 @@ exports.PDFNodeStream = void 0;
 
 var _util = __w_pdfjs_require__(2);
 
-var _network_utils = __w_pdfjs_require__(24);
+var _network_utils = __w_pdfjs_require__(23);
 
 ;
 
@@ -13606,7 +13154,7 @@ class PDFNodeStreamFsRangeReader extends BaseRangeReader {
 }
 
 /***/ }),
-/* 24 */
+/* 23 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -13621,7 +13169,7 @@ exports.validateResponseStatus = validateResponseStatus;
 
 var _util = __w_pdfjs_require__(2);
 
-var _content_disposition = __w_pdfjs_require__(25);
+var _content_disposition = __w_pdfjs_require__(24);
 
 var _display_utils = __w_pdfjs_require__(1);
 
@@ -13699,7 +13247,7 @@ function validateResponseStatus(status) {
 }
 
 /***/ }),
-/* 25 */
+/* 24 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -13886,7 +13434,7 @@ function getFilenameFromContentDispositionHeader(contentDisposition) {
 }
 
 /***/ }),
-/* 26 */
+/* 25 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -13898,7 +13446,7 @@ exports.PDFNetworkStream = void 0;
 
 var _util = __w_pdfjs_require__(2);
 
-var _network_utils = __w_pdfjs_require__(24);
+var _network_utils = __w_pdfjs_require__(23);
 
 ;
 const OK_RESPONSE = 200;
@@ -14426,7 +13974,7 @@ class PDFNetworkStreamRangeRequestReader {
 }
 
 /***/ }),
-/* 27 */
+/* 26 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -14438,7 +13986,7 @@ exports.PDFFetchStream = void 0;
 
 var _util = __w_pdfjs_require__(2);
 
-var _network_utils = __w_pdfjs_require__(24);
+var _network_utils = __w_pdfjs_require__(23);
 
 ;
 
@@ -14970,38 +14518,38 @@ var _api = __w_pdfjs_require__(5);
 
 var _util = __w_pdfjs_require__(2);
 
-var _annotation_layer = __w_pdfjs_require__(18);
+var _annotation_layer = __w_pdfjs_require__(17);
 
 var _api_compatibility = __w_pdfjs_require__(9);
 
 var _worker_options = __w_pdfjs_require__(12);
 
-var _text_layer = __w_pdfjs_require__(20);
+var _text_layer = __w_pdfjs_require__(19);
 
-var _svg = __w_pdfjs_require__(21);
+var _svg = __w_pdfjs_require__(20);
 
-var _xfa_layer = __w_pdfjs_require__(22);
+var _xfa_layer = __w_pdfjs_require__(21);
 
 const pdfjsVersion = '2.9.0';
-const pdfjsBuild = 'a6f324d';
+const pdfjsBuild = '438cf1e';
 {
   const {
     isNodeJS
   } = __w_pdfjs_require__(4);
 
   if (isNodeJS) {
-    const PDFNodeStream = __w_pdfjs_require__(23).PDFNodeStream;
+    const PDFNodeStream = __w_pdfjs_require__(22).PDFNodeStream;
 
     (0, _api.setPDFNetworkStreamFactory)(params => {
       return new PDFNodeStream(params);
     });
   } else {
-    const PDFNetworkStream = __w_pdfjs_require__(26).PDFNetworkStream;
+    const PDFNetworkStream = __w_pdfjs_require__(25).PDFNetworkStream;
 
     let PDFFetchStream;
 
     if ((0, _display_utils.isFetchSupported)()) {
-      PDFFetchStream = __w_pdfjs_require__(27).PDFFetchStream;
+      PDFFetchStream = __w_pdfjs_require__(26).PDFFetchStream;
     }
 
     (0, _api.setPDFNetworkStreamFactory)(params => {
