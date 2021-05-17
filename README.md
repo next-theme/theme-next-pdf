@@ -1,6 +1,6 @@
-<h1 align="center"><a href="https://github.com/mozilla/pdf.js">PDF.js</a> for <a href="https://github.com/theme-next">NexT</a></h1>
+# [PDF.js](https://github.com/mozilla/pdf.js) for [NexT](https://github.com/next-theme/hexo-theme-next)
 
-<h2 align="center">Introduce</h2>
+## Introduce
 
 This is a plugin that allows to preview PDF files in the blog pages.
 
@@ -8,19 +8,20 @@ If the browser supports embedded PDFs natively, NexT will create a `<embed>` tag
 
 Follow the guide below to install dependencies.
 
-<h1 align="center">Installation</h1>
+## Installation
 
-<h2 align="center">Step 1 &rarr; Go to NexT dir</h2>
+### Step 1 &rarr; Go to Hexo dir
 
-Change dir to **NexT** directory. There must be `layout`, `source`, `languages` and other directories:
+Change dir to **Hexo** directory. There must be `source`, `themes` and other directories:
 
 ```sh
-$ cd themes/next
+$ cd hexo-site
 $ ls
-_config.yml  crowdin.yml  docs  gulpfile.js  languages  layout  LICENSE.md  package.json  README.md  scripts  source
+_config.next.yml  db.json           package-lock.json scaffolds         themes
+_config.yml       node_modules      package.json      source
 ```
 
-<h2 align="center">Step 2 &rarr; Get module</h2>
+### Step 2 &rarr; Get module
 
 Install module to `source/lib` directory:
 
@@ -28,9 +29,9 @@ Install module to `source/lib` directory:
 $ git clone https://github.com/next-theme/theme-next-pdf source/lib/pdf
 ```
 
-<h2 align="center">Step 3 &rarr; Set it up</h2>
+### Step 3 &rarr; Set it up
 
-Enable module in **NexT** `_config.yml` file:
+Enable module in **NexT** `_config.next.yml` file:
 
 ```yml
 # PDF tag
@@ -43,7 +44,8 @@ pdf:
   height: 500px
 ```
 
-<h1 align="center">Usage</h1>
+## Usage
+
 In order to embed PDF files in the article, you just need to create an `pdf` tag with the URL of your local PDF file, e.g.
 
 ```
@@ -53,9 +55,9 @@ Notice: Do not use cross-origin PDF files, it might be blocked by the CORS polic
 
 Enjoy it!
 
-<h1 align="center">Update</h1>
+## Update
 
 ```sh
-$ cd themes/next/source/lib/pdf
+$ cd hexo-site/source/lib/pdf
 $ git pull
 ```
