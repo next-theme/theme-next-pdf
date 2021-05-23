@@ -1058,6 +1058,7 @@ const UNSUPPORTED_FEATURES = {
   errorOperatorList: "errorOperatorList",
   errorFontToUnicode: "errorFontToUnicode",
   errorFontLoadNative: "errorFontLoadNative",
+  errorFontBuildPath: "errorFontBuildPath",
   errorFontGetPath: "errorFontGetPath",
   errorMarkedContent: "errorMarkedContent"
 };
@@ -1461,7 +1462,7 @@ class Util {
 }
 
 exports.Util = Util;
-const PDFStringTranslateTable = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2D8, 0x2C7, 0x2C6, 0x2D9, 0x2DD, 0x2DB, 0x2DA, 0x2DC, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2022, 0x2020, 0x2021, 0x2026, 0x2014, 0x2013, 0x192, 0x2044, 0x2039, 0x203A, 0x2212, 0x2030, 0x201E, 0x201C, 0x201D, 0x2018, 0x2019, 0x201A, 0x2122, 0xFB01, 0xFB02, 0x141, 0x152, 0x160, 0x178, 0x17D, 0x131, 0x142, 0x153, 0x161, 0x17E, 0, 0x20AC];
+const PDFStringTranslateTable = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2d8, 0x2c7, 0x2c6, 0x2d9, 0x2dd, 0x2db, 0x2da, 0x2dc, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2022, 0x2020, 0x2021, 0x2026, 0x2014, 0x2013, 0x192, 0x2044, 0x2039, 0x203a, 0x2212, 0x2030, 0x201e, 0x201c, 0x201d, 0x2018, 0x2019, 0x201a, 0x2122, 0xfb01, 0xfb02, 0x141, 0x152, 0x160, 0x178, 0x17d, 0x131, 0x142, 0x153, 0x161, 0x17e, 0, 0x20ac];
 
 function stringToPDFString(str) {
   const length = str.length,
@@ -3474,10 +3475,6 @@ var _xref = __w_pdfjs_require__(87);
 const DEFAULT_USER_UNIT = 1.0;
 const LETTER_SIZE_MEDIABOX = [0, 0, 612, 792];
 
-function isAnnotationRenderable(annotation, intent) {
-  return intent === "display" && annotation.viewable || intent === "print" && annotation.printable;
-}
-
 class Page {
   constructor({
     pdfManager,
@@ -3662,7 +3659,7 @@ class Page {
       const newRefsPromises = [];
 
       for (const annotation of annotations) {
-        if (!isAnnotationRenderable(annotation, "print")) {
+        if (!annotation.mustBePrinted(annotationStorage)) {
           continue;
         }
 
@@ -3735,7 +3732,7 @@ class Page {
       const opListPromises = [];
 
       for (const annotation of annotations) {
-        if (isAnnotationRenderable(annotation, intent) && !annotation.isHidden(annotationStorage)) {
+        if (intent === "display" && annotation.mustBeViewed(annotationStorage) || intent === "print" && annotation.mustBePrinted(annotationStorage)) {
           opListPromises.push(annotation.getOperatorList(partialEvaluator, task, renderInteractiveForms, annotationStorage).catch(function (reason) {
             (0, _util.warn)("getOperatorList - ignoring annotation data during " + `"${task.name}" task: "${reason}".`);
             return null;
@@ -3815,7 +3812,7 @@ class Page {
       const annotationsData = [];
 
       for (let i = 0, ii = annotations.length; i < ii; i++) {
-        if (!intent || isAnnotationRenderable(annotations[i], intent)) {
+        if (!intent || intent === "display" && annotations[i].viewable || intent === "print" && annotations[i].printable) {
           annotationsData.push(annotations[i].data);
         }
       }
@@ -4907,14 +4904,24 @@ class Annotation {
     return this._hasFlag(flags, _util.AnnotationFlag.PRINT) && !this._hasFlag(flags, _util.AnnotationFlag.INVISIBLE);
   }
 
-  isHidden(annotationStorage) {
+  mustBeViewed(annotationStorage) {
     const storageEntry = annotationStorage && annotationStorage.get(this.data.id);
 
     if (storageEntry && storageEntry.hidden !== undefined) {
-      return storageEntry.hidden;
+      return !storageEntry.hidden;
     }
 
-    return this._hasFlag(this.flags, _util.AnnotationFlag.HIDDEN);
+    return this.viewable && !this._hasFlag(this.flags, _util.AnnotationFlag.HIDDEN);
+  }
+
+  mustBePrinted(annotationStorage) {
+    const storageEntry = annotationStorage && annotationStorage.get(this.data.id);
+
+    if (storageEntry && storageEntry.print !== undefined) {
+      return storageEntry.print;
+    }
+
+    return this.printable;
   }
 
   get viewable() {
@@ -8375,7 +8382,8 @@ class PartialEvaluator {
       bbox = null;
     }
 
-    let optionalContent = null;
+    let optionalContent = null,
+        groupOptions;
 
     if (dict.has("OC")) {
       optionalContent = await this.parseMarkedContentProps(dict.get("OC"), resources);
@@ -8385,7 +8393,7 @@ class PartialEvaluator {
     const group = dict.get("Group");
 
     if (group) {
-      var groupOptions = {
+      groupOptions = {
         matrix,
         bbox,
         smask,
@@ -8728,7 +8736,7 @@ class PartialEvaluator {
           loadedName: "g_font_error",
           font: new _fonts.ErrorFont(`Type3 font load error: ${reason}`),
           dict: translated.font,
-          extraProperties: this.options.fontExtraProperties
+          evaluatorOptions: this.options
         });
       });
     }).then(translated => {
@@ -8746,7 +8754,7 @@ class PartialEvaluator {
       const isAddToPathSet = !!(state.textRenderingMode & _util.TextRenderingMode.ADD_TO_PATH_FLAG);
 
       if (isAddToPathSet || state.fillColorSpace.name === "Pattern" || font.disableFontFace || this.options.disableFontFace) {
-        PartialEvaluator.buildFontPaths(font, glyphs, this.handler);
+        PartialEvaluator.buildFontPaths(font, glyphs, this.handler, this.options);
       }
     }
 
@@ -8883,7 +8891,7 @@ class PartialEvaluator {
         loadedName: "g_font_error",
         font: new _fonts.ErrorFont(`Font "${fontName}" is not available.`),
         dict: font,
-        extraProperties: this.options.fontExtraProperties
+        evaluatorOptions: this.options
       });
     };
 
@@ -9010,7 +9018,7 @@ class PartialEvaluator {
         loadedName: font.loadedName,
         font: translatedFont,
         dict: font,
-        extraProperties: this.options.fontExtraProperties
+        evaluatorOptions: this.options
       }));
     }).catch(reason => {
       this.handler.send("UnsupportedFeature", {
@@ -9030,7 +9038,7 @@ class PartialEvaluator {
         loadedName: font.loadedName,
         font: new _fonts.ErrorFont(reason instanceof Error ? reason.message : reason),
         dict: font,
-        extraProperties: this.options.fontExtraProperties
+        evaluatorOptions: this.options
       }));
     });
     return fontCapability.promise;
@@ -11281,10 +11289,11 @@ class PartialEvaluator {
     toUnicode,
     cssFontInfo
   }) {
+    const isType3Font = type === "Type3";
     let properties;
 
     if (!descriptor) {
-      if (type === "Type3") {
+      if (isType3Font) {
         descriptor = new _primitives.Dict(null);
         descriptor.set("FontName", _primitives.Name.get(type));
         descriptor.set("FontBBox", dict.getArray("FontBBox") || [0, 0, 0, 0]);
@@ -11307,7 +11316,8 @@ class PartialEvaluator {
           flags,
           firstChar,
           lastChar,
-          toUnicode
+          toUnicode,
+          isType3Font
         };
         const widths = dict.get("Widths");
         return this.extractDataStructures(dict, dict, properties).then(newProperties => {
@@ -11340,7 +11350,7 @@ class PartialEvaluator {
       baseFont = _primitives.Name.get(baseFont);
     }
 
-    if (type !== "Type3") {
+    if (!isType3Font) {
       const fontNameStr = fontName && fontName.name;
       const baseFontStr = baseFont && baseFont.name;
 
@@ -11359,7 +11369,7 @@ class PartialEvaluator {
       throw new _util.FormatError("invalid font name");
     }
 
-    let fontFile;
+    let fontFile, subtype, length1, length2, length3;
 
     try {
       fontFile = descriptor.get("FontFile", "FontFile2", "FontFile3");
@@ -11374,15 +11384,15 @@ class PartialEvaluator {
 
     if (fontFile) {
       if (fontFile.dict) {
-        var subtype = fontFile.dict.get("Subtype");
+        const subtypeEntry = fontFile.dict.get("Subtype");
 
-        if (subtype) {
-          subtype = subtype.name;
+        if (subtypeEntry instanceof _primitives.Name) {
+          subtype = subtypeEntry.name;
         }
 
-        var length1 = fontFile.dict.get("Length1");
-        var length2 = fontFile.dict.get("Length2");
-        var length3 = fontFile.dict.get("Length3");
+        length1 = fontFile.dict.get("Length1");
+        length2 = fontFile.dict.get("Length2");
+        length3 = fontFile.dict.get("Length3");
       }
     }
 
@@ -11408,7 +11418,7 @@ class PartialEvaluator {
       capHeight: descriptor.get("CapHeight"),
       flags: descriptor.get("Flags"),
       italicAngle: descriptor.get("ItalicAngle"),
-      isType3Font: false,
+      isType3Font,
       cssFontInfo
     };
 
@@ -11430,22 +11440,31 @@ class PartialEvaluator {
 
     return this.extractDataStructures(dict, baseDict, properties).then(newProperties => {
       this.extractWidths(dict, descriptor, newProperties);
-
-      if (type === "Type3") {
-        newProperties.isType3Font = true;
-      }
-
       return new _fonts.Font(fontName.name, fontFile, newProperties);
     });
   }
 
-  static buildFontPaths(font, glyphs, handler) {
+  static buildFontPaths(font, glyphs, handler, evaluatorOptions) {
     function buildPath(fontChar) {
-      if (font.renderer.hasBuiltPath(fontChar)) {
-        return;
-      }
+      const glyphName = `${font.loadedName}_path_${fontChar}`;
 
-      handler.send("commonobj", [`${font.loadedName}_path_${fontChar}`, "FontPath", font.renderer.getPathJs(fontChar)]);
+      try {
+        if (font.renderer.hasBuiltPath(fontChar)) {
+          return;
+        }
+
+        handler.send("commonobj", [glyphName, "FontPath", font.renderer.getPathJs(fontChar)]);
+      } catch (reason) {
+        if (evaluatorOptions.ignoreErrors) {
+          handler.send("UnsupportedFeature", {
+            featureId: _util.UNSUPPORTED_FEATURES.errorFontBuildPath
+          });
+          (0, _util.warn)(`buildFontPaths - ignoring ${glyphName} glyph: "${reason}".`);
+          return;
+        }
+
+        throw reason;
+      }
     }
 
     for (const glyph of glyphs) {
@@ -11476,12 +11495,12 @@ class TranslatedFont {
     loadedName,
     font,
     dict,
-    extraProperties = false
+    evaluatorOptions
   }) {
     this.loadedName = loadedName;
     this.font = font;
     this.dict = dict;
-    this._extraProperties = extraProperties;
+    this._evaluatorOptions = evaluatorOptions || DefaultPartialEvaluatorOptions;
     this.type3Loaded = null;
     this.type3Dependencies = font.isType3Font ? new Set() : null;
     this.sent = false;
@@ -11493,7 +11512,7 @@ class TranslatedFont {
     }
 
     this.sent = true;
-    handler.send("commonobj", [this.loadedName, "Font", this.font.exportData(this._extraProperties)]);
+    handler.send("commonobj", [this.loadedName, "Font", this.font.exportData(this._evaluatorOptions.fontExtraProperties)]);
   }
 
   fallback(handler) {
@@ -11502,8 +11521,7 @@ class TranslatedFont {
     }
 
     this.font.disableFontFace = true;
-    const glyphs = this.font.glyphCacheValues;
-    PartialEvaluator.buildFontPaths(this.font, glyphs, handler);
+    PartialEvaluator.buildFontPaths(this.font, this.font.glyphCacheValues, handler, this._evaluatorOptions);
   }
 
   loadType3Data(evaluator, resources, task) {
@@ -13727,7 +13745,7 @@ class Parser {
     if (this.tryShift() && (0, _primitives.isCmd)(this.buf2, "endstream")) {
       this.shift();
     } else {
-      const ENDSTREAM_SIGNATURE = new Uint8Array([0x65, 0x6E, 0x64, 0x73, 0x74, 0x72, 0x65, 0x61, 0x6D]);
+      const ENDSTREAM_SIGNATURE = new Uint8Array([0x65, 0x6e, 0x64, 0x73, 0x74, 0x72, 0x65, 0x61, 0x6d]);
 
       let actualLength = this._findStreamLength(startPos, ENDSTREAM_SIGNATURE);
 
@@ -25027,8 +25045,15 @@ class Font {
     }
 
     const mapping = font.getGlyphMapping(properties);
-    const newMapping = adjustMapping(mapping, font.hasGlyphId.bind(font), glyphZeroId);
-    this.toFontChar = newMapping.toFontChar;
+    let newMapping = null;
+    let newCharCodeToGlyphId = mapping;
+
+    if (!properties.cssFontInfo) {
+      newMapping = adjustMapping(mapping, font.hasGlyphId.bind(font), glyphZeroId);
+      this.toFontChar = newMapping.toFontChar;
+      newCharCodeToGlyphId = newMapping.charCodeToGlyphId;
+    }
+
     const numGlyphs = font.numGlyphs;
 
     function getCharCodes(charCodeToGlyphId, glyphId) {
@@ -25060,7 +25085,7 @@ class Font {
 
     const seacs = font.seacs;
 
-    if (_fonts_utils.SEAC_ANALYSIS_ENABLED && seacs && seacs.length) {
+    if (newMapping && _fonts_utils.SEAC_ANALYSIS_ENABLED && seacs && seacs.length) {
       const matrix = properties.fontMatrix || _util.FONT_IDENTITY_MATRIX;
       const charset = font.getCharset();
       const seacMap = Object.create(null);
@@ -25106,8 +25131,8 @@ class Font {
     const unitsPerEm = 1 / (properties.fontMatrix || _util.FONT_IDENTITY_MATRIX)[0];
     const builder = new _opentype_file_builder.OpenTypeFileBuilder("\x4F\x54\x54\x4F");
     builder.addTable("CFF ", font.data);
-    builder.addTable("OS/2", createOS2Table(properties, newMapping.charCodeToGlyphId));
-    builder.addTable("cmap", createCmapTable(newMapping.charCodeToGlyphId, numGlyphs));
+    builder.addTable("OS/2", createOS2Table(properties, newCharCodeToGlyphId));
+    builder.addTable("cmap", createCmapTable(newCharCodeToGlyphId, numGlyphs));
     builder.addTable("head", "\x00\x01\x00\x00" + "\x00\x00\x10\x00" + "\x00\x00\x00\x00" + "\x5F\x0F\x3C\xF5" + "\x00\x00" + safeString16(unitsPerEm) + "\x00\x00\x00\x00\x9e\x0b\x7e\x27" + "\x00\x00\x00\x00\x9e\x0b\x7e\x27" + "\x00\x00" + safeString16(properties.descent) + "\x0F\xFF" + safeString16(properties.ascent) + string16(properties.italicAngle ? 2 : 0) + "\x00\x11" + "\x00\x00" + "\x00\x00" + "\x00\x00");
     builder.addTable("hhea", "\x00\x01\x00\x00" + safeString16(properties.ascent) + safeString16(properties.descent) + "\x00\x00" + "\xFF\xFF" + "\x00\x00" + "\x00\x00" + "\x00\x00" + safeString16(properties.capHeight) + safeString16(Math.tan(properties.italicAngle) * properties.xHeight) + "\x00\x00" + "\x00\x00" + "\x00\x00" + "\x00\x00" + "\x00\x00" + "\x00\x00" + string16(numGlyphs));
     builder.addTable("hmtx", function fontFieldsHmtx() {
@@ -26011,7 +26036,7 @@ const CFFParser = function CFFParserClosure() {
               (0, _util.warn)("Found too many parameters for stack-clearing command");
             }
 
-            if (stackSize > 0 && stack[stackSize - 1] >= 0) {
+            if (stackSize > 0) {
               state.width = stack[stackSize - 1];
             }
           }
@@ -41656,16 +41681,29 @@ class CompiledFont {
   }
 
   getPathJs(unicode) {
-    const cmap = lookupCmap(this.cmap, unicode);
-    let fn = this.compiledGlyphs[cmap.glyphId];
+    const {
+      charCode,
+      glyphId
+    } = lookupCmap(this.cmap, unicode);
+    let fn = this.compiledGlyphs[glyphId];
 
     if (!fn) {
-      fn = this.compileGlyph(this.glyphs[cmap.glyphId], cmap.glyphId);
-      this.compiledGlyphs[cmap.glyphId] = fn;
+      try {
+        fn = this.compileGlyph(this.glyphs[glyphId], glyphId);
+        this.compiledGlyphs[glyphId] = fn;
+      } catch (ex) {
+        this.compiledGlyphs[glyphId] = NOOP;
+
+        if (this.compiledCharCodeToGlyphId[charCode] === undefined) {
+          this.compiledCharCodeToGlyphId[charCode] = glyphId;
+        }
+
+        throw ex;
+      }
     }
 
-    if (this.compiledCharCodeToGlyphId[cmap.charCode] === undefined) {
-      this.compiledCharCodeToGlyphId[cmap.charCode] = cmap.glyphId;
+    if (this.compiledCharCodeToGlyphId[charCode] === undefined) {
+      this.compiledCharCodeToGlyphId[charCode] = glyphId;
     }
 
     return fn;
@@ -41713,8 +41751,11 @@ class CompiledFont {
   }
 
   hasBuiltPath(unicode) {
-    const cmap = lookupCmap(this.cmap, unicode);
-    return this.compiledGlyphs[cmap.glyphId] !== undefined && this.compiledCharCodeToGlyphId[cmap.charCode] !== undefined;
+    const {
+      charCode,
+      glyphId
+    } = lookupCmap(this.cmap, unicode);
+    return this.compiledGlyphs[glyphId] !== undefined && this.compiledCharCodeToGlyphId[charCode] !== undefined;
   }
 
 }
@@ -45998,8 +46039,8 @@ exports.bidi = bidi;
 
 var _util = __w_pdfjs_require__(2);
 
-var baseTypes = ["BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "S", "B", "S", "WS", "B", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "B", "B", "B", "S", "WS", "ON", "ON", "ET", "ET", "ET", "ON", "ON", "ON", "ON", "ON", "ES", "CS", "ES", "CS", "CS", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "CS", "ON", "ON", "ON", "ON", "ON", "ON", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "ON", "ON", "ON", "ON", "ON", "ON", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "ON", "ON", "ON", "ON", "BN", "BN", "BN", "BN", "BN", "BN", "B", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "CS", "ON", "ET", "ET", "ET", "ET", "ON", "ON", "ON", "ON", "L", "ON", "ON", "BN", "ON", "ON", "ET", "ET", "EN", "EN", "ON", "L", "ON", "ON", "ON", "EN", "L", "ON", "ON", "ON", "ON", "ON", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "ON", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "ON", "L", "L", "L", "L", "L", "L", "L", "L"];
-var arabicTypes = ["AN", "AN", "AN", "AN", "AN", "AN", "ON", "ON", "AL", "ET", "ET", "AL", "CS", "AL", "ON", "ON", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "AL", "AL", "", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "AN", "AN", "AN", "AN", "AN", "AN", "AN", "AN", "AN", "AN", "ET", "AN", "AN", "AL", "AL", "AL", "NSM", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "AN", "ON", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "AL", "AL", "NSM", "NSM", "ON", "NSM", "NSM", "NSM", "NSM", "AL", "AL", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "AL", "AL", "AL", "AL", "AL", "AL"];
+const baseTypes = ["BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "S", "B", "S", "WS", "B", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "B", "B", "B", "S", "WS", "ON", "ON", "ET", "ET", "ET", "ON", "ON", "ON", "ON", "ON", "ES", "CS", "ES", "CS", "CS", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "CS", "ON", "ON", "ON", "ON", "ON", "ON", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "ON", "ON", "ON", "ON", "ON", "ON", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "ON", "ON", "ON", "ON", "BN", "BN", "BN", "BN", "BN", "BN", "B", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "BN", "CS", "ON", "ET", "ET", "ET", "ET", "ON", "ON", "ON", "ON", "L", "ON", "ON", "BN", "ON", "ON", "ET", "ET", "EN", "EN", "ON", "L", "ON", "ON", "ON", "EN", "L", "ON", "ON", "ON", "ON", "ON", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "ON", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "L", "ON", "L", "L", "L", "L", "L", "L", "L", "L"];
+const arabicTypes = ["AN", "AN", "AN", "AN", "AN", "AN", "ON", "ON", "AL", "ET", "ET", "AL", "CS", "AL", "ON", "ON", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "AL", "AL", "", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "AN", "AN", "AN", "AN", "AN", "AN", "AN", "AN", "AN", "AN", "ET", "AN", "AN", "AL", "AL", "AL", "NSM", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "AL", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "AN", "ON", "NSM", "NSM", "NSM", "NSM", "NSM", "NSM", "AL", "AL", "NSM", "NSM", "ON", "NSM", "NSM", "NSM", "NSM", "AL", "AL", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "EN", "AL", "AL", "AL", "AL", "AL", "AL"];
 
 function isOdd(i) {
   return (i & 1) !== 0;
@@ -46010,7 +46051,9 @@ function isEven(i) {
 }
 
 function findUnequal(arr, start, value) {
-  for (var j = start, jj = arr.length; j < jj; ++j) {
+  let j, jj;
+
+  for (j = start, jj = arr.length; j < jj; ++j) {
     if (arr[j] !== value) {
       return j;
     }
@@ -46020,14 +46063,14 @@ function findUnequal(arr, start, value) {
 }
 
 function setValues(arr, start, end, value) {
-  for (var j = start; j < end; ++j) {
+  for (let j = start; j < end; ++j) {
     arr[j] = value;
   }
 }
 
 function reverseValues(arr, start, end) {
-  for (var i = start, j = end - 1; i < j; ++i, --j) {
-    var temp = arr[i];
+  for (let i = start, j = end - 1; i < j; ++i, --j) {
+    const temp = arr[i];
     arr[i] = arr[j];
     arr[j] = temp;
   }
@@ -46048,12 +46091,12 @@ function createBidiText(str, isLTR, vertical = false) {
   };
 }
 
-var chars = [];
-var types = [];
+const chars = [];
+const types = [];
 
 function bidi(str, startLevel, vertical) {
-  var isLTR = true;
-  var strLength = str.length;
+  let isLTR = true;
+  const strLength = str.length;
 
   if (strLength === 0 || vertical) {
     return createBidiText(str, isLTR, vertical);
@@ -46061,13 +46104,13 @@ function bidi(str, startLevel, vertical) {
 
   chars.length = strLength;
   types.length = strLength;
-  var numBidi = 0;
-  var i, ii;
+  let numBidi = 0;
+  let i, ii;
 
   for (i = 0; i < strLength; ++i) {
     chars[i] = str.charAt(i);
-    var charCode = str.charCodeAt(i);
-    var charType = "L";
+    const charCode = str.charCodeAt(i);
+    let charType = "L";
 
     if (charCode <= 0x00ff) {
       charType = baseTypes[charCode];
@@ -46105,16 +46148,16 @@ function bidi(str, startLevel, vertical) {
     }
   }
 
-  var levels = [];
+  const levels = [];
 
   for (i = 0; i < strLength; ++i) {
     levels[i] = startLevel;
   }
 
-  var e = isOdd(startLevel) ? "R" : "L";
-  var sor = e;
-  var eor = sor;
-  var lastType = sor;
+  const e = isOdd(startLevel) ? "R" : "L";
+  const sor = e;
+  const eor = sor;
+  let lastType = sor;
 
   for (i = 0; i < strLength; ++i) {
     if (types[i] === "NSM") {
@@ -46125,7 +46168,7 @@ function bidi(str, startLevel, vertical) {
   }
 
   lastType = sor;
-  var t;
+  let t;
 
   for (i = 0; i < strLength; ++i) {
     t = types[i];
@@ -46157,9 +46200,7 @@ function bidi(str, startLevel, vertical) {
 
   for (i = 0; i < strLength; ++i) {
     if (types[i] === "EN") {
-      var j;
-
-      for (j = i - 1; j >= 0; --j) {
+      for (let j = i - 1; j >= 0; --j) {
         if (types[j] !== "ET") {
           break;
         }
@@ -46167,7 +46208,7 @@ function bidi(str, startLevel, vertical) {
         types[j] = "EN";
       }
 
-      for (j = i + 1; j < strLength; ++j) {
+      for (let j = i + 1; j < strLength; ++j) {
         if (types[j] !== "ET") {
           break;
         }
@@ -46199,14 +46240,14 @@ function bidi(str, startLevel, vertical) {
 
   for (i = 0; i < strLength; ++i) {
     if (types[i] === "ON") {
-      var end = findUnequal(types, i + 1, "ON");
-      var before = sor;
+      const end = findUnequal(types, i + 1, "ON");
+      let before = sor;
 
       if (i > 0) {
         before = types[i - 1];
       }
 
-      var after = eor;
+      let after = eor;
 
       if (end + 1 < strLength) {
         after = types[end + 1];
@@ -46250,9 +46291,9 @@ function bidi(str, startLevel, vertical) {
     }
   }
 
-  var highestLevel = -1;
-  var lowestOddLevel = 99;
-  var level;
+  let highestLevel = -1;
+  let lowestOddLevel = 99;
+  let level;
 
   for (i = 0, ii = levels.length; i < ii; ++i) {
     level = levels[i];
@@ -46267,7 +46308,7 @@ function bidi(str, startLevel, vertical) {
   }
 
   for (level = highestLevel; level >= lowestOddLevel; --level) {
-    var start = -1;
+    let start = -1;
 
     for (i = 0, ii = levels.length; i < ii; ++i) {
       if (levels[i] < level) {
@@ -46286,7 +46327,7 @@ function bidi(str, startLevel, vertical) {
   }
 
   for (i = 0, ii = chars.length; i < ii; ++i) {
-    var ch = chars[i];
+    const ch = chars[i];
 
     if (ch === "<" || ch === ">") {
       chars[i] = "";
@@ -49387,403 +49428,423 @@ exports.OperatorList = void 0;
 
 var _util = __w_pdfjs_require__(2);
 
-const QueueOptimizer = function QueueOptimizerClosure() {
-  function addState(parentState, pattern, checkFn, iterateFn, processFn) {
-    let state = parentState;
+function addState(parentState, pattern, checkFn, iterateFn, processFn) {
+  let state = parentState;
 
-    for (let i = 0, ii = pattern.length - 1; i < ii; i++) {
-      const item = pattern[i];
-      state = state[item] || (state[item] = []);
-    }
-
-    state[pattern[pattern.length - 1]] = {
-      checkFn,
-      iterateFn,
-      processFn
-    };
+  for (let i = 0, ii = pattern.length - 1; i < ii; i++) {
+    const item = pattern[i];
+    state = state[item] || (state[item] = []);
   }
 
-  function handlePaintSolidColorImageMask(iFirstSave, count, fnArray, argsArray) {
-    const iFirstPIMXO = iFirstSave + 2;
-    let i;
+  state[pattern[pattern.length - 1]] = {
+    checkFn,
+    iterateFn,
+    processFn
+  };
+}
 
-    for (i = 0; i < count; i++) {
-      const arg = argsArray[iFirstPIMXO + 4 * i];
-      const imageMask = arg.length === 1 && arg[0];
+function handlePaintSolidColorImageMask(iFirstSave, count, fnArray, argsArray) {
+  const iFirstPIMXO = iFirstSave + 2;
+  let i;
 
-      if (imageMask && imageMask.width === 1 && imageMask.height === 1 && (!imageMask.data.length || imageMask.data.length === 1 && imageMask.data[0] === 0)) {
-        fnArray[iFirstPIMXO + 4 * i] = _util.OPS.paintSolidColorImageMask;
-        continue;
-      }
+  for (i = 0; i < count; i++) {
+    const arg = argsArray[iFirstPIMXO + 4 * i];
+    const imageMask = arg.length === 1 && arg[0];
 
-      break;
+    if (imageMask && imageMask.width === 1 && imageMask.height === 1 && (!imageMask.data.length || imageMask.data.length === 1 && imageMask.data[0] === 0)) {
+      fnArray[iFirstPIMXO + 4 * i] = _util.OPS.paintSolidColorImageMask;
+      continue;
     }
 
-    return count - i;
+    break;
   }
 
-  const InitialState = [];
-  addState(InitialState, [_util.OPS.save, _util.OPS.transform, _util.OPS.paintInlineImageXObject, _util.OPS.restore], null, function iterateInlineImageGroup(context, i) {
-    const fnArray = context.fnArray;
-    const iFirstSave = context.iCurr - 3;
-    const pos = (i - iFirstSave) % 4;
+  return count - i;
+}
 
-    switch (pos) {
-      case 0:
-        return fnArray[i] === _util.OPS.save;
+const InitialState = [];
+addState(InitialState, [_util.OPS.save, _util.OPS.transform, _util.OPS.paintInlineImageXObject, _util.OPS.restore], null, function iterateInlineImageGroup(context, i) {
+  const fnArray = context.fnArray;
+  const iFirstSave = context.iCurr - 3;
+  const pos = (i - iFirstSave) % 4;
 
-      case 1:
-        return fnArray[i] === _util.OPS.transform;
+  switch (pos) {
+    case 0:
+      return fnArray[i] === _util.OPS.save;
 
-      case 2:
-        return fnArray[i] === _util.OPS.paintInlineImageXObject;
+    case 1:
+      return fnArray[i] === _util.OPS.transform;
 
-      case 3:
-        return fnArray[i] === _util.OPS.restore;
+    case 2:
+      return fnArray[i] === _util.OPS.paintInlineImageXObject;
+
+    case 3:
+      return fnArray[i] === _util.OPS.restore;
+  }
+
+  throw new Error(`iterateInlineImageGroup - invalid pos: ${pos}`);
+}, function foundInlineImageGroup(context, i) {
+  const MIN_IMAGES_IN_INLINE_IMAGES_BLOCK = 10;
+  const MAX_IMAGES_IN_INLINE_IMAGES_BLOCK = 200;
+  const MAX_WIDTH = 1000;
+  const IMAGE_PADDING = 1;
+  const fnArray = context.fnArray,
+        argsArray = context.argsArray;
+  const curr = context.iCurr;
+  const iFirstSave = curr - 3;
+  const iFirstTransform = curr - 2;
+  const iFirstPIIXO = curr - 1;
+  const count = Math.min(Math.floor((i - iFirstSave) / 4), MAX_IMAGES_IN_INLINE_IMAGES_BLOCK);
+
+  if (count < MIN_IMAGES_IN_INLINE_IMAGES_BLOCK) {
+    return i - (i - iFirstSave) % 4;
+  }
+
+  let maxX = 0;
+  const map = [];
+  let maxLineHeight = 0;
+  let currentX = IMAGE_PADDING,
+      currentY = IMAGE_PADDING;
+
+  for (let q = 0; q < count; q++) {
+    const transform = argsArray[iFirstTransform + (q << 2)];
+    const img = argsArray[iFirstPIIXO + (q << 2)][0];
+
+    if (currentX + img.width > MAX_WIDTH) {
+      maxX = Math.max(maxX, currentX);
+      currentY += maxLineHeight + 2 * IMAGE_PADDING;
+      currentX = 0;
+      maxLineHeight = 0;
     }
 
-    throw new Error(`iterateInlineImageGroup - invalid pos: ${pos}`);
-  }, function foundInlineImageGroup(context, i) {
-    const MIN_IMAGES_IN_INLINE_IMAGES_BLOCK = 10;
-    const MAX_IMAGES_IN_INLINE_IMAGES_BLOCK = 200;
-    const MAX_WIDTH = 1000;
-    const IMAGE_PADDING = 1;
-    const fnArray = context.fnArray,
-          argsArray = context.argsArray;
-    const curr = context.iCurr;
-    const iFirstSave = curr - 3;
-    const iFirstTransform = curr - 2;
-    const iFirstPIIXO = curr - 1;
-    const count = Math.min(Math.floor((i - iFirstSave) / 4), MAX_IMAGES_IN_INLINE_IMAGES_BLOCK);
+    map.push({
+      transform,
+      x: currentX,
+      y: currentY,
+      w: img.width,
+      h: img.height
+    });
+    currentX += img.width + 2 * IMAGE_PADDING;
+    maxLineHeight = Math.max(maxLineHeight, img.height);
+  }
 
-    if (count < MIN_IMAGES_IN_INLINE_IMAGES_BLOCK) {
-      return i - (i - iFirstSave) % 4;
+  const imgWidth = Math.max(maxX, currentX) + IMAGE_PADDING;
+  const imgHeight = currentY + maxLineHeight + IMAGE_PADDING;
+  const imgData = new Uint8ClampedArray(imgWidth * imgHeight * 4);
+  const imgRowSize = imgWidth << 2;
+
+  for (let q = 0; q < count; q++) {
+    const data = argsArray[iFirstPIIXO + (q << 2)][0].data;
+    const rowSize = map[q].w << 2;
+    let dataOffset = 0;
+    let offset = map[q].x + map[q].y * imgWidth << 2;
+    imgData.set(data.subarray(0, rowSize), offset - imgRowSize);
+
+    for (let k = 0, kk = map[q].h; k < kk; k++) {
+      imgData.set(data.subarray(dataOffset, dataOffset + rowSize), offset);
+      dataOffset += rowSize;
+      offset += imgRowSize;
     }
 
-    let maxX = 0;
-    const map = [];
-    let maxLineHeight = 0;
-    let currentX = IMAGE_PADDING,
-        currentY = IMAGE_PADDING;
+    imgData.set(data.subarray(dataOffset - rowSize, dataOffset), offset);
 
-    for (let q = 0; q < count; q++) {
-      const transform = argsArray[iFirstTransform + (q << 2)];
-      const img = argsArray[iFirstPIIXO + (q << 2)][0];
-
-      if (currentX + img.width > MAX_WIDTH) {
-        maxX = Math.max(maxX, currentX);
-        currentY += maxLineHeight + 2 * IMAGE_PADDING;
-        currentX = 0;
-        maxLineHeight = 0;
-      }
-
-      map.push({
-        transform,
-        x: currentX,
-        y: currentY,
-        w: img.width,
-        h: img.height
-      });
-      currentX += img.width + 2 * IMAGE_PADDING;
-      maxLineHeight = Math.max(maxLineHeight, img.height);
+    while (offset >= 0) {
+      data[offset - 4] = data[offset];
+      data[offset - 3] = data[offset + 1];
+      data[offset - 2] = data[offset + 2];
+      data[offset - 1] = data[offset + 3];
+      data[offset + rowSize] = data[offset + rowSize - 4];
+      data[offset + rowSize + 1] = data[offset + rowSize - 3];
+      data[offset + rowSize + 2] = data[offset + rowSize - 2];
+      data[offset + rowSize + 3] = data[offset + rowSize - 1];
+      offset -= imgRowSize;
     }
+  }
 
-    const imgWidth = Math.max(maxX, currentX) + IMAGE_PADDING;
-    const imgHeight = currentY + maxLineHeight + IMAGE_PADDING;
-    const imgData = new Uint8ClampedArray(imgWidth * imgHeight * 4);
-    const imgRowSize = imgWidth << 2;
+  fnArray.splice(iFirstSave, count * 4, _util.OPS.paintInlineImageXObjectGroup);
+  argsArray.splice(iFirstSave, count * 4, [{
+    width: imgWidth,
+    height: imgHeight,
+    kind: _util.ImageKind.RGBA_32BPP,
+    data: imgData
+  }, map]);
+  return iFirstSave + 1;
+});
+addState(InitialState, [_util.OPS.save, _util.OPS.transform, _util.OPS.paintImageMaskXObject, _util.OPS.restore], null, function iterateImageMaskGroup(context, i) {
+  const fnArray = context.fnArray;
+  const iFirstSave = context.iCurr - 3;
+  const pos = (i - iFirstSave) % 4;
 
-    for (let q = 0; q < count; q++) {
-      const data = argsArray[iFirstPIIXO + (q << 2)][0].data;
-      const rowSize = map[q].w << 2;
-      let dataOffset = 0;
-      let offset = map[q].x + map[q].y * imgWidth << 2;
-      imgData.set(data.subarray(0, rowSize), offset - imgRowSize);
+  switch (pos) {
+    case 0:
+      return fnArray[i] === _util.OPS.save;
 
-      for (let k = 0, kk = map[q].h; k < kk; k++) {
-        imgData.set(data.subarray(dataOffset, dataOffset + rowSize), offset);
-        dataOffset += rowSize;
-        offset += imgRowSize;
-      }
+    case 1:
+      return fnArray[i] === _util.OPS.transform;
 
-      imgData.set(data.subarray(dataOffset - rowSize, dataOffset), offset);
+    case 2:
+      return fnArray[i] === _util.OPS.paintImageMaskXObject;
 
-      while (offset >= 0) {
-        data[offset - 4] = data[offset];
-        data[offset - 3] = data[offset + 1];
-        data[offset - 2] = data[offset + 2];
-        data[offset - 1] = data[offset + 3];
-        data[offset + rowSize] = data[offset + rowSize - 4];
-        data[offset + rowSize + 1] = data[offset + rowSize - 3];
-        data[offset + rowSize + 2] = data[offset + rowSize - 2];
-        data[offset + rowSize + 3] = data[offset + rowSize - 1];
-        offset -= imgRowSize;
-      }
-    }
+    case 3:
+      return fnArray[i] === _util.OPS.restore;
+  }
 
-    fnArray.splice(iFirstSave, count * 4, _util.OPS.paintInlineImageXObjectGroup);
-    argsArray.splice(iFirstSave, count * 4, [{
-      width: imgWidth,
-      height: imgHeight,
-      kind: _util.ImageKind.RGBA_32BPP,
-      data: imgData
-    }, map]);
-    return iFirstSave + 1;
-  });
-  addState(InitialState, [_util.OPS.save, _util.OPS.transform, _util.OPS.paintImageMaskXObject, _util.OPS.restore], null, function iterateImageMaskGroup(context, i) {
-    const fnArray = context.fnArray;
-    const iFirstSave = context.iCurr - 3;
-    const pos = (i - iFirstSave) % 4;
+  throw new Error(`iterateImageMaskGroup - invalid pos: ${pos}`);
+}, function foundImageMaskGroup(context, i) {
+  const MIN_IMAGES_IN_MASKS_BLOCK = 10;
+  const MAX_IMAGES_IN_MASKS_BLOCK = 100;
+  const MAX_SAME_IMAGES_IN_MASKS_BLOCK = 1000;
+  const fnArray = context.fnArray,
+        argsArray = context.argsArray;
+  const curr = context.iCurr;
+  const iFirstSave = curr - 3;
+  const iFirstTransform = curr - 2;
+  const iFirstPIMXO = curr - 1;
+  let count = Math.floor((i - iFirstSave) / 4);
+  count = handlePaintSolidColorImageMask(iFirstSave, count, fnArray, argsArray);
 
-    switch (pos) {
-      case 0:
-        return fnArray[i] === _util.OPS.save;
+  if (count < MIN_IMAGES_IN_MASKS_BLOCK) {
+    return i - (i - iFirstSave) % 4;
+  }
 
-      case 1:
-        return fnArray[i] === _util.OPS.transform;
+  let isSameImage = false;
+  let iTransform, transformArgs;
+  const firstPIMXOArg0 = argsArray[iFirstPIMXO][0];
+  const firstTransformArg0 = argsArray[iFirstTransform][0],
+        firstTransformArg1 = argsArray[iFirstTransform][1],
+        firstTransformArg2 = argsArray[iFirstTransform][2],
+        firstTransformArg3 = argsArray[iFirstTransform][3];
 
-      case 2:
-        return fnArray[i] === _util.OPS.paintImageMaskXObject;
+  if (firstTransformArg1 === firstTransformArg2) {
+    isSameImage = true;
+    iTransform = iFirstTransform + 4;
+    let iPIMXO = iFirstPIMXO + 4;
 
-      case 3:
-        return fnArray[i] === _util.OPS.restore;
-    }
+    for (let q = 1; q < count; q++, iTransform += 4, iPIMXO += 4) {
+      transformArgs = argsArray[iTransform];
 
-    throw new Error(`iterateImageMaskGroup - invalid pos: ${pos}`);
-  }, function foundImageMaskGroup(context, i) {
-    const MIN_IMAGES_IN_MASKS_BLOCK = 10;
-    const MAX_IMAGES_IN_MASKS_BLOCK = 100;
-    const MAX_SAME_IMAGES_IN_MASKS_BLOCK = 1000;
-    const fnArray = context.fnArray,
-          argsArray = context.argsArray;
-    const curr = context.iCurr;
-    const iFirstSave = curr - 3;
-    const iFirstTransform = curr - 2;
-    const iFirstPIMXO = curr - 1;
-    let count = Math.floor((i - iFirstSave) / 4);
-    count = handlePaintSolidColorImageMask(iFirstSave, count, fnArray, argsArray);
-
-    if (count < MIN_IMAGES_IN_MASKS_BLOCK) {
-      return i - (i - iFirstSave) % 4;
-    }
-
-    let isSameImage = false;
-    let iTransform, transformArgs;
-    const firstPIMXOArg0 = argsArray[iFirstPIMXO][0];
-    const firstTransformArg0 = argsArray[iFirstTransform][0],
-          firstTransformArg1 = argsArray[iFirstTransform][1],
-          firstTransformArg2 = argsArray[iFirstTransform][2],
-          firstTransformArg3 = argsArray[iFirstTransform][3];
-
-    if (firstTransformArg1 === firstTransformArg2) {
-      isSameImage = true;
-      iTransform = iFirstTransform + 4;
-      let iPIMXO = iFirstPIMXO + 4;
-
-      for (let q = 1; q < count; q++, iTransform += 4, iPIMXO += 4) {
-        transformArgs = argsArray[iTransform];
-
-        if (argsArray[iPIMXO][0] !== firstPIMXOArg0 || transformArgs[0] !== firstTransformArg0 || transformArgs[1] !== firstTransformArg1 || transformArgs[2] !== firstTransformArg2 || transformArgs[3] !== firstTransformArg3) {
-          if (q < MIN_IMAGES_IN_MASKS_BLOCK) {
-            isSameImage = false;
-          } else {
-            count = q;
-          }
-
-          break;
-        }
-      }
-    }
-
-    if (isSameImage) {
-      count = Math.min(count, MAX_SAME_IMAGES_IN_MASKS_BLOCK);
-      const positions = new Float32Array(count * 2);
-      iTransform = iFirstTransform;
-
-      for (let q = 0; q < count; q++, iTransform += 4) {
-        transformArgs = argsArray[iTransform];
-        positions[q << 1] = transformArgs[4];
-        positions[(q << 1) + 1] = transformArgs[5];
-      }
-
-      fnArray.splice(iFirstSave, count * 4, _util.OPS.paintImageMaskXObjectRepeat);
-      argsArray.splice(iFirstSave, count * 4, [firstPIMXOArg0, firstTransformArg0, firstTransformArg1, firstTransformArg2, firstTransformArg3, positions]);
-    } else {
-      count = Math.min(count, MAX_IMAGES_IN_MASKS_BLOCK);
-      const images = [];
-
-      for (let q = 0; q < count; q++) {
-        transformArgs = argsArray[iFirstTransform + (q << 2)];
-        const maskParams = argsArray[iFirstPIMXO + (q << 2)][0];
-        images.push({
-          data: maskParams.data,
-          width: maskParams.width,
-          height: maskParams.height,
-          transform: transformArgs
-        });
-      }
-
-      fnArray.splice(iFirstSave, count * 4, _util.OPS.paintImageMaskXObjectGroup);
-      argsArray.splice(iFirstSave, count * 4, [images]);
-    }
-
-    return iFirstSave + 1;
-  });
-  addState(InitialState, [_util.OPS.save, _util.OPS.transform, _util.OPS.paintImageXObject, _util.OPS.restore], function (context) {
-    const argsArray = context.argsArray;
-    const iFirstTransform = context.iCurr - 2;
-    return argsArray[iFirstTransform][1] === 0 && argsArray[iFirstTransform][2] === 0;
-  }, function iterateImageGroup(context, i) {
-    const fnArray = context.fnArray,
-          argsArray = context.argsArray;
-    const iFirstSave = context.iCurr - 3;
-    const pos = (i - iFirstSave) % 4;
-
-    switch (pos) {
-      case 0:
-        return fnArray[i] === _util.OPS.save;
-
-      case 1:
-        if (fnArray[i] !== _util.OPS.transform) {
-          return false;
+      if (argsArray[iPIMXO][0] !== firstPIMXOArg0 || transformArgs[0] !== firstTransformArg0 || transformArgs[1] !== firstTransformArg1 || transformArgs[2] !== firstTransformArg2 || transformArgs[3] !== firstTransformArg3) {
+        if (q < MIN_IMAGES_IN_MASKS_BLOCK) {
+          isSameImage = false;
+        } else {
+          count = q;
         }
 
-        const iFirstTransform = context.iCurr - 2;
-        const firstTransformArg0 = argsArray[iFirstTransform][0];
-        const firstTransformArg3 = argsArray[iFirstTransform][3];
-
-        if (argsArray[i][0] !== firstTransformArg0 || argsArray[i][1] !== 0 || argsArray[i][2] !== 0 || argsArray[i][3] !== firstTransformArg3) {
-          return false;
-        }
-
-        return true;
-
-      case 2:
-        if (fnArray[i] !== _util.OPS.paintImageXObject) {
-          return false;
-        }
-
-        const iFirstPIXO = context.iCurr - 1;
-        const firstPIXOArg0 = argsArray[iFirstPIXO][0];
-
-        if (argsArray[i][0] !== firstPIXOArg0) {
-          return false;
-        }
-
-        return true;
-
-      case 3:
-        return fnArray[i] === _util.OPS.restore;
+        break;
+      }
     }
+  }
 
-    throw new Error(`iterateImageGroup - invalid pos: ${pos}`);
-  }, function (context, i) {
-    const MIN_IMAGES_IN_BLOCK = 3;
-    const MAX_IMAGES_IN_BLOCK = 1000;
-    const fnArray = context.fnArray,
-          argsArray = context.argsArray;
-    const curr = context.iCurr;
-    const iFirstSave = curr - 3;
-    const iFirstTransform = curr - 2;
-    const iFirstPIXO = curr - 1;
-    const firstPIXOArg0 = argsArray[iFirstPIXO][0];
-    const firstTransformArg0 = argsArray[iFirstTransform][0];
-    const firstTransformArg3 = argsArray[iFirstTransform][3];
-    const count = Math.min(Math.floor((i - iFirstSave) / 4), MAX_IMAGES_IN_BLOCK);
-
-    if (count < MIN_IMAGES_IN_BLOCK) {
-      return i - (i - iFirstSave) % 4;
-    }
-
+  if (isSameImage) {
+    count = Math.min(count, MAX_SAME_IMAGES_IN_MASKS_BLOCK);
     const positions = new Float32Array(count * 2);
-    let iTransform = iFirstTransform;
+    iTransform = iFirstTransform;
 
     for (let q = 0; q < count; q++, iTransform += 4) {
-      const transformArgs = argsArray[iTransform];
+      transformArgs = argsArray[iTransform];
       positions[q << 1] = transformArgs[4];
       positions[(q << 1) + 1] = transformArgs[5];
     }
 
-    const args = [firstPIXOArg0, firstTransformArg0, firstTransformArg3, positions];
-    fnArray.splice(iFirstSave, count * 4, _util.OPS.paintImageXObjectRepeat);
-    argsArray.splice(iFirstSave, count * 4, args);
-    return iFirstSave + 1;
-  });
-  addState(InitialState, [_util.OPS.beginText, _util.OPS.setFont, _util.OPS.setTextMatrix, _util.OPS.showText, _util.OPS.endText], null, function iterateShowTextGroup(context, i) {
-    const fnArray = context.fnArray,
-          argsArray = context.argsArray;
-    const iFirstSave = context.iCurr - 4;
-    const pos = (i - iFirstSave) % 5;
+    fnArray.splice(iFirstSave, count * 4, _util.OPS.paintImageMaskXObjectRepeat);
+    argsArray.splice(iFirstSave, count * 4, [firstPIMXOArg0, firstTransformArg0, firstTransformArg1, firstTransformArg2, firstTransformArg3, positions]);
+  } else {
+    count = Math.min(count, MAX_IMAGES_IN_MASKS_BLOCK);
+    const images = [];
 
-    switch (pos) {
-      case 0:
-        return fnArray[i] === _util.OPS.beginText;
-
-      case 1:
-        return fnArray[i] === _util.OPS.setFont;
-
-      case 2:
-        return fnArray[i] === _util.OPS.setTextMatrix;
-
-      case 3:
-        if (fnArray[i] !== _util.OPS.showText) {
-          return false;
-        }
-
-        const iFirstSetFont = context.iCurr - 3;
-        const firstSetFontArg0 = argsArray[iFirstSetFont][0];
-        const firstSetFontArg1 = argsArray[iFirstSetFont][1];
-
-        if (argsArray[i][0] !== firstSetFontArg0 || argsArray[i][1] !== firstSetFontArg1) {
-          return false;
-        }
-
-        return true;
-
-      case 4:
-        return fnArray[i] === _util.OPS.endText;
+    for (let q = 0; q < count; q++) {
+      transformArgs = argsArray[iFirstTransform + (q << 2)];
+      const maskParams = argsArray[iFirstPIMXO + (q << 2)][0];
+      images.push({
+        data: maskParams.data,
+        width: maskParams.width,
+        height: maskParams.height,
+        transform: transformArgs
+      });
     }
 
-    throw new Error(`iterateShowTextGroup - invalid pos: ${pos}`);
-  }, function (context, i) {
-    const MIN_CHARS_IN_BLOCK = 3;
-    const MAX_CHARS_IN_BLOCK = 1000;
-    const fnArray = context.fnArray,
-          argsArray = context.argsArray;
-    const curr = context.iCurr;
-    const iFirstBeginText = curr - 4;
-    const iFirstSetFont = curr - 3;
-    const iFirstSetTextMatrix = curr - 2;
-    const iFirstShowText = curr - 1;
-    const iFirstEndText = curr;
-    const firstSetFontArg0 = argsArray[iFirstSetFont][0];
-    const firstSetFontArg1 = argsArray[iFirstSetFont][1];
-    let count = Math.min(Math.floor((i - iFirstBeginText) / 5), MAX_CHARS_IN_BLOCK);
+    fnArray.splice(iFirstSave, count * 4, _util.OPS.paintImageMaskXObjectGroup);
+    argsArray.splice(iFirstSave, count * 4, [images]);
+  }
 
-    if (count < MIN_CHARS_IN_BLOCK) {
-      return i - (i - iFirstBeginText) % 5;
-    }
+  return iFirstSave + 1;
+});
+addState(InitialState, [_util.OPS.save, _util.OPS.transform, _util.OPS.paintImageXObject, _util.OPS.restore], function (context) {
+  const argsArray = context.argsArray;
+  const iFirstTransform = context.iCurr - 2;
+  return argsArray[iFirstTransform][1] === 0 && argsArray[iFirstTransform][2] === 0;
+}, function iterateImageGroup(context, i) {
+  const fnArray = context.fnArray,
+        argsArray = context.argsArray;
+  const iFirstSave = context.iCurr - 3;
+  const pos = (i - iFirstSave) % 4;
 
-    let iFirst = iFirstBeginText;
+  switch (pos) {
+    case 0:
+      return fnArray[i] === _util.OPS.save;
 
-    if (iFirstBeginText >= 4 && fnArray[iFirstBeginText - 4] === fnArray[iFirstSetFont] && fnArray[iFirstBeginText - 3] === fnArray[iFirstSetTextMatrix] && fnArray[iFirstBeginText - 2] === fnArray[iFirstShowText] && fnArray[iFirstBeginText - 1] === fnArray[iFirstEndText] && argsArray[iFirstBeginText - 4][0] === firstSetFontArg0 && argsArray[iFirstBeginText - 4][1] === firstSetFontArg1) {
-      count++;
-      iFirst -= 5;
-    }
+    case 1:
+      if (fnArray[i] !== _util.OPS.transform) {
+        return false;
+      }
 
-    let iEndText = iFirst + 4;
+      const iFirstTransform = context.iCurr - 2;
+      const firstTransformArg0 = argsArray[iFirstTransform][0];
+      const firstTransformArg3 = argsArray[iFirstTransform][3];
 
-    for (let q = 1; q < count; q++) {
-      fnArray.splice(iEndText, 3);
-      argsArray.splice(iEndText, 3);
-      iEndText += 2;
-    }
+      if (argsArray[i][0] !== firstTransformArg0 || argsArray[i][1] !== 0 || argsArray[i][2] !== 0 || argsArray[i][3] !== firstTransformArg3) {
+        return false;
+      }
 
-    return iEndText + 1;
-  });
+      return true;
 
-  function QueueOptimizer(queue) {
+    case 2:
+      if (fnArray[i] !== _util.OPS.paintImageXObject) {
+        return false;
+      }
+
+      const iFirstPIXO = context.iCurr - 1;
+      const firstPIXOArg0 = argsArray[iFirstPIXO][0];
+
+      if (argsArray[i][0] !== firstPIXOArg0) {
+        return false;
+      }
+
+      return true;
+
+    case 3:
+      return fnArray[i] === _util.OPS.restore;
+  }
+
+  throw new Error(`iterateImageGroup - invalid pos: ${pos}`);
+}, function (context, i) {
+  const MIN_IMAGES_IN_BLOCK = 3;
+  const MAX_IMAGES_IN_BLOCK = 1000;
+  const fnArray = context.fnArray,
+        argsArray = context.argsArray;
+  const curr = context.iCurr;
+  const iFirstSave = curr - 3;
+  const iFirstTransform = curr - 2;
+  const iFirstPIXO = curr - 1;
+  const firstPIXOArg0 = argsArray[iFirstPIXO][0];
+  const firstTransformArg0 = argsArray[iFirstTransform][0];
+  const firstTransformArg3 = argsArray[iFirstTransform][3];
+  const count = Math.min(Math.floor((i - iFirstSave) / 4), MAX_IMAGES_IN_BLOCK);
+
+  if (count < MIN_IMAGES_IN_BLOCK) {
+    return i - (i - iFirstSave) % 4;
+  }
+
+  const positions = new Float32Array(count * 2);
+  let iTransform = iFirstTransform;
+
+  for (let q = 0; q < count; q++, iTransform += 4) {
+    const transformArgs = argsArray[iTransform];
+    positions[q << 1] = transformArgs[4];
+    positions[(q << 1) + 1] = transformArgs[5];
+  }
+
+  const args = [firstPIXOArg0, firstTransformArg0, firstTransformArg3, positions];
+  fnArray.splice(iFirstSave, count * 4, _util.OPS.paintImageXObjectRepeat);
+  argsArray.splice(iFirstSave, count * 4, args);
+  return iFirstSave + 1;
+});
+addState(InitialState, [_util.OPS.beginText, _util.OPS.setFont, _util.OPS.setTextMatrix, _util.OPS.showText, _util.OPS.endText], null, function iterateShowTextGroup(context, i) {
+  const fnArray = context.fnArray,
+        argsArray = context.argsArray;
+  const iFirstSave = context.iCurr - 4;
+  const pos = (i - iFirstSave) % 5;
+
+  switch (pos) {
+    case 0:
+      return fnArray[i] === _util.OPS.beginText;
+
+    case 1:
+      return fnArray[i] === _util.OPS.setFont;
+
+    case 2:
+      return fnArray[i] === _util.OPS.setTextMatrix;
+
+    case 3:
+      if (fnArray[i] !== _util.OPS.showText) {
+        return false;
+      }
+
+      const iFirstSetFont = context.iCurr - 3;
+      const firstSetFontArg0 = argsArray[iFirstSetFont][0];
+      const firstSetFontArg1 = argsArray[iFirstSetFont][1];
+
+      if (argsArray[i][0] !== firstSetFontArg0 || argsArray[i][1] !== firstSetFontArg1) {
+        return false;
+      }
+
+      return true;
+
+    case 4:
+      return fnArray[i] === _util.OPS.endText;
+  }
+
+  throw new Error(`iterateShowTextGroup - invalid pos: ${pos}`);
+}, function (context, i) {
+  const MIN_CHARS_IN_BLOCK = 3;
+  const MAX_CHARS_IN_BLOCK = 1000;
+  const fnArray = context.fnArray,
+        argsArray = context.argsArray;
+  const curr = context.iCurr;
+  const iFirstBeginText = curr - 4;
+  const iFirstSetFont = curr - 3;
+  const iFirstSetTextMatrix = curr - 2;
+  const iFirstShowText = curr - 1;
+  const iFirstEndText = curr;
+  const firstSetFontArg0 = argsArray[iFirstSetFont][0];
+  const firstSetFontArg1 = argsArray[iFirstSetFont][1];
+  let count = Math.min(Math.floor((i - iFirstBeginText) / 5), MAX_CHARS_IN_BLOCK);
+
+  if (count < MIN_CHARS_IN_BLOCK) {
+    return i - (i - iFirstBeginText) % 5;
+  }
+
+  let iFirst = iFirstBeginText;
+
+  if (iFirstBeginText >= 4 && fnArray[iFirstBeginText - 4] === fnArray[iFirstSetFont] && fnArray[iFirstBeginText - 3] === fnArray[iFirstSetTextMatrix] && fnArray[iFirstBeginText - 2] === fnArray[iFirstShowText] && fnArray[iFirstBeginText - 1] === fnArray[iFirstEndText] && argsArray[iFirstBeginText - 4][0] === firstSetFontArg0 && argsArray[iFirstBeginText - 4][1] === firstSetFontArg1) {
+    count++;
+    iFirst -= 5;
+  }
+
+  let iEndText = iFirst + 4;
+
+  for (let q = 1; q < count; q++) {
+    fnArray.splice(iEndText, 3);
+    argsArray.splice(iEndText, 3);
+    iEndText += 2;
+  }
+
+  return iEndText + 1;
+});
+
+class NullOptimizer {
+  constructor(queue) {
     this.queue = queue;
+  }
+
+  _optimize() {}
+
+  push(fn, args) {
+    this.queue.fnArray.push(fn);
+    this.queue.argsArray.push(args);
+
+    this._optimize();
+  }
+
+  flush() {}
+
+  reset() {}
+
+}
+
+class QueueOptimizer extends NullOptimizer {
+  constructor(queue) {
+    super(queue);
     this.state = null;
     this.context = {
       iCurr: 0,
@@ -49794,116 +49855,92 @@ const QueueOptimizer = function QueueOptimizerClosure() {
     this.lastProcessed = 0;
   }
 
-  QueueOptimizer.prototype = {
-    _optimize() {
-      const fnArray = this.queue.fnArray;
-      let i = this.lastProcessed,
-          ii = fnArray.length;
-      let state = this.state;
-      let match = this.match;
+  _optimize() {
+    const fnArray = this.queue.fnArray;
+    let i = this.lastProcessed,
+        ii = fnArray.length;
+    let state = this.state;
+    let match = this.match;
 
-      if (!state && !match && i + 1 === ii && !InitialState[fnArray[i]]) {
-        this.lastProcessed = ii;
-        return;
-      }
+    if (!state && !match && i + 1 === ii && !InitialState[fnArray[i]]) {
+      this.lastProcessed = ii;
+      return;
+    }
 
-      const context = this.context;
+    const context = this.context;
 
-      while (i < ii) {
-        if (match) {
-          const iterate = (0, match.iterateFn)(context, i);
+    while (i < ii) {
+      if (match) {
+        const iterate = (0, match.iterateFn)(context, i);
 
-          if (iterate) {
-            i++;
-            continue;
-          }
-
-          i = (0, match.processFn)(context, i + 1);
-          ii = fnArray.length;
-          match = null;
-          state = null;
-
-          if (i >= ii) {
-            break;
-          }
-        }
-
-        state = (state || InitialState)[fnArray[i]];
-
-        if (!state || Array.isArray(state)) {
+        if (iterate) {
           i++;
           continue;
         }
 
-        context.iCurr = i;
-        i++;
-
-        if (state.checkFn && !(0, state.checkFn)(context)) {
-          state = null;
-          continue;
-        }
-
-        match = state;
+        i = (0, match.processFn)(context, i + 1);
+        ii = fnArray.length;
+        match = null;
         state = null;
+
+        if (i >= ii) {
+          break;
+        }
       }
 
-      this.state = state;
-      this.match = match;
-      this.lastProcessed = i;
-    },
+      state = (state || InitialState)[fnArray[i]];
 
-    push(fn, args) {
-      this.queue.fnArray.push(fn);
-      this.queue.argsArray.push(args);
-
-      this._optimize();
-    },
-
-    flush() {
-      while (this.match) {
-        const length = this.queue.fnArray.length;
-        this.lastProcessed = (0, this.match.processFn)(this.context, length);
-        this.match = null;
-        this.state = null;
-
-        this._optimize();
+      if (!state || Array.isArray(state)) {
+        i++;
+        continue;
       }
-    },
 
-    reset() {
-      this.state = null;
-      this.match = null;
-      this.lastProcessed = 0;
+      context.iCurr = i;
+      i++;
+
+      if (state.checkFn && !(0, state.checkFn)(context)) {
+        state = null;
+        continue;
+      }
+
+      match = state;
+      state = null;
     }
 
-  };
-  return QueueOptimizer;
-}();
-
-const NullOptimizer = function NullOptimizerClosure() {
-  function NullOptimizer(queue) {
-    this.queue = queue;
+    this.state = state;
+    this.match = match;
+    this.lastProcessed = i;
   }
 
-  NullOptimizer.prototype = {
-    push(fn, args) {
-      this.queue.fnArray.push(fn);
-      this.queue.argsArray.push(args);
-    },
+  flush() {
+    while (this.match) {
+      const length = this.queue.fnArray.length;
+      this.lastProcessed = (0, this.match.processFn)(this.context, length);
+      this.match = null;
+      this.state = null;
 
-    flush() {},
+      this._optimize();
+    }
+  }
 
-    reset() {}
+  reset() {
+    this.state = null;
+    this.match = null;
+    this.lastProcessed = 0;
+  }
 
-  };
-  return NullOptimizer;
-}();
+}
 
-const OperatorList = function OperatorListClosure() {
-  const CHUNK_SIZE = 1000;
-  const CHUNK_SIZE_ABOUT = CHUNK_SIZE - 5;
+class OperatorList {
+  static get CHUNK_SIZE() {
+    return (0, _util.shadow)(this, "CHUNK_SIZE", 1000);
+  }
 
-  function OperatorList(intent, streamSink) {
+  static get CHUNK_SIZE_ABOUT() {
+    return (0, _util.shadow)(this, "CHUNK_SIZE_ABOUT", OperatorList.CHUNK_SIZE - 5);
+  }
+
+  constructor(intent, streamSink) {
     this._streamSink = streamSink;
     this.fnArray = [];
     this.argsArray = [];
@@ -49920,119 +49957,116 @@ const OperatorList = function OperatorListClosure() {
     this._resolved = streamSink ? null : Promise.resolve();
   }
 
-  OperatorList.prototype = {
-    get length() {
-      return this.argsArray.length;
-    },
+  get length() {
+    return this.argsArray.length;
+  }
 
-    get ready() {
-      return this._resolved || this._streamSink.ready;
-    },
+  get ready() {
+    return this._resolved || this._streamSink.ready;
+  }
 
-    get totalLength() {
-      return this._totalLength + this.length;
-    },
+  get totalLength() {
+    return this._totalLength + this.length;
+  }
 
-    addOp(fn, args) {
-      this.optimizer.push(fn, args);
-      this.weight++;
+  addOp(fn, args) {
+    this.optimizer.push(fn, args);
+    this.weight++;
 
-      if (this._streamSink) {
-        if (this.weight >= CHUNK_SIZE) {
-          this.flush();
-        } else if (this.weight >= CHUNK_SIZE_ABOUT && (fn === _util.OPS.restore || fn === _util.OPS.endText)) {
-          this.flush();
-        }
+    if (this._streamSink) {
+      if (this.weight >= OperatorList.CHUNK_SIZE) {
+        this.flush();
+      } else if (this.weight >= OperatorList.CHUNK_SIZE_ABOUT && (fn === _util.OPS.restore || fn === _util.OPS.endText)) {
+        this.flush();
       }
-    },
+    }
+  }
 
-    addDependency(dependency) {
-      if (this.dependencies.has(dependency)) {
-        return;
-      }
-
-      this.dependencies.add(dependency);
-      this.addOp(_util.OPS.dependency, [dependency]);
-    },
-
-    addDependencies(dependencies) {
-      for (const dependency of dependencies) {
-        this.addDependency(dependency);
-      }
-    },
-
-    addOpList(opList) {
-      if (!(opList instanceof OperatorList)) {
-        (0, _util.warn)('addOpList - ignoring invalid "opList" parameter.');
-        return;
-      }
-
-      for (const dependency of opList.dependencies) {
-        this.dependencies.add(dependency);
-      }
-
-      for (let i = 0, ii = opList.length; i < ii; i++) {
-        this.addOp(opList.fnArray[i], opList.argsArray[i]);
-      }
-    },
-
-    getIR() {
-      return {
-        fnArray: this.fnArray,
-        argsArray: this.argsArray,
-        length: this.length
-      };
-    },
-
-    get _transfers() {
-      const transfers = [];
-      const {
-        fnArray,
-        argsArray,
-        length
-      } = this;
-
-      for (let i = 0; i < length; i++) {
-        switch (fnArray[i]) {
-          case _util.OPS.paintInlineImageXObject:
-          case _util.OPS.paintInlineImageXObjectGroup:
-          case _util.OPS.paintImageMaskXObject:
-            const arg = argsArray[i][0];
-            ;
-
-            if (!arg.cached) {
-              transfers.push(arg.data.buffer);
-            }
-
-            break;
-        }
-      }
-
-      return transfers;
-    },
-
-    flush(lastChunk = false) {
-      this.optimizer.flush();
-      const length = this.length;
-      this._totalLength += length;
-
-      this._streamSink.enqueue({
-        fnArray: this.fnArray,
-        argsArray: this.argsArray,
-        lastChunk,
-        length
-      }, 1, this._transfers);
-
-      this.dependencies.clear();
-      this.fnArray.length = 0;
-      this.argsArray.length = 0;
-      this.weight = 0;
-      this.optimizer.reset();
+  addDependency(dependency) {
+    if (this.dependencies.has(dependency)) {
+      return;
     }
 
-  };
-  return OperatorList;
-}();
+    this.dependencies.add(dependency);
+    this.addOp(_util.OPS.dependency, [dependency]);
+  }
+
+  addDependencies(dependencies) {
+    for (const dependency of dependencies) {
+      this.addDependency(dependency);
+    }
+  }
+
+  addOpList(opList) {
+    if (!(opList instanceof OperatorList)) {
+      (0, _util.warn)('addOpList - ignoring invalid "opList" parameter.');
+      return;
+    }
+
+    for (const dependency of opList.dependencies) {
+      this.dependencies.add(dependency);
+    }
+
+    for (let i = 0, ii = opList.length; i < ii; i++) {
+      this.addOp(opList.fnArray[i], opList.argsArray[i]);
+    }
+  }
+
+  getIR() {
+    return {
+      fnArray: this.fnArray,
+      argsArray: this.argsArray,
+      length: this.length
+    };
+  }
+
+  get _transfers() {
+    const transfers = [];
+    const {
+      fnArray,
+      argsArray,
+      length
+    } = this;
+
+    for (let i = 0; i < length; i++) {
+      switch (fnArray[i]) {
+        case _util.OPS.paintInlineImageXObject:
+        case _util.OPS.paintInlineImageXObjectGroup:
+        case _util.OPS.paintImageMaskXObject:
+          const arg = argsArray[i][0];
+          ;
+
+          if (!arg.cached) {
+            transfers.push(arg.data.buffer);
+          }
+
+          break;
+      }
+    }
+
+    return transfers;
+  }
+
+  flush(lastChunk = false) {
+    this.optimizer.flush();
+    const length = this.length;
+    this._totalLength += length;
+
+    this._streamSink.enqueue({
+      fnArray: this.fnArray,
+      argsArray: this.argsArray,
+      lastChunk,
+      length
+    }, 1, this._transfers);
+
+    this.dependencies.clear();
+    this.fnArray.length = 0;
+    this.argsArray.length = 0;
+    this.weight = 0;
+    this.optimizer.reset();
+  }
+
+}
 
 exports.OperatorList = OperatorList;
 
@@ -50739,7 +50773,11 @@ var _metadata_parser = __w_pdfjs_require__(60);
 var _struct_tree = __w_pdfjs_require__(62);
 
 function fetchDestination(dest) {
-  return (0, _primitives.isDict)(dest) ? dest.get("D") : dest;
+  if (dest instanceof _primitives.Dict) {
+    dest = dest.get("D");
+  }
+
+  return Array.isArray(dest) ? dest : null;
 }
 
 class Catalog {
@@ -51257,12 +51295,18 @@ class Catalog {
 
     if (obj instanceof _name_number_tree.NameTree) {
       for (const [key, value] of obj.getAll()) {
-        dests[key] = fetchDestination(value);
+        const dest = fetchDestination(value);
+
+        if (dest) {
+          dests[key] = dest;
+        }
       }
     } else if (obj instanceof _primitives.Dict) {
       obj.forEach(function (key, value) {
-        if (value) {
-          dests[key] = fetchDestination(value);
+        const dest = fetchDestination(value);
+
+        if (dest) {
+          dests[key] = dest;
         }
       });
     }
@@ -51270,11 +51314,28 @@ class Catalog {
     return (0, _util.shadow)(this, "destinations", dests);
   }
 
-  getDestination(destinationId) {
+  getDestination(id) {
     const obj = this._readDests();
 
-    if (obj instanceof _name_number_tree.NameTree || obj instanceof _primitives.Dict) {
-      return fetchDestination(obj.get(destinationId) || null);
+    if (obj instanceof _name_number_tree.NameTree) {
+      const dest = fetchDestination(obj.get(id));
+
+      if (dest) {
+        return dest;
+      }
+
+      const allDest = this.destinations[id];
+
+      if (allDest) {
+        (0, _util.warn)(`Found "${id}" at an incorrect position in the NameTree.`);
+        return allDest;
+      }
+    } else if (obj instanceof _primitives.Dict) {
+      const dest = fetchDestination(obj.get(id));
+
+      if (dest) {
+        return dest;
+      }
     }
 
     return null;
@@ -52296,17 +52357,6 @@ class NameOrNumberTree {
           return xref.fetchIfRef(entries[m + 1]);
         }
       }
-
-      (0, _util.info)(`Falling back to an exhaustive search, for key "${key}", ` + `in "${this._type}" tree.`);
-
-      for (let m = 0, mm = entries.length; m < mm; m += 2) {
-        const currentKey = xref.fetchIfRef(entries[m]);
-
-        if (currentKey === key) {
-          (0, _util.warn)(`The "${key}" key was found at an incorrect, ` + `i.e. out-of-order, position in "${this._type}" tree.`);
-          return xref.fetchIfRef(entries[m + 1]);
-        }
-      }
     }
 
     return null;
@@ -52720,7 +52770,7 @@ class XMLParserBase {
       }
     }
 
-    while (pos < s.length && !isWhitespace(s, pos) && s[pos] !== ">" && s[pos] !== "/") {
+    while (pos < s.length && !isWhitespace(s, pos) && s[pos] !== ">" && s[pos] !== "?" && s[pos] !== "/") {
       ++pos;
     }
 
@@ -55155,7 +55205,7 @@ class CipherTransform {
 }
 
 const CipherTransformFactory = function CipherTransformFactoryClosure() {
-  const defaultPasswordBytes = new Uint8Array([0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41, 0x64, 0x00, 0x4E, 0x56, 0xFF, 0xFA, 0x01, 0x08, 0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80, 0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A]);
+  const defaultPasswordBytes = new Uint8Array([0x28, 0xbf, 0x4e, 0x5e, 0x4e, 0x75, 0x8a, 0x41, 0x64, 0x00, 0x4e, 0x56, 0xff, 0xfa, 0x01, 0x08, 0x2e, 0x2e, 0x00, 0xb6, 0xd0, 0x68, 0x3e, 0x80, 0x2f, 0x0c, 0xa9, 0xfe, 0x64, 0x53, 0x69, 0x7a]);
 
   function createEncryptionKey20(revision, password, ownerPassword, ownerValidationSalt, ownerKeySalt, uBytes, userPassword, userValidationSalt, userKeySalt, ownerEncryption, userEncryption, perms) {
     if (password) {
@@ -59215,26 +59265,23 @@ class Image extends _xfa_object.StringObject {
   }
 
   [_xfa_object.$toHTML]() {
-    const html = {
-      name: "img",
-      attributes: {
-        class: "xfaImage",
-        style: {}
-      }
-    };
-
-    if (this.href) {
-      html.attributes.src = new URL(this.href);
-      return html;
+    if (this.href || !this[_xfa_object.$content]) {
+      return null;
     }
 
     if (this.transferEncoding === "base64") {
-      const buffer = Uint8Array.from(atob(this[_xfa_object.$content]), c => c.charCodeAt(0));
+      const buffer = (0, _util.stringToBytes)(atob(this[_xfa_object.$content]));
       const blob = new Blob([buffer], {
         type: this.contentType
       });
-      html.attributes.src = URL.createObjectURL(blob);
-      return html;
+      return {
+        name: "img",
+        attributes: {
+          class: "xfaImage",
+          style: {},
+          src: URL.createObjectURL(blob)
+        }
+      };
     }
 
     return null;
@@ -62331,7 +62378,7 @@ class Area extends _xfa_object.XFAObject {
     this.level = (0, _utils.getInteger)({
       data: attributes.level,
       defaultValue: 0,
-      validator: n => n >= 1 && n <= 3
+      validate: n => n >= 1 && n <= 3
     });
     this.name = (0, _utils.getStringOption)(attributes.name, ["", "barcode", "coreinit", "deviceDriver", "font", "general", "layout", "merge", "script", "signature", "sourceSet", "templateCache"]);
   }
@@ -62605,7 +62652,7 @@ class Equate extends _xfa_object.XFAObject {
     this.force = (0, _utils.getInteger)({
       data: attributes.force,
       defaultValue: 1,
-      validator: n => n === 0
+      validate: n => n === 0
     });
     this.from = attributes.from || "";
     this.to = attributes.to || "";
@@ -62938,12 +62985,12 @@ class PageOffset extends _xfa_object.XFAObject {
     this.x = (0, _utils.getInteger)({
       data: attributes.x,
       defaultValue: "useXDCSetting",
-      validator: n => true
+      validate: n => true
     });
     this.y = (0, _utils.getInteger)({
       data: attributes.y,
       defaultValue: "useXDCSetting",
-      validator: n => true
+      validate: n => true
     });
   }
 
@@ -63361,7 +63408,7 @@ class TemplateCache extends _xfa_object.XFAObject {
     this.maxEntries = (0, _utils.getInteger)({
       data: attributes.maxEntries,
       defaultValue: 5,
-      validator: n => n >= 0
+      validate: n => n >= 0
     });
   }
 
@@ -66747,7 +66794,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.9.0';
-const pdfjsBuild = '438cf1e';
+const pdfjsBuild = '3538ef0';
 })();
 
 /******/ 	return __webpack_exports__;

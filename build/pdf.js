@@ -980,6 +980,7 @@ const UNSUPPORTED_FEATURES = {
   errorOperatorList: "errorOperatorList",
   errorFontToUnicode: "errorFontToUnicode",
   errorFontLoadNative: "errorFontLoadNative",
+  errorFontBuildPath: "errorFontBuildPath",
   errorFontGetPath: "errorFontGetPath",
   errorMarkedContent: "errorMarkedContent"
 };
@@ -1383,7 +1384,7 @@ class Util {
 }
 
 exports.Util = Util;
-const PDFStringTranslateTable = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2D8, 0x2C7, 0x2C6, 0x2D9, 0x2DD, 0x2DB, 0x2DA, 0x2DC, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2022, 0x2020, 0x2021, 0x2026, 0x2014, 0x2013, 0x192, 0x2044, 0x2039, 0x203A, 0x2212, 0x2030, 0x201E, 0x201C, 0x201D, 0x2018, 0x2019, 0x201A, 0x2122, 0xFB01, 0xFB02, 0x141, 0x152, 0x160, 0x178, 0x17D, 0x131, 0x142, 0x153, 0x161, 0x17E, 0, 0x20AC];
+const PDFStringTranslateTable = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2d8, 0x2c7, 0x2c6, 0x2d9, 0x2dd, 0x2db, 0x2da, 0x2dc, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2022, 0x2020, 0x2021, 0x2026, 0x2014, 0x2013, 0x192, 0x2044, 0x2039, 0x203a, 0x2212, 0x2030, 0x201e, 0x201c, 0x201d, 0x2018, 0x2019, 0x201a, 0x2122, 0xfb01, 0xfb02, 0x141, 0x152, 0x160, 0x178, 0x17d, 0x131, 0x142, 0x153, 0x161, 0x17e, 0, 0x20ac];
 
 function stringToPDFString(str) {
   const length = str.length,
@@ -2643,7 +2644,11 @@ class LoopbackPort {
         return result;
       }
 
-      result = Array.isArray(value) ? [] : {};
+      if (value instanceof URL) {
+        throw new Error(`LoopbackPort.postMessage - cannot clone: ${value}`);
+      }
+
+      result = Array.isArray(value) ? [] : Object.create(null);
       cloned.set(value, result);
 
       for (const i in value) {
@@ -3853,7 +3858,7 @@ const InternalRenderTask = function InternalRenderTaskClosure() {
 
 const version = '2.9.0';
 exports.version = version;
-const build = '438cf1e';
+const build = '3538ef0';
 exports.build = build;
 
 /***/ }),
@@ -4629,12 +4634,12 @@ class CachedCanvases {
 
 function compileType3Glyph(imgData) {
   const POINT_TO_PROCESS_LIMIT = 1000;
+  const POINT_TYPES = new Uint8Array([0, 2, 4, 0, 1, 0, 5, 4, 8, 10, 0, 8, 0, 2, 1, 0]);
   const width = imgData.width,
         height = imgData.height,
         width1 = width + 1;
   let i, ii, j, j0;
   const points = new Uint8Array(width1 * (height + 1));
-  const POINT_TYPES = new Uint8Array([0, 2, 4, 0, 1, 0, 5, 4, 8, 10, 0, 8, 0, 2, 1, 0]);
   const lineSize = width + 7 & ~7,
         data0 = imgData.data;
   const data = new Uint8Array(lineSize * height);
@@ -6168,7 +6173,7 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
         };
         pattern = new _pattern_helper.TilingPattern(IR, color, this.ctx, canvasGraphicsFactory, baseTransform);
       } else {
-        pattern = (0, _pattern_helper.getShadingPatternFromIR)(IR);
+        pattern = (0, _pattern_helper.getShadingPattern)(IR);
       }
 
       return pattern;
@@ -6205,7 +6210,7 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
 
       const ctx = this.ctx;
       this.save();
-      const pattern = (0, _pattern_helper.getShadingPatternFromIR)(patternIR);
+      const pattern = (0, _pattern_helper.getShadingPattern)(patternIR);
       ctx.fillStyle = pattern.getPattern(ctx, this, true);
       const inv = ctx.mozCurrentTransformInverse;
 
@@ -6772,12 +6777,11 @@ exports.CanvasGraphics = CanvasGraphics;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.getShadingPatternFromIR = getShadingPatternFromIR;
+exports.getShadingPattern = getShadingPattern;
 exports.TilingPattern = void 0;
 
 var _util = __w_pdfjs_require__(2);
 
-const ShadingIRs = {};
 let svgElement;
 
 function createMatrix(matrix) {
@@ -6804,235 +6808,259 @@ function applyBoundingBox(ctx, bbox) {
   ctx.clip(region);
 }
 
-ShadingIRs.RadialAxial = {
-  fromIR: function RadialAxial_fromIR(raw) {
-    const type = raw[1];
-    const bbox = raw[2];
-    const colorStops = raw[3];
-    const p0 = raw[4];
-    const p1 = raw[5];
-    const r0 = raw[6];
-    const r1 = raw[7];
-    const matrix = raw[8];
-    return {
-      getPattern: function RadialAxial_getPattern(ctx, owner, shadingFill) {
-        const tmpCanvas = owner.cachedCanvases.getCanvas("pattern", ctx.canvas.width, ctx.canvas.height, true);
-        const tmpCtx = tmpCanvas.context;
-        tmpCtx.clearRect(0, 0, tmpCtx.canvas.width, tmpCtx.canvas.height);
-        tmpCtx.beginPath();
-        tmpCtx.rect(0, 0, tmpCtx.canvas.width, tmpCtx.canvas.height);
-
-        if (!shadingFill) {
-          tmpCtx.setTransform.apply(tmpCtx, owner.baseTransform);
-
-          if (matrix) {
-            tmpCtx.transform.apply(tmpCtx, matrix);
-          }
-        } else {
-          tmpCtx.setTransform.apply(tmpCtx, ctx.mozCurrentTransform);
-        }
-
-        applyBoundingBox(tmpCtx, bbox);
-        let grad;
-
-        if (type === "axial") {
-          grad = tmpCtx.createLinearGradient(p0[0], p0[1], p1[0], p1[1]);
-        } else if (type === "radial") {
-          grad = tmpCtx.createRadialGradient(p0[0], p0[1], r0, p1[0], p1[1], r1);
-        }
-
-        for (let i = 0, ii = colorStops.length; i < ii; ++i) {
-          const c = colorStops[i];
-          grad.addColorStop(c[0], c[1]);
-        }
-
-        tmpCtx.fillStyle = grad;
-        tmpCtx.fill();
-        const pattern = ctx.createPattern(tmpCanvas.canvas, "repeat");
-        pattern.setTransform(createMatrix(ctx.mozCurrentTransformInverse));
-        return pattern;
-      }
-    };
+class BaseShadingPattern {
+  constructor() {
+    if (this.constructor === BaseShadingPattern) {
+      (0, _util.unreachable)("Cannot initialize BaseShadingPattern.");
+    }
   }
-};
 
-const createMeshCanvas = function createMeshCanvasClosure() {
-  function drawTriangle(data, context, p1, p2, p3, c1, c2, c3) {
-    const coords = context.coords,
-          colors = context.colors;
-    const bytes = data.data,
-          rowSize = data.width * 4;
-    let tmp;
+  getPattern() {
+    (0, _util.unreachable)("Abstract method `getPattern` called.");
+  }
 
-    if (coords[p1 + 1] > coords[p2 + 1]) {
-      tmp = p1;
-      p1 = p2;
-      p2 = tmp;
-      tmp = c1;
-      c1 = c2;
-      c2 = tmp;
-    }
+}
 
-    if (coords[p2 + 1] > coords[p3 + 1]) {
-      tmp = p2;
-      p2 = p3;
-      p3 = tmp;
-      tmp = c2;
-      c2 = c3;
-      c3 = tmp;
-    }
+class RadialAxialShadingPattern extends BaseShadingPattern {
+  constructor(IR) {
+    super();
+    this._type = IR[1];
+    this._bbox = IR[2];
+    this._colorStops = IR[3];
+    this._p0 = IR[4];
+    this._p1 = IR[5];
+    this._r0 = IR[6];
+    this._r1 = IR[7];
+    this._matrix = IR[8];
+  }
 
-    if (coords[p1 + 1] > coords[p2 + 1]) {
-      tmp = p1;
-      p1 = p2;
-      p2 = tmp;
-      tmp = c1;
-      c1 = c2;
-      c2 = tmp;
-    }
+  getPattern(ctx, owner, shadingFill) {
+    const tmpCanvas = owner.cachedCanvases.getCanvas("pattern", ctx.canvas.width, ctx.canvas.height, true);
+    const tmpCtx = tmpCanvas.context;
+    tmpCtx.clearRect(0, 0, tmpCtx.canvas.width, tmpCtx.canvas.height);
+    tmpCtx.beginPath();
+    tmpCtx.rect(0, 0, tmpCtx.canvas.width, tmpCtx.canvas.height);
 
-    const x1 = (coords[p1] + context.offsetX) * context.scaleX;
-    const y1 = (coords[p1 + 1] + context.offsetY) * context.scaleY;
-    const x2 = (coords[p2] + context.offsetX) * context.scaleX;
-    const y2 = (coords[p2 + 1] + context.offsetY) * context.scaleY;
-    const x3 = (coords[p3] + context.offsetX) * context.scaleX;
-    const y3 = (coords[p3 + 1] + context.offsetY) * context.scaleY;
+    if (!shadingFill) {
+      tmpCtx.setTransform.apply(tmpCtx, owner.baseTransform);
 
-    if (y1 >= y3) {
-      return;
-    }
-
-    const c1r = colors[c1],
-          c1g = colors[c1 + 1],
-          c1b = colors[c1 + 2];
-    const c2r = colors[c2],
-          c2g = colors[c2 + 1],
-          c2b = colors[c2 + 2];
-    const c3r = colors[c3],
-          c3g = colors[c3 + 1],
-          c3b = colors[c3 + 2];
-    const minY = Math.round(y1),
-          maxY = Math.round(y3);
-    let xa, car, cag, cab;
-    let xb, cbr, cbg, cbb;
-
-    for (let y = minY; y <= maxY; y++) {
-      if (y < y2) {
-        let k;
-
-        if (y < y1) {
-          k = 0;
-        } else if (y1 === y2) {
-          k = 1;
-        } else {
-          k = (y1 - y) / (y1 - y2);
-        }
-
-        xa = x1 - (x1 - x2) * k;
-        car = c1r - (c1r - c2r) * k;
-        cag = c1g - (c1g - c2g) * k;
-        cab = c1b - (c1b - c2b) * k;
-      } else {
-        let k;
-
-        if (y > y3) {
-          k = 1;
-        } else if (y2 === y3) {
-          k = 0;
-        } else {
-          k = (y2 - y) / (y2 - y3);
-        }
-
-        xa = x2 - (x2 - x3) * k;
-        car = c2r - (c2r - c3r) * k;
-        cag = c2g - (c2g - c3g) * k;
-        cab = c2b - (c2b - c3b) * k;
+      if (this._matrix) {
+        tmpCtx.transform.apply(tmpCtx, this._matrix);
       }
+    } else {
+      tmpCtx.setTransform.apply(tmpCtx, ctx.mozCurrentTransform);
+    }
 
+    applyBoundingBox(tmpCtx, this._bbox);
+    let grad;
+
+    if (this._type === "axial") {
+      grad = tmpCtx.createLinearGradient(this._p0[0], this._p0[1], this._p1[0], this._p1[1]);
+    } else if (this._type === "radial") {
+      grad = tmpCtx.createRadialGradient(this._p0[0], this._p0[1], this._r0, this._p1[0], this._p1[1], this._r1);
+    }
+
+    for (const colorStop of this._colorStops) {
+      grad.addColorStop(colorStop[0], colorStop[1]);
+    }
+
+    tmpCtx.fillStyle = grad;
+    tmpCtx.fill();
+    const pattern = ctx.createPattern(tmpCanvas.canvas, "repeat");
+    pattern.setTransform(createMatrix(ctx.mozCurrentTransformInverse));
+    return pattern;
+  }
+
+}
+
+function drawTriangle(data, context, p1, p2, p3, c1, c2, c3) {
+  const coords = context.coords,
+        colors = context.colors;
+  const bytes = data.data,
+        rowSize = data.width * 4;
+  let tmp;
+
+  if (coords[p1 + 1] > coords[p2 + 1]) {
+    tmp = p1;
+    p1 = p2;
+    p2 = tmp;
+    tmp = c1;
+    c1 = c2;
+    c2 = tmp;
+  }
+
+  if (coords[p2 + 1] > coords[p3 + 1]) {
+    tmp = p2;
+    p2 = p3;
+    p3 = tmp;
+    tmp = c2;
+    c2 = c3;
+    c3 = tmp;
+  }
+
+  if (coords[p1 + 1] > coords[p2 + 1]) {
+    tmp = p1;
+    p1 = p2;
+    p2 = tmp;
+    tmp = c1;
+    c1 = c2;
+    c2 = tmp;
+  }
+
+  const x1 = (coords[p1] + context.offsetX) * context.scaleX;
+  const y1 = (coords[p1 + 1] + context.offsetY) * context.scaleY;
+  const x2 = (coords[p2] + context.offsetX) * context.scaleX;
+  const y2 = (coords[p2 + 1] + context.offsetY) * context.scaleY;
+  const x3 = (coords[p3] + context.offsetX) * context.scaleX;
+  const y3 = (coords[p3 + 1] + context.offsetY) * context.scaleY;
+
+  if (y1 >= y3) {
+    return;
+  }
+
+  const c1r = colors[c1],
+        c1g = colors[c1 + 1],
+        c1b = colors[c1 + 2];
+  const c2r = colors[c2],
+        c2g = colors[c2 + 1],
+        c2b = colors[c2 + 2];
+  const c3r = colors[c3],
+        c3g = colors[c3 + 1],
+        c3b = colors[c3 + 2];
+  const minY = Math.round(y1),
+        maxY = Math.round(y3);
+  let xa, car, cag, cab;
+  let xb, cbr, cbg, cbb;
+
+  for (let y = minY; y <= maxY; y++) {
+    if (y < y2) {
       let k;
 
       if (y < y1) {
         k = 0;
-      } else if (y > y3) {
+      } else if (y1 === y2) {
         k = 1;
       } else {
-        k = (y1 - y) / (y1 - y3);
+        k = (y1 - y) / (y1 - y2);
       }
 
-      xb = x1 - (x1 - x3) * k;
-      cbr = c1r - (c1r - c3r) * k;
-      cbg = c1g - (c1g - c3g) * k;
-      cbb = c1b - (c1b - c3b) * k;
-      const x1_ = Math.round(Math.min(xa, xb));
-      const x2_ = Math.round(Math.max(xa, xb));
-      let j = rowSize * y + x1_ * 4;
+      xa = x1 - (x1 - x2) * k;
+      car = c1r - (c1r - c2r) * k;
+      cag = c1g - (c1g - c2g) * k;
+      cab = c1b - (c1b - c2b) * k;
+    } else {
+      let k;
 
-      for (let x = x1_; x <= x2_; x++) {
-        k = (xa - x) / (xa - xb);
-
-        if (k < 0) {
-          k = 0;
-        } else if (k > 1) {
-          k = 1;
-        }
-
-        bytes[j++] = car - (car - cbr) * k | 0;
-        bytes[j++] = cag - (cag - cbg) * k | 0;
-        bytes[j++] = cab - (cab - cbb) * k | 0;
-        bytes[j++] = 255;
+      if (y > y3) {
+        k = 1;
+      } else if (y2 === y3) {
+        k = 0;
+      } else {
+        k = (y2 - y) / (y2 - y3);
       }
+
+      xa = x2 - (x2 - x3) * k;
+      car = c2r - (c2r - c3r) * k;
+      cag = c2g - (c2g - c3g) * k;
+      cab = c2b - (c2b - c3b) * k;
+    }
+
+    let k;
+
+    if (y < y1) {
+      k = 0;
+    } else if (y > y3) {
+      k = 1;
+    } else {
+      k = (y1 - y) / (y1 - y3);
+    }
+
+    xb = x1 - (x1 - x3) * k;
+    cbr = c1r - (c1r - c3r) * k;
+    cbg = c1g - (c1g - c3g) * k;
+    cbb = c1b - (c1b - c3b) * k;
+    const x1_ = Math.round(Math.min(xa, xb));
+    const x2_ = Math.round(Math.max(xa, xb));
+    let j = rowSize * y + x1_ * 4;
+
+    for (let x = x1_; x <= x2_; x++) {
+      k = (xa - x) / (xa - xb);
+
+      if (k < 0) {
+        k = 0;
+      } else if (k > 1) {
+        k = 1;
+      }
+
+      bytes[j++] = car - (car - cbr) * k | 0;
+      bytes[j++] = cag - (cag - cbg) * k | 0;
+      bytes[j++] = cab - (cab - cbb) * k | 0;
+      bytes[j++] = 255;
     }
   }
+}
 
-  function drawFigure(data, figure, context) {
-    const ps = figure.coords;
-    const cs = figure.colors;
-    let i, ii;
+function drawFigure(data, figure, context) {
+  const ps = figure.coords;
+  const cs = figure.colors;
+  let i, ii;
 
-    switch (figure.type) {
-      case "lattice":
-        const verticesPerRow = figure.verticesPerRow;
-        const rows = Math.floor(ps.length / verticesPerRow) - 1;
-        const cols = verticesPerRow - 1;
+  switch (figure.type) {
+    case "lattice":
+      const verticesPerRow = figure.verticesPerRow;
+      const rows = Math.floor(ps.length / verticesPerRow) - 1;
+      const cols = verticesPerRow - 1;
 
-        for (i = 0; i < rows; i++) {
-          let q = i * verticesPerRow;
+      for (i = 0; i < rows; i++) {
+        let q = i * verticesPerRow;
 
-          for (let j = 0; j < cols; j++, q++) {
-            drawTriangle(data, context, ps[q], ps[q + 1], ps[q + verticesPerRow], cs[q], cs[q + 1], cs[q + verticesPerRow]);
-            drawTriangle(data, context, ps[q + verticesPerRow + 1], ps[q + 1], ps[q + verticesPerRow], cs[q + verticesPerRow + 1], cs[q + 1], cs[q + verticesPerRow]);
-          }
+        for (let j = 0; j < cols; j++, q++) {
+          drawTriangle(data, context, ps[q], ps[q + 1], ps[q + verticesPerRow], cs[q], cs[q + 1], cs[q + verticesPerRow]);
+          drawTriangle(data, context, ps[q + verticesPerRow + 1], ps[q + 1], ps[q + verticesPerRow], cs[q + verticesPerRow + 1], cs[q + 1], cs[q + verticesPerRow]);
         }
+      }
 
-        break;
+      break;
 
-      case "triangles":
-        for (i = 0, ii = ps.length; i < ii; i += 3) {
-          drawTriangle(data, context, ps[i], ps[i + 1], ps[i + 2], cs[i], cs[i + 1], cs[i + 2]);
-        }
+    case "triangles":
+      for (i = 0, ii = ps.length; i < ii; i += 3) {
+        drawTriangle(data, context, ps[i], ps[i + 1], ps[i + 2], cs[i], cs[i + 1], cs[i + 2]);
+      }
 
-        break;
+      break;
 
-      default:
-        throw new Error("illegal figure");
-    }
+    default:
+      throw new Error("illegal figure");
+  }
+}
+
+class MeshShadingPattern extends BaseShadingPattern {
+  constructor(IR) {
+    super();
+    this._coords = IR[2];
+    this._colors = IR[3];
+    this._figures = IR[4];
+    this._bounds = IR[5];
+    this._matrix = IR[6];
+    this._bbox = IR[7];
+    this._background = IR[8];
   }
 
-  function createMeshCanvas(bounds, combinesScale, coords, colors, figures, backgroundColor, cachedCanvases) {
+  _createMeshCanvas(combinedScale, backgroundColor, cachedCanvases) {
     const EXPECTED_SCALE = 1.1;
     const MAX_PATTERN_SIZE = 3000;
     const BORDER_SIZE = 2;
-    const offsetX = Math.floor(bounds[0]);
-    const offsetY = Math.floor(bounds[1]);
-    const boundsWidth = Math.ceil(bounds[2]) - offsetX;
-    const boundsHeight = Math.ceil(bounds[3]) - offsetY;
-    const width = Math.min(Math.ceil(Math.abs(boundsWidth * combinesScale[0] * EXPECTED_SCALE)), MAX_PATTERN_SIZE);
-    const height = Math.min(Math.ceil(Math.abs(boundsHeight * combinesScale[1] * EXPECTED_SCALE)), MAX_PATTERN_SIZE);
+    const offsetX = Math.floor(this._bounds[0]);
+    const offsetY = Math.floor(this._bounds[1]);
+    const boundsWidth = Math.ceil(this._bounds[2]) - offsetX;
+    const boundsHeight = Math.ceil(this._bounds[3]) - offsetY;
+    const width = Math.min(Math.ceil(Math.abs(boundsWidth * combinedScale[0] * EXPECTED_SCALE)), MAX_PATTERN_SIZE);
+    const height = Math.min(Math.ceil(Math.abs(boundsHeight * combinedScale[1] * EXPECTED_SCALE)), MAX_PATTERN_SIZE);
     const scaleX = boundsWidth / width;
     const scaleY = boundsHeight / height;
     const context = {
-      coords,
-      colors,
+      coords: this._coords,
+      colors: this._colors,
       offsetX: -offsetX,
       offsetY: -offsetY,
       scaleX: 1 / scaleX,
@@ -7055,8 +7083,8 @@ const createMeshCanvas = function createMeshCanvasClosure() {
       }
     }
 
-    for (let i = 0, ii = figures.length; i < ii; i++) {
-      drawFigure(data, figures[i], context);
+    for (const figure of this._figures) {
+      drawFigure(data, figure, context);
     }
 
     tmpCtx.putImageData(data, BORDER_SIZE, BORDER_SIZE);
@@ -7070,80 +7098,72 @@ const createMeshCanvas = function createMeshCanvasClosure() {
     };
   }
 
-  return createMeshCanvas;
-}();
+  getPattern(ctx, owner, shadingFill) {
+    applyBoundingBox(ctx, this._bbox);
+    let scale;
 
-ShadingIRs.Mesh = {
-  fromIR: function Mesh_fromIR(raw) {
-    const coords = raw[2];
-    const colors = raw[3];
-    const figures = raw[4];
-    const bounds = raw[5];
-    const matrix = raw[6];
-    const bbox = raw[7];
-    const background = raw[8];
-    return {
-      getPattern: function Mesh_getPattern(ctx, owner, shadingFill) {
-        applyBoundingBox(ctx, bbox);
-        let scale;
+    if (shadingFill) {
+      scale = _util.Util.singularValueDecompose2dScale(ctx.mozCurrentTransform);
+    } else {
+      scale = _util.Util.singularValueDecompose2dScale(owner.baseTransform);
 
-        if (shadingFill) {
-          scale = _util.Util.singularValueDecompose2dScale(ctx.mozCurrentTransform);
-        } else {
-          scale = _util.Util.singularValueDecompose2dScale(owner.baseTransform);
+      if (this._matrix) {
+        const matrixScale = _util.Util.singularValueDecompose2dScale(this._matrix);
 
-          if (matrix) {
-            const matrixScale = _util.Util.singularValueDecompose2dScale(matrix);
-
-            scale = [scale[0] * matrixScale[0], scale[1] * matrixScale[1]];
-          }
-        }
-
-        const temporaryPatternCanvas = createMeshCanvas(bounds, scale, coords, colors, figures, shadingFill ? null : background, owner.cachedCanvases);
-
-        if (!shadingFill) {
-          ctx.setTransform.apply(ctx, owner.baseTransform);
-
-          if (matrix) {
-            ctx.transform.apply(ctx, matrix);
-          }
-        }
-
-        ctx.translate(temporaryPatternCanvas.offsetX, temporaryPatternCanvas.offsetY);
-        ctx.scale(temporaryPatternCanvas.scaleX, temporaryPatternCanvas.scaleY);
-        return ctx.createPattern(temporaryPatternCanvas.canvas, "no-repeat");
+        scale = [scale[0] * matrixScale[0], scale[1] * matrixScale[1]];
       }
-    };
-  }
-};
-ShadingIRs.Dummy = {
-  fromIR: function Dummy_fromIR() {
-    return {
-      getPattern: function Dummy_fromIR_getPattern() {
-        return "hotpink";
+    }
+
+    const temporaryPatternCanvas = this._createMeshCanvas(scale, shadingFill ? null : this._background, owner.cachedCanvases);
+
+    if (!shadingFill) {
+      ctx.setTransform.apply(ctx, owner.baseTransform);
+
+      if (this._matrix) {
+        ctx.transform.apply(ctx, this._matrix);
       }
-    };
-  }
-};
+    }
 
-function getShadingPatternFromIR(raw) {
-  const shadingIR = ShadingIRs[raw[0]];
-
-  if (!shadingIR) {
-    throw new Error(`Unknown IR type: ${raw[0]}`);
+    ctx.translate(temporaryPatternCanvas.offsetX, temporaryPatternCanvas.offsetY);
+    ctx.scale(temporaryPatternCanvas.scaleX, temporaryPatternCanvas.scaleY);
+    return ctx.createPattern(temporaryPatternCanvas.canvas, "no-repeat");
   }
 
-  return shadingIR.fromIR(raw);
 }
 
-const TilingPattern = function TilingPatternClosure() {
-  const PaintType = {
-    COLORED: 1,
-    UNCOLORED: 2
-  };
-  const MAX_PATTERN_SIZE = 3000;
+class DummyShadingPattern extends BaseShadingPattern {
+  getPattern() {
+    return "hotpink";
+  }
 
-  function TilingPattern(IR, color, ctx, canvasGraphicsFactory, baseTransform) {
+}
+
+function getShadingPattern(IR) {
+  switch (IR[0]) {
+    case "RadialAxial":
+      return new RadialAxialShadingPattern(IR);
+
+    case "Mesh":
+      return new MeshShadingPattern(IR);
+
+    case "Dummy":
+      return new DummyShadingPattern();
+  }
+
+  throw new Error(`Unknown IR type: ${IR[0]}`);
+}
+
+const PaintType = {
+  COLORED: 1,
+  UNCOLORED: 2
+};
+
+class TilingPattern {
+  static get MAX_PATTERN_SIZE() {
+    return (0, _util.shadow)(this, "MAX_PATTERN_SIZE", 3000);
+  }
+
+  constructor(IR, color, ctx, canvasGraphicsFactory, baseTransform) {
     this.operatorList = IR[2];
     this.matrix = IR[3] || [1, 0, 0, 1, 0, 0];
     this.bbox = IR[4];
@@ -7152,123 +7172,125 @@ const TilingPattern = function TilingPatternClosure() {
     this.paintType = IR[7];
     this.tilingType = IR[8];
     this.color = color;
+    this.ctx = ctx;
     this.canvasGraphicsFactory = canvasGraphicsFactory;
     this.baseTransform = baseTransform;
-    this.ctx = ctx;
   }
 
-  TilingPattern.prototype = {
-    createPatternCanvas: function TilinPattern_createPatternCanvas(owner) {
-      const operatorList = this.operatorList;
-      const bbox = this.bbox;
-      const xstep = this.xstep;
-      const ystep = this.ystep;
-      const paintType = this.paintType;
-      const tilingType = this.tilingType;
-      const color = this.color;
-      const canvasGraphicsFactory = this.canvasGraphicsFactory;
-      (0, _util.info)("TilingType: " + tilingType);
-      const x0 = bbox[0],
-            y0 = bbox[1],
-            x1 = bbox[2],
-            y1 = bbox[3];
+  createPatternCanvas(owner) {
+    const operatorList = this.operatorList;
+    const bbox = this.bbox;
+    const xstep = this.xstep;
+    const ystep = this.ystep;
+    const paintType = this.paintType;
+    const tilingType = this.tilingType;
+    const color = this.color;
+    const canvasGraphicsFactory = this.canvasGraphicsFactory;
+    (0, _util.info)("TilingType: " + tilingType);
+    const x0 = bbox[0],
+          y0 = bbox[1],
+          x1 = bbox[2],
+          y1 = bbox[3];
 
-      const matrixScale = _util.Util.singularValueDecompose2dScale(this.matrix);
+    const matrixScale = _util.Util.singularValueDecompose2dScale(this.matrix);
 
-      const curMatrixScale = _util.Util.singularValueDecompose2dScale(this.baseTransform);
+    const curMatrixScale = _util.Util.singularValueDecompose2dScale(this.baseTransform);
 
-      const combinedScale = [matrixScale[0] * curMatrixScale[0], matrixScale[1] * curMatrixScale[1]];
-      const dimx = this.getSizeAndScale(xstep, this.ctx.canvas.width, combinedScale[0]);
-      const dimy = this.getSizeAndScale(ystep, this.ctx.canvas.height, combinedScale[1]);
-      const tmpCanvas = owner.cachedCanvases.getCanvas("pattern", dimx.size, dimy.size, true);
-      const tmpCtx = tmpCanvas.context;
-      const graphics = canvasGraphicsFactory.createCanvasGraphics(tmpCtx);
-      graphics.groupLevel = owner.groupLevel;
-      this.setFillAndStrokeStyleToContext(graphics, paintType, color);
-      graphics.transform(dimx.scale, 0, 0, dimy.scale, 0, 0);
-      this.clipBbox(graphics, bbox, x0, y0, x1, y1);
-      graphics.baseTransform = graphics.ctx.mozCurrentTransform.slice();
-      graphics.executeOperatorList(operatorList);
-      graphics.endDrawing();
-      return {
-        canvas: tmpCanvas.canvas,
-        scaleX: dimx.scale,
-        scaleY: dimy.scale
-      };
-    },
-    getSizeAndScale: function TilingPattern_getSizeAndScale(step, realOutputSize, scale) {
-      step = Math.abs(step);
-      const maxSize = Math.max(MAX_PATTERN_SIZE, realOutputSize);
-      let size = Math.ceil(step * scale);
+    const combinedScale = [matrixScale[0] * curMatrixScale[0], matrixScale[1] * curMatrixScale[1]];
+    const dimx = this.getSizeAndScale(xstep, this.ctx.canvas.width, combinedScale[0]);
+    const dimy = this.getSizeAndScale(ystep, this.ctx.canvas.height, combinedScale[1]);
+    const tmpCanvas = owner.cachedCanvases.getCanvas("pattern", dimx.size, dimy.size, true);
+    const tmpCtx = tmpCanvas.context;
+    const graphics = canvasGraphicsFactory.createCanvasGraphics(tmpCtx);
+    graphics.groupLevel = owner.groupLevel;
+    this.setFillAndStrokeStyleToContext(graphics, paintType, color);
+    graphics.transform(dimx.scale, 0, 0, dimy.scale, 0, 0);
+    this.clipBbox(graphics, bbox, x0, y0, x1, y1);
+    graphics.baseTransform = graphics.ctx.mozCurrentTransform.slice();
+    graphics.executeOperatorList(operatorList);
+    graphics.endDrawing();
+    return {
+      canvas: tmpCanvas.canvas,
+      scaleX: dimx.scale,
+      scaleY: dimy.scale
+    };
+  }
 
-      if (size >= maxSize) {
-        size = maxSize;
-      } else {
-        scale = size / step;
-      }
+  getSizeAndScale(step, realOutputSize, scale) {
+    step = Math.abs(step);
+    const maxSize = Math.max(TilingPattern.MAX_PATTERN_SIZE, realOutputSize);
+    let size = Math.ceil(step * scale);
 
-      return {
-        scale,
-        size
-      };
-    },
-    clipBbox: function clipBbox(graphics, bbox, x0, y0, x1, y1) {
-      if (Array.isArray(bbox) && bbox.length === 4) {
-        const bboxWidth = x1 - x0;
-        const bboxHeight = y1 - y0;
-        graphics.ctx.rect(x0, y0, bboxWidth, bboxHeight);
-        graphics.clip();
-        graphics.endPath();
-      }
-    },
-    setFillAndStrokeStyleToContext: function setFillAndStrokeStyleToContext(graphics, paintType, color) {
-      const context = graphics.ctx,
-            current = graphics.current;
-
-      switch (paintType) {
-        case PaintType.COLORED:
-          const ctx = this.ctx;
-          context.fillStyle = ctx.fillStyle;
-          context.strokeStyle = ctx.strokeStyle;
-          current.fillColor = ctx.fillStyle;
-          current.strokeColor = ctx.strokeStyle;
-          break;
-
-        case PaintType.UNCOLORED:
-          const cssColor = _util.Util.makeHexColor(color[0], color[1], color[2]);
-
-          context.fillStyle = cssColor;
-          context.strokeStyle = cssColor;
-          current.fillColor = cssColor;
-          current.strokeColor = cssColor;
-          break;
-
-        default:
-          throw new _util.FormatError(`Unsupported paint type: ${paintType}`);
-      }
-    },
-    getPattern: function TilingPattern_getPattern(ctx, owner, shadingFill) {
-      ctx = this.ctx;
-      let matrix = ctx.mozCurrentTransformInverse;
-
-      if (!shadingFill) {
-        matrix = _util.Util.transform(matrix, owner.baseTransform);
-
-        if (this.matrix) {
-          matrix = _util.Util.transform(matrix, this.matrix);
-        }
-      }
-
-      const temporaryPatternCanvas = this.createPatternCanvas(owner);
-      let domMatrix = createMatrix(matrix);
-      domMatrix = domMatrix.scale(1 / temporaryPatternCanvas.scaleX, 1 / temporaryPatternCanvas.scaleY);
-      const pattern = ctx.createPattern(temporaryPatternCanvas.canvas, "repeat");
-      pattern.setTransform(domMatrix);
-      return pattern;
+    if (size >= maxSize) {
+      size = maxSize;
+    } else {
+      scale = size / step;
     }
-  };
-  return TilingPattern;
-}();
+
+    return {
+      scale,
+      size
+    };
+  }
+
+  clipBbox(graphics, bbox, x0, y0, x1, y1) {
+    if (Array.isArray(bbox) && bbox.length === 4) {
+      const bboxWidth = x1 - x0;
+      const bboxHeight = y1 - y0;
+      graphics.ctx.rect(x0, y0, bboxWidth, bboxHeight);
+      graphics.clip();
+      graphics.endPath();
+    }
+  }
+
+  setFillAndStrokeStyleToContext(graphics, paintType, color) {
+    const context = graphics.ctx,
+          current = graphics.current;
+
+    switch (paintType) {
+      case PaintType.COLORED:
+        const ctx = this.ctx;
+        context.fillStyle = ctx.fillStyle;
+        context.strokeStyle = ctx.strokeStyle;
+        current.fillColor = ctx.fillStyle;
+        current.strokeColor = ctx.strokeStyle;
+        break;
+
+      case PaintType.UNCOLORED:
+        const cssColor = _util.Util.makeHexColor(color[0], color[1], color[2]);
+
+        context.fillStyle = cssColor;
+        context.strokeStyle = cssColor;
+        current.fillColor = cssColor;
+        current.strokeColor = cssColor;
+        break;
+
+      default:
+        throw new _util.FormatError(`Unsupported paint type: ${paintType}`);
+    }
+  }
+
+  getPattern(ctx, owner, shadingFill) {
+    ctx = this.ctx;
+    let matrix = ctx.mozCurrentTransformInverse;
+
+    if (!shadingFill) {
+      matrix = _util.Util.transform(matrix, owner.baseTransform);
+
+      if (this.matrix) {
+        matrix = _util.Util.transform(matrix, this.matrix);
+      }
+    }
+
+    const temporaryPatternCanvas = this.createPatternCanvas(owner);
+    let domMatrix = createMatrix(matrix);
+    domMatrix = domMatrix.scale(1 / temporaryPatternCanvas.scaleX, 1 / temporaryPatternCanvas.scaleY);
+    const pattern = ctx.createPattern(temporaryPatternCanvas.canvas, "repeat");
+    pattern.setTransform(domMatrix);
+    return pattern;
+  }
+
+}
 
 exports.TilingPattern = TilingPattern;
 
@@ -8839,39 +8861,79 @@ class WidgetAnnotationElement extends AnnotationElement {
     }
   }
 
-  _setColor(event) {
-    const {
-      detail,
-      target
-    } = event;
-    const {
-      style
-    } = target;
+  _dispatchEventFromSandbox(actions, jsEvent) {
+    const setColor = (jsName, styleName, event) => {
+      const color = event.detail[jsName];
+      event.target.style[styleName] = _scripting_utils.ColorConverters[`${color[0]}_HTML`](color.slice(1));
+    };
 
-    for (const name of ["bgColor", "fillColor", "fgColor", "textColor", "borderColor", "strokeColor"]) {
-      let color = detail[name];
-
-      if (!color) {
-        continue;
+    const commonActions = {
+      display: event => {
+        const hidden = event.detail.display % 2 === 1;
+        event.target.style.visibility = hidden ? "hidden" : "visible";
+        this.annotationStorage.setValue(this.data.id, {
+          hidden,
+          print: event.detail.display === 0 || event.detail.display === 3
+        });
+      },
+      print: event => {
+        this.annotationStorage.setValue(this.data.id, {
+          print: event.detail.print
+        });
+      },
+      hidden: event => {
+        event.target.style.visibility = event.detail.hidden ? "hidden" : "visible";
+        this.annotationStorage.setValue(this.data.id, {
+          hidden: event.detail.hidden
+        });
+      },
+      focus: event => {
+        setTimeout(() => event.target.focus({
+          preventScroll: false
+        }), 0);
+      },
+      userName: event => {
+        event.target.title = event.detail.userName;
+      },
+      readonly: event => {
+        if (event.detail.readonly) {
+          event.target.setAttribute("readonly", "");
+        } else {
+          event.target.removeAttribute("readonly");
+        }
+      },
+      required: event => {
+        if (event.detail.required) {
+          event.target.setAttribute("required", "");
+        } else {
+          event.target.removeAttribute("required");
+        }
+      },
+      bgColor: event => {
+        setColor("bgColor", "backgroundColor", event);
+      },
+      fillColor: event => {
+        setColor("fillColor", "backgroundColor", event);
+      },
+      fgColor: event => {
+        setColor("fgColor", "color", event);
+      },
+      textColor: event => {
+        setColor("textColor", "color", event);
+      },
+      borderColor: event => {
+        setColor("borderColor", "borderColor", event);
+      },
+      strokeColor: event => {
+        setColor("strokeColor", "borderColor", event);
       }
+    };
 
-      color = _scripting_utils.ColorConverters[`${color[0]}_HTML`](color.slice(1));
+    for (const name of Object.keys(jsEvent.detail)) {
+      const action = actions[name] || commonActions[name];
 
-      switch (name) {
-        case "bgColor":
-        case "fillColor":
-          style.backgroundColor = color;
-          break;
-
-        case "fgColor":
-        case "textColor":
-          style.color = color;
-          break;
-
-        case "borderColor":
-        case "strokeColor":
-          style.borderColor = color;
-          break;
+      if (action) {
+        action(jsEvent);
       }
     }
   }
@@ -8951,13 +9013,10 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
             event.target.value = elementData.userValue;
           }
         });
-        element.addEventListener("updatefromsandbox", event => {
-          const {
-            detail
-          } = event;
+        element.addEventListener("updatefromsandbox", jsEvent => {
           const actions = {
-            value() {
-              elementData.userValue = detail.value || "";
+            value(event) {
+              elementData.userValue = event.detail.value || "";
               storage.setValue(id, {
                 value: elementData.userValue.toString()
               });
@@ -8967,8 +9026,8 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
               }
             },
 
-            valueAsString() {
-              elementData.formattedValue = detail.valueAsString || "";
+            valueAsString(event) {
+              elementData.formattedValue = event.detail.valueAsString || "";
 
               if (event.target !== document.activeElement) {
                 event.target.value = elementData.formattedValue;
@@ -8979,29 +9038,8 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
               });
             },
 
-            focus() {
-              setTimeout(() => event.target.focus({
-                preventScroll: false
-              }), 0);
-            },
-
-            userName() {
-              event.target.title = detail.userName;
-            },
-
-            hidden() {
-              event.target.style.visibility = detail.hidden ? "hidden" : "visible";
-              storage.setValue(id, {
-                hidden: detail.hidden
-              });
-            },
-
-            editable() {
-              event.target.disabled = !detail.editable;
-            },
-
-            selRange() {
-              const [selStart, selEnd] = detail.selRange;
+            selRange(event) {
+              const [selStart, selEnd] = event.detail.selRange;
 
               if (selStart >= 0 && selEnd < event.target.value.length) {
                 event.target.setSelectionRange(selStart, selEnd);
@@ -9009,9 +9047,8 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
             }
 
           };
-          Object.keys(detail).filter(name => name in actions).forEach(name => actions[name]());
 
-          this._setColor(event);
+          this._dispatchEventFromSandbox(actions, jsEvent);
         });
         element.addEventListener("keydown", event => {
           elementData.beforeInputValue = event.target.value;
@@ -9206,39 +9243,18 @@ class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
     });
 
     if (this.enableScripting && this.hasJSActions) {
-      element.addEventListener("updatefromsandbox", event => {
-        const {
-          detail
-        } = event;
+      element.addEventListener("updatefromsandbox", jsEvent => {
         const actions = {
-          value() {
-            event.target.checked = detail.value !== "Off";
+          value(event) {
+            event.target.checked = event.detail.value !== "Off";
             storage.setValue(id, {
               value: event.target.checked
             });
-          },
-
-          focus() {
-            setTimeout(() => event.target.focus({
-              preventScroll: false
-            }), 0);
-          },
-
-          hidden() {
-            event.target.style.visibility = detail.hidden ? "hidden" : "visible";
-            storage.setValue(id, {
-              hidden: detail.hidden
-            });
-          },
-
-          editable() {
-            event.target.disabled = !detail.editable;
           }
 
         };
-        Object.keys(detail).filter(name => name in actions).forEach(name => actions[name]());
 
-        this._setColor(event);
+        this._dispatchEventFromSandbox(actions, jsEvent);
       });
 
       this._setEventListeners(element, [["change", "Validate"], ["change", "Action"], ["focus", "Focus"], ["blur", "Blur"], ["mousedown", "Mouse Down"], ["mouseenter", "Mouse Enter"], ["mouseleave", "Mouse Exit"], ["mouseup", "Mouse Up"]], event => event.target.checked);
@@ -9303,13 +9319,10 @@ class RadioButtonWidgetAnnotationElement extends WidgetAnnotationElement {
 
     if (this.enableScripting && this.hasJSActions) {
       const pdfButtonValue = data.buttonValue;
-      element.addEventListener("updatefromsandbox", event => {
-        const {
-          detail
-        } = event;
+      element.addEventListener("updatefromsandbox", jsEvent => {
         const actions = {
-          value() {
-            const checked = pdfButtonValue === detail.value;
+          value(event) {
+            const checked = pdfButtonValue === event.detail.value;
 
             for (const radio of document.getElementsByName(event.target.name)) {
               const radioId = radio.getAttribute("id");
@@ -9318,29 +9331,11 @@ class RadioButtonWidgetAnnotationElement extends WidgetAnnotationElement {
                 value: radio.checked
               });
             }
-          },
-
-          focus() {
-            setTimeout(() => event.target.focus({
-              preventScroll: false
-            }), 0);
-          },
-
-          hidden() {
-            event.target.style.visibility = detail.hidden ? "hidden" : "visible";
-            storage.setValue(id, {
-              hidden: detail.hidden
-            });
-          },
-
-          editable() {
-            event.target.disabled = !detail.editable;
           }
 
         };
-        Object.keys(detail).filter(name => name in actions).forEach(name => actions[name]());
 
-        this._setColor(event);
+        this._dispatchEventFromSandbox(actions, jsEvent);
       });
 
       this._setEventListeners(element, [["change", "Validate"], ["change", "Action"], ["focus", "Focus"], ["blur", "Blur"], ["mousedown", "Mouse Down"], ["mouseenter", "Mouse Enter"], ["mouseleave", "Mouse Exit"], ["mouseup", "Mouse Up"]], event => event.target.checked);
@@ -9427,14 +9422,11 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
     };
 
     if (this.enableScripting && this.hasJSActions) {
-      selectElement.addEventListener("updatefromsandbox", event => {
-        const {
-          detail
-        } = event;
+      selectElement.addEventListener("updatefromsandbox", jsEvent => {
         const actions = {
-          value() {
+          value(event) {
             const options = selectElement.options;
-            const value = detail.value;
+            const value = event.detail.value;
             const values = new Set(Array.isArray(value) ? value : [value]);
             Array.prototype.forEach.call(options, option => {
               option.selected = values.has(option.value);
@@ -9444,13 +9436,13 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
             });
           },
 
-          multipleSelection() {
+          multipleSelection(event) {
             selectElement.multiple = true;
           },
 
-          remove() {
+          remove(event) {
             const options = selectElement.options;
-            const index = detail.remove;
+            const index = event.detail.remove;
             options[index].selected = false;
             selectElement.remove(index);
 
@@ -9468,7 +9460,7 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
             });
           },
 
-          clear() {
+          clear(event) {
             while (selectElement.length !== 0) {
               selectElement.remove(0);
             }
@@ -9479,12 +9471,12 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
             });
           },
 
-          insert() {
+          insert(event) {
             const {
               index,
               displayValue,
               exportValue
-            } = detail.insert;
+            } = event.detail.insert;
             const optionElement = document.createElement("option");
             optionElement.textContent = displayValue;
             optionElement.value = exportValue;
@@ -9495,10 +9487,10 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
             });
           },
 
-          items() {
+          items(event) {
             const {
               items
-            } = detail;
+            } = event.detail;
 
             while (selectElement.length !== 0) {
               selectElement.remove(0);
@@ -9525,8 +9517,8 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
             });
           },
 
-          indices() {
-            const indices = new Set(detail.indices);
+          indices(event) {
+            const indices = new Set(event.detail.indices);
             const options = event.target.options;
             Array.prototype.forEach.call(options, (option, i) => {
               option.selected = indices.has(i);
@@ -9536,27 +9528,13 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
             });
           },
 
-          focus() {
-            setTimeout(() => event.target.focus({
-              preventScroll: false
-            }), 0);
-          },
-
-          hidden() {
-            event.target.style.visibility = detail.hidden ? "hidden" : "visible";
-            storage.setValue(id, {
-              hidden: detail.hidden
-            });
-          },
-
-          editable() {
-            event.target.disabled = !detail.editable;
+          editable(event) {
+            event.target.disabled = !event.detail.editable;
           }
 
         };
-        Object.keys(detail).filter(name => name in actions).forEach(name => actions[name]());
 
-        this._setColor(event);
+        this._dispatchEventFromSandbox(actions, jsEvent);
       });
       selectElement.addEventListener("input", event => {
         const exportValue = getValue(event, true);
@@ -13248,7 +13226,7 @@ function validateResponseStatus(status) {
 
 /***/ }),
 /* 24 */
-/***/ ((__unused_webpack_module, exports) => {
+/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
 
@@ -13256,6 +13234,8 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.getFilenameFromContentDispositionHeader = getFilenameFromContentDispositionHeader;
+
+var _util = __w_pdfjs_require__(2);
 
 function getFilenameFromContentDispositionHeader(contentDisposition) {
   let needsEncodingFixup = true;
@@ -13300,10 +13280,8 @@ function getFilenameFromContentDispositionHeader(contentDisposition) {
         const decoder = new TextDecoder(encoding, {
           fatal: true
         });
-        const bytes = Array.from(value, function (ch) {
-          return ch.charCodeAt(0) & 0xff;
-        });
-        value = decoder.decode(new Uint8Array(bytes));
+        const buffer = (0, _util.stringToBytes)(value);
+        value = decoder.decode(buffer);
         needsEncodingFixup = false;
       } catch (e) {
         if (/^utf-?8$/i.test(encoding)) {
@@ -14531,7 +14509,7 @@ var _svg = __w_pdfjs_require__(20);
 var _xfa_layer = __w_pdfjs_require__(21);
 
 const pdfjsVersion = '2.9.0';
-const pdfjsBuild = '438cf1e';
+const pdfjsBuild = '3538ef0';
 {
   const {
     isNodeJS

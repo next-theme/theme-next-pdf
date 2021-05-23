@@ -8331,6 +8331,7 @@ class PDFScriptingManager {
     }
 
     delete detail.id;
+    delete detail.siblings;
     const ids = siblings ? [id, ...siblings] : [id];
 
     for (const elementId of ids) {
@@ -13282,6 +13283,13 @@ class Toolbar {
         value: this.value
       });
     });
+    scaleSelect.addEventListener("click", function (evt) {
+      const target = evt.target;
+
+      if (this.value === self.pageScaleValue && target.tagName.toUpperCase() === "OPTION") {
+        this.blur();
+      }
+    });
     scaleSelect.oncontextmenu = _ui_utils.noContextMenuHandler;
 
     this.eventBus._on("localized", () => {
@@ -15085,7 +15093,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(3);
 
 const pdfjsVersion = '2.9.0';
-const pdfjsBuild = '438cf1e';
+const pdfjsBuild = '3538ef0';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
