@@ -1429,8 +1429,7 @@ function stringToUTF16BEString(str) {
 
   for (let i = 0, ii = str.length; i < ii; i++) {
     const char = str.charCodeAt(i);
-    buf.push(String.fromCharCode(char >> 8 & 0xff));
-    buf.push(String.fromCharCode(char & 0xff));
+    buf.push(String.fromCharCode(char >> 8 & 0xff), String.fromCharCode(char & 0xff));
   }
 
   return buf.join("");
@@ -3858,7 +3857,7 @@ const InternalRenderTask = function InternalRenderTaskClosure() {
 
 const version = '2.9.0';
 exports.version = version;
-const build = '3538ef0';
+const build = 'd725ff3';
 exports.build = build;
 
 /***/ }),
@@ -4114,8 +4113,8 @@ exports.FontLoader = FontLoader;
       this.insertRule(rule);
       const names = [];
 
-      for (i = 0, ii = fonts.length; i < ii; i++) {
-        names.push(fonts[i].loadedName);
+      for (const font of fonts) {
+        names.push(font.loadedName);
       }
 
       names.push(loadTestFontId);
@@ -4127,11 +4126,11 @@ exports.FontLoader = FontLoader;
       div.style.position = "absolute";
       div.style.top = div.style.left = "0px";
 
-      for (i = 0, ii = names.length; i < ii; ++i) {
+      for (const name of names) {
         const span = this._document.createElement("span");
 
         span.textContent = "Hi";
-        span.style.fontFamily = names[i];
+        span.style.fontFamily = name;
         div.appendChild(span);
       }
 
@@ -4229,7 +4228,7 @@ class FontFaceObject {
       return this.compiledGlyphs[character];
     }
 
-    let cmds, current;
+    let cmds;
 
     try {
       cmds = objs.get(this.loadedName + "_path_" + character);
@@ -4247,28 +4246,18 @@ class FontFaceObject {
     }
 
     if (this.isEvalSupported && _util.IsEvalSupportedCached.value) {
-      let args,
-          js = "";
+      const jsBuf = [];
 
-      for (let i = 0, ii = cmds.length; i < ii; i++) {
-        current = cmds[i];
-
-        if (current.args !== undefined) {
-          args = current.args.join(",");
-        } else {
-          args = "";
-        }
-
-        js += "c." + current.cmd + "(" + args + ");\n";
+      for (const current of cmds) {
+        const args = current.args !== undefined ? current.args.join(",") : "";
+        jsBuf.push("c.", current.cmd, "(", args, ");\n");
       }
 
-      return this.compiledGlyphs[character] = new Function("c", "size", js);
+      return this.compiledGlyphs[character] = new Function("c", "size", jsBuf.join(""));
     }
 
     return this.compiledGlyphs[character] = function (c, size) {
-      for (let i = 0, ii = cmds.length; i < ii; i++) {
-        current = cmds[i];
-
+      for (const current of cmds) {
         if (current.cmd === "scale") {
           current.args = [size, -size];
         }
@@ -4771,8 +4760,7 @@ function compileType3Glyph(imgData) {
         points[p] &= type >> 2 | type << 2;
       }
 
-      coords.push(p % width1);
-      coords.push(p / width1 | 0);
+      coords.push(p % width1, p / width1 | 0);
 
       if (!points[p]) {
         --count;
@@ -12588,26 +12576,108 @@ Object.defineProperty(exports, "__esModule", ({
 exports.XfaLayer = void 0;
 
 class XfaLayer {
-  static setAttributes(html, attrs) {
-    for (const [key, value] of Object.entries(attrs)) {
-      if (value === null || value === undefined) {
+  static setupStorage(html, fieldId, element, storage) {
+    const storedData = storage.getValue(fieldId, {
+      value: null
+    });
+
+    switch (element.name) {
+      case "textarea":
+        html.textContent = storedData.value !== null ? storedData.value : "";
+        html.addEventListener("input", event => {
+          storage.setValue(fieldId, {
+            value: event.target.value
+          });
+        });
+        break;
+
+      case "input":
+        if (storedData.value !== null) {
+          html.setAttribute("value", storedData.value);
+        }
+
+        if (element.attributes.type === "radio") {
+          html.addEventListener("change", event => {
+            const {
+              target
+            } = event;
+
+            for (const radio of document.getElementsByName(target.name)) {
+              if (radio !== target) {
+                const id = radio.id;
+                storage.setValue(id.split("-")[0], {
+                  value: false
+                });
+              }
+            }
+
+            storage.setValue(fieldId, {
+              value: target.checked
+            });
+          });
+        } else {
+          html.addEventListener("input", event => {
+            storage.setValue(fieldId, {
+              value: event.target.value
+            });
+          });
+        }
+
+        break;
+
+      case "select":
+        if (storedData.value !== null) {
+          for (const option of element.children) {
+            if (option.attributes.value === storedData.value) {
+              option.attributes.selected = true;
+            }
+          }
+        }
+
+        html.addEventListener("input", event => {
+          const options = event.target.options;
+          const value = options.selectedIndex === -1 ? null : options[options.selectedIndex].value;
+          storage.setValue(fieldId, {
+            value
+          });
+        });
+        break;
+    }
+  }
+
+  static setAttributes(html, element, storage) {
+    const {
+      attributes
+    } = element;
+
+    for (const [key, value] of Object.entries(attributes)) {
+      if (value === null || value === undefined || key === "fieldId") {
         continue;
       }
 
       if (key !== "style") {
-        html.setAttribute(key, value);
+        if (key === "textContent") {
+          html.textContent = value;
+        } else {
+          html.setAttribute(key, value);
+        }
       } else {
         Object.assign(html.style, value);
       }
     }
+
+    if (storage && attributes.fieldId !== undefined) {
+      this.setupStorage(html, attributes.fieldId, element, storage);
+    }
   }
 
   static render(parameters) {
+    const storage = parameters.annotationStorage;
     const root = parameters.xfa;
     const rootHtml = document.createElement(root.name);
 
     if (root.attributes) {
-      XfaLayer.setAttributes(rootHtml, root.attributes);
+      this.setAttributes(rootHtml, root);
     }
 
     const stack = [[root, -1, rootHtml]];
@@ -12644,7 +12714,7 @@ class XfaLayer {
       html.appendChild(childHtml);
 
       if (child.attributes) {
-        XfaLayer.setAttributes(childHtml, child.attributes);
+        this.setAttributes(childHtml, child, storage);
       }
 
       if (child.children && child.children.length > 0) {
@@ -14509,7 +14579,7 @@ var _svg = __w_pdfjs_require__(20);
 var _xfa_layer = __w_pdfjs_require__(21);
 
 const pdfjsVersion = '2.9.0';
-const pdfjsBuild = '3538ef0';
+const pdfjsBuild = 'd725ff3';
 {
   const {
     isNodeJS

@@ -10829,10 +10829,11 @@ class BaseViewer {
     });
   }
 
-  createXfaLayerBuilder(pageDiv, pdfPage) {
+  createXfaLayerBuilder(pageDiv, pdfPage, annotationStorage = null) {
     return new _xfa_layer_builder.XfaLayerBuilder({
       pageDiv,
-      pdfPage
+      pdfPage,
+      annotationStorage: annotationStorage || this.pdfDocument?.annotationStorage
     });
   }
 
@@ -11917,7 +11918,7 @@ class PDFPageView {
 
     if (this.xfaLayerFactory) {
       if (!this.xfaLayer) {
-        this.xfaLayer = this.xfaLayerFactory.createXfaLayerBuilder(div, pdfPage);
+        this.xfaLayer = this.xfaLayerFactory.createXfaLayerBuilder(div, pdfPage, null);
       }
 
       this._renderXfaLayer();
@@ -12632,10 +12633,12 @@ var _pdfjsLib = __webpack_require__(5);
 class XfaLayerBuilder {
   constructor({
     pageDiv,
-    pdfPage
+    pdfPage,
+    annotationStorage
   }) {
     this.pageDiv = pageDiv;
     this.pdfPage = pdfPage;
+    this.annotationStorage = annotationStorage;
     this.div = null;
     this._cancelled = false;
   }
@@ -12652,7 +12655,8 @@ class XfaLayerBuilder {
         }),
         div: this.div,
         xfa,
-        page: this.pdfPage
+        page: this.pdfPage,
+        annotationStorage: this.annotationStorage
       };
 
       if (this.div) {
@@ -12664,6 +12668,8 @@ class XfaLayerBuilder {
 
         _pdfjsLib.XfaLayer.render(parameters);
       }
+    }).catch(error => {
+      console.error(error);
     });
   }
 
@@ -12684,10 +12690,11 @@ class XfaLayerBuilder {
 exports.XfaLayerBuilder = XfaLayerBuilder;
 
 class DefaultXfaLayerFactory {
-  createXfaLayerBuilder(pageDiv, pdfPage) {
+  createXfaLayerBuilder(pageDiv, pdfPage, annotationStorage = null) {
     return new XfaLayerBuilder({
       pageDiv,
-      pdfPage
+      pdfPage,
+      annotationStorage
     });
   }
 
@@ -15093,7 +15100,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(3);
 
 const pdfjsVersion = '2.9.0';
-const pdfjsBuild = '3538ef0';
+const pdfjsBuild = 'd725ff3';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;

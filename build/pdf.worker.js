@@ -54,9 +54,9 @@ var _writer = __w_pdfjs_require__(64);
 
 var _is_node = __w_pdfjs_require__(4);
 
-var _message_handler = __w_pdfjs_require__(88);
+var _message_handler = __w_pdfjs_require__(89);
 
-var _worker_stream = __w_pdfjs_require__(89);
+var _worker_stream = __w_pdfjs_require__(90);
 
 var _core_utils = __w_pdfjs_require__(9);
 
@@ -1507,8 +1507,7 @@ function stringToUTF16BEString(str) {
 
   for (let i = 0, ii = str.length; i < ii; i++) {
     const char = str.charCodeAt(i);
-    buf.push(String.fromCharCode(char >> 8 & 0xff));
-    buf.push(String.fromCharCode(char & 0xff));
+    buf.push(String.fromCharCode(char >> 8 & 0xff), String.fromCharCode(char & 0xff));
   }
 
   return buf.join("");
@@ -3470,7 +3469,7 @@ var _struct_tree = __w_pdfjs_require__(62);
 
 var _factory = __w_pdfjs_require__(67);
 
-var _xref = __w_pdfjs_require__(87);
+var _xref = __w_pdfjs_require__(88);
 
 const DEFAULT_USER_UNIT = 1.0;
 const LETTER_SIZE_MEDIABOX = [0, 0, 612, 792];
@@ -4232,7 +4231,7 @@ class PDFDocument {
 
       const fontFamily = descriptor.get("FontFamily");
       const fontWeight = descriptor.get("FontWeight");
-      const italicAngle = descriptor.get("ItalicAngle");
+      const italicAngle = -descriptor.get("ItalicAngle");
       const cssFontInfo = {
         fontFamily,
         fontWeight,
@@ -5315,6 +5314,8 @@ class MarkupAnnotation extends Annotation {
     strokeColor,
     fillColor,
     blendMode,
+    strokeAlpha,
+    fillAlpha,
     pointsCallback
   }) {
     let minX = Number.MAX_VALUE;
@@ -5372,6 +5373,14 @@ class MarkupAnnotation extends Annotation {
 
     if (blendMode) {
       gsDict.set("BM", _primitives.Name.get(blendMode));
+    }
+
+    if (typeof strokeAlpha === "number") {
+      gsDict.set("CA", strokeAlpha);
+    }
+
+    if (typeof fillAlpha === "number") {
+      gsDict.set("ca", fillAlpha);
     }
 
     const stateDict = new _primitives.Dict(xref);
@@ -5573,9 +5582,7 @@ class WidgetAnnotation extends Annotation {
     bufferOriginal.push("\nendobj\n");
     const bufferNew = [`${newRef.num} ${newRef.gen} obj\n`];
     (0, _writer.writeDict)(appearanceDict, bufferNew, newTransform);
-    bufferNew.push(" stream\n");
-    bufferNew.push(appearance);
-    bufferNew.push("\nendstream\nendobj\n");
+    bufferNew.push(" stream\n", appearance, "\nendstream\nendobj\n");
     return [{
       ref: this.ref,
       data: bufferOriginal.join(""),
@@ -6447,20 +6454,33 @@ class LineAnnotation extends MarkupAnnotation {
 
     if (!this.appearance) {
       const strokeColor = this.color ? Array.from(this.color).map(c => c / 255) : [0, 0, 0];
-      const borderWidth = this.borderStyle.width;
+      const strokeAlpha = parameters.dict.get("CA");
+      let fillColor = null,
+          interiorColor = parameters.dict.getArray("IC");
 
-      if ((0, _util.isArrayEqual)(this.rectangle, [0, 0, 0, 0])) {
-        this.rectangle = [this.data.lineCoordinates[0] - 2 * borderWidth, this.data.lineCoordinates[1] - 2 * borderWidth, this.data.lineCoordinates[2] + 2 * borderWidth, this.data.lineCoordinates[3] + 2 * borderWidth];
+      if (interiorColor) {
+        interiorColor = getRgbColor(interiorColor);
+        fillColor = interiorColor ? Array.from(interiorColor).map(c => c / 255) : null;
+      }
+
+      const fillAlpha = fillColor ? strokeAlpha : null;
+      const borderWidth = this.borderStyle.width || 1,
+            borderAdjust = 2 * borderWidth;
+      const bbox = [this.data.lineCoordinates[0] - borderAdjust, this.data.lineCoordinates[1] - borderAdjust, this.data.lineCoordinates[2] + borderAdjust, this.data.lineCoordinates[3] + borderAdjust];
+
+      if (!_util.Util.intersect(this.rectangle, bbox)) {
+        this.rectangle = bbox;
       }
 
       this._setDefaultAppearance({
         xref: parameters.xref,
         extra: `${borderWidth} w`,
         strokeColor,
+        fillColor,
+        strokeAlpha,
+        fillAlpha,
         pointsCallback: (buffer, points) => {
-          buffer.push(`${lineCoordinates[0]} ${lineCoordinates[1]} m`);
-          buffer.push(`${lineCoordinates[2]} ${lineCoordinates[3]} l`);
-          buffer.push("S");
+          buffer.push(`${lineCoordinates[0]} ${lineCoordinates[1]} m`, `${lineCoordinates[2]} ${lineCoordinates[3]} l`, "S");
           return [points[0].x - borderWidth, points[1].x + borderWidth, points[3].y - borderWidth, points[1].y + borderWidth];
         }
       });
@@ -6476,19 +6496,24 @@ class SquareAnnotation extends MarkupAnnotation {
 
     if (!this.appearance) {
       const strokeColor = this.color ? Array.from(this.color).map(c => c / 255) : [0, 0, 0];
-      let fillColor = null;
-      let interiorColor = parameters.dict.getArray("IC");
+      const strokeAlpha = parameters.dict.get("CA");
+      let fillColor = null,
+          interiorColor = parameters.dict.getArray("IC");
 
       if (interiorColor) {
         interiorColor = getRgbColor(interiorColor);
         fillColor = interiorColor ? Array.from(interiorColor).map(c => c / 255) : null;
       }
 
+      const fillAlpha = fillColor ? strokeAlpha : null;
+
       this._setDefaultAppearance({
         xref: parameters.xref,
         extra: `${this.borderStyle.width} w`,
         strokeColor,
         fillColor,
+        strokeAlpha,
+        fillAlpha,
         pointsCallback: (buffer, points) => {
           const x = points[2].x + this.borderStyle.width / 2;
           const y = points[2].y + this.borderStyle.width / 2;
@@ -6517,6 +6542,7 @@ class CircleAnnotation extends MarkupAnnotation {
 
     if (!this.appearance) {
       const strokeColor = this.color ? Array.from(this.color).map(c => c / 255) : [0, 0, 0];
+      const strokeAlpha = parameters.dict.get("CA");
       let fillColor = null;
       let interiorColor = parameters.dict.getArray("IC");
 
@@ -6525,6 +6551,7 @@ class CircleAnnotation extends MarkupAnnotation {
         fillColor = interiorColor ? Array.from(interiorColor).map(c => c / 255) : null;
       }
 
+      const fillAlpha = fillColor ? strokeAlpha : null;
       const controlPointsDistance = 4 / 3 * Math.tan(Math.PI / (2 * 4));
 
       this._setDefaultAppearance({
@@ -6532,6 +6559,8 @@ class CircleAnnotation extends MarkupAnnotation {
         extra: `${this.borderStyle.width} w`,
         strokeColor,
         fillColor,
+        strokeAlpha,
+        fillAlpha,
         pointsCallback: (buffer, points) => {
           const x0 = points[0].x + this.borderStyle.width / 2;
           const y0 = points[0].y - this.borderStyle.width / 2;
@@ -6541,12 +6570,7 @@ class CircleAnnotation extends MarkupAnnotation {
           const yMid = y0 + (y1 - y0) / 2;
           const xOffset = (x1 - x0) / 2 * controlPointsDistance;
           const yOffset = (y1 - y0) / 2 * controlPointsDistance;
-          buffer.push(`${xMid} ${y1} m`);
-          buffer.push(`${xMid + xOffset} ${y1} ${x1} ${yMid + yOffset} ${x1} ${yMid} c`);
-          buffer.push(`${x1} ${yMid - yOffset} ${xMid + xOffset} ${y0} ${xMid} ${y0} c`);
-          buffer.push(`${xMid - xOffset} ${y0} ${x0} ${yMid - yOffset} ${x0} ${yMid} c`);
-          buffer.push(`${x0} ${yMid + yOffset} ${xMid - xOffset} ${y1} ${xMid} ${y1} c`);
-          buffer.push("h");
+          buffer.push(`${xMid} ${y1} m`, `${xMid + xOffset} ${y1} ${x1} ${yMid + yOffset} ${x1} ${yMid} c`, `${x1} ${yMid - yOffset} ${xMid + xOffset} ${y0} ${xMid} ${y0} c`, `${xMid - xOffset} ${y0} ${x0} ${yMid - yOffset} ${x0} ${yMid} c`, `${x0} ${yMid + yOffset} ${xMid - xOffset} ${y1} ${xMid} ${y1} c`, "h");
 
           if (fillColor) {
             buffer.push("B");
@@ -6582,12 +6606,27 @@ class PolylineAnnotation extends MarkupAnnotation {
 
     if (!this.appearance) {
       const strokeColor = this.color ? Array.from(this.color).map(c => c / 255) : [0, 0, 0];
-      const borderWidth = this.borderStyle.width || 1;
+      const strokeAlpha = parameters.dict.get("CA");
+      const borderWidth = this.borderStyle.width || 1,
+            borderAdjust = 2 * borderWidth;
+      const bbox = [Infinity, Infinity, -Infinity, -Infinity];
+
+      for (const vertex of this.data.vertices) {
+        bbox[0] = Math.min(bbox[0], vertex.x - borderAdjust);
+        bbox[1] = Math.min(bbox[1], vertex.y - borderAdjust);
+        bbox[2] = Math.max(bbox[2], vertex.x + borderAdjust);
+        bbox[3] = Math.max(bbox[3], vertex.y + borderAdjust);
+      }
+
+      if (!_util.Util.intersect(this.rectangle, bbox)) {
+        this.rectangle = bbox;
+      }
 
       this._setDefaultAppearance({
         xref: parameters.xref,
         extra: `${borderWidth} w`,
         strokeColor,
+        strokeAlpha,
         pointsCallback: (buffer, points) => {
           const vertices = this.data.vertices;
 
@@ -6646,12 +6685,29 @@ class InkAnnotation extends MarkupAnnotation {
 
     if (!this.appearance) {
       const strokeColor = this.color ? Array.from(this.color).map(c => c / 255) : [0, 0, 0];
-      const borderWidth = this.borderStyle.width || 1;
+      const strokeAlpha = parameters.dict.get("CA");
+      const borderWidth = this.borderStyle.width || 1,
+            borderAdjust = 2 * borderWidth;
+      const bbox = [Infinity, Infinity, -Infinity, -Infinity];
+
+      for (const inkLists of this.data.inkLists) {
+        for (const vertex of inkLists) {
+          bbox[0] = Math.min(bbox[0], vertex.x - borderAdjust);
+          bbox[1] = Math.min(bbox[1], vertex.y - borderAdjust);
+          bbox[2] = Math.max(bbox[2], vertex.x + borderAdjust);
+          bbox[3] = Math.max(bbox[3], vertex.y + borderAdjust);
+        }
+      }
+
+      if (!_util.Util.intersect(this.rectangle, bbox)) {
+        this.rectangle = bbox;
+      }
 
       this._setDefaultAppearance({
         xref: parameters.xref,
         extra: `${borderWidth} w`,
         strokeColor,
+        strokeAlpha,
         pointsCallback: (buffer, points) => {
           for (const inkList of this.data.inkLists) {
             for (let i = 0, ii = inkList.length; i < ii; i++) {
@@ -6676,19 +6732,23 @@ class HighlightAnnotation extends MarkupAnnotation {
     const quadPoints = this.data.quadPoints = getQuadPoints(parameters.dict, null);
 
     if (quadPoints) {
-      if (!this.appearance) {
+      const resources = this.appearance && this.appearance.dict.get("Resources");
+
+      if (!this.appearance || !(resources && resources.has("ExtGState"))) {
+        if (this.appearance) {
+          (0, _util.warn)("HighlightAnnotation - ignoring built-in appearance stream.");
+        }
+
         const fillColor = this.color ? Array.from(this.color).map(c => c / 255) : [1, 1, 0];
+        const fillAlpha = parameters.dict.get("CA");
 
         this._setDefaultAppearance({
           xref: parameters.xref,
           fillColor,
           blendMode: "Multiply",
+          fillAlpha,
           pointsCallback: (buffer, points) => {
-            buffer.push(`${points[0].x} ${points[0].y} m`);
-            buffer.push(`${points[1].x} ${points[1].y} l`);
-            buffer.push(`${points[3].x} ${points[3].y} l`);
-            buffer.push(`${points[2].x} ${points[2].y} l`);
-            buffer.push("f");
+            buffer.push(`${points[0].x} ${points[0].y} m`, `${points[1].x} ${points[1].y} l`, `${points[3].x} ${points[3].y} l`, `${points[2].x} ${points[2].y} l`, "f");
             return [points[0].x, points[1].x, points[3].y, points[1].y];
           }
         });
@@ -6709,15 +6769,15 @@ class UnderlineAnnotation extends MarkupAnnotation {
     if (quadPoints) {
       if (!this.appearance) {
         const strokeColor = this.color ? Array.from(this.color).map(c => c / 255) : [0, 0, 0];
+        const strokeAlpha = parameters.dict.get("CA");
 
         this._setDefaultAppearance({
           xref: parameters.xref,
           extra: "[] 0 d 1 w",
           strokeColor,
+          strokeAlpha,
           pointsCallback: (buffer, points) => {
-            buffer.push(`${points[2].x} ${points[2].y} m`);
-            buffer.push(`${points[3].x} ${points[3].y} l`);
-            buffer.push("S");
+            buffer.push(`${points[2].x} ${points[2].y} m`, `${points[3].x} ${points[3].y} l`, "S");
             return [points[0].x, points[1].x, points[3].y, points[1].y];
           }
         });
@@ -6738,11 +6798,13 @@ class SquigglyAnnotation extends MarkupAnnotation {
     if (quadPoints) {
       if (!this.appearance) {
         const strokeColor = this.color ? Array.from(this.color).map(c => c / 255) : [0, 0, 0];
+        const strokeAlpha = parameters.dict.get("CA");
 
         this._setDefaultAppearance({
           xref: parameters.xref,
           extra: "[] 0 d 1 w",
           strokeColor,
+          strokeAlpha,
           pointsCallback: (buffer, points) => {
             const dy = (points[0].y - points[2].y) / 6;
             let shift = dy;
@@ -6778,15 +6840,15 @@ class StrikeOutAnnotation extends MarkupAnnotation {
     if (quadPoints) {
       if (!this.appearance) {
         const strokeColor = this.color ? Array.from(this.color).map(c => c / 255) : [0, 0, 0];
+        const strokeAlpha = parameters.dict.get("CA");
 
         this._setDefaultAppearance({
           xref: parameters.xref,
           extra: "[] 0 d 1 w",
           strokeColor,
+          strokeAlpha,
           pointsCallback: (buffer, points) => {
-            buffer.push(`${(points[0].x + points[2].x) / 2}` + ` ${(points[0].y + points[2].y) / 2} m`);
-            buffer.push(`${(points[1].x + points[3].x) / 2}` + ` ${(points[1].y + points[3].y) / 2} l`);
-            buffer.push("S");
+            buffer.push(`${(points[0].x + points[2].x) / 2} ` + `${(points[0].y + points[2].y) / 2} m`, `${(points[1].x + points[3].x) / 2} ` + `${(points[1].y + points[3].y) / 2} l`, "S");
             return [points[0].x, points[1].x, points[3].y, points[1].y];
           }
         });
@@ -16844,12 +16906,10 @@ function decodePatternDictionary(mmr, patternWidth, patternHeight, maxPatternInd
       at.push({
         x: -3,
         y: -1
-      });
-      at.push({
+      }, {
         x: 2,
         y: -2
-      });
-      at.push({
+      }, {
         x: -2,
         y: -2
       });
@@ -16918,12 +16978,10 @@ function decodeHalftoneRegion(mmr, patterns, template, regionWidth, regionHeight
       at.push({
         x: -3,
         y: -1
-      });
-      at.push({
+      }, {
         x: 2,
         y: -2
-      });
-      at.push({
+      }, {
         x: -2,
         y: -2
       });
@@ -23335,12 +23393,16 @@ function createPostTable(properties) {
   return "\x00\x03\x00\x00" + (0, _util.string32)(angle) + "\x00\x00" + "\x00\x00" + (0, _util.string32)(properties.fixedPitch) + "\x00\x00\x00\x00" + "\x00\x00\x00\x00" + "\x00\x00\x00\x00" + "\x00\x00\x00\x00";
 }
 
+function createPostscriptName(name) {
+  return name.replace(/[^\x21-\x7E]|[[\](){}<>/%]/g, "").slice(0, 63);
+}
+
 function createNameTable(name, proto) {
   if (!proto) {
     proto = [[], []];
   }
 
-  const strings = [proto[0][0] || "Original licence", proto[0][1] || name, proto[0][2] || "Unknown", proto[0][3] || "uniqueID", proto[0][4] || name, proto[0][5] || "Version 0.11", proto[0][6] || "", proto[0][7] || "Unknown", proto[0][8] || "Unknown", proto[0][9] || "Unknown"];
+  const strings = [proto[0][0] || "Original licence", proto[0][1] || name, proto[0][2] || "Unknown", proto[0][3] || "uniqueID", proto[0][4] || name, proto[0][5] || "Version 0.11", proto[0][6] || createPostscriptName(name), proto[0][7] || "Unknown", proto[0][8] || "Unknown", proto[0][9] || "Unknown"];
   const stringsUnicode = [];
   let i, ii, j, jj, str;
 
@@ -23387,7 +23449,8 @@ class Font {
     this.isType3Font = properties.isType3Font;
     this.missingFile = false;
     this.cssFontInfo = properties.cssFontInfo;
-    this.glyphCache = Object.create(null);
+    this._charsCache = Object.create(null);
+    this._glyphCache = Object.create(null);
     this.isSerifFont = !!(properties.flags & _fonts_utils.FontFlags.Serif);
     this.isSymbolicFont = !!(properties.flags & _fonts_utils.FontFlags.Symbolic);
     this.isMonospace = !!(properties.flags & _fonts_utils.FontFlags.FixedPitch);
@@ -25256,58 +25319,53 @@ class Font {
       }
     }
 
-    let glyph = this.glyphCache[charcode];
+    let glyph = this._glyphCache[charcode];
 
     if (!glyph || !glyph.matchesForCache(fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont)) {
       glyph = new Glyph(fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont);
-      this.glyphCache[charcode] = glyph;
+      this._glyphCache[charcode] = glyph;
     }
 
     return glyph;
   }
 
   charsToGlyphs(chars) {
-    let charsCache = this.charsCache;
-    let glyphs, glyph, charcode;
+    let glyphs = this._charsCache[chars];
 
-    if (charsCache) {
-      glyphs = charsCache[chars];
-
-      if (glyphs) {
-        return glyphs;
-      }
-    }
-
-    if (!charsCache) {
-      charsCache = this.charsCache = Object.create(null);
+    if (glyphs) {
+      return glyphs;
     }
 
     glyphs = [];
-    const charsCacheKey = chars;
-    let i = 0,
-        ii;
 
     if (this.cMap) {
-      const c = Object.create(null);
+      const c = Object.create(null),
+            ii = chars.length;
+      let i = 0;
 
-      while (i < chars.length) {
+      while (i < ii) {
         this.cMap.readCharCode(chars, i, c);
-        charcode = c.charcode;
-        const length = c.length;
+        const {
+          charcode,
+          length
+        } = c;
         i += length;
-        const isSpace = length === 1 && chars.charCodeAt(i - 1) === 0x20;
-        glyph = this._charToGlyph(charcode, isSpace);
+
+        const glyph = this._charToGlyph(charcode, length === 1 && chars.charCodeAt(i - 1) === 0x20);
+
         glyphs.push(glyph);
       }
     } else {
-      for (i = 0, ii = chars.length; i < ii; ++i) {
-        charcode = chars.charCodeAt(i);
-        glyph = this._charToGlyph(charcode, charcode === 0x20);
+      for (let i = 0, ii = chars.length; i < ii; ++i) {
+        const charcode = chars.charCodeAt(i);
+
+        const glyph = this._charToGlyph(charcode, charcode === 0x20);
+
         glyphs.push(glyph);
       }
     }
 
-    return charsCache[charsCacheKey] = glyphs;
+    return this._charsCache[chars] = glyphs;
   }
 
   getCharPositions(chars) {
@@ -25333,7 +25391,7 @@ class Font {
   }
 
   get glyphCacheValues() {
-    return Object.values(this.glyphCache);
+    return Object.values(this._glyphCache);
   }
 
   encodeString(str) {
@@ -41114,8 +41172,7 @@ function compileGlyf(code, cmds, font) {
       if (subglyph) {
         cmds.push({
           cmd: "save"
-        });
-        cmds.push({
+        }, {
           cmd: "transform",
           args: [scaleX, scale01, scale10, scaleY, x, y]
         });
@@ -41457,8 +41514,7 @@ function compileCharString(charStringCode, cmds, font, glyphId) {
             x = stack.pop();
             cmds.push({
               cmd: "save"
-            });
-            cmds.push({
+            }, {
               cmd: "translate",
               args: [x, y]
             });
@@ -41727,18 +41783,15 @@ class CompiledFont {
       }
     }
 
-    const cmds = [];
-    cmds.push({
+    const cmds = [{
       cmd: "save"
-    });
-    cmds.push({
+    }, {
       cmd: "transform",
       args: fontMatrix.slice()
-    });
-    cmds.push({
+    }, {
       cmd: "scale",
       args: ["size", "-size"]
-    });
+    }];
     this.compileGlyphImpl(code, cmds, glyphId);
     cmds.push({
       cmd: "restore"
@@ -53725,8 +53778,7 @@ function writeStream(stream, buffer, transform) {
     string = transform.encryptString(string);
   }
 
-  buffer.push(string);
-  buffer.push("\nendstream\n");
+  buffer.push(string, "\nendstream\n");
 }
 
 function writeArray(array, buffer, transform) {
@@ -53931,8 +53983,7 @@ function incrementalUpdate({
     maxOffset = Math.max(maxOffset, baseOffset);
     xrefTableData.push([1, baseOffset, Math.min(ref.gen, 0xffff)]);
     baseOffset += data.length;
-    indexes.push(ref.num);
-    indexes.push(1);
+    indexes.push(ref.num, 1);
     buffer.push(data);
   }
 
@@ -55640,7 +55691,7 @@ var _xfa_object = __w_pdfjs_require__(68);
 
 var _bind = __w_pdfjs_require__(71);
 
-var _parser = __w_pdfjs_require__(75);
+var _parser = __w_pdfjs_require__(76);
 
 class XFAFactory {
   constructor(data) {
@@ -55682,7 +55733,7 @@ exports.XFAFactory = XFAFactory;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.XmlObject = exports.XFAObjectArray = exports.XFAObject = exports.XFAAttribute = exports.StringObject = exports.OptionObject = exports.Option10 = exports.Option01 = exports.IntegerObject = exports.ContentObject = exports.$uid = exports.$toStyle = exports.$toHTML = exports.$text = exports.$setValue = exports.$setSetAttributes = exports.$setId = exports.$resolvePrototypes = exports.$removeChild = exports.$onText = exports.$onChildCheck = exports.$onChild = exports.$nsAttributes = exports.$nodeName = exports.$namespaceId = exports.$isTransparent = exports.$isDescendent = exports.$isDataValue = exports.$insertAt = exports.$indexOf = exports.$hasSettableValue = exports.$hasItem = exports.$global = exports.$getRealChildrenByNameIt = exports.$getParent = exports.$getChildrenByNameIt = exports.$getChildrenByName = exports.$getChildrenByClass = exports.$getChildren = exports.$getAttributeIt = exports.$finalize = exports.$extra = exports.$dump = exports.$data = exports.$content = exports.$consumed = exports.$clone = exports.$cleanup = exports.$clean = exports.$childrenToHTML = exports.$appendChild = exports.$acceptWhitespace = void 0;
+exports.XmlObject = exports.XFAObjectArray = exports.XFAObject = exports.XFAAttribute = exports.StringObject = exports.OptionObject = exports.Option10 = exports.Option01 = exports.IntegerObject = exports.ContentObject = exports.$uid = exports.$toStyle = exports.$toHTML = exports.$text = exports.$setValue = exports.$setSetAttributes = exports.$setId = exports.$searchNode = exports.$resolvePrototypes = exports.$removeChild = exports.$onText = exports.$onChildCheck = exports.$onChild = exports.$nsAttributes = exports.$nodeName = exports.$namespaceId = exports.$isTransparent = exports.$isDescendent = exports.$isDataValue = exports.$insertAt = exports.$indexOf = exports.$ids = exports.$hasSettableValue = exports.$hasItem = exports.$global = exports.$getRealChildrenByNameIt = exports.$getParent = exports.$getNextPage = exports.$getDataValue = exports.$getChildrenByNameIt = exports.$getChildrenByName = exports.$getChildrenByClass = exports.$getChildren = exports.$getAvailableSpace = exports.$getAttributeIt = exports.$flushHTML = exports.$finalize = exports.$extra = exports.$dump = exports.$data = exports.$content = exports.$consumed = exports.$clone = exports.$cleanup = exports.$clean = exports.$childrenToHTML = exports.$break = exports.$appendChild = exports.$addHTML = exports.$acceptWhitespace = void 0;
 
 var _utils = __w_pdfjs_require__(69);
 
@@ -55692,8 +55743,12 @@ var _namespaces = __w_pdfjs_require__(70);
 
 const $acceptWhitespace = Symbol();
 exports.$acceptWhitespace = $acceptWhitespace;
+const $addHTML = Symbol();
+exports.$addHTML = $addHTML;
 const $appendChild = Symbol();
 exports.$appendChild = $appendChild;
+const $break = Symbol();
+exports.$break = $break;
 const $childrenToHTML = Symbol();
 exports.$childrenToHTML = $childrenToHTML;
 const $clean = Symbol();
@@ -55714,18 +55769,26 @@ const $extra = Symbol("extra");
 exports.$extra = $extra;
 const $finalize = Symbol();
 exports.$finalize = $finalize;
+const $flushHTML = Symbol();
+exports.$flushHTML = $flushHTML;
 const $getAttributeIt = Symbol();
 exports.$getAttributeIt = $getAttributeIt;
+const $getAvailableSpace = Symbol();
+exports.$getAvailableSpace = $getAvailableSpace;
 const $getChildrenByClass = Symbol();
 exports.$getChildrenByClass = $getChildrenByClass;
 const $getChildrenByName = Symbol();
 exports.$getChildrenByName = $getChildrenByName;
 const $getChildrenByNameIt = Symbol();
 exports.$getChildrenByNameIt = $getChildrenByNameIt;
+const $getDataValue = Symbol();
+exports.$getDataValue = $getDataValue;
 const $getRealChildrenByNameIt = Symbol();
 exports.$getRealChildrenByNameIt = $getRealChildrenByNameIt;
 const $getChildren = Symbol();
 exports.$getChildren = $getChildren;
+const $getNextPage = Symbol();
+exports.$getNextPage = $getNextPage;
 const $getParent = Symbol();
 exports.$getParent = $getParent;
 const $global = Symbol();
@@ -55734,6 +55797,8 @@ const $hasItem = Symbol();
 exports.$hasItem = $hasItem;
 const $hasSettableValue = Symbol();
 exports.$hasSettableValue = $hasSettableValue;
+const $ids = Symbol();
+exports.$ids = $ids;
 const $indexOf = Symbol();
 exports.$indexOf = $indexOf;
 const $insertAt = Symbol();
@@ -55761,6 +55826,8 @@ const $removeChild = Symbol();
 exports.$removeChild = $removeChild;
 const $resolvePrototypes = Symbol();
 exports.$resolvePrototypes = $resolvePrototypes;
+const $searchNode = Symbol();
+exports.$searchNode = $searchNode;
 const $setId = Symbol();
 exports.$setId = $setId;
 const $setSetAttributes = Symbol();
@@ -55789,6 +55856,8 @@ const _cloneAttribute = Symbol();
 const _dataValue = Symbol();
 
 const _defaultValue = Symbol();
+
+const _filteredChildrenGenerator = Symbol();
 
 const _getPrototype = Symbol();
 
@@ -56005,24 +56074,75 @@ class XFAObject {
   }
 
   [$toHTML]() {
+    return _utils.HTMLResult.EMPTY;
+  }
+
+  *[_filteredChildrenGenerator](filter, include) {
+    for (const node of this[$getChildren]()) {
+      if (!filter || include === filter.has(node[$nodeName])) {
+        const availableSpace = this[$getAvailableSpace]();
+        const res = node[$toHTML](availableSpace);
+
+        if (!res.success) {
+          this[$extra].failingNode = node;
+        }
+
+        yield res;
+      }
+    }
+  }
+
+  [$flushHTML]() {
     return null;
   }
+
+  [$addHTML](html, bbox) {
+    this[$extra].children.push(html);
+  }
+
+  [$getAvailableSpace]() {}
 
   [$childrenToHTML]({
     filter = null,
     include = true
   }) {
-    const res = [];
-    this[$getChildren]().forEach(node => {
-      if (!filter || include === filter.has(node[$nodeName])) {
-        const html = node[$toHTML]();
+    if (!this[$extra].generator) {
+      this[$extra].generator = this[_filteredChildrenGenerator](filter, include);
+    } else {
+      const availableSpace = this[$getAvailableSpace]();
+      const res = this[$extra].failingNode[$toHTML](availableSpace);
 
-        if (html) {
-          res.push(html);
-        }
+      if (!res.success) {
+        return false;
       }
-    });
-    return res;
+
+      if (res.html) {
+        this[$addHTML](res.html, res.bbox);
+      }
+
+      delete this[$extra].failingNode;
+    }
+
+    while (true) {
+      const gen = this[$extra].generator.next();
+
+      if (gen.done) {
+        break;
+      }
+
+      const res = gen.value;
+
+      if (!res.success) {
+        return false;
+      }
+
+      if (res.html) {
+        this[$addHTML](res.html, res.bbox);
+      }
+    }
+
+    this[$extra].generator = null;
+    return true;
   }
 
   [$setSetAttributes](attributes) {
@@ -56393,13 +56513,13 @@ class XmlObject extends XFAObject {
 
   [$toHTML]() {
     if (this[$nodeName] === "#text") {
-      return {
+      return _utils.HTMLResult.success({
         name: "#text",
         value: this[$content]
-      };
+      });
     }
 
-    return null;
+    return _utils.HTMLResult.EMPTY;
   }
 
   [$getChildren](name = null) {
@@ -56464,10 +56584,26 @@ class XmlObject extends XFAObject {
 
   [$isDataValue]() {
     if (this[_dataValue] === null) {
-      return this[_children].length === 0;
+      return this[_children].length === 0 || this[_children][0][$namespaceId] === _namespaces.NamespaceIds.xhtml.id;
     }
 
     return this[_dataValue];
+  }
+
+  [$getDataValue]() {
+    if (this[_dataValue] === null) {
+      if (this[_children].length === 0) {
+        return this[$content].trim();
+      }
+
+      if (this[_children][0][$namespaceId] === _namespaces.NamespaceIds.xhtml.id) {
+        return this[_children][0][$text]().trim();
+      }
+
+      return null;
+    }
+
+    return this[$content].trim();
   }
 
   [$dump]() {
@@ -56606,11 +56742,13 @@ exports.getMeasurement = getMeasurement;
 exports.getRatio = getRatio;
 exports.getRelevant = getRelevant;
 exports.getStringOption = getStringOption;
+exports.HTMLResult = void 0;
 const dimConverters = {
   pt: x => x,
   cm: x => x / 2.54 * 72,
   mm: x => x / (10 * 2.54) * 72,
-  in: x => x * 72
+  in: x => x * 72,
+  px: x => x
 };
 const measurementPattern = /([+-]?[0-9]+\.?[0-9]*)(.*)/;
 
@@ -56813,6 +56951,23 @@ function getBBox(data) {
   };
 }
 
+class HTMLResult {
+  constructor(success, html, bbox) {
+    this.success = success;
+    this.html = html;
+    this.bbox = bbox;
+  }
+
+  static success(html, bbox = null) {
+    return new HTMLResult(true, html, bbox);
+  }
+
+}
+
+exports.HTMLResult = HTMLResult;
+HTMLResult.FAILURE = new HTMLResult(false, null, null);
+HTMLResult.EMPTY = new HTMLResult(true, null, null);
+
 /***/ }),
 /* 70 */
 /***/ ((__unused_webpack_module, exports) => {
@@ -56904,7 +57059,7 @@ var _xfa_object = __w_pdfjs_require__(68);
 
 var _template = __w_pdfjs_require__(72);
 
-var _som = __w_pdfjs_require__(74);
+var _som = __w_pdfjs_require__(75);
 
 var _namespaces = __w_pdfjs_require__(70);
 
@@ -56953,7 +57108,7 @@ class Binder {
   _bindValue(formNode, data, picture) {
     if (formNode[_xfa_object.$hasSettableValue]()) {
       if (data[_xfa_object.$isDataValue]()) {
-        const value = data[_xfa_object.$content].trim();
+        const value = data[_xfa_object.$getDataValue]();
 
         formNode[_xfa_object.$setValue](createText(value));
 
@@ -56976,7 +57131,7 @@ class Binder {
     }
   }
 
-  _findDataByNameToConsume(name, dataNode, global) {
+  _findDataByNameToConsume(name, isValue, dataNode, global) {
     if (!name) {
       return null;
     }
@@ -56985,10 +57140,17 @@ class Binder {
 
     for (let i = 0; i < 3; i++) {
       generator = dataNode[_xfa_object.$getRealChildrenByNameIt](name, false, true);
-      match = generator.next().value;
 
-      if (match) {
-        return match;
+      while (true) {
+        match = generator.next().value;
+
+        if (!match) {
+          break;
+        }
+
+        if (isValue === match[_xfa_object.$isDataValue]()) {
+          return match;
+        }
       }
 
       if (dataNode[_xfa_object.$namespaceId] === _namespaces.NamespaceIds.datasets.id && dataNode[_xfa_object.$nodeName] === "data") {
@@ -57002,7 +57164,7 @@ class Binder {
       return null;
     }
 
-    generator = this.datasets[_xfa_object.$getRealChildrenByNameIt](name, false, false);
+    generator = this.data[_xfa_object.$getRealChildrenByNameIt](name, false, false);
 
     while (true) {
       match = generator.next().value;
@@ -57298,6 +57460,8 @@ class Binder {
       if (child.bind) {
         switch (child.bind.match) {
           case "none":
+            this._bindElement(child, dataNode);
+
             continue;
 
           case "global":
@@ -57307,6 +57471,9 @@ class Binder {
           case "dataRef":
             if (!child.bind.ref) {
               (0, _util.warn)(`XFA - ref is empty in node ${child[_xfa_object.$nodeName]}.`);
+
+              this._bindElement(child, dataNode);
+
               continue;
             }
 
@@ -57363,7 +57530,7 @@ class Binder {
           const matches = [];
 
           while (matches.length < max) {
-            const found = this._findDataByNameToConsume(child.name, dataNode, global);
+            const found = this._findDataByNameToConsume(child.name, child[_xfa_object.$hasSettableValue](), dataNode, global);
 
             if (!found) {
               break;
@@ -57395,6 +57562,10 @@ class Binder {
 
         this._bindOccurrences(child, match, picture);
       } else if (min > 0) {
+        this._setProperties(child, dataNode);
+
+        this._bindItems(child, dataNode);
+
         this._bindElement(child, dataNode);
       } else {
         uselessNodes.push(child);
@@ -57425,11 +57596,16 @@ var _namespaces = __w_pdfjs_require__(70);
 
 var _html_utils = __w_pdfjs_require__(73);
 
+var _layout = __w_pdfjs_require__(74);
+
 var _utils = __w_pdfjs_require__(69);
 
 var _util = __w_pdfjs_require__(2);
 
+var _som = __w_pdfjs_require__(75);
+
 const TEMPLATE_NS_ID = _namespaces.NamespaceIds.template.id;
+const MAX_ATTEMPTS_FOR_LRTB_LAYOUT = 2;
 
 function _setValue(templateNode, value) {
   if (!templateNode.value) {
@@ -57441,6 +57617,44 @@ function _setValue(templateNode, value) {
   }
 
   templateNode.value[_xfa_object.$setValue](value);
+}
+
+function getRoot(node) {
+  let parent = node[_xfa_object.$getParent]();
+
+  while (!(parent instanceof Template)) {
+    parent = parent[_xfa_object.$getParent]();
+  }
+
+  return parent;
+}
+
+const NOTHING = 0;
+const NOSPACE = 1;
+const VALID = 2;
+
+function checkDimensions(node, space) {
+  if (node.w !== "" && Math.round(node.w + node.x - space.width) > 1) {
+    const area = getRoot(node)[_xfa_object.$extra].currentContentArea;
+
+    if (node.w + node.x > area.w) {
+      return NOTHING;
+    }
+
+    return NOSPACE;
+  }
+
+  if (node.h !== "" && Math.round(node.h + node.y - space.height) > 1) {
+    const area = getRoot(node)[_xfa_object.$extra].currentContentArea;
+
+    if (node.h + node.y > area.h) {
+      return NOTHING;
+    }
+
+    return NOSPACE;
+  }
+
+  return VALID;
 }
 
 class AppearanceFilter extends _xfa_object.StringObject {
@@ -57488,7 +57702,7 @@ class Area extends _xfa_object.XFAObject {
     this.colSpan = (0, _utils.getInteger)({
       data: attributes.colSpan,
       defaultValue: 1,
-      validate: n => n >= 1
+      validate: n => n >= 1 || n === -1
     });
     this.id = attributes.id || "";
     this.name = attributes.name || "";
@@ -57512,8 +57726,19 @@ class Area extends _xfa_object.XFAObject {
     return true;
   }
 
-  [_xfa_object.$toHTML]() {
-    this[_xfa_object.$extra] = Object.create(null);
+  [_xfa_object.$addHTML](html, bbox) {
+    const [x, y, w, h] = bbox;
+    this[_xfa_object.$extra].width = Math.max(this[_xfa_object.$extra].width, x + w);
+    this[_xfa_object.$extra].height = Math.max(this[_xfa_object.$extra].height, y + h);
+
+    this[_xfa_object.$extra].children.push(html);
+  }
+
+  [_xfa_object.$getAvailableSpace]() {
+    return this[_xfa_object.$extra].availableSpace;
+  }
+
+  [_xfa_object.$toHTML](availableSpace) {
     const style = (0, _html_utils.toStyle)(this, "position");
     const attributes = {
       style,
@@ -57525,17 +57750,32 @@ class Area extends _xfa_object.XFAObject {
       attributes.xfaName = this.name;
     }
 
-    const children = this[_xfa_object.$childrenToHTML]({
-      filter: new Set(["area", "draw", "field", "subform", "subformSet"]),
-      include: true
-    });
+    const children = [];
+    this[_xfa_object.$extra] = {
+      children,
+      width: 0,
+      height: 0,
+      availableSpace
+    };
 
+    if (!this[_xfa_object.$childrenToHTML]({
+      filter: new Set(["area", "draw", "field", "exclGroup", "subform", "subformSet"]),
+      include: true
+    })) {
+      delete this[_xfa_object.$extra];
+      return _utils.HTMLResult.empty;
+    }
+
+    style.width = (0, _html_utils.measureToString)(this[_xfa_object.$extra].width);
+    style.height = (0, _html_utils.measureToString)(this[_xfa_object.$extra].height);
     const html = {
       name: "div",
       attributes,
       children
     };
-    return html;
+    const bbox = [this.x, this.y, this[_xfa_object.$extra].width, this[_xfa_object.$extra].height];
+    delete this[_xfa_object.$extra];
+    return _utils.HTMLResult.success(html, bbox);
   }
 
 }
@@ -57655,8 +57895,8 @@ class BooleanElement extends _xfa_object.Option01 {
     this.usehref = attributes.usehref || "";
   }
 
-  [_xfa_object.$toHTML]() {
-    return this[_xfa_object.$content] === 1;
+  [_xfa_object.$toHTML](availableSpace) {
+    return _utils.HTMLResult.success(this[_xfa_object.$content] === 1);
   }
 
 }
@@ -57689,38 +57929,50 @@ class Border extends _xfa_object.XFAObject {
       }
     }
 
-    if (widths) {
-      for (let i = 0; i < 4; i++) {
-        widths[i] = edges[i].thickness;
-      }
+    widths = widths || [0, 0, 0, 0];
+
+    for (let i = 0; i < 4; i++) {
+      widths[i] = edges[i].thickness;
     }
 
-    const edgeStyles = edges.map(node => node[_xfa_object.$toStyle]());
-    const cornerStyles = this.corner.children.map(node => node[_xfa_object.$toStyle]());
+    margins = margins || [0, 0, 0, 0];
+    const edgeStyles = edges.map(node => {
+      const style = node[_xfa_object.$toStyle]();
+
+      style.color = style.color || "#000000";
+      return style;
+    });
     let style;
 
     if (this.margin) {
       style = this.margin[_xfa_object.$toStyle]();
-
-      if (margins) {
-        margins[0] = this.margin.topInset;
-        margins[1] = this.margin.rightInset;
-        margins[2] = this.margin.bottomInset;
-        margins[3] = this.margin.leftInset;
-      }
+      margins[0] = this.margin.topInset;
+      margins[1] = this.margin.rightInset;
+      margins[2] = this.margin.bottomInset;
+      margins[3] = this.margin.leftInset;
     } else {
       style = Object.create(null);
+    }
+
+    let isForUi = false;
+
+    const parent = this[_xfa_object.$getParent]();
+
+    const grandParent = parent ? parent[_xfa_object.$getParent]() : null;
+
+    if (grandParent instanceof Ui) {
+      isForUi = true;
     }
 
     if (this.fill) {
       Object.assign(style, this.fill[_xfa_object.$toStyle]());
     }
 
-    style.borderWidth = edgeStyles.map(s => s.width).join(" ");
-    style.borderColor = edgeStyles.map(s => s.color).join(" ");
-    style.borderStyle = edgeStyles.map(s => s.style).join(" ");
+    let hasRadius = false;
 
-    if (cornerStyles.length > 0) {
+    if (this.corner.children.some(node => node.radius !== 0)) {
+      const cornerStyles = this.corner.children.map(node => node[_xfa_object.$toStyle]());
+
       if (cornerStyles.length === 2 || cornerStyles.length === 3) {
         const last = cornerStyles[cornerStyles.length - 1];
 
@@ -57730,17 +57982,54 @@ class Border extends _xfa_object.XFAObject {
       }
 
       style.borderRadius = cornerStyles.map(s => s.radius).join(" ");
+      hasRadius = true;
     }
 
-    switch (this.presence) {
-      case "invisible":
-      case "hidden":
-        style.borderStyle = "";
-        break;
+    const firstEdge = edgeStyles[0];
 
-      case "inactive":
-        style.borderStyle = "none";
-        break;
+    if (!hasRadius && (this.edge.children.length <= 1 || edgeStyles.every(x => x.style === firstEdge.style && x.width === firstEdge.width && x.color === firstEdge.color) && margins.every(x => x === margins[0]))) {
+      let borderStyle;
+
+      switch (this.presence) {
+        case "invisible":
+        case "hidden":
+          borderStyle = "";
+          break;
+
+        case "inactive":
+          borderStyle = "none";
+          break;
+
+        default:
+          borderStyle = firstEdge.style;
+          break;
+      }
+
+      style.outline = `${firstEdge.width} ${firstEdge.color} ${borderStyle}`;
+      const offset = edges[0].thickness + margins[0];
+      style.outlineOffset = `-${(0, _html_utils.measureToString)(offset)}`;
+
+      if (isForUi) {
+        style.padding = `${(0, _html_utils.measureToString)(offset + 1)}`;
+      }
+    } else {
+      switch (this.presence) {
+        case "invisible":
+        case "hidden":
+          style.borderStyle = "";
+          break;
+
+        case "inactive":
+          style.borderStyle = "none";
+          break;
+
+        default:
+          style.borderStyle = edgeStyles.map(s => s.style).join(" ");
+          break;
+      }
+
+      style.borderWidth = edgeStyles.map(s => s.width).join(" ");
+      style.borderColor = edgeStyles.map(s => s.color).join(" ");
     }
 
     return style;
@@ -57811,6 +58100,11 @@ class BreakBefore extends _xfa_object.XFAObject {
     this.script = null;
   }
 
+  [_xfa_object.$toHTML](availableSpace) {
+    this[_xfa_object.$extra] = {};
+    return _utils.HTMLResult.FAILURE;
+  }
+
 }
 
 class Button extends _xfa_object.XFAObject {
@@ -57823,14 +58117,15 @@ class Button extends _xfa_object.XFAObject {
     this.extras = null;
   }
 
-  [_xfa_object.$toHTML]() {
-    return {
+  [_xfa_object.$toHTML](availableSpace) {
+    return _utils.HTMLResult.success({
       name: "button",
       attributes: {
         class: "xfaButton",
         style: {}
-      }
-    };
+      },
+      children: []
+    });
   }
 
 }
@@ -57869,15 +58164,15 @@ class Caption extends _xfa_object.XFAObject {
     _setValue(this, value);
   }
 
-  [_xfa_object.$toHTML]() {
+  [_xfa_object.$toHTML](availableSpace) {
     if (!this.value) {
-      return null;
+      return _utils.HTMLResult.EMPTY;
     }
 
-    const value = this.value[_xfa_object.$toHTML]();
+    const value = this.value[_xfa_object.$toHTML](availableSpace).html;
 
     if (!value) {
-      return null;
+      return _utils.HTMLResult.EMPTY;
     }
 
     const children = [];
@@ -57896,22 +58191,33 @@ class Caption extends _xfa_object.XFAObject {
     switch (this.placement) {
       case "left":
       case "right":
-        style.minWidth = (0, _html_utils.measureToString)(this.reserve);
+        if (this.reserve > 0) {
+          style.width = (0, _html_utils.measureToString)(this.reserve);
+        } else {
+          style.minWidth = (0, _html_utils.measureToString)(this.reserve);
+        }
+
         break;
 
       case "top":
       case "bottom":
-        style.minHeight = (0, _html_utils.measureToString)(this.reserve);
+        if (this.reserve > 0) {
+          style.height = (0, _html_utils.measureToString)(this.reserve);
+        } else {
+          style.minHeight = (0, _html_utils.measureToString)(this.reserve);
+        }
+
         break;
     }
 
-    return {
+    return _utils.HTMLResult.success({
       name: "div",
       attributes: {
-        style
+        style,
+        class: "xfaCaption"
       },
       children
-    };
+    });
   }
 
 }
@@ -57960,7 +58266,7 @@ class CheckButton extends _xfa_object.XFAObject {
     this.margin = null;
   }
 
-  [_xfa_object.$toHTML]() {
+  [_xfa_object.$toHTML](availableSpace) {
     const style = (0, _html_utils.toStyle)(this, "border", "margin");
     const size = (0, _html_utils.measureToString)(this.size);
     style.width = style.height = size;
@@ -58013,18 +58319,30 @@ class CheckButton extends _xfa_object.XFAObject {
       style.height = size;
     }
 
-    return {
+    const fieldId = this[_xfa_object.$getParent]()[_xfa_object.$getParent]()[_xfa_object.$uid];
+
+    const input = {
+      name: "input",
+      attributes: {
+        class: "xfaCheckbox",
+        fieldId,
+        type: "radio",
+        id: `${fieldId}-radio`
+      }
+    };
+
+    const container = this[_xfa_object.$getParent]()[_xfa_object.$getParent]()[_xfa_object.$getParent]();
+
+    if (container instanceof ExclGroup) {
+      input.attributes.name = container[_xfa_object.$uid];
+    }
+
+    return _utils.HTMLResult.success({
       name: "label",
       attributes: {
         class: "xfaLabel"
       },
-      children: [{
-        name: "input",
-        attributes: {
-          class: "xfaCheckbox",
-          type: "checkbox"
-        }
-      }, {
+      children: [input, {
         name: "span",
         attributes: {
           class: "xfaCheckboxMark",
@@ -58032,7 +58350,7 @@ class CheckButton extends _xfa_object.XFAObject {
           style
         }
       }]
-    };
+    });
   }
 
 }
@@ -58055,22 +58373,52 @@ class ChoiceList extends _xfa_object.XFAObject {
     this.margin = null;
   }
 
-  [_xfa_object.$toHTML]() {
+  [_xfa_object.$toHTML](availableSpace) {
     const style = (0, _html_utils.toStyle)(this, "border", "margin");
-    return {
+
+    const ui = this[_xfa_object.$getParent]();
+
+    const field = ui[_xfa_object.$getParent]();
+
+    const children = [];
+
+    if (field.items.children.length > 0) {
+      const displayed = field.items.children[0][_xfa_object.$toHTML]().html;
+
+      const values = field.items.children[1] ? field.items.children[1][_xfa_object.$toHTML]().html : [];
+
+      for (let i = 0, ii = displayed.length; i < ii; i++) {
+        children.push({
+          name: "option",
+          attributes: {
+            value: values[i] || displayed[i]
+          },
+          value: displayed[i]
+        });
+      }
+    }
+
+    const selectAttributes = {
+      class: "xfaSelect",
+      fieldId: this[_xfa_object.$getParent]()[_xfa_object.$getParent]()[_xfa_object.$uid],
+      style
+    };
+
+    if (this.open === "multiSelect") {
+      selectAttributes.multiple = true;
+    }
+
+    return _utils.HTMLResult.success({
       name: "label",
       attributes: {
         class: "xfaLabel"
       },
       children: [{
         name: "select",
-        attributes: {
-          class: "xfaSelect",
-          multiple: this.open === "multiSelect",
-          style
-        }
+        children,
+        attributes: selectAttributes
       }]
-    };
+    });
   }
 
 }
@@ -58082,7 +58430,7 @@ class Color extends _xfa_object.XFAObject {
     this.id = attributes.id || "";
     this.use = attributes.use || "";
     this.usehref = attributes.usehref || "";
-    this.value = (0, _utils.getColor)(attributes.value);
+    this.value = attributes.value ? (0, _utils.getColor)(attributes.value) : "";
     this.extras = null;
   }
 
@@ -58091,7 +58439,7 @@ class Color extends _xfa_object.XFAObject {
   }
 
   [_xfa_object.$toStyle]() {
-    return _util.Util.makeHexColor(this.value.r, this.value.g, this.value.b);
+    return this.value ? _util.Util.makeHexColor(this.value.r, this.value.g, this.value.b) : null;
   }
 
 }
@@ -58141,7 +58489,7 @@ class ContentArea extends _xfa_object.XFAObject {
     this.extras = null;
   }
 
-  [_xfa_object.$toHTML]() {
+  [_xfa_object.$toHTML](availableSpace) {
     const left = (0, _html_utils.measureToString)(this.x);
     const top = (0, _html_utils.measureToString)(this.y);
     const style = {
@@ -58151,7 +58499,7 @@ class ContentArea extends _xfa_object.XFAObject {
       width: (0, _html_utils.measureToString)(this.w),
       height: (0, _html_utils.measureToString)(this.h)
     };
-    return {
+    return _utils.HTMLResult.success({
       name: "div",
       children: [],
       attributes: {
@@ -58159,7 +58507,7 @@ class ContentArea extends _xfa_object.XFAObject {
         class: "xfaContentarea",
         id: this[_xfa_object.$uid]
       }
-    };
+    });
   }
 
 }
@@ -58205,8 +58553,8 @@ class DateElement extends _xfa_object.ContentObject {
     this[_xfa_object.$content] = new Date(this[_xfa_object.$content].trim());
   }
 
-  [_xfa_object.$toHTML]() {
-    return this[_xfa_object.$content].toString();
+  [_xfa_object.$toHTML](availableSpace) {
+    return _utils.HTMLResult.success(this[_xfa_object.$content].toString());
   }
 
 }
@@ -58224,8 +58572,8 @@ class DateTime extends _xfa_object.ContentObject {
     this[_xfa_object.$content] = new Date(this[_xfa_object.$content].trim());
   }
 
-  [_xfa_object.$toHTML]() {
-    return this[_xfa_object.$content].toString();
+  [_xfa_object.$toHTML](availableSpace) {
+    return _utils.HTMLResult.success(this[_xfa_object.$content].toString());
   }
 
 }
@@ -58244,23 +58592,24 @@ class DateTimeEdit extends _xfa_object.XFAObject {
     this.margin = null;
   }
 
-  [_xfa_object.$toHTML]() {
+  [_xfa_object.$toHTML](availableSpace) {
     const style = (0, _html_utils.toStyle)(this, "border", "font", "margin");
     const html = {
       name: "input",
       attributes: {
         type: "text",
+        fieldId: this[_xfa_object.$getParent]()[_xfa_object.$getParent]()[_xfa_object.$uid],
         class: "xfaTextfield",
         style
       }
     };
-    return {
+    return _utils.HTMLResult.success({
       name: "label",
       attributes: {
         class: "xfaLabel"
       },
       children: [html]
-    };
+    });
   }
 
 }
@@ -58289,8 +58638,8 @@ class Decimal extends _xfa_object.ContentObject {
     this[_xfa_object.$content] = isNaN(number) ? null : number;
   }
 
-  [_xfa_object.$toHTML]() {
-    return this[_xfa_object.$content] !== null ? this[_xfa_object.$content].toString() : "";
+  [_xfa_object.$toHTML](availableSpace) {
+    return _utils.HTMLResult.success(this[_xfa_object.$content] !== null ? this[_xfa_object.$content].toString() : "");
   }
 
 }
@@ -58355,7 +58704,7 @@ class Draw extends _xfa_object.XFAObject {
     this.colSpan = (0, _utils.getInteger)({
       data: attributes.colSpan,
       defaultValue: 1,
-      validate: x => x >= 1
+      validate: n => n >= 1 || n === -1
     });
     this.h = attributes.h ? (0, _utils.getMeasurement)(attributes.h) : "";
     this.hAlign = (0, _utils.getStringOption)(attributes.hAlign, ["left", "center", "justify", "justifyAll", "radix", "right"]);
@@ -58397,57 +58746,112 @@ class Draw extends _xfa_object.XFAObject {
     _setValue(this, value);
   }
 
-  [_xfa_object.$toHTML]() {
-    if (!this.value) {
-      return null;
+  [_xfa_object.$toHTML](availableSpace) {
+    if (this.presence === "hidden" || this.presence === "inactive" || this.h === 0 || this.w === 0) {
+      return _utils.HTMLResult.EMPTY;
+    }
+
+    (0, _html_utils.fixDimensions)(this);
+
+    if (this.w !== "" && this.h === "" && this.value) {
+      const text = this.value[_xfa_object.$text]();
+
+      if (text) {
+        const {
+          height
+        } = (0, _html_utils.layoutText)(text, this.font.size, {
+          width: this.w,
+          height: Infinity
+        });
+        this.h = height || "";
+      }
+    }
+
+    switch (checkDimensions(this, availableSpace)) {
+      case NOTHING:
+        return _utils.HTMLResult.EMPTY;
+
+      case NOSPACE:
+        return _utils.HTMLResult.FAILURE;
+
+      default:
+        break;
     }
 
     const style = (0, _html_utils.toStyle)(this, "font", "hAlign", "dimensions", "position", "presence", "rotate", "anchorType", "borderMarginPadding");
-    const clazz = ["xfaDraw"];
+    const classNames = ["xfaDraw"];
 
     if (this.font) {
-      clazz.push("xfaFont");
+      classNames.push("xfaFont");
     }
 
     const attributes = {
       style,
       id: this[_xfa_object.$uid],
-      class: clazz.join(" ")
+      class: classNames.join(" ")
     };
 
     if (this.name) {
       attributes.xfaName = this.name;
     }
 
-    let html = {
+    const html = {
       name: "div",
       attributes,
       children: []
     };
-    const value = this.value ? this.value[_xfa_object.$toHTML]() : null;
+    const extra = (0, _html_utils.addExtraDivForBorder)(html);
+    const bbox = (0, _html_utils.computeBbox)(this, html, availableSpace);
+    const value = this.value ? this.value[_xfa_object.$toHTML](availableSpace).html : null;
 
     if (value === null) {
-      return html;
+      return _utils.HTMLResult.success(extra, bbox);
     }
 
     html.children.push(value);
 
-    if (this.para && value.attributes.class === "xfaRich") {
-      const paraStyle = this.para[_xfa_object.$toStyle]();
+    if (value.attributes.class === "xfaRich") {
+      if (this.h === "") {
+        style.height = "auto";
+      }
 
-      if (!value.attributes.style) {
-        value.attributes.style = paraStyle;
-      } else {
-        for (const [key, val] of Object.entries(paraStyle)) {
-          if (!(key in value.attributes.style)) {
-            value.attributes.style[key] = val;
+      if (this.w === "") {
+        style.width = "auto";
+      }
+
+      if (this.para) {
+        attributes.style.display = "flex";
+        attributes.style.flexDirection = "column";
+
+        switch (this.para.vAlign) {
+          case "top":
+            attributes.style.justifyContent = "start";
+            break;
+
+          case "bottom":
+            attributes.style.justifyContent = "end";
+            break;
+
+          case "middle":
+            attributes.style.justifyContent = "center";
+            break;
+        }
+
+        const paraStyle = this.para[_xfa_object.$toStyle]();
+
+        if (!value.attributes.style) {
+          value.attributes.style = paraStyle;
+        } else {
+          for (const [key, val] of Object.entries(paraStyle)) {
+            if (!(key in value.attributes.style)) {
+              value.attributes.style[key] = val;
+            }
           }
         }
       }
     }
 
-    html = (0, _html_utils.addExtraDivForMargin)(html);
-    return html;
+    return _utils.HTMLResult.success(extra, bbox);
   }
 
 }
@@ -58459,7 +58863,7 @@ class Edge extends _xfa_object.XFAObject {
     this.id = attributes.id || "";
     this.presence = (0, _utils.getStringOption)(attributes.presence, ["visible", "hidden", "inactive", "invisible"]);
     this.stroke = (0, _utils.getStringOption)(attributes.stroke, ["solid", "dashDot", "dashDotDot", "dashed", "dotted", "embossed", "etched", "lowered", "raised"]);
-    this.thickness = (0, _utils.getMeasurement)(attributes.thickness, "0.5pt");
+    this.thickness = Math.max(1, Math.round((0, _utils.getMeasurement)(attributes.thickness, "0.5pt")));
     this.use = attributes.use || "";
     this.usehref = attributes.usehref || "";
     this.color = null;
@@ -58470,8 +58874,8 @@ class Edge extends _xfa_object.XFAObject {
     const style = (0, _html_utils.toStyle)(this, "visibility");
     Object.assign(style, {
       linecap: this.cap,
-      width: (0, _html_utils.measureToString)(this.thickness),
-      color: this.color ? this.color[_xfa_object.$toHTML]() : "#000000",
+      width: (0, _html_utils.measureToString)(Math.max(1, Math.round(this.thickness))),
+      color: this.color ? this.color[_xfa_object.$toStyle]() : "#000000",
       style: ""
     });
 
@@ -58655,12 +59059,12 @@ class ExData extends _xfa_object.ContentObject {
     return false;
   }
 
-  [_xfa_object.$toHTML]() {
+  [_xfa_object.$toHTML](availableSpace) {
     if (this.contentType !== "text/html" || !this[_xfa_object.$content]) {
-      return null;
+      return _utils.HTMLResult.EMPTY;
     }
 
-    return this[_xfa_object.$content][_xfa_object.$toHTML]();
+    return this[_xfa_object.$content][_xfa_object.$toHTML](availableSpace);
   }
 
 }
@@ -58701,7 +59105,7 @@ class ExclGroup extends _xfa_object.XFAObject {
     this.colSpan = (0, _utils.getInteger)({
       data: attributes.colSpan,
       defaultValue: 1,
-      validate: x => x >= 1
+      validate: n => n >= 1 || n === -1
     });
     this.h = attributes.h ? (0, _utils.getMeasurement)(attributes.h) : "";
     this.hAlign = (0, _utils.getStringOption)(attributes.hAlign, ["left", "center", "justify", "justifyAll", "radix", "right"]);
@@ -58764,28 +59168,143 @@ class ExclGroup extends _xfa_object.XFAObject {
     }
   }
 
-  [_xfa_object.$toHTML]() {
-    if (!this.value) {
-      return null;
+  [_xfa_object.$flushHTML]() {
+    return (0, _layout.flushHTML)(this);
+  }
+
+  [_xfa_object.$addHTML](html, bbox) {
+    (0, _layout.addHTML)(this, html, bbox);
+  }
+
+  [_xfa_object.$getAvailableSpace]() {
+    return (0, _layout.getAvailableSpace)(this);
+  }
+
+  [_xfa_object.$toHTML](availableSpace) {
+    if (this.presence === "hidden" || this.presence === "inactive" || this.h === 0 || this.w === 0) {
+      return _utils.HTMLResult.EMPTY;
     }
 
-    const style = (0, _html_utils.toStyle)(this, "dimensions", "position", "anchorType");
+    (0, _html_utils.fixDimensions)(this);
+    const children = [];
     const attributes = {
-      style,
-      id: this[_xfa_object.$uid],
-      class: "xfaExclgroup"
+      id: this[_xfa_object.$uid]
     };
 
-    const children = this[_xfa_object.$childrenToHTML]({
-      filter: new Set(["field"]),
-      include: true
+    if (!this[_xfa_object.$extra]) {
+      this[_xfa_object.$extra] = Object.create(null);
+    }
+
+    Object.assign(this[_xfa_object.$extra], {
+      children,
+      attributes,
+      attempt: 0,
+      availableSpace,
+      width: 0,
+      height: 0,
+      prevHeight: 0,
+      currentWidth: 0
     });
 
-    return {
+    switch (checkDimensions(this, availableSpace)) {
+      case NOTHING:
+        return _utils.HTMLResult.EMPTY;
+
+      case NOSPACE:
+        return _utils.HTMLResult.FAILURE;
+
+      default:
+        break;
+    }
+
+    availableSpace = {
+      width: this.w === "" ? availableSpace.width : this.w,
+      height: this.h === "" ? availableSpace.height : this.h
+    };
+    const filter = new Set(["field"]);
+
+    if (this.layout === "row") {
+      const columnWidths = this[_xfa_object.$getParent]().columnWidths;
+
+      if (Array.isArray(columnWidths) && columnWidths.length > 0) {
+        this[_xfa_object.$extra].columnWidths = columnWidths;
+        this[_xfa_object.$extra].currentColumn = 0;
+      }
+    }
+
+    const style = (0, _html_utils.toStyle)(this, "anchorType", "dimensions", "position", "presence", "borderMarginPadding", "hAlign");
+    const classNames = ["xfaExclgroup"];
+    const cl = (0, _html_utils.layoutClass)(this);
+
+    if (cl) {
+      classNames.push(cl);
+    }
+
+    attributes.style = style;
+    attributes.class = classNames.join(" ");
+
+    if (this.name) {
+      attributes.xfaName = this.name;
+    }
+
+    let failure;
+
+    if (this.layout === "lr-tb" || this.layout === "rl-tb") {
+      for (; this[_xfa_object.$extra].attempt < MAX_ATTEMPTS_FOR_LRTB_LAYOUT; this[_xfa_object.$extra].attempt++) {
+        if (this[_xfa_object.$childrenToHTML]({
+          filter,
+          include: true
+        })) {
+          break;
+        }
+      }
+
+      failure = this[_xfa_object.$extra].attempt === 2;
+    } else {
+      failure = !this[_xfa_object.$childrenToHTML]({
+        filter,
+        include: true
+      });
+    }
+
+    if (failure) {
+      return _utils.HTMLResult.FAILURE;
+    }
+
+    let marginH = 0;
+    let marginV = 0;
+
+    if (this.margin) {
+      marginH = this.margin.leftInset + this.margin.rightInset;
+      marginV = this.margin.topInset + this.margin.bottomInset;
+    }
+
+    if (this.w === "") {
+      style.width = (0, _html_utils.measureToString)(this[_xfa_object.$extra].width + marginH);
+    }
+
+    if (this.h === "") {
+      style.height = (0, _html_utils.measureToString)(this[_xfa_object.$extra].height + marginV);
+    }
+
+    let html = {
       name: "div",
       attributes,
       children
     };
+    html = (0, _html_utils.addExtraDivForBorder)(html);
+    let bbox;
+
+    if (this.w !== "" && this.h !== "") {
+      bbox = [this.x, this.y, this.w, this.h];
+    } else {
+      const width = this.w === "" ? marginH + this[_xfa_object.$extra].width : this.w;
+      const height = this.h === "" ? marginV + this[_xfa_object.$extra].height : this.h;
+      bbox = [this.x, this.y, width, height];
+    }
+
+    delete this[_xfa_object.$extra];
+    return _utils.HTMLResult.success(html, bbox);
   }
 
 }
@@ -58834,7 +59353,7 @@ class Field extends _xfa_object.XFAObject {
     this.colSpan = (0, _utils.getInteger)({
       data: attributes.colSpan,
       defaultValue: 1,
-      validate: x => x >= 1
+      validate: n => n >= 1 || n === -1
     });
     this.h = attributes.h ? (0, _utils.getMeasurement)(attributes.h) : "";
     this.hAlign = (0, _utils.getStringOption)(attributes.hAlign, ["left", "center", "justify", "justifyAll", "radix", "right"]);
@@ -58884,22 +59403,35 @@ class Field extends _xfa_object.XFAObject {
     _setValue(this, value);
   }
 
-  [_xfa_object.$toHTML]() {
-    if (!this.ui) {
-      return null;
+  [_xfa_object.$toHTML](availableSpace) {
+    if (!this.ui || this.presence === "hidden" || this.presence === "inactive" || this.h === 0 || this.w === 0) {
+      return _utils.HTMLResult.EMPTY;
     }
 
-    const style = (0, _html_utils.toStyle)(this, "font", "dimensions", "position", "rotate", "anchorType", "presence", "borderMarginPadding");
-    const clazz = ["xfaField"];
+    (0, _html_utils.fixDimensions)(this);
+
+    switch (checkDimensions(this, availableSpace)) {
+      case NOTHING:
+        return _utils.HTMLResult.EMPTY;
+
+      case NOSPACE:
+        return _utils.HTMLResult.FAILURE;
+
+      default:
+        break;
+    }
+
+    const style = (0, _html_utils.toStyle)(this, "font", "dimensions", "position", "rotate", "anchorType", "presence", "borderMarginPadding", "hAlign");
+    const classNames = ["xfaField"];
 
     if (this.font) {
-      clazz.push("xfaFont");
+      classNames.push("xfaFont");
     }
 
     const attributes = {
       style,
       id: this[_xfa_object.$uid],
-      class: clazz.join(" ")
+      class: classNames.join(" ")
     };
 
     if (this.name) {
@@ -58912,10 +59444,12 @@ class Field extends _xfa_object.XFAObject {
       attributes,
       children
     };
-    const ui = this.ui ? this.ui[_xfa_object.$toHTML]() : null;
+    const bbox = (0, _html_utils.computeBbox)(this, html, availableSpace);
+    html = (0, _html_utils.addExtraDivForBorder)(html);
+    const ui = this.ui ? this.ui[_xfa_object.$toHTML]().html : null;
 
     if (!ui) {
-      return html;
+      return _utils.HTMLResult.success(html, bbox);
     }
 
     if (!ui.attributes.style) {
@@ -58924,14 +59458,26 @@ class Field extends _xfa_object.XFAObject {
 
     children.push(ui);
 
-    if (this.value && ui.name !== "button") {
-      ui.children[0].attributes.value = this.value[_xfa_object.$toHTML]().value;
+    if (this.value) {
+      if (this.ui.imageEdit) {
+        ui.children.push(this.value[_xfa_object.$toHTML]().html);
+      } else if (ui.name !== "button") {
+        const value = this.value[_xfa_object.$toHTML]().html;
+
+        if (value) {
+          if (ui.children[0].name === "textarea") {
+            ui.children[0].attributes.textContent = value.value;
+          } else {
+            ui.children[0].attributes.value = value.value;
+          }
+        }
+      }
     }
 
-    const caption = this.caption ? this.caption[_xfa_object.$toHTML]() : null;
+    const caption = this.caption ? this.caption[_xfa_object.$toHTML]().html : null;
 
     if (!caption) {
-      return html;
+      return _utils.HTMLResult.success(html, bbox);
     }
 
     if (ui.name === "button") {
@@ -58942,8 +59488,8 @@ class Field extends _xfa_object.XFAObject {
         caption.name = "span";
       }
 
-      ui.children = [caption];
-      return html;
+      ui.children.push(caption);
+      return _utils.HTMLResult.success(html, bbox);
     }
 
     ui.children.splice(0, 0, caption);
@@ -58958,10 +59504,12 @@ class Field extends _xfa_object.XFAObject {
         break;
 
       case "top":
+        ui.attributes.style.alignItems = "start";
         ui.attributes.style.flexDirection = "column";
         break;
 
       case "bottom":
+        ui.attributes.style.alignItems = "start";
         ui.attributes.style.flexDirection = "column-reverse";
         break;
 
@@ -58971,8 +59519,7 @@ class Field extends _xfa_object.XFAObject {
         break;
     }
 
-    html = (0, _html_utils.addExtraDivForMargin)(html);
-    return html;
+    return _utils.HTMLResult.success(html, bbox);
   }
 
 }
@@ -58996,6 +59543,16 @@ class Fill extends _xfa_object.XFAObject {
   }
 
   [_xfa_object.$toStyle]() {
+    const parent = this[_xfa_object.$getParent]();
+
+    let propName = "color";
+
+    if (parent instanceof Border) {
+      propName = "background";
+    }
+
+    const style = Object.create(null);
+
     for (const name of Object.getOwnPropertyNames(this)) {
       if (name === "extras" || name === "color") {
         continue;
@@ -59007,18 +59564,15 @@ class Fill extends _xfa_object.XFAObject {
         continue;
       }
 
-      return {
-        color: obj[_xfa_object.$toStyle](this.color)
-      };
+      style[propName] = obj[_xfa_object.$toStyle](this.color);
+      return style;
     }
 
     if (this.color) {
-      return {
-        background: this.color[_xfa_object.$toStyle]()
-      };
+      style[propName] = this.color[_xfa_object.$toStyle]();
     }
 
-    return {};
+    return style;
   }
 
 }
@@ -59064,8 +59618,8 @@ class Float extends _xfa_object.ContentObject {
     this[_xfa_object.$content] = isNaN(number) ? null : number;
   }
 
-  [_xfa_object.$toHTML]() {
-    return this[_xfa_object.$content] !== null ? this[_xfa_object.$content].toString() : "";
+  [_xfa_object.$toHTML](availableSpace) {
+    return _utils.HTMLResult.success(this[_xfa_object.$content] !== null ? this[_xfa_object.$content].toString() : "");
   }
 
 }
@@ -59117,17 +59671,15 @@ class Font extends _xfa_object.XFAObject {
 
   [_xfa_object.$toStyle]() {
     const style = (0, _html_utils.toStyle)(this, "fill");
-    const color = style.background;
+    const color = style.color;
 
     if (color) {
       if (color === "#000000") {
-        delete style.background;
+        delete style.color;
       } else if (!color.startsWith("#")) {
+        style.background = color;
         style.backgroundClip = "text";
         style.color = "transparent";
-      } else {
-        style.color = color;
-        delete style.background;
       }
     }
 
@@ -59163,13 +59715,13 @@ class Font extends _xfa_object.XFAObject {
       style.fontStyle = this.posture;
     }
 
-    const fontSize = (0, _html_utils.measureToString)(this.size);
+    const fontSize = (0, _html_utils.measureToString)(0.99 * this.size);
 
     if (fontSize !== "10px") {
       style.fontSize = fontSize;
     }
 
-    style.fontFamily = this.typeface;
+    style.fontFamily = (0, _html_utils.getFonts)(this.typeface);
 
     if (this.underline !== 0) {
       style.textDecoration = "underline";
@@ -59266,7 +59818,7 @@ class Image extends _xfa_object.StringObject {
 
   [_xfa_object.$toHTML]() {
     if (this.href || !this[_xfa_object.$content]) {
-      return null;
+      return _utils.HTMLResult.EMPTY;
     }
 
     if (this.transferEncoding === "base64") {
@@ -59274,17 +59826,17 @@ class Image extends _xfa_object.StringObject {
       const blob = new Blob([buffer], {
         type: this.contentType
       });
-      return {
+      return _utils.HTMLResult.success({
         name: "img",
         attributes: {
           class: "xfaImage",
           style: {},
           src: URL.createObjectURL(blob)
         }
-      };
+      });
     }
 
-    return null;
+    return _utils.HTMLResult.EMPTY;
   }
 
 }
@@ -59299,6 +59851,18 @@ class ImageEdit extends _xfa_object.XFAObject {
     this.border = null;
     this.extras = null;
     this.margin = null;
+  }
+
+  [_xfa_object.$toHTML](availableSpace) {
+    if (this.data === "embed") {
+      return _utils.HTMLResult.success({
+        name: "div",
+        children: [],
+        attributes: {}
+      });
+    }
+
+    return _utils.HTMLResult.EMPTY;
   }
 
 }
@@ -59317,8 +59881,8 @@ class Integer extends _xfa_object.ContentObject {
     this[_xfa_object.$content] = isNaN(number) ? null : number;
   }
 
-  [_xfa_object.$toHTML]() {
-    return this[_xfa_object.$content] !== null ? this[_xfa_object.$content].toString() : "";
+  [_xfa_object.$toHTML](availableSpace) {
+    return _utils.HTMLResult.success(this[_xfa_object.$content] !== null ? this[_xfa_object.$content].toString() : "");
   }
 
 }
@@ -59363,6 +59927,16 @@ class Items extends _xfa_object.XFAObject {
 
   [_xfa_object.$hasItem](value) {
     return this.hasOwnProperty(value[_xfa_object.$nodeName]) && this[value[_xfa_object.$nodeName]].children.some(node => node[_xfa_object.$content] === value[_xfa_object.$content]);
+  }
+
+  [_xfa_object.$toHTML]() {
+    const output = [];
+
+    for (const child of this[_xfa_object.$getChildren]()) {
+      output.push(child[_xfa_object.$text]());
+    }
+
+    return _utils.HTMLResult.success(output);
   }
 
 }
@@ -59545,23 +60119,24 @@ class NumericEdit extends _xfa_object.XFAObject {
     this.margin = null;
   }
 
-  [_xfa_object.$toHTML]() {
+  [_xfa_object.$toHTML](availableSpace) {
     const style = (0, _html_utils.toStyle)(this, "border", "font", "margin");
     const html = {
       name: "input",
       attributes: {
         type: "text",
+        fieldId: this[_xfa_object.$getParent]()[_xfa_object.$getParent]()[_xfa_object.$uid],
         class: "xfaTextfield",
         style
       }
     };
-    return {
+    return _utils.HTMLResult.success({
       name: "label",
       attributes: {
         class: "xfaLabel"
       },
       children: [html]
-    };
+    });
   }
 
 }
@@ -59661,33 +60236,70 @@ class PageArea extends _xfa_object.XFAObject {
     this.subform = new _xfa_object.XFAObjectArray();
   }
 
-  [_xfa_object.$toHTML]() {
-    if (this.contentArea.children.length === 0) {
-      return null;
+  [_xfa_object.$getNextPage]() {
+    if (!this[_xfa_object.$extra]) {
+      this[_xfa_object.$extra] = {
+        numberOfUse: 1
+      };
     }
 
-    const children = this[_xfa_object.$childrenToHTML]({
-      filter: new Set(["area", "draw", "field", "subform", "contentArea"]),
-      include: true
-    });
+    const parent = this[_xfa_object.$getParent]();
 
-    const contentArea = children.find(node => node.attributes.class === "xfaContentarea");
+    if (parent.relation === "orderedOccurrence") {
+      if (this.occur && (this.occur.max === -1 || this[_xfa_object.$extra].numberOfUse < this.occur.max)) {
+        this[_xfa_object.$extra].numberOfUse += 1;
+        return this;
+      }
+    }
+
+    delete this[_xfa_object.$extra];
+    return parent[_xfa_object.$getNextPage]();
+  }
+
+  [_xfa_object.$getAvailableSpace]() {
+    return {
+      width: Infinity,
+      height: Infinity
+    };
+  }
+
+  [_xfa_object.$toHTML]() {
+    if (!this[_xfa_object.$extra]) {
+      this[_xfa_object.$extra] = {
+        numberOfUse: 1
+      };
+    }
+
+    const children = [];
+    this[_xfa_object.$extra].children = children;
     const style = Object.create(null);
 
     if (this.medium && this.medium.short && this.medium.long) {
       style.width = (0, _html_utils.measureToString)(this.medium.short);
       style.height = (0, _html_utils.measureToString)(this.medium.long);
-    } else {}
 
-    return {
+      if (this.medium.orientation === "landscape") {
+        const x = style.width;
+        style.width = style.height;
+        style.height = x;
+      }
+    } else {
+      (0, _util.warn)("XFA - No medium specified in pageArea: please file a bug.");
+    }
+
+    this[_xfa_object.$childrenToHTML]({
+      filter: new Set(["area", "draw", "field", "subform", "contentArea"]),
+      include: true
+    });
+
+    return _utils.HTMLResult.success({
       name: "div",
       children,
       attributes: {
         id: this[_xfa_object.$uid],
         style
-      },
-      contentArea
-    };
+      }
+    });
   }
 
 }
@@ -59708,17 +60320,70 @@ class PageSet extends _xfa_object.XFAObject {
     this.pageSet = new _xfa_object.XFAObjectArray();
   }
 
-  [_xfa_object.$toHTML]() {
-    return {
-      name: "div",
-      children: this[_xfa_object.$childrenToHTML]({
-        filter: new Set(["pageArea", "pageSet"]),
-        include: true
-      }),
-      attributes: {
-        id: this[_xfa_object.$uid]
+  [_xfa_object.$getNextPage]() {
+    if (!this[_xfa_object.$extra]) {
+      this[_xfa_object.$extra] = {
+        numberOfUse: 1,
+        currentIndex: -1
+      };
+    }
+
+    if (this.relation === "orderedOccurrence") {
+      if (this[_xfa_object.$extra].currentIndex + 1 < this.pageArea.children.length) {
+        this[_xfa_object.$extra].currentIndex += 1;
+        return this.pageArea.children[this[_xfa_object.$extra].currentIndex];
       }
-    };
+
+      if (this[_xfa_object.$extra].currentIndex + 1 < this.pageSet.children.length) {
+        this[_xfa_object.$extra].currentIndex += 1;
+        return this.pageSet.children[this[_xfa_object.$extra].currentIndex];
+      }
+
+      if (this.occur && (this.occur.max === -1 || this[_xfa_object.$extra].numberOfUse < this.occur.max)) {
+        this[_xfa_object.$extra].numberOfUse += 1;
+        this[_xfa_object.$extra].currentIndex = 0;
+
+        if (this.pageArea.children.length > 0) {
+          return this.pageArea.children[0];
+        }
+
+        return this.pageSet.children[0][_xfa_object.$getNextPage]();
+      }
+
+      delete this[_xfa_object.$extra];
+
+      const parent = this[_xfa_object.$getParent]();
+
+      if (parent instanceof PageSet) {
+        return parent[_xfa_object.$getNextPage]();
+      }
+
+      return this[_xfa_object.$getNextPage]();
+    }
+
+    const pageNumber = getRoot(this)[_xfa_object.$extra].pageNumber;
+
+    const parity = pageNumber % 2 === 0 ? "even" : "odd";
+    const position = pageNumber === 0 ? "first" : "rest";
+    let page = this.pageArea.children.find(p => p.oddOrEven === parity && p.pagePosition === position);
+
+    if (page) {
+      return page;
+    }
+
+    page = this.pageArea.children.find(p => p.oddOrEven === "any" && p.pagePosition === position);
+
+    if (page) {
+      return page;
+    }
+
+    page = this.pageArea.children.find(p => p.oddOrEven === "any" && p.pagePosition === "any");
+
+    if (page) {
+      return page;
+    }
+
+    return this.pageArea.children[0];
   }
 
 }
@@ -59775,9 +60440,10 @@ class Para extends _xfa_object.XFAObject {
 
     if (this.textIndent !== "") {
       style.textIndent = (0, _html_utils.measureToString)(this.textIndent);
+      (0, _html_utils.fixTextIndent)(style);
     }
 
-    if (this.lineHeight !== "") {
+    if (this.lineHeight > 0) {
       style.lineHeight = (0, _html_utils.measureToString)(this.lineHeight);
     }
 
@@ -60184,7 +60850,7 @@ class Subform extends _xfa_object.XFAObject {
     this.colSpan = (0, _utils.getInteger)({
       data: attributes.colSpan,
       defaultValue: 1,
-      validate: x => x >= 1
+      validate: n => n >= 1 || n === -1
     });
     this.columnWidths = (attributes.columnWidths || "").trim().split(/\s+/).map(x => x === "-1" ? -1 : (0, _utils.getMeasurement)(x));
     this.h = attributes.h ? (0, _utils.getMeasurement)(attributes.h) : "";
@@ -60239,10 +60905,84 @@ class Subform extends _xfa_object.XFAObject {
     this.subformSet = new _xfa_object.XFAObjectArray();
   }
 
-  [_xfa_object.$toHTML]() {
-    this[_xfa_object.$extra] = Object.create(null);
+  [_xfa_object.$flushHTML]() {
+    return (0, _layout.flushHTML)(this);
+  }
 
-    if (this.layout === "row") {
+  [_xfa_object.$addHTML](html, bbox) {
+    (0, _layout.addHTML)(this, html, bbox);
+  }
+
+  [_xfa_object.$getAvailableSpace]() {
+    return (0, _layout.getAvailableSpace)(this);
+  }
+
+  [_xfa_object.$toHTML](availableSpace) {
+    if (this.name === "helpText") {
+      return _utils.HTMLResult.EMPTY;
+    }
+
+    if (this[_xfa_object.$extra] && this[_xfa_object.$extra].afterBreakAfter) {
+      const ret = this[_xfa_object.$extra].afterBreakAfter;
+      delete this[_xfa_object.$extra];
+      return ret;
+    }
+
+    if (this.presence === "hidden" || this.presence === "inactive") {
+      return _utils.HTMLResult.EMPTY;
+    }
+
+    if (this.breakBefore.children.length > 1 || this.breakAfter.children.length > 1) {
+      (0, _util.warn)("XFA - Several breakBefore or breakAfter in subforms: please file a bug.");
+    }
+
+    (0, _html_utils.fixDimensions)(this);
+    const children = [];
+    const attributes = {
+      id: this[_xfa_object.$uid]
+    };
+
+    if (!this[_xfa_object.$extra]) {
+      this[_xfa_object.$extra] = Object.create(null);
+    }
+
+    Object.assign(this[_xfa_object.$extra], {
+      children,
+      attributes,
+      attempt: 0,
+      availableSpace,
+      width: 0,
+      height: 0,
+      prevHeight: 0,
+      currentWidth: 0
+    });
+
+    if (this.breakBefore.children.length >= 1) {
+      const breakBefore = this.breakBefore.children[0];
+
+      if (!breakBefore[_xfa_object.$extra]) {
+        breakBefore[_xfa_object.$extra] = true;
+
+        getRoot(this)[_xfa_object.$break](breakBefore);
+
+        return _utils.HTMLResult.FAILURE;
+      }
+    }
+
+    switch (checkDimensions(this, availableSpace)) {
+      case NOTHING:
+        return _utils.HTMLResult.EMPTY;
+
+      case NOSPACE:
+        return _utils.HTMLResult.FAILURE;
+
+      default:
+        break;
+    }
+
+    const filter = new Set(["area", "draw", "exclGroup", "field", "subform", "subformSet"]);
+
+    if (this.layout.includes("row")) {
       const columnWidths = this[_xfa_object.$getParent]().columnWidths;
 
       if (Array.isArray(columnWidths) && columnWidths.length > 0) {
@@ -60251,59 +60991,88 @@ class Subform extends _xfa_object.XFAObject {
       }
     }
 
-    const parent = this[_xfa_object.$getParent]();
-
-    let page = null;
-
-    if (parent[_xfa_object.$nodeName] === "template") {
-      if (this.pageSet !== null) {
-        this[_xfa_object.$extra].pageNumber = 0;
-      } else {
-        (0, _util.warn)("XFA - No pageSet in root subform");
-      }
-    } else if (parent[_xfa_object.$extra] && parent[_xfa_object.$extra].pageNumber !== undefined) {
-      const pageNumber = parent[_xfa_object.$extra].pageNumber;
-      const pageAreas = parent.pageSet.pageArea.children;
-      parent[_xfa_object.$extra].pageNumber = (parent[_xfa_object.$extra].pageNumber + 1) % pageAreas.length;
-      page = pageAreas[pageNumber][_xfa_object.$toHTML]();
-    }
-
-    const style = (0, _html_utils.toStyle)(this, "dimensions", "position", "presence");
-    const clazz = ["xfaSubform"];
+    const style = (0, _html_utils.toStyle)(this, "anchorType", "dimensions", "position", "presence", "borderMarginPadding", "hAlign");
+    const classNames = ["xfaSubform"];
     const cl = (0, _html_utils.layoutClass)(this);
 
     if (cl) {
-      clazz.push(cl);
+      classNames.push(cl);
     }
 
-    const attributes = {
-      style,
-      id: this[_xfa_object.$uid],
-      class: clazz.join(" ")
-    };
+    attributes.style = style;
+    attributes.class = classNames.join(" ");
 
     if (this.name) {
       attributes.xfaName = this.name;
     }
 
-    const children = this[_xfa_object.$childrenToHTML]({
-      filter: new Set(["area", "draw", "field", "subform", "subformSet"]),
-      include: true
-    });
+    let failure;
 
-    const html = {
+    if (this.layout === "lr-tb" || this.layout === "rl-tb") {
+      for (; this[_xfa_object.$extra].attempt < MAX_ATTEMPTS_FOR_LRTB_LAYOUT; this[_xfa_object.$extra].attempt++) {
+        if (this[_xfa_object.$childrenToHTML]({
+          filter,
+          include: true
+        })) {
+          break;
+        }
+      }
+
+      failure = this[_xfa_object.$extra].attempt === 2;
+    } else {
+      failure = !this[_xfa_object.$childrenToHTML]({
+        filter,
+        include: true
+      });
+    }
+
+    if (failure) {
+      return _utils.HTMLResult.FAILURE;
+    }
+
+    let marginH = 0;
+    let marginV = 0;
+
+    if (this.margin) {
+      marginH = this.margin.leftInset + this.margin.rightInset;
+      marginV = this.margin.topInset + this.margin.bottomInset;
+    }
+
+    if (this.w === "") {
+      style.width = (0, _html_utils.measureToString)(this[_xfa_object.$extra].width + marginH);
+    }
+
+    if (this.h === "") {
+      style.height = (0, _html_utils.measureToString)(this[_xfa_object.$extra].height + marginV);
+    }
+
+    let html = {
       name: "div",
       attributes,
       children
     };
+    html = (0, _html_utils.addExtraDivForBorder)(html);
+    let bbox;
 
-    if (page) {
-      page.contentArea.children.push(html);
-      delete page.contentArea;
-      return page;
+    if (this.w !== "" && this.h !== "") {
+      bbox = [this.x, this.y, this.w, this.h];
+    } else {
+      const width = this.w === "" ? marginH + this[_xfa_object.$extra].width : this.w;
+      const height = this.h === "" ? marginV + this[_xfa_object.$extra].height : this.h;
+      bbox = [this.x, this.y, width, height];
     }
 
-    return html;
+    if (this.breakAfter.children.length >= 1) {
+      const breakAfter = this.breakAfter.children[0];
+
+      getRoot(this)[_xfa_object.$break](breakAfter);
+
+      this[_xfa_object.$extra].afterBreakAfter = _utils.HTMLResult.success(html, bbox);
+      return _utils.HTMLResult.FAILURE;
+    }
+
+    delete this[_xfa_object.$extra];
+    return _utils.HTMLResult.success(html, bbox);
   }
 
 }
@@ -60327,6 +61096,29 @@ class SubformSet extends _xfa_object.XFAObject {
     this.breakBefore = new _xfa_object.XFAObjectArray();
     this.subform = new _xfa_object.XFAObjectArray();
     this.subformSet = new _xfa_object.XFAObjectArray();
+  }
+
+  [_xfa_object.$toHTML]() {
+    const children = [];
+
+    if (!this[_xfa_object.$extra]) {
+      this[_xfa_object.$extra] = Object.create(null);
+    }
+
+    this[_xfa_object.$extra].children = children;
+
+    this[_xfa_object.$childrenToHTML]({
+      filter: new Set(["subform", "subformSet"]),
+      include: true
+    });
+
+    return _utils.HTMLResult.success({
+      name: "div",
+      children,
+      attributes: {
+        id: this[_xfa_object.$uid]
+      }
+    });
   }
 
 }
@@ -60407,15 +61199,187 @@ class Template extends _xfa_object.XFAObject {
     }
   }
 
-  [_xfa_object.$toHTML]() {
-    if (this.subform.children.length > 0) {
-      return this.subform.children[0][_xfa_object.$toHTML]();
+  [_xfa_object.$break](node) {
+    this[_xfa_object.$extra].breakingNode = node;
+  }
+
+  [_xfa_object.$searchNode](expr, container) {
+    if (expr.startsWith("#")) {
+      return [this[_xfa_object.$ids].get(expr.slice(1))];
     }
 
-    return {
+    return (0, _som.searchNode)(this, container, expr, true, true);
+  }
+
+  [_xfa_object.$toHTML]() {
+    if (!this.subform.children.length) {
+      return _utils.HTMLResult.success({
+        name: "div",
+        children: []
+      });
+    }
+
+    this[_xfa_object.$extra] = {
+      breakingNode: null,
+      pageNumber: 1,
+      pagePosition: "first",
+      oddOrEven: "odd",
+      blankOrNotBlank: "nonBlank"
+    };
+    const root = this.subform.children[0];
+    const pageAreas = root.pageSet.pageArea.children;
+    const mainHtml = {
       name: "div",
       children: []
     };
+    let pageArea = null;
+    let breakBefore = null;
+    let breakBeforeTarget = null;
+
+    if (root.breakBefore.children.length >= 1) {
+      breakBefore = root.breakBefore.children[0];
+      breakBeforeTarget = breakBefore.target;
+    } else if (root.subform.children.length >= 1 && root.subform.children[0].breakBefore.children.length >= 1) {
+      breakBefore = root.subform.children[0].breakBefore.children[0];
+      breakBeforeTarget = breakBefore.target;
+    } else if (root.break && root.break.beforeTarget) {
+      breakBefore = root.break;
+      breakBeforeTarget = breakBefore.beforeTarget;
+    } else if (root.subform.children.length >= 1 && root.subform.children[0].break && root.subform.children[0].break.beforeTarget) {
+      breakBefore = root.subform.children[0].break;
+      breakBeforeTarget = breakBefore.beforeTarget;
+    }
+
+    if (breakBefore) {
+      const target = this[_xfa_object.$searchNode](breakBeforeTarget, breakBefore[_xfa_object.$getParent]());
+
+      if (target instanceof PageArea) {
+        pageArea = target;
+        breakBefore[_xfa_object.$extra] = {};
+      }
+    }
+
+    if (!pageArea) {
+      pageArea = pageAreas[0];
+    }
+
+    const pageAreaParent = pageArea[_xfa_object.$getParent]();
+
+    pageAreaParent[_xfa_object.$extra] = {
+      numberOfUse: 1,
+      currentIndex: pageAreaParent.pageArea.children.indexOf(pageArea)
+    };
+    let targetPageArea;
+    let leader = null;
+    let trailer = null;
+
+    while (true) {
+      targetPageArea = null;
+
+      const page = pageArea[_xfa_object.$toHTML]().html;
+
+      mainHtml.children.push(page);
+
+      if (leader) {
+        page.children.push(leader[_xfa_object.$toHTML](page[_xfa_object.$extra].space).html);
+        leader = null;
+      }
+
+      if (trailer) {
+        page.children.push(trailer[_xfa_object.$toHTML](page[_xfa_object.$extra].space).html);
+        trailer = null;
+      }
+
+      const contentAreas = pageArea.contentArea.children;
+      const htmlContentAreas = page.children.filter(node => node.attributes.class === "xfaContentarea");
+
+      for (let i = 0, ii = contentAreas.length; i < ii; i++) {
+        const contentArea = this[_xfa_object.$extra].currentContentArea = contentAreas[i];
+        const space = {
+          width: contentArea.w,
+          height: contentArea.h
+        };
+
+        if (leader) {
+          htmlContentAreas[i].children.push(leader[_xfa_object.$toHTML](space).html);
+          leader = null;
+        }
+
+        if (trailer) {
+          htmlContentAreas[i].children.push(trailer[_xfa_object.$toHTML](space).html);
+          trailer = null;
+        }
+
+        let html = root[_xfa_object.$toHTML](space);
+
+        if (html.success) {
+          if (html.html) {
+            htmlContentAreas[i].children.push(html.html);
+          }
+
+          return mainHtml;
+        }
+
+        let mustBreak = false;
+
+        if (this[_xfa_object.$extra].breakingNode) {
+          const node = this[_xfa_object.$extra].breakingNode;
+          this[_xfa_object.$extra].breakingNode = null;
+
+          if (node.targetType === "auto") {
+            i--;
+            continue;
+          }
+
+          const startNew = node.startNew === 1;
+
+          if (node.leader) {
+            leader = this[_xfa_object.$searchNode](node.leader, node[_xfa_object.$getParent]());
+            leader = leader ? leader[0] : null;
+          }
+
+          if (node.trailer) {
+            trailer = this[_xfa_object.$searchNode](node.trailer, node[_xfa_object.$getParent]());
+            trailer = trailer ? trailer[0] : null;
+          }
+
+          let target = null;
+
+          if (node.target) {
+            target = this[_xfa_object.$searchNode](node.target, node[_xfa_object.$getParent]());
+            target = target ? target[0] : target;
+          }
+
+          if (node.targetType === "pageArea") {
+            if (startNew) {
+              mustBreak = true;
+            } else if (target === pageArea || !(target instanceof PageArea)) {
+              i--;
+              continue;
+            } else {
+              targetPageArea = target;
+              mustBreak = true;
+            }
+          } else if (target === "contentArea" || !(target instanceof ContentArea)) {
+            i--;
+            continue;
+          }
+        }
+
+        html = root[_xfa_object.$flushHTML]();
+
+        if (html) {
+          htmlContentAreas[i].children.push(html);
+        }
+
+        if (mustBreak) {
+          break;
+        }
+      }
+
+      this[_xfa_object.$extra].pageNumber += 1;
+      pageArea = targetPageArea || pageArea[_xfa_object.$getNextPage]();
+    }
   }
 
 }
@@ -60447,7 +61411,7 @@ class Text extends _xfa_object.ContentObject {
     return false;
   }
 
-  [_xfa_object.$toHTML]() {
+  [_xfa_object.$toHTML](availableSpace) {
     if (typeof this[_xfa_object.$content] === "string") {
       const html = {
         name: "span",
@@ -60490,10 +61454,10 @@ class Text extends _xfa_object.ContentObject {
         });
       }
 
-      return html;
+      return _utils.HTMLResult.success(html);
     }
 
-    return this[_xfa_object.$content][_xfa_object.$toHTML]();
+    return this[_xfa_object.$content][_xfa_object.$toHTML](availableSpace);
   }
 
 }
@@ -60524,7 +61488,7 @@ class TextEdit extends _xfa_object.XFAObject {
     this.margin = null;
   }
 
-  [_xfa_object.$toHTML]() {
+  [_xfa_object.$toHTML](availableSpace) {
     const style = (0, _html_utils.toStyle)(this, "border", "font", "margin");
     let html;
 
@@ -60532,6 +61496,7 @@ class TextEdit extends _xfa_object.XFAObject {
       html = {
         name: "textarea",
         attributes: {
+          fieldId: this[_xfa_object.$getParent]()[_xfa_object.$getParent]()[_xfa_object.$uid],
           class: "xfaTextfield",
           style
         }
@@ -60541,19 +61506,20 @@ class TextEdit extends _xfa_object.XFAObject {
         name: "input",
         attributes: {
           type: "text",
+          fieldId: this[_xfa_object.$getParent]()[_xfa_object.$getParent]()[_xfa_object.$uid],
           class: "xfaTextfield",
           style
         }
       };
     }
 
-    return {
+    return _utils.HTMLResult.success({
       name: "label",
       attributes: {
         class: "xfaLabel"
       },
       children: [html]
-    };
+    });
   }
 
 }
@@ -60571,8 +61537,8 @@ class Time extends _xfa_object.StringObject {
     this[_xfa_object.$content] = new Date(this[_xfa_object.$content]);
   }
 
-  [_xfa_object.$toHTML]() {
-    return this[_xfa_object.$content].toString();
+  [_xfa_object.$toHTML](availableSpace) {
+    return _utils.HTMLResult.success(this[_xfa_object.$content].toString());
   }
 
 }
@@ -60655,7 +61621,7 @@ class Ui extends _xfa_object.XFAObject {
     this.textEdit = null;
   }
 
-  [_xfa_object.$toHTML]() {
+  [_xfa_object.$toHTML](availableSpace) {
     for (const name of Object.getOwnPropertyNames(this)) {
       if (name === "extras" || name === "picture") {
         continue;
@@ -60667,10 +61633,10 @@ class Ui extends _xfa_object.XFAObject {
         continue;
       }
 
-      return obj[_xfa_object.$toHTML]();
+      return obj[_xfa_object.$toHTML](availableSpace);
     }
 
-    return null;
+    return _utils.HTMLResult.EMPTY;
   }
 
 }
@@ -60720,6 +61686,19 @@ class Value extends _xfa_object.XFAObject {
   }
 
   [_xfa_object.$setValue](value) {
+    const parent = this[_xfa_object.$getParent]();
+
+    if (parent instanceof Field) {
+      if (parent.ui && parent.ui.imageEdit) {
+        if (!this.image) {
+          this.image = new Image({});
+        }
+
+        this.image[_xfa_object.$content] = value[_xfa_object.$content];
+        return;
+      }
+    }
+
     const valueName = value[_xfa_object.$nodeName];
 
     if (this[valueName] !== null) {
@@ -60742,7 +61721,27 @@ class Value extends _xfa_object.XFAObject {
     this[_xfa_object.$appendChild](value);
   }
 
-  [_xfa_object.$toHTML]() {
+  [_xfa_object.$text]() {
+    if (this.exData) {
+      return this.exData[_xfa_object.$content][_xfa_object.$text]().trim();
+    }
+
+    for (const name of Object.getOwnPropertyNames(this)) {
+      if (name === "image") {
+        continue;
+      }
+
+      const obj = this[name];
+
+      if (obj instanceof _xfa_object.XFAObject) {
+        return (obj[_xfa_object.$content] || "").toString().trim();
+      }
+    }
+
+    return null;
+  }
+
+  [_xfa_object.$toHTML](availableSpace) {
     for (const name of Object.getOwnPropertyNames(this)) {
       const obj = this[name];
 
@@ -60750,10 +61749,10 @@ class Value extends _xfa_object.XFAObject {
         continue;
       }
 
-      return obj[_xfa_object.$toHTML]();
+      return obj[_xfa_object.$toHTML](availableSpace);
     }
 
-    return null;
+    return _utils.HTMLResult.EMPTY;
   }
 
 }
@@ -61264,14 +62263,24 @@ exports.TemplateNamespace = TemplateNamespace;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.addExtraDivForMargin = addExtraDivForMargin;
+exports.addExtraDivForBorder = addExtraDivForBorder;
+exports.computeBbox = computeBbox;
+exports.fixDimensions = fixDimensions;
+exports.fixTextIndent = fixTextIndent;
+exports.getFonts = getFonts;
 exports.layoutClass = layoutClass;
+exports.layoutText = layoutText;
 exports.measureToString = measureToString;
 exports.toStyle = toStyle;
 
 var _xfa_object = __w_pdfjs_require__(68);
 
+var _utils = __w_pdfjs_require__(69);
+
 var _util = __w_pdfjs_require__(2);
+
+const wordNonWordRegex = new RegExp("([\\p{N}\\p{L}\\p{M}]+)|([^\\p{N}\\p{L}\\p{M}]+)", "gu");
+const wordFirstRegex = new RegExp("^[\\p{N}\\p{L}\\p{M}]", "u");
 
 function measureToString(m) {
   if (typeof m === "string") {
@@ -61283,6 +62292,12 @@ function measureToString(m) {
 
 const converters = {
   anchorType(node, style) {
+    const parent = node[_xfa_object.$getParent]();
+
+    if (!parent || parent.layout && parent.layout !== "position") {
+      return;
+    }
+
     if (!("transform" in style)) {
       style.transform = "";
     }
@@ -61325,12 +62340,25 @@ const converters = {
   dimensions(node, style) {
     const parent = node[_xfa_object.$getParent]();
 
-    const extra = parent[_xfa_object.$extra];
     let width = node.w;
+    const height = node.h;
 
-    if (extra && extra.columnWidths) {
-      width = extra.columnWidths[extra.currentColumn];
-      extra.currentColumn = (extra.currentColumn + 1) % extra.columnWidths.length;
+    if (parent.layout && parent.layout.includes("row")) {
+      const extra = parent[_xfa_object.$extra];
+      const colSpan = node.colSpan;
+      let w;
+
+      if (colSpan === -1) {
+        w = extra.columnWidths.slice(extra.currentColumn).reduce((a, x) => a + x, 0);
+        extra.currentColumn = 0;
+      } else {
+        w = extra.columnWidths.slice(extra.currentColumn, extra.currentColumn + colSpan).reduce((a, x) => a + x, 0);
+        extra.currentColumn = (extra.currentColumn + node.colSpan) % extra.columnWidths.length;
+      }
+
+      if (!isNaN(w)) {
+        width = node.w = w;
+      }
     }
 
     if (width !== "") {
@@ -61342,11 +62370,13 @@ const converters = {
         style.maxWidth = measureToString(node.maxW);
       }
 
-      style.minWidth = measureToString(node.minW);
+      if (parent.layout === "position") {
+        style.minWidth = measureToString(node.minW);
+      }
     }
 
-    if (node.h !== "") {
-      style.height = measureToString(node.h);
+    if (height !== "") {
+      style.height = measureToString(height);
     } else {
       style.height = "auto";
 
@@ -61354,7 +62384,9 @@ const converters = {
         style.maxHeight = measureToString(node.maxH);
       }
 
-      style.minHeight = measureToString(node.minH);
+      if (parent.layout === "position") {
+        style.minHeight = measureToString(node.minH);
+      }
     }
   },
 
@@ -61395,42 +62427,247 @@ const converters = {
   },
 
   hAlign(node, style) {
-    switch (node.hAlign) {
-      case "justifyAll":
-        style.textAlign = "justify-all";
-        break;
+    if (node[_xfa_object.$nodeName] === "para") {
+      switch (node.hAlign) {
+        case "justifyAll":
+          style.textAlign = "justify-all";
+          break;
 
-      case "radix":
-        style.textAlign = "left";
-        break;
+        case "radix":
+          style.textAlign = "left";
+          break;
 
-      default:
-        style.textAlign = node.hAlign;
+        default:
+          style.textAlign = node.hAlign;
+      }
+    } else {
+      switch (node.hAlign) {
+        case "right":
+        case "center":
+          style.justifyContent = node.hAlign;
+          break;
+      }
     }
   },
 
   borderMarginPadding(node, style) {
     const borderWidths = [0, 0, 0, 0];
-    const marginWidths = [0, 0, 0, 0];
+    const borderInsets = [0, 0, 0, 0];
     const marginNode = node.margin ? [node.margin.topInset, node.margin.rightInset, node.margin.bottomInset, node.margin.leftInset] : [0, 0, 0, 0];
+    let borderMargin;
 
     if (node.border) {
-      Object.assign(style, node.border[_xfa_object.$toStyle](borderWidths, marginWidths));
+      Object.assign(style, node.border[_xfa_object.$toStyle](borderWidths, borderInsets));
+      borderMargin = style.margin;
+      delete style.margin;
     }
 
     if (borderWidths.every(x => x === 0)) {
-      if (node.margin) {
-        Object.assign(style, node.margin[_xfa_object.$toStyle]());
+      if (marginNode.every(x => x === 0)) {
+        return;
       }
 
+      Object.assign(style, node.margin[_xfa_object.$toStyle]());
       style.padding = style.margin;
       delete style.margin;
-    } else {
-      style.padding = measureToString(marginNode[0] - borderWidths[0] - marginWidths[0]) + " " + measureToString(marginNode[1] - borderWidths[1] - marginWidths[1]) + " " + measureToString(marginNode[2] - borderWidths[2] - marginWidths[2]) + " " + measureToString(marginNode[3] - borderWidths[3] - marginWidths[3]);
+      delete style.outline;
+      delete style.outlineOffset;
+      return;
     }
+
+    if (node.margin) {
+      Object.assign(style, node.margin[_xfa_object.$toStyle]());
+      style.padding = style.margin;
+      delete style.margin;
+    }
+
+    if (!style.borderWidth) {
+      return;
+    }
+
+    style.borderData = {
+      borderWidth: style.borderWidth,
+      borderColor: style.borderColor,
+      borderStyle: style.borderStyle,
+      margin: borderMargin
+    };
+    delete style.borderWidth;
+    delete style.borderColor;
+    delete style.borderStyle;
   }
 
 };
+
+function layoutText(text, fontSize, space) {
+  let width = 0;
+  let height = 0;
+  let totalWidth = 0;
+  const lineHeight = fontSize * 1.5;
+  const averageCharSize = fontSize * 0.4;
+  const maxCharOnLine = Math.floor(space.width / averageCharSize);
+  const chunks = text.match(wordNonWordRegex);
+  let treatedChars = 0;
+  let i = 0;
+  let chunk = chunks[0];
+
+  while (chunk) {
+    const w = chunk.length * averageCharSize;
+
+    if (width + w <= space.width) {
+      width += w;
+      treatedChars += chunk.length;
+      chunk = chunks[i++];
+      continue;
+    }
+
+    if (!wordFirstRegex.test(chunk) || chunk.length > maxCharOnLine) {
+      const numOfCharOnLine = Math.floor((space.width - width) / averageCharSize);
+      chunk = chunk.slice(numOfCharOnLine);
+      treatedChars += numOfCharOnLine;
+
+      if (height + lineHeight > space.height) {
+        return {
+          width: 0,
+          height: 0,
+          splitPos: treatedChars
+        };
+      }
+
+      totalWidth = Math.max(width, totalWidth);
+      width = 0;
+      height += lineHeight;
+      continue;
+    }
+
+    if (height + lineHeight > space.height) {
+      return {
+        width: 0,
+        height: 0,
+        splitPos: treatedChars
+      };
+    }
+
+    totalWidth = Math.max(width, totalWidth);
+    width = w;
+    height += lineHeight;
+    chunk = chunks[i++];
+  }
+
+  if (totalWidth === 0) {
+    totalWidth = width;
+  }
+
+  if (totalWidth !== 0) {
+    height += lineHeight;
+  }
+
+  return {
+    width: totalWidth,
+    height,
+    splitPos: -1
+  };
+}
+
+function computeBbox(node, html, availableSpace) {
+  let bbox;
+
+  if (node.w !== "" && node.h !== "") {
+    bbox = [node.x, node.y, node.w, node.h];
+  } else {
+    if (!availableSpace) {
+      return null;
+    }
+
+    let width = node.w;
+
+    if (width === "") {
+      if (node.maxW === 0) {
+        const parent = node[_xfa_object.$getParent]();
+
+        if (parent.layout === "position" && parent.w !== "") {
+          width = 0;
+        } else {
+          width = node.minW;
+        }
+      } else {
+        width = Math.min(node.maxW, availableSpace.width);
+      }
+
+      html.attributes.style.width = measureToString(width);
+    }
+
+    let height = node.h;
+
+    if (height === "") {
+      if (node.maxH === 0) {
+        const parent = node[_xfa_object.$getParent]();
+
+        if (parent.layout === "position" && parent.h !== "") {
+          height = 0;
+        } else {
+          height = node.minH;
+        }
+      } else {
+        height = Math.min(node.maxH, availableSpace.height);
+      }
+
+      html.attributes.style.height = measureToString(height);
+    }
+
+    bbox = [node.x, node.y, width, height];
+  }
+
+  return bbox;
+}
+
+function fixDimensions(node) {
+  const parent = node[_xfa_object.$getParent]();
+
+  if (parent.layout && parent.layout.includes("row")) {
+    const extra = parent[_xfa_object.$extra];
+    const colSpan = node.colSpan;
+    let width;
+
+    if (colSpan === -1) {
+      width = extra.columnWidths.slice(extra.currentColumn).reduce((a, w) => a + w, 0);
+    } else {
+      width = extra.columnWidths.slice(extra.currentColumn, extra.currentColumn + colSpan).reduce((a, w) => a + w, 0);
+    }
+
+    if (!isNaN(width)) {
+      node.w = width;
+    }
+  }
+
+  if (parent.w && node.w) {
+    node.w = Math.min(parent.w, node.w);
+  }
+
+  if (parent.h && node.h) {
+    node.h = Math.min(parent.h, node.h);
+  }
+
+  if (parent.layout && parent.layout !== "position") {
+    node.x = node.y = 0;
+
+    if (parent.layout === "tb") {
+      if (parent.w !== "" && (node.w === "" || node.w === 0 || node.w > parent.w)) {
+        node.w = parent.w;
+      }
+    }
+  }
+
+  if (node.layout === "position") {
+    node.minW = node.minH = 0;
+    node.maxW = node.maxH = Infinity;
+  } else {
+    if (node.layout === "table") {
+      if (node.w === "" && Array.isArray(node.columnWidths)) {
+        node.w = node.columnWidths.reduce((a, x) => a + x, 0);
+      }
+    }
+  }
+}
 
 function layoutClass(node) {
   switch (node.layout) {
@@ -61490,34 +62727,306 @@ function toStyle(node, ...names) {
   return style;
 }
 
-function addExtraDivForMargin(html) {
+function addExtraDivForBorder(html) {
   const style = html.attributes.style;
+  const data = style.borderData;
+  const children = [];
+  const attributes = {
+    class: "xfaWrapper",
+    style: Object.create(null)
+  };
 
-  if (style.margin) {
-    const padding = style.margin;
-    delete style.margin;
-    const width = style.width || "auto";
-    const height = style.height || "auto";
-    style.width = "100%";
-    style.height = "100%";
-    return {
-      name: "div",
-      attributes: {
-        style: {
-          padding,
-          width,
-          height
-        }
-      },
-      children: [html]
-    };
+  for (const key of ["top", "left"]) {
+    if (style[key] !== undefined) {
+      attributes.style[key] = style[key];
+    }
   }
 
-  return html;
+  delete style.top;
+  delete style.left;
+
+  if (style.position === "absolute") {
+    attributes.style.position = "absolute";
+  } else {
+    attributes.style.position = "relative";
+  }
+
+  delete style.position;
+
+  if (style.justifyContent) {
+    attributes.style.justifyContent = style.justifyContent;
+    delete style.justifyContent;
+  }
+
+  if (data) {
+    delete style.borderData;
+    let insets;
+
+    if (data.margin) {
+      insets = data.margin.split(" ");
+      delete data.margin;
+    } else {
+      insets = ["0px", "0px", "0px", "0px"];
+    }
+
+    let width = "100%";
+    let height = width;
+
+    if (insets[1] !== "0px" || insets[3] !== "0px") {
+      width = `calc(100% - ${parseInt(insets[1]) + parseInt(insets[3])}px`;
+    }
+
+    if (insets[0] !== "0px" || insets[2] !== "0px") {
+      height = `calc(100% - ${parseInt(insets[0]) + parseInt(insets[2])}px`;
+    }
+
+    const borderStyle = {
+      top: insets[0],
+      left: insets[3],
+      width,
+      height
+    };
+
+    for (const [k, v] of Object.entries(data)) {
+      borderStyle[k] = v;
+    }
+
+    if (style.transform) {
+      borderStyle.transform = style.transform;
+    }
+
+    const borderDiv = {
+      name: "div",
+      attributes: {
+        class: "xfaBorderDiv",
+        style: borderStyle
+      }
+    };
+    children.push(borderDiv);
+  }
+
+  children.push(html);
+  return {
+    name: "div",
+    attributes,
+    children
+  };
+}
+
+function fixTextIndent(styles) {
+  const indent = (0, _utils.getMeasurement)(styles.textIndent, "0px");
+
+  if (indent >= 0) {
+    return;
+  }
+
+  const align = styles.textAlign || "left";
+
+  if (align === "left" || align === "right") {
+    const name = "margin" + (align === "left" ? "Left" : "Right");
+    const margin = (0, _utils.getMeasurement)(styles[name], "0px");
+    styles[name] = `${margin - indent}pt`;
+  }
+}
+
+function getFonts(family) {
+  if (family.startsWith("'")) {
+    family = `"${family.slice(1, family.length - 1)}"`;
+  } else if (family.includes(" ") && !family.startsWith('"')) {
+    family = `"${family}"`;
+  }
+
+  const fonts = [family];
+
+  switch (family) {
+    case `"Myriad Pro"`:
+      fonts.push(`"Roboto Condensed"`, `"Ubuntu Condensed"`, `"Microsoft Sans Serif"`, `"Apple Symbols"`, "Helvetica", `"sans serif"`);
+      break;
+
+    case "Arial":
+      fonts.push("Helvetica", `"Liberation Sans"`, "Arimo", `"sans serif"`);
+      break;
+  }
+
+  return fonts.join(",");
 }
 
 /***/ }),
 /* 74 */
+/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
+
+
+
+Object.defineProperty(exports, "__esModule", ({
+  value: true
+}));
+exports.addHTML = addHTML;
+exports.flushHTML = flushHTML;
+exports.getAvailableSpace = getAvailableSpace;
+
+var _xfa_object = __w_pdfjs_require__(68);
+
+var _html_utils = __w_pdfjs_require__(73);
+
+function flushHTML(node) {
+  const attributes = node[_xfa_object.$extra].attributes;
+  const html = {
+    name: "div",
+    attributes,
+    children: node[_xfa_object.$extra].children
+  };
+
+  if (node[_xfa_object.$extra].failingNode) {
+    const htmlFromFailing = node[_xfa_object.$extra].failingNode[_xfa_object.$flushHTML]();
+
+    if (htmlFromFailing) {
+      html.children.push(htmlFromFailing);
+    }
+  }
+
+  if (html.children.length === 0) {
+    return null;
+  }
+
+  node[_xfa_object.$extra].children = [];
+  delete node[_xfa_object.$extra].line;
+  return html;
+}
+
+function addHTML(node, html, bbox) {
+  const extra = node[_xfa_object.$extra];
+  const availableSpace = extra.availableSpace;
+
+  switch (node.layout) {
+    case "position":
+      {
+        const [x, y, w, h] = bbox;
+        extra.width = Math.max(extra.width, x + w);
+        extra.height = Math.max(extra.height, y + h);
+        extra.children.push(html);
+        break;
+      }
+
+    case "lr-tb":
+    case "rl-tb":
+      if (!extra.line || extra.attempt === 1) {
+        extra.line = {
+          name: "div",
+          attributes: {
+            class: node.layout === "lr-tb" ? "xfaLr" : "xfaRl"
+          },
+          children: []
+        };
+        extra.children.push(extra.line);
+      }
+
+      extra.line.children.push(html);
+
+      if (extra.attempt === 0) {
+        const [,, w, h] = bbox;
+        extra.currentWidth += w;
+        extra.height = Math.max(extra.height, extra.prevHeight + h);
+      } else {
+        const [,, w, h] = bbox;
+        extra.width = Math.max(extra.width, extra.currentWidth);
+        extra.currentWidth = w;
+        extra.prevHeight = extra.height;
+        extra.height += h;
+        extra.attempt = 0;
+      }
+
+      break;
+
+    case "rl-row":
+    case "row":
+      {
+        extra.children.push(html);
+        const [,, w, h] = bbox;
+        extra.width += w;
+        extra.height = Math.max(extra.height, h);
+        const height = (0, _html_utils.measureToString)(extra.height);
+
+        for (const child of extra.children) {
+          if (child.attributes.class === "xfaWrapper") {
+            child.children[child.children.length - 1].attributes.style.height = height;
+          } else {
+            child.attributes.style.height = height;
+          }
+        }
+
+        break;
+      }
+
+    case "table":
+      {
+        const [,, w, h] = bbox;
+        extra.width = Math.min(availableSpace.width, Math.max(extra.width, w));
+        extra.height += h;
+        extra.children.push(html);
+        break;
+      }
+
+    case "tb":
+      {
+        const [,,, h] = bbox;
+        extra.width = availableSpace.width;
+        extra.height += h;
+        extra.children.push(html);
+        break;
+      }
+  }
+}
+
+function getAvailableSpace(node) {
+  const availableSpace = node[_xfa_object.$extra].availableSpace;
+
+  switch (node.layout) {
+    case "lr-tb":
+    case "rl-tb":
+      switch (node[_xfa_object.$extra].attempt) {
+        case 0:
+          return {
+            width: availableSpace.width - node[_xfa_object.$extra].currentWidth,
+            height: availableSpace.height - node[_xfa_object.$extra].prevHeight
+          };
+
+        case 1:
+          return {
+            width: availableSpace.width,
+            height: availableSpace.height - node[_xfa_object.$extra].height
+          };
+
+        default:
+          return {
+            width: Infinity,
+            height: availableSpace.height - node[_xfa_object.$extra].prevHeight
+          };
+      }
+
+    case "rl-row":
+    case "row":
+      const width = node[_xfa_object.$extra].columnWidths.slice(node[_xfa_object.$extra].currentColumn).reduce((a, x) => a + x);
+
+      return {
+        width,
+        height: availableSpace.height
+      };
+
+    case "table":
+    case "tb":
+      return {
+        width: availableSpace.width,
+        height: availableSpace.height - node[_xfa_object.$extra].height
+      };
+
+    case "position":
+    default:
+      return availableSpace;
+  }
+}
+
+/***/ }),
+/* 75 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -61792,7 +63301,8 @@ function createDataNode(root, container, expr) {
 
   for (let ii = parsed.length; i < ii; i++) {
     const {
-      cacheName,
+      name,
+      operator,
       index
     } = parsed[i];
 
@@ -61801,14 +63311,31 @@ function createDataNode(root, container, expr) {
       return createNodes(root, parsed.slice(i));
     }
 
-    const cached = somCache.get(root);
+    let children;
 
-    if (!cached) {
-      (0, _util.warn)(`XFA - createDataNode must be called after searchNode.`);
-      return null;
+    switch (operator) {
+      case operators.dot:
+        children = root[_xfa_object.$getChildrenByName](name, false);
+        break;
+
+      case operators.dotDot:
+        children = root[_xfa_object.$getChildrenByName](name, true);
+        break;
+
+      case operators.dotHash:
+        children = root[_xfa_object.$getChildrenByClass](name);
+
+        if (children instanceof _xfa_object.XFAObjectArray) {
+          children = children.children;
+        } else {
+          children = [children];
+        }
+
+        break;
+
+      default:
+        break;
     }
-
-    const children = cached.get(cacheName);
 
     if (children.length === 0) {
       return createNodes(root, parsed.slice(i));
@@ -61833,7 +63360,7 @@ function createDataNode(root, container, expr) {
 }
 
 /***/ }),
-/* 75 */
+/* 76 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -61847,7 +63374,7 @@ var _xfa_object = __w_pdfjs_require__(68);
 
 var _xml_parser = __w_pdfjs_require__(61);
 
-var _builder = __w_pdfjs_require__(76);
+var _builder = __w_pdfjs_require__(77);
 
 var _util = __w_pdfjs_require__(2);
 
@@ -61860,6 +63387,7 @@ class XFAParser extends _xml_parser.XMLParserBase {
     this._current = this._builder.buildRoot(this._ids);
     this._errorCode = _xml_parser.XMLParserErrorCode.NoError;
     this._whiteRegex = /^\s+$/;
+    this._nbsps = /\xa0+/g;
   }
 
   parse(data) {
@@ -61875,6 +63403,8 @@ class XFAParser extends _xml_parser.XMLParserBase {
   }
 
   onText(text) {
+    text = text.replace(this._nbsps, match => match.slice(1) + " ");
+
     if (this._current[_xfa_object.$acceptWhitespace]()) {
       this._current[_xfa_object.$onText](text);
 
@@ -62008,7 +63538,7 @@ class XFAParser extends _xml_parser.XMLParserBase {
 exports.XFAParser = XFAParser;
 
 /***/ }),
-/* 76 */
+/* 77 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -62022,21 +63552,19 @@ var _namespaces = __w_pdfjs_require__(70);
 
 var _xfa_object = __w_pdfjs_require__(68);
 
-var _setup = __w_pdfjs_require__(77);
+var _setup = __w_pdfjs_require__(78);
 
 var _template = __w_pdfjs_require__(72);
 
-var _unknown = __w_pdfjs_require__(86);
+var _unknown = __w_pdfjs_require__(87);
 
 var _util = __w_pdfjs_require__(2);
-
-const _ids = Symbol();
 
 class Root extends _xfa_object.XFAObject {
   constructor(ids) {
     super(-1, "root", Object.create(null));
     this.element = null;
-    this[_ids] = ids;
+    this[_xfa_object.$ids] = ids;
   }
 
   [_xfa_object.$onChild](child) {
@@ -62048,7 +63576,9 @@ class Root extends _xfa_object.XFAObject {
     super[_xfa_object.$finalize]();
 
     if (this.element.template instanceof _template.Template) {
-      this.element.template[_xfa_object.$resolvePrototypes](this[_ids]);
+      this.element.template[_xfa_object.$resolvePrototypes](this[_xfa_object.$ids]);
+
+      this.element.template[_xfa_object.$ids] = this[_xfa_object.$ids];
     }
   }
 
@@ -62224,7 +63754,7 @@ class Builder {
 exports.Builder = Builder;
 
 /***/ }),
-/* 77 */
+/* 78 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -62234,23 +63764,23 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.NamespaceSetUp = void 0;
 
-var _config = __w_pdfjs_require__(78);
+var _config = __w_pdfjs_require__(79);
 
-var _connection_set = __w_pdfjs_require__(79);
+var _connection_set = __w_pdfjs_require__(80);
 
-var _datasets = __w_pdfjs_require__(80);
+var _datasets = __w_pdfjs_require__(81);
 
-var _locale_set = __w_pdfjs_require__(81);
+var _locale_set = __w_pdfjs_require__(82);
 
-var _signature = __w_pdfjs_require__(82);
+var _signature = __w_pdfjs_require__(83);
 
-var _stylesheet = __w_pdfjs_require__(83);
+var _stylesheet = __w_pdfjs_require__(84);
 
 var _template = __w_pdfjs_require__(72);
 
-var _xdp = __w_pdfjs_require__(84);
+var _xdp = __w_pdfjs_require__(85);
 
-var _xhtml = __w_pdfjs_require__(85);
+var _xhtml = __w_pdfjs_require__(86);
 
 const NamespaceSetUp = {
   config: _config.ConfigNamespace,
@@ -62266,7 +63796,7 @@ const NamespaceSetUp = {
 exports.NamespaceSetUp = NamespaceSetUp;
 
 /***/ }),
-/* 78 */
+/* 79 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -64155,7 +65685,7 @@ class ConfigNamespace {
 exports.ConfigNamespace = ConfigNamespace;
 
 /***/ }),
-/* 79 */
+/* 80 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -64369,7 +65899,7 @@ class ConnectionSetNamespace {
 exports.ConnectionSetNamespace = ConnectionSetNamespace;
 
 /***/ }),
-/* 80 */
+/* 81 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -64435,7 +65965,7 @@ class DatasetsNamespace {
 exports.DatasetsNamespace = DatasetsNamespace;
 
 /***/ }),
-/* 81 */
+/* 82 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -64773,7 +66303,7 @@ class LocaleSetNamespace {
 exports.LocaleSetNamespace = LocaleSetNamespace;
 
 /***/ }),
-/* 82 */
+/* 83 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -64814,7 +66344,7 @@ class SignatureNamespace {
 exports.SignatureNamespace = SignatureNamespace;
 
 /***/ }),
-/* 83 */
+/* 84 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -64855,7 +66385,7 @@ class StylesheetNamespace {
 exports.StylesheetNamespace = StylesheetNamespace;
 
 /***/ }),
-/* 84 */
+/* 85 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -64909,7 +66439,7 @@ class XdpNamespace {
 exports.XdpNamespace = XdpNamespace;
 
 /***/ }),
-/* 85 */
+/* 86 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -64923,13 +66453,13 @@ var _xfa_object = __w_pdfjs_require__(68);
 
 var _namespaces = __w_pdfjs_require__(70);
 
-var _utils = __w_pdfjs_require__(69);
-
 var _html_utils = __w_pdfjs_require__(73);
+
+var _utils = __w_pdfjs_require__(69);
 
 const XHTML_NS_ID = _namespaces.NamespaceIds.xhtml.id;
 const VALID_STYLES = new Set(["color", "font", "font-family", "font-size", "font-stretch", "font-style", "font-weight", "margin", "margin-bottom", "margin-left", "margin-right", "margin-top", "letter-spacing", "line-height", "orphans", "page-break-after", "page-break-before", "page-break-inside", "tab-interval", "tab-stop", "text-align", "text-decoration", "text-indent", "vertical-align", "widows", "kerning-mode", "xfa-font-horizontal-scale", "xfa-font-vertical-scale", "xfa-spacerun", "xfa-tab-stops"]);
-const StyleMapping = new Map([["page-break-after", "breakAfter"], ["page-break-before", "breakBefore"], ["page-break-inside", "breakInside"], ["kerning-mode", value => value === "none" ? "none" : "normal"], ["xfa-font-horizontal-scale", value => `scaleX(${Math.max(0, Math.min(parseInt(value) / 100)).toFixed(2)})`], ["xfa-font-vertical-scale", value => `scaleY(${Math.max(0, Math.min(parseInt(value) / 100)).toFixed(2)})`], ["xfa-spacerun", ""], ["xfa-tab-stops", ""], ["font-size", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["letter-spacing", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["line-height", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-bottom", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-left", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-right", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-top", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))]]);
+const StyleMapping = new Map([["page-break-after", "breakAfter"], ["page-break-before", "breakBefore"], ["page-break-inside", "breakInside"], ["kerning-mode", value => value === "none" ? "none" : "normal"], ["xfa-font-horizontal-scale", value => `scaleX(${Math.max(0, Math.min(parseInt(value) / 100)).toFixed(2)})`], ["xfa-font-vertical-scale", value => `scaleY(${Math.max(0, Math.min(parseInt(value) / 100)).toFixed(2)})`], ["xfa-spacerun", ""], ["xfa-tab-stops", ""], ["font-size", value => (0, _html_utils.measureToString)(1 * (0, _utils.getMeasurement)(value))], ["letter-spacing", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["line-height", value => (0, _html_utils.measureToString)(0.99 * (0, _utils.getMeasurement)(value))], ["margin", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-bottom", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-left", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-right", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-top", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["text-indent", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["font-family", value => (0, _html_utils.getFonts)(value)]]);
 const spacesRegExp = /\s+/g;
 const crlfRegExp = /[\r\n]+/g;
 
@@ -64968,6 +66498,7 @@ function mapStyle(styleStr) {
     }
   }
 
+  (0, _html_utils.fixTextIndent)(style);
   return style;
 }
 
@@ -65003,16 +66534,27 @@ class XhtmlObject extends _xfa_object.XmlObject {
     }
   }
 
-  [_xfa_object.$toHTML]() {
-    return {
+  [_xfa_object.$toHTML](availableSpace) {
+    const children = [];
+    this[_xfa_object.$extra] = {
+      children
+    };
+
+    this[_xfa_object.$childrenToHTML]({});
+
+    if (children.length === 0 && !this[_xfa_object.$content]) {
+      return _utils.HTMLResult.EMPTY;
+    }
+
+    return _utils.HTMLResult.success({
       name: this[_xfa_object.$nodeName],
       attributes: {
         href: this.href,
         style: mapStyle(this.style)
       },
-      children: this[_xfa_object.$childrenToHTML]({}),
+      children,
       value: this[_xfa_object.$content] || ""
-    };
+    });
   }
 
 }
@@ -65037,11 +66579,20 @@ class Body extends XhtmlObject {
     super(attributes, "body");
   }
 
-  [_xfa_object.$toHTML]() {
-    const html = super[_xfa_object.$toHTML]();
+  [_xfa_object.$toHTML](availableSpace) {
+    const res = super[_xfa_object.$toHTML](availableSpace);
 
+    const {
+      html
+    } = res;
+
+    if (!html) {
+      return _utils.HTMLResult.EMPTY;
+    }
+
+    html.name = "div";
     html.attributes.class = "xfaRich";
-    return html;
+    return res;
   }
 
 }
@@ -65055,10 +66606,10 @@ class Br extends XhtmlObject {
     return "\n";
   }
 
-  [_xfa_object.$toHTML]() {
-    return {
+  [_xfa_object.$toHTML](availableSpace) {
+    return _utils.HTMLResult.success({
       name: "br"
-    };
+    });
   }
 
 }
@@ -65068,36 +66619,41 @@ class Html extends XhtmlObject {
     super(attributes, "html");
   }
 
-  [_xfa_object.$toHTML]() {
-    const children = this[_xfa_object.$childrenToHTML]({});
+  [_xfa_object.$toHTML](availableSpace) {
+    const children = [];
+    this[_xfa_object.$extra] = {
+      children
+    };
+
+    this[_xfa_object.$childrenToHTML]({});
 
     if (children.length === 0) {
-      return {
+      return _utils.HTMLResult.success({
         name: "div",
         attributes: {
           class: "xfaRich",
           style: {}
         },
         value: this[_xfa_object.$content] || ""
-      };
+      });
     }
 
     if (children.length === 1) {
       const child = children[0];
 
       if (child.attributes && child.attributes.class === "xfaRich") {
-        return child;
+        return _utils.HTMLResult.success(child);
       }
     }
 
-    return {
+    return _utils.HTMLResult.success({
       name: "div",
       attributes: {
         class: "xfaRich",
         style: {}
       },
       children
-    };
+    });
   }
 
 }
@@ -65126,6 +66682,10 @@ class Ol extends XhtmlObject {
 class P extends XhtmlObject {
   constructor(attributes) {
     super(attributes, "p");
+  }
+
+  [_xfa_object.$text]() {
+    return super[_xfa_object.$text]() + "\n";
   }
 
 }
@@ -65224,7 +66784,7 @@ class XhtmlNamespace {
 exports.XhtmlNamespace = XhtmlNamespace;
 
 /***/ }),
-/* 86 */
+/* 87 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -65252,7 +66812,7 @@ class UnknownNamespace {
 exports.UnknownNamespace = UnknownNamespace;
 
 /***/ }),
-/* 87 */
+/* 88 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -66069,7 +67629,7 @@ class XRef {
 exports.XRef = XRef;
 
 /***/ }),
-/* 88 */
+/* 89 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -66569,7 +68129,7 @@ class MessageHandler {
 exports.MessageHandler = MessageHandler;
 
 /***/ }),
-/* 89 */
+/* 90 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -66794,7 +68354,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.9.0';
-const pdfjsBuild = '3538ef0';
+const pdfjsBuild = 'd725ff3';
 })();
 
 /******/ 	return __webpack_exports__;
