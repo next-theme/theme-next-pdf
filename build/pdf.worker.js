@@ -125,7 +125,7 @@ class WorkerMessageHandler {
     const WorkerTasks = [];
     const verbosity = (0, _util.getVerbosityLevel)();
     const apiVersion = docParams.apiVersion;
-    const workerVersion = '2.9.0';
+    const workerVersion = '2.10.0';
 
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
@@ -176,9 +176,9 @@ class WorkerMessageHandler {
         await pdfManager.ensureDoc("checkFirstPage");
       }
 
-      const [numPages, fingerprint, isPureXfa] = await Promise.all([pdfManager.ensureDoc("numPages"), pdfManager.ensureDoc("fingerprint"), pdfManager.ensureDoc("isPureXfa")]);
+      const [numPages, fingerprint, htmlForXfa] = await Promise.all([pdfManager.ensureDoc("numPages"), pdfManager.ensureDoc("fingerprint"), pdfManager.ensureDoc("htmlForXfa")]);
 
-      if (isPureXfa) {
+      if (htmlForXfa) {
         const task = new WorkerTask("loadXfaFonts");
         startWorkerTask(task);
         await pdfManager.loadXfaFonts(handler, task).catch(reason => {}).then(() => finishWorkerTask(task));
@@ -187,7 +187,7 @@ class WorkerMessageHandler {
       return {
         numPages,
         fingerprint,
-        isPureXfa
+        htmlForXfa
       };
     }
 
@@ -440,13 +440,6 @@ class WorkerMessageHandler {
     }) {
       return pdfManager.getPage(pageIndex).then(function (page) {
         return pdfManager.ensure(page, "jsActions");
-      });
-    });
-    handler.on("GetPageXfa", function wphSetupGetXfa({
-      pageIndex
-    }) {
-      return pdfManager.getPage(pageIndex).then(function (page) {
-        return pdfManager.ensure(page, "xfaData");
       });
     });
     handler.on("GetOutline", function wphSetupGetOutline(data) {
@@ -3547,11 +3540,7 @@ class Page {
 
   _getBoundingBox(name) {
     if (this.xfaData) {
-      const {
-        width,
-        height
-      } = this.xfaData.attributes.style;
-      return [0, 0, parseInt(width), parseInt(height)];
+      return this.xfaData.bbox;
     }
 
     const box = this._getInheritableProperty(name, true);
@@ -3637,7 +3626,9 @@ class Page {
 
   get xfaData() {
     if (this.xfaFactory) {
-      return (0, _util.shadow)(this, "xfaData", this.xfaFactory.getPage(this.pageIndex));
+      return (0, _util.shadow)(this, "xfaData", {
+        bbox: this.xfaFactory.getBoundingBox(this.pageIndex)
+      });
     }
 
     return (0, _util.shadow)(this, "xfaData", null);
@@ -4174,8 +4165,12 @@ class PDFDocument {
     return (0, _util.shadow)(this, "xfaFaxtory", null);
   }
 
-  get isPureXfa() {
-    return this.xfaFactory !== null;
+  get htmlForXfa() {
+    if (this.xfaFactory) {
+      return this.xfaFactory.getPages();
+    }
+
+    return null;
   }
 
   async loadXfaFonts(handler, task) {
@@ -8272,9 +8267,9 @@ class PartialEvaluator {
     return (0, _util.shadow)(this, "_pdfFunctionFactory", pdfFunctionFactory);
   }
 
-  clone(newOptions = DefaultPartialEvaluatorOptions) {
+  clone(newOptions = null) {
     const newEvaluator = Object.create(this);
-    newEvaluator.options = newOptions;
+    newEvaluator.options = Object.assign(Object.create(null), this.options, newOptions);
     return newEvaluator;
   }
 
@@ -11595,9 +11590,9 @@ class TranslatedFont {
       throw new Error("Must be a Type3 font.");
     }
 
-    const type3Options = Object.create(evaluator.options);
-    type3Options.ignoreErrors = false;
-    const type3Evaluator = evaluator.clone(type3Options);
+    const type3Evaluator = evaluator.clone({
+      ignoreErrors: false
+    });
     type3Evaluator.parsingType3Font = true;
     const translatedFont = this.font,
           type3Dependencies = this.type3Dependencies;
@@ -22947,7 +22942,8 @@ function adjustToUnicode(properties, builtInEncoding) {
 }
 
 class Glyph {
-  constructor(fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont) {
+  constructor(originalCharCode, fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont) {
+    this.originalCharCode = originalCharCode;
     this.fontChar = fontChar;
     this.unicode = unicode;
     this.accent = accent;
@@ -22958,8 +22954,8 @@ class Glyph {
     this.isInFont = isInFont;
   }
 
-  matchesForCache(fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont) {
-    return this.fontChar === fontChar && this.unicode === unicode && this.accent === accent && this.width === width && this.vmetric === vmetric && this.operatorListId === operatorListId && this.isSpace === isSpace && this.isInFont === isInFont;
+  matchesForCache(originalCharCode, fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont) {
+    return this.originalCharCode === originalCharCode && this.fontChar === fontChar && this.unicode === unicode && this.accent === accent && this.width === width && this.vmetric === vmetric && this.operatorListId === operatorListId && this.isSpace === isSpace && this.isInFont === isInFont;
   }
 
 }
@@ -25321,8 +25317,8 @@ class Font {
 
     let glyph = this._glyphCache[charcode];
 
-    if (!glyph || !glyph.matchesForCache(fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont)) {
-      glyph = new Glyph(fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont);
+    if (!glyph || !glyph.matchesForCache(charcode, fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont)) {
+      glyph = new Glyph(charcode, fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont);
       this._glyphCache[charcode] = glyph;
     }
 
@@ -26061,6 +26057,9 @@ const CFFParser = function CFFParserClosure() {
         } else if (value === 11) {
           state.stackSize = stackSize;
           return true;
+        } else if (value === 0 && j === data.length) {
+          data[j - 1] = 14;
+          validationCommand = CharstringValidationData[14];
         } else {
           validationCommand = CharstringValidationData[value];
         }
@@ -26080,6 +26079,12 @@ const CFFParser = function CFFParserClosure() {
           if ("min" in validationCommand) {
             if (!state.undefStack && stackSize < validationCommand.min) {
               (0, _util.warn)("Not enough parameters for " + validationCommand.id + "; actual: " + stackSize + ", expected: " + validationCommand.min);
+
+              if (stackSize === 0) {
+                data[j - 1] = 14;
+                return true;
+              }
+
               return false;
             }
           }
@@ -55689,7 +55694,7 @@ exports.XFAFactory = void 0;
 
 var _xfa_object = __w_pdfjs_require__(68);
 
-var _bind = __w_pdfjs_require__(71);
+var _bind = __w_pdfjs_require__(72);
 
 var _parser = __w_pdfjs_require__(76);
 
@@ -55698,18 +55703,40 @@ class XFAFactory {
     try {
       this.root = new _parser.XFAParser().parse(XFAFactory._createDocument(data));
       this.form = new _bind.Binder(this.root).bind();
-      this.pages = this.form[_xfa_object.$toHTML]();
+
+      this._createPages();
     } catch (e) {
       console.log(e);
     }
   }
 
-  getPage(pageIndex) {
-    return this.pages.children[pageIndex];
+  _createPages() {
+    this.pages = this.form[_xfa_object.$toHTML]();
+    this.dims = this.pages.children.map(c => {
+      const {
+        width,
+        height
+      } = c.attributes.style;
+      return [0, 0, parseInt(width), parseInt(height)];
+    });
+  }
+
+  getBoundingBox(pageIndex) {
+    return this.dims[pageIndex];
   }
 
   get numberPages() {
-    return this.pages.children.length;
+    return this.dims.length;
+  }
+
+  getPages() {
+    if (!this.pages) {
+      this._createPages();
+    }
+
+    const pages = this.pages;
+    this.pages = null;
+    return pages;
   }
 
   static _createDocument(data) {
@@ -55733,13 +55760,15 @@ exports.XFAFactory = XFAFactory;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.XmlObject = exports.XFAObjectArray = exports.XFAObject = exports.XFAAttribute = exports.StringObject = exports.OptionObject = exports.Option10 = exports.Option01 = exports.IntegerObject = exports.ContentObject = exports.$uid = exports.$toStyle = exports.$toHTML = exports.$text = exports.$setValue = exports.$setSetAttributes = exports.$setId = exports.$searchNode = exports.$resolvePrototypes = exports.$removeChild = exports.$onText = exports.$onChildCheck = exports.$onChild = exports.$nsAttributes = exports.$nodeName = exports.$namespaceId = exports.$isTransparent = exports.$isDescendent = exports.$isDataValue = exports.$insertAt = exports.$indexOf = exports.$ids = exports.$hasSettableValue = exports.$hasItem = exports.$global = exports.$getRealChildrenByNameIt = exports.$getParent = exports.$getNextPage = exports.$getDataValue = exports.$getChildrenByNameIt = exports.$getChildrenByName = exports.$getChildrenByClass = exports.$getChildren = exports.$getAvailableSpace = exports.$getAttributeIt = exports.$flushHTML = exports.$finalize = exports.$extra = exports.$dump = exports.$data = exports.$content = exports.$consumed = exports.$clone = exports.$cleanup = exports.$clean = exports.$childrenToHTML = exports.$break = exports.$appendChild = exports.$addHTML = exports.$acceptWhitespace = void 0;
+exports.XmlObject = exports.XFAObjectArray = exports.XFAObject = exports.XFAAttribute = exports.StringObject = exports.OptionObject = exports.Option10 = exports.Option01 = exports.IntegerObject = exports.ContentObject = exports.$uid = exports.$toStyle = exports.$toHTML = exports.$text = exports.$setValue = exports.$setSetAttributes = exports.$setId = exports.$searchNode = exports.$root = exports.$resolvePrototypes = exports.$removeChild = exports.$onText = exports.$onChildCheck = exports.$onChild = exports.$nsAttributes = exports.$nodeName = exports.$namespaceId = exports.$isTransparent = exports.$isDescendent = exports.$isDataValue = exports.$insertAt = exports.$indexOf = exports.$ids = exports.$hasSettableValue = exports.$hasItem = exports.$global = exports.$getRealChildrenByNameIt = exports.$getParent = exports.$getNextPage = exports.$getDataValue = exports.$getChildrenByNameIt = exports.$getChildrenByName = exports.$getChildrenByClass = exports.$getChildren = exports.$getAvailableSpace = exports.$getAttributeIt = exports.$flushHTML = exports.$finalize = exports.$extra = exports.$dump = exports.$data = exports.$content = exports.$consumed = exports.$clone = exports.$cleanup = exports.$clean = exports.$childrenToHTML = exports.$break = exports.$appendChild = exports.$addHTML = exports.$acceptWhitespace = void 0;
 
 var _utils = __w_pdfjs_require__(69);
 
 var _util = __w_pdfjs_require__(2);
 
 var _namespaces = __w_pdfjs_require__(70);
+
+var _som = __w_pdfjs_require__(71);
 
 const $acceptWhitespace = Symbol();
 exports.$acceptWhitespace = $acceptWhitespace;
@@ -55824,6 +55853,8 @@ const $onText = Symbol();
 exports.$onText = $onText;
 const $removeChild = Symbol();
 exports.$removeChild = $removeChild;
+const $root = Symbol("root");
+exports.$root = $root;
 const $resolvePrototypes = Symbol();
 exports.$resolvePrototypes = $resolvePrototypes;
 const $searchNode = Symbol();
@@ -55870,6 +55901,8 @@ const _max = Symbol();
 const _options = Symbol();
 
 const _parent = Symbol("parent");
+
+const _resolvePrototypesHelper = Symbol();
 
 const _setAttributes = Symbol();
 
@@ -55982,7 +56015,7 @@ class XFAObject {
   }
 
   [$isTransparent]() {
-    return this.name === "";
+    return !this.name;
   }
 
   [$lastAttribute]() {
@@ -56146,9 +56179,7 @@ class XFAObject {
   }
 
   [$setSetAttributes](attributes) {
-    if (attributes.use || attributes.id) {
-      this[_setAttributes] = new Set(Object.keys(attributes));
-    }
+    this[_setAttributes] = new Set(Object.keys(attributes));
   }
 
   [_getUnsetAttributes](protoAttributes) {
@@ -56159,57 +56190,93 @@ class XFAObject {
 
   [$resolvePrototypes](ids, ancestors = new Set()) {
     for (const child of this[_children]) {
-      const proto = child[_getPrototype](ids, ancestors);
+      child[_resolvePrototypesHelper](ids, ancestors);
+    }
+  }
 
-      if (proto) {
-        child[_applyPrototype](proto, ids, ancestors);
-      } else {
-        child[$resolvePrototypes](ids, ancestors);
-      }
+  [_resolvePrototypesHelper](ids, ancestors) {
+    const proto = this[_getPrototype](ids, ancestors);
+
+    if (proto) {
+      this[_applyPrototype](proto, ids, ancestors);
+    } else {
+      this[$resolvePrototypes](ids, ancestors);
     }
   }
 
   [_getPrototype](ids, ancestors) {
     const {
-      use
+      use,
+      usehref
     } = this;
 
-    if (use && use.startsWith("#")) {
-      const id = use.slice(1);
-      const proto = ids.get(id);
-      this.use = "";
+    if (!use && !usehref) {
+      return null;
+    }
 
-      if (!proto) {
-        (0, _util.warn)(`XFA - Invalid prototype id: ${id}.`);
-        return null;
+    let proto = null;
+    let somExpression = null;
+    let id = null;
+    let ref = use;
+
+    if (usehref) {
+      ref = usehref;
+
+      if (usehref.startsWith("#som(") && usehref.endsWith(")")) {
+        somExpression = usehref.slice("#som(".length, usehref.length - 1);
+      } else if (usehref.startsWith(".#som(") && usehref.endsWith(")")) {
+        somExpression = usehref.slice(".#som(".length, usehref.length - 1);
+      } else if (usehref.startsWith("#")) {
+        id = usehref.slice(1);
+      } else if (usehref.startsWith(".#")) {
+        id = usehref.slice(2);
       }
+    } else if (use.startsWith("#")) {
+      id = use.slice(1);
+    } else {
+      somExpression = use;
+    }
 
-      if (proto[$nodeName] !== this[$nodeName]) {
-        (0, _util.warn)(`XFA - Incompatible prototype: ${proto[$nodeName]} !== ${this[$nodeName]}.`);
-        return null;
+    this.use = this.usehref = "";
+
+    if (id) {
+      proto = ids.get(id);
+    } else {
+      proto = (0, _som.searchNode)(ids.get($root), this, somExpression, true, false);
+
+      if (proto) {
+        proto = proto[0];
       }
+    }
 
-      if (ancestors.has(proto)) {
-        (0, _util.warn)(`XFA - Cycle detected in prototypes use.`);
-        return null;
-      }
+    if (!proto) {
+      (0, _util.warn)(`XFA - Invalid prototype reference: ${ref}.`);
+      return null;
+    }
 
-      ancestors.add(proto);
+    if (proto[$nodeName] !== this[$nodeName]) {
+      (0, _util.warn)(`XFA - Incompatible prototype: ${proto[$nodeName]} !== ${this[$nodeName]}.`);
+      return null;
+    }
 
-      const protoProto = proto[_getPrototype](ids, ancestors);
+    if (ancestors.has(proto)) {
+      (0, _util.warn)(`XFA - Cycle detected in prototypes use.`);
+      return null;
+    }
 
-      if (!protoProto) {
-        ancestors.delete(proto);
-        return proto;
-      }
+    ancestors.add(proto);
 
-      proto[_applyPrototype](protoProto, ids, ancestors);
+    const protoProto = proto[_getPrototype](ids, ancestors);
 
+    if (!protoProto) {
       ancestors.delete(proto);
       return proto;
     }
 
-    return null;
+    proto[_applyPrototype](protoProto, ids, ancestors);
+
+    ancestors.delete(proto);
+    return proto;
   }
 
   [_applyPrototype](proto, ids, ancestors) {
@@ -56243,7 +56310,7 @@ class XFAObject {
 
       if (value instanceof XFAObjectArray) {
         for (const child of value[_children]) {
-          child[$resolvePrototypes](ids, ancestors);
+          child[_resolvePrototypesHelper](ids, ancestors);
         }
 
         for (let i = value[_children].length, ii = protoValue[_children].length; i < ii; i++) {
@@ -56254,7 +56321,7 @@ class XFAObject {
 
             this[_children].push(child);
 
-            child[$resolvePrototypes](ids, newAncestors);
+            child[_resolvePrototypesHelper](ids, ancestors);
           } else {
             break;
           }
@@ -56265,6 +56332,11 @@ class XFAObject {
 
       if (value !== null) {
         value[$resolvePrototypes](ids, ancestors);
+
+        if (protoValue) {
+          value[_applyPrototype](protoValue, ids, ancestors);
+        }
+
         continue;
       }
 
@@ -56275,7 +56347,7 @@ class XFAObject {
 
         this[_children].push(child);
 
-        child[$resolvePrototypes](ids, newAncestors);
+        child[_resolvePrototypesHelper](ids, ancestors);
       }
     }
   }
@@ -56726,7 +56798,7 @@ exports.Option10 = Option10;
 
 /***/ }),
 /* 69 */
-/***/ ((__unused_webpack_module, exports) => {
+/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
 
@@ -56743,6 +56815,9 @@ exports.getRatio = getRatio;
 exports.getRelevant = getRelevant;
 exports.getStringOption = getStringOption;
 exports.HTMLResult = void 0;
+
+var _util = __w_pdfjs_require__(2);
+
 const dimConverters = {
   pt: x => x,
   cm: x => x / 2.54 * 72,
@@ -56952,6 +57027,14 @@ function getBBox(data) {
 }
 
 class HTMLResult {
+  static get FAILURE() {
+    return (0, _util.shadow)(this, "FAILURE", new HTMLResult(false, null, null));
+  }
+
+  static get EMPTY() {
+    return (0, _util.shadow)(this, "EMPTY", new HTMLResult(true, null, null));
+  }
+
   constructor(success, html, bbox) {
     this.success = success;
     this.html = html;
@@ -56965,8 +57048,6 @@ class HTMLResult {
 }
 
 exports.HTMLResult = HTMLResult;
-HTMLResult.FAILURE = new HTMLResult(false, null, null);
-HTMLResult.EMPTY = new HTMLResult(true, null, null);
 
 /***/ }),
 /* 70 */
@@ -57053,13 +57134,347 @@ exports.NamespaceIds = NamespaceIds;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
+exports.createDataNode = createDataNode;
+exports.searchNode = searchNode;
+
+var _xfa_object = __w_pdfjs_require__(68);
+
+var _util = __w_pdfjs_require__(2);
+
+const namePattern = /^[^.[]+/;
+const indexPattern = /^[^\]]+/;
+const operators = {
+  dot: 0,
+  dotDot: 1,
+  dotHash: 2,
+  dotBracket: 3,
+  dotParen: 4
+};
+const shortcuts = new Map([["$data", (root, current) => root.datasets.data], ["$template", (root, current) => root.template], ["$connectionSet", (root, current) => root.connectionSet], ["$form", (root, current) => root.form], ["$layout", (root, current) => root.layout], ["$host", (root, current) => root.host], ["$dataWindow", (root, current) => root.dataWindow], ["$event", (root, current) => root.event], ["!", (root, current) => root.datasets], ["$xfa", (root, current) => root], ["xfa", (root, current) => root], ["$", (root, current) => current]]);
+const somCache = new WeakMap();
+
+function parseIndex(index) {
+  index = index.trim();
+
+  if (index === "*") {
+    return Infinity;
+  }
+
+  return parseInt(index, 10) || 0;
+}
+
+function parseExpression(expr, dotDotAllowed) {
+  let match = expr.match(namePattern);
+
+  if (!match) {
+    return null;
+  }
+
+  let [name] = match;
+  const parsed = [{
+    name,
+    cacheName: "." + name,
+    index: 0,
+    js: null,
+    formCalc: null,
+    operator: operators.dot
+  }];
+  let pos = name.length;
+
+  while (pos < expr.length) {
+    const spos = pos;
+    const char = expr.charAt(pos++);
+
+    if (char === "[") {
+      match = expr.slice(pos).match(indexPattern);
+
+      if (!match) {
+        (0, _util.warn)("XFA - Invalid index in SOM expression");
+        return null;
+      }
+
+      parsed[parsed.length - 1].index = parseIndex(match[0]);
+      pos += match[0].length + 1;
+      continue;
+    }
+
+    let operator;
+
+    switch (expr.charAt(pos)) {
+      case ".":
+        if (!dotDotAllowed) {
+          return null;
+        }
+
+        pos++;
+        operator = operators.dotDot;
+        break;
+
+      case "#":
+        pos++;
+        operator = operators.dotHash;
+        break;
+
+      case "[":
+        operator = operators.dotBracket;
+        break;
+
+      case "(":
+        operator = operators.dotParen;
+        break;
+
+      default:
+        operator = operators.dot;
+        break;
+    }
+
+    match = expr.slice(pos).match(namePattern);
+
+    if (!match) {
+      break;
+    }
+
+    [name] = match;
+    pos += name.length;
+    parsed.push({
+      name,
+      cacheName: expr.slice(spos, pos),
+      operator,
+      index: 0,
+      js: null,
+      formCalc: null
+    });
+  }
+
+  return parsed;
+}
+
+function searchNode(root, container, expr, dotDotAllowed = true, useCache = true) {
+  const parsed = parseExpression(expr, dotDotAllowed);
+
+  if (!parsed) {
+    return null;
+  }
+
+  const fn = shortcuts.get(parsed[0].name);
+  let i = 0;
+  let isQualified;
+
+  if (fn) {
+    isQualified = true;
+    root = [fn(root, container)];
+    i = 1;
+  } else {
+    isQualified = container === null;
+    root = [container || root];
+  }
+
+  for (let ii = parsed.length; i < ii; i++) {
+    const {
+      name,
+      cacheName,
+      operator,
+      index
+    } = parsed[i];
+    const nodes = [];
+
+    for (const node of root) {
+      if (!(node instanceof _xfa_object.XFAObject)) {
+        continue;
+      }
+
+      let children, cached;
+
+      if (useCache) {
+        cached = somCache.get(node);
+
+        if (!cached) {
+          cached = new Map();
+          somCache.set(node, cached);
+        }
+
+        children = cached.get(cacheName);
+      }
+
+      if (!children) {
+        switch (operator) {
+          case operators.dot:
+            children = node[_xfa_object.$getChildrenByName](name, false);
+            break;
+
+          case operators.dotDot:
+            children = node[_xfa_object.$getChildrenByName](name, true);
+            break;
+
+          case operators.dotHash:
+            children = node[_xfa_object.$getChildrenByClass](name);
+
+            if (children instanceof _xfa_object.XFAObjectArray) {
+              children = children.children;
+            } else {
+              children = [children];
+            }
+
+            break;
+
+          default:
+            break;
+        }
+
+        if (useCache) {
+          cached.set(cacheName, children);
+        }
+      }
+
+      if (children.length > 0) {
+        nodes.push(children);
+      }
+    }
+
+    if (nodes.length === 0 && !isQualified && i === 0) {
+      const parent = container[_xfa_object.$getParent]();
+
+      container = parent;
+
+      if (!container) {
+        return null;
+      }
+
+      i = -1;
+      root = [container];
+      continue;
+    }
+
+    if (isFinite(index)) {
+      root = nodes.filter(node => index < node.length).map(node => node[index]);
+    } else {
+      root = nodes.reduce((acc, node) => acc.concat(node), []);
+    }
+  }
+
+  if (root.length === 0) {
+    return null;
+  }
+
+  return root;
+}
+
+function createNodes(root, path) {
+  let node = null;
+
+  for (const {
+    name,
+    index
+  } of path) {
+    for (let i = 0; i <= index; i++) {
+      node = new _xfa_object.XmlObject(root[_xfa_object.$namespaceId], name);
+
+      root[_xfa_object.$appendChild](node);
+    }
+
+    root = node;
+  }
+
+  return node;
+}
+
+function createDataNode(root, container, expr) {
+  const parsed = parseExpression(expr);
+
+  if (!parsed) {
+    return null;
+  }
+
+  if (parsed.some(x => x.operator === operators.dotDot)) {
+    return null;
+  }
+
+  const fn = shortcuts.get(parsed[0].name);
+  let i = 0;
+
+  if (fn) {
+    root = fn(root, container);
+    i = 1;
+  } else {
+    root = container || root;
+  }
+
+  for (let ii = parsed.length; i < ii; i++) {
+    const {
+      name,
+      operator,
+      index
+    } = parsed[i];
+
+    if (!isFinite(index)) {
+      parsed[i].index = 0;
+      return createNodes(root, parsed.slice(i));
+    }
+
+    let children;
+
+    switch (operator) {
+      case operators.dot:
+        children = root[_xfa_object.$getChildrenByName](name, false);
+        break;
+
+      case operators.dotDot:
+        children = root[_xfa_object.$getChildrenByName](name, true);
+        break;
+
+      case operators.dotHash:
+        children = root[_xfa_object.$getChildrenByClass](name);
+
+        if (children instanceof _xfa_object.XFAObjectArray) {
+          children = children.children;
+        } else {
+          children = [children];
+        }
+
+        break;
+
+      default:
+        break;
+    }
+
+    if (children.length === 0) {
+      return createNodes(root, parsed.slice(i));
+    }
+
+    if (index < children.length) {
+      const child = children[index];
+
+      if (!(child instanceof _xfa_object.XFAObject)) {
+        (0, _util.warn)(`XFA - Cannot create a node.`);
+        return null;
+      }
+
+      root = child;
+    } else {
+      parsed[i].index = children.length - index;
+      return createNodes(root, parsed.slice(i));
+    }
+  }
+
+  return null;
+}
+
+/***/ }),
+/* 72 */
+/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
+
+
+
+Object.defineProperty(exports, "__esModule", ({
+  value: true
+}));
 exports.Binder = void 0;
 
 var _xfa_object = __w_pdfjs_require__(68);
 
-var _template = __w_pdfjs_require__(72);
+var _template = __w_pdfjs_require__(73);
 
-var _som = __w_pdfjs_require__(75);
+var _som = __w_pdfjs_require__(71);
 
 var _namespaces = __w_pdfjs_require__(70);
 
@@ -57580,7 +57995,7 @@ class Binder {
 exports.Binder = Binder;
 
 /***/ }),
-/* 72 */
+/* 73 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -57594,15 +58009,15 @@ var _xfa_object = __w_pdfjs_require__(68);
 
 var _namespaces = __w_pdfjs_require__(70);
 
-var _html_utils = __w_pdfjs_require__(73);
+var _html_utils = __w_pdfjs_require__(74);
 
-var _layout = __w_pdfjs_require__(74);
+var _layout = __w_pdfjs_require__(75);
 
 var _utils = __w_pdfjs_require__(69);
 
 var _util = __w_pdfjs_require__(2);
 
-var _som = __w_pdfjs_require__(75);
+var _som = __w_pdfjs_require__(71);
 
 const TEMPLATE_NS_ID = _namespaces.NamespaceIds.template.id;
 const MAX_ATTEMPTS_FOR_LRTB_LAYOUT = 2;
@@ -58267,74 +58682,44 @@ class CheckButton extends _xfa_object.XFAObject {
   }
 
   [_xfa_object.$toHTML](availableSpace) {
-    const style = (0, _html_utils.toStyle)(this, "border", "margin");
+    const style = (0, _html_utils.toStyle)("margin");
     const size = (0, _html_utils.measureToString)(this.size);
     style.width = style.height = size;
-    let mark, radius;
-
-    if (this.shape === "square") {
-      mark = "▪";
-      radius = "10%";
-    } else {
-      mark = "●";
-      radius = "50%";
-    }
-
-    if (!style.borderRadius) {
-      style.borderRadius = radius;
-    }
-
-    if (this.mark !== "default") {
-      switch (this.mark) {
-        case "check":
-          mark = "✓";
-          break;
-
-        case "circle":
-          mark = "●";
-          break;
-
-        case "cross":
-          mark = "✕";
-          break;
-
-        case "diamond":
-          mark = "♦";
-          break;
-
-        case "square":
-          mark = "▪";
-          break;
-
-        case "star":
-          mark = "★";
-          break;
-      }
-    }
-
-    if (size !== "10px") {
-      style.fontSize = size;
-      style.lineHeight = size;
-      style.width = size;
-      style.height = size;
-    }
+    let type;
+    let className;
+    let groupId;
+    let id;
 
     const fieldId = this[_xfa_object.$getParent]()[_xfa_object.$getParent]()[_xfa_object.$uid];
-
-    const input = {
-      name: "input",
-      attributes: {
-        class: "xfaCheckbox",
-        fieldId,
-        type: "radio",
-        id: `${fieldId}-radio`
-      }
-    };
 
     const container = this[_xfa_object.$getParent]()[_xfa_object.$getParent]()[_xfa_object.$getParent]();
 
     if (container instanceof ExclGroup) {
-      input.attributes.name = container[_xfa_object.$uid];
+      groupId = container[_xfa_object.$uid];
+      type = "radio";
+      className = "xfaRadio";
+      id = `${fieldId}-radio`;
+    } else {
+      type = "checkbox";
+      className = "xfaCheckbox";
+    }
+
+    const input = {
+      name: "input",
+      attributes: {
+        class: className,
+        style,
+        fieldId,
+        type
+      }
+    };
+
+    if (id) {
+      input.attributes.id = id;
+    }
+
+    if (groupId) {
+      input.attributes.name = groupId;
     }
 
     return _utils.HTMLResult.success({
@@ -58342,14 +58727,7 @@ class CheckButton extends _xfa_object.XFAObject {
       attributes: {
         class: "xfaLabel"
       },
-      children: [input, {
-        name: "span",
-        attributes: {
-          class: "xfaCheckboxMark",
-          mark,
-          style
-        }
-      }]
+      children: [input]
     });
   }
 
@@ -60918,10 +61296,6 @@ class Subform extends _xfa_object.XFAObject {
   }
 
   [_xfa_object.$toHTML](availableSpace) {
-    if (this.name === "helpText") {
-      return _utils.HTMLResult.EMPTY;
-    }
-
     if (this[_xfa_object.$extra] && this[_xfa_object.$extra].afterBreakAfter) {
       const ret = this[_xfa_object.$extra].afterBreakAfter;
       delete this[_xfa_object.$extra];
@@ -62255,7 +62629,7 @@ class TemplateNamespace {
 exports.TemplateNamespace = TemplateNamespace;
 
 /***/ }),
-/* 73 */
+/* 74 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -62852,7 +63226,7 @@ function getFonts(family) {
 }
 
 /***/ }),
-/* 74 */
+/* 75 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -62866,7 +63240,7 @@ exports.getAvailableSpace = getAvailableSpace;
 
 var _xfa_object = __w_pdfjs_require__(68);
 
-var _html_utils = __w_pdfjs_require__(73);
+var _html_utils = __w_pdfjs_require__(74);
 
 function flushHTML(node) {
   const attributes = node[_xfa_object.$extra].attributes;
@@ -63023,340 +63397,6 @@ function getAvailableSpace(node) {
     default:
       return availableSpace;
   }
-}
-
-/***/ }),
-/* 75 */
-/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
-
-
-
-Object.defineProperty(exports, "__esModule", ({
-  value: true
-}));
-exports.createDataNode = createDataNode;
-exports.searchNode = searchNode;
-
-var _xfa_object = __w_pdfjs_require__(68);
-
-var _util = __w_pdfjs_require__(2);
-
-const namePattern = /^[^.[]+/;
-const indexPattern = /^[^\]]+/;
-const operators = {
-  dot: 0,
-  dotDot: 1,
-  dotHash: 2,
-  dotBracket: 3,
-  dotParen: 4
-};
-const shortcuts = new Map([["$data", (root, current) => root.datasets.data], ["$template", (root, current) => root.template], ["$connectionSet", (root, current) => root.connectionSet], ["$form", (root, current) => root.form], ["$layout", (root, current) => root.layout], ["$host", (root, current) => root.host], ["$dataWindow", (root, current) => root.dataWindow], ["$event", (root, current) => root.event], ["!", (root, current) => root.datasets], ["$xfa", (root, current) => root], ["xfa", (root, current) => root], ["$", (root, current) => current]]);
-const somCache = new WeakMap();
-
-function parseIndex(index) {
-  index = index.trim();
-
-  if (index === "*") {
-    return Infinity;
-  }
-
-  return parseInt(index, 10) || 0;
-}
-
-function parseExpression(expr, dotDotAllowed) {
-  let match = expr.match(namePattern);
-
-  if (!match) {
-    return null;
-  }
-
-  let [name] = match;
-  const parsed = [{
-    name,
-    cacheName: "." + name,
-    index: 0,
-    js: null,
-    formCalc: null,
-    operator: operators.dot
-  }];
-  let pos = name.length;
-
-  while (pos < expr.length) {
-    const spos = pos;
-    const char = expr.charAt(pos++);
-
-    if (char === "[") {
-      match = expr.slice(pos).match(indexPattern);
-
-      if (!match) {
-        (0, _util.warn)("XFA - Invalid index in SOM expression");
-        return null;
-      }
-
-      parsed[parsed.length - 1].index = parseIndex(match[0]);
-      pos += match[0].length + 1;
-      continue;
-    }
-
-    let operator;
-
-    switch (expr.charAt(pos)) {
-      case ".":
-        if (!dotDotAllowed) {
-          return null;
-        }
-
-        pos++;
-        operator = operators.dotDot;
-        break;
-
-      case "#":
-        pos++;
-        operator = operators.dotHash;
-        break;
-
-      case "[":
-        operator = operators.dotBracket;
-        break;
-
-      case "(":
-        operator = operators.dotParen;
-        break;
-
-      default:
-        operator = operators.dot;
-        break;
-    }
-
-    match = expr.slice(pos).match(namePattern);
-
-    if (!match) {
-      break;
-    }
-
-    [name] = match;
-    pos += name.length;
-    parsed.push({
-      name,
-      cacheName: expr.slice(spos, pos),
-      operator,
-      index: 0,
-      js: null,
-      formCalc: null
-    });
-  }
-
-  return parsed;
-}
-
-function searchNode(root, container, expr, dotDotAllowed = true, useCache = true) {
-  const parsed = parseExpression(expr, dotDotAllowed);
-
-  if (!parsed) {
-    return null;
-  }
-
-  const fn = shortcuts.get(parsed[0].name);
-  let i = 0;
-  let isQualified;
-
-  if (fn) {
-    isQualified = true;
-    root = [fn(root, container)];
-    i = 1;
-  } else {
-    isQualified = container === null;
-    root = [container || root];
-  }
-
-  for (let ii = parsed.length; i < ii; i++) {
-    const {
-      name,
-      cacheName,
-      operator,
-      index
-    } = parsed[i];
-    const nodes = [];
-
-    for (const node of root) {
-      if (!(node instanceof _xfa_object.XFAObject)) {
-        continue;
-      }
-
-      let children, cached;
-
-      if (useCache) {
-        cached = somCache.get(node);
-
-        if (!cached) {
-          cached = new Map();
-          somCache.set(node, cached);
-        }
-
-        children = cached.get(cacheName);
-      }
-
-      if (!children) {
-        switch (operator) {
-          case operators.dot:
-            children = node[_xfa_object.$getChildrenByName](name, false);
-            break;
-
-          case operators.dotDot:
-            children = node[_xfa_object.$getChildrenByName](name, true);
-            break;
-
-          case operators.dotHash:
-            children = node[_xfa_object.$getChildrenByClass](name);
-
-            if (children instanceof _xfa_object.XFAObjectArray) {
-              children = children.children;
-            } else {
-              children = [children];
-            }
-
-            break;
-
-          default:
-            break;
-        }
-
-        if (useCache) {
-          cached.set(cacheName, children);
-        }
-      }
-
-      if (children.length > 0) {
-        nodes.push(children);
-      }
-    }
-
-    if (nodes.length === 0 && !isQualified && i === 0) {
-      const parent = container[_xfa_object.$getParent]();
-
-      container = parent;
-
-      if (!container) {
-        return null;
-      }
-
-      i = -1;
-      root = [container];
-      continue;
-    }
-
-    if (isFinite(index)) {
-      root = nodes.filter(node => index < node.length).map(node => node[index]);
-    } else {
-      root = nodes.reduce((acc, node) => acc.concat(node), []);
-    }
-  }
-
-  if (root.length === 0) {
-    return null;
-  }
-
-  return root;
-}
-
-function createNodes(root, path) {
-  let node = null;
-
-  for (const {
-    name,
-    index
-  } of path) {
-    for (let i = 0; i <= index; i++) {
-      node = new _xfa_object.XmlObject(root[_xfa_object.$namespaceId], name);
-
-      root[_xfa_object.$appendChild](node);
-    }
-
-    root = node;
-  }
-
-  return node;
-}
-
-function createDataNode(root, container, expr) {
-  const parsed = parseExpression(expr);
-
-  if (!parsed) {
-    return null;
-  }
-
-  if (parsed.some(x => x.operator === operators.dotDot)) {
-    return null;
-  }
-
-  const fn = shortcuts.get(parsed[0].name);
-  let i = 0;
-
-  if (fn) {
-    root = fn(root, container);
-    i = 1;
-  } else {
-    root = container || root;
-  }
-
-  for (let ii = parsed.length; i < ii; i++) {
-    const {
-      name,
-      operator,
-      index
-    } = parsed[i];
-
-    if (!isFinite(index)) {
-      parsed[i].index = 0;
-      return createNodes(root, parsed.slice(i));
-    }
-
-    let children;
-
-    switch (operator) {
-      case operators.dot:
-        children = root[_xfa_object.$getChildrenByName](name, false);
-        break;
-
-      case operators.dotDot:
-        children = root[_xfa_object.$getChildrenByName](name, true);
-        break;
-
-      case operators.dotHash:
-        children = root[_xfa_object.$getChildrenByClass](name);
-
-        if (children instanceof _xfa_object.XFAObjectArray) {
-          children = children.children;
-        } else {
-          children = [children];
-        }
-
-        break;
-
-      default:
-        break;
-    }
-
-    if (children.length === 0) {
-      return createNodes(root, parsed.slice(i));
-    }
-
-    if (index < children.length) {
-      const child = children[index];
-
-      if (!(child instanceof _xfa_object.XFAObject)) {
-        (0, _util.warn)(`XFA - Cannot create a node.`);
-        return null;
-      }
-
-      root = child;
-    } else {
-      parsed[i].index = children.length - index;
-      return createNodes(root, parsed.slice(i));
-    }
-  }
-
-  return null;
 }
 
 /***/ }),
@@ -63554,7 +63594,7 @@ var _xfa_object = __w_pdfjs_require__(68);
 
 var _setup = __w_pdfjs_require__(78);
 
-var _template = __w_pdfjs_require__(72);
+var _template = __w_pdfjs_require__(73);
 
 var _unknown = __w_pdfjs_require__(87);
 
@@ -63576,6 +63616,8 @@ class Root extends _xfa_object.XFAObject {
     super[_xfa_object.$finalize]();
 
     if (this.element.template instanceof _template.Template) {
+      this[_xfa_object.$ids].set(_xfa_object.$root, this.element);
+
       this.element.template[_xfa_object.$resolvePrototypes](this[_xfa_object.$ids]);
 
       this.element.template[_xfa_object.$ids] = this[_xfa_object.$ids];
@@ -63776,7 +63818,7 @@ var _signature = __w_pdfjs_require__(83);
 
 var _stylesheet = __w_pdfjs_require__(84);
 
-var _template = __w_pdfjs_require__(72);
+var _template = __w_pdfjs_require__(73);
 
 var _xdp = __w_pdfjs_require__(85);
 
@@ -66453,7 +66495,7 @@ var _xfa_object = __w_pdfjs_require__(68);
 
 var _namespaces = __w_pdfjs_require__(70);
 
-var _html_utils = __w_pdfjs_require__(73);
+var _html_utils = __w_pdfjs_require__(74);
 
 var _utils = __w_pdfjs_require__(69);
 
@@ -68353,8 +68395,8 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 
 var _worker = __w_pdfjs_require__(1);
 
-const pdfjsVersion = '2.9.0';
-const pdfjsBuild = 'd725ff3';
+const pdfjsVersion = '2.10.0';
+const pdfjsBuild = '1dd01b8';
 })();
 
 /******/ 	return __webpack_exports__;

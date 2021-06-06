@@ -1792,7 +1792,7 @@ function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
 
   return worker.messageHandler.sendWithPromise("GetDocRequest", {
     docId,
-    apiVersion: '2.9.0',
+    apiVersion: '2.10.0',
     source: {
       data: source.data,
       url: source.url,
@@ -1948,7 +1948,11 @@ class PDFDocumentProxy {
   }
 
   get isPureXfa() {
-    return this._pdfInfo.isPureXfa;
+    return !!this._transport._htmlForXfa;
+  }
+
+  get allXfaHtml() {
+    return this._transport._htmlForXfa;
   }
 
   getPage(pageNumber) {
@@ -2048,10 +2052,6 @@ class PDFDocumentProxy {
   }
 
   saveDocument() {
-    if (arguments.length > 0) {
-      (0, _display_utils.deprecated)("saveDocument no longer accepts any options.");
-    }
-
     if (this._transport.annotationStorage.size <= 0) {
       (0, _display_utils.deprecated)("saveDocument called while `annotationStorage` is empty, " + "please use the getData-method instead.");
     }
@@ -2143,8 +2143,8 @@ class PDFPageProxy {
     return this._jsActionsPromise || (this._jsActionsPromise = this._transport.getPageJSActions(this._pageIndex));
   }
 
-  getXfa() {
-    return this._xfaPromise || (this._xfaPromise = this._transport.getPageXfa(this._pageIndex));
+  async getXfa() {
+    return this._transport._htmlForXfa?.children[this._pageIndex] || null;
   }
 
   render({
@@ -2160,11 +2160,6 @@ class PDFPageProxy {
     optionalContentConfigPromise = null
   }) {
     var _intentState;
-
-    if (arguments[0]?.annotationStorage !== undefined) {
-      (0, _display_utils.deprecated)("render no longer accepts an `annotationStorage` option, " + "please use the `includeAnnotationStorage`-boolean instead.");
-      includeAnnotationStorage || (includeAnnotationStorage = !!arguments[0].annotationStorage);
-    }
 
     if (this._stats) {
       this._stats.time("Overall");
@@ -2404,7 +2399,6 @@ class PDFPageProxy {
     this.objs.clear();
     this._annotationsPromise = null;
     this._jsActionsPromise = null;
-    this._xfaPromise = null;
     this._structTreePromise = null;
     this.pendingCleanup = false;
     return Promise.all(waitOn);
@@ -2434,7 +2428,6 @@ class PDFPageProxy {
     this.objs.clear();
     this._annotationsPromise = null;
     this._jsActionsPromise = null;
-    this._xfaPromise = null;
     this._structTreePromise = null;
 
     if (resetStats && this._stats) {
@@ -3196,6 +3189,8 @@ class WorkerTransport {
       pdfInfo
     }) => {
       this._numPages = pdfInfo.numPages;
+      this._htmlForXfa = pdfInfo.htmlForXfa;
+      delete pdfInfo.htmlForXfa;
 
       loadingTask._capability.resolve(new PDFDocumentProxy(pdfInfo, this));
     });
@@ -3530,12 +3525,6 @@ class WorkerTransport {
     });
   }
 
-  getPageXfa(pageIndex) {
-    return this.messageHandler.sendWithPromise("GetPageXfa", {
-      pageIndex
-    });
-  }
-
   getStructTree(pageIndex) {
     return this.messageHandler.sendWithPromise("GetStructTree", {
       pageIndex
@@ -3855,9 +3844,9 @@ const InternalRenderTask = function InternalRenderTaskClosure() {
   return InternalRenderTask;
 }();
 
-const version = '2.9.0';
+const version = '2.10.0';
 exports.version = version;
-const build = 'd725ff3';
+const build = '1dd01b8';
 exports.build = build;
 
 /***/ }),
@@ -12566,7 +12555,7 @@ exports.SVGGraphics = SVGGraphics;
 
 /***/ }),
 /* 21 */
-/***/ ((__unused_webpack_module, exports) => {
+/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
 
@@ -12575,8 +12564,10 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.XfaLayer = void 0;
 
+var _display_utils = __w_pdfjs_require__(1);
+
 class XfaLayer {
-  static setupStorage(html, fieldId, element, storage) {
+  static setupStorage(html, fieldId, element, storage, intent) {
     const storedData = storage.getValue(fieldId, {
       value: null
     });
@@ -12584,6 +12575,11 @@ class XfaLayer {
     switch (element.name) {
       case "textarea":
         html.textContent = storedData.value !== null ? storedData.value : "";
+
+        if (intent === "print") {
+          break;
+        }
+
         html.addEventListener("input", event => {
           storage.setValue(fieldId, {
             value: event.target.value
@@ -12592,11 +12588,15 @@ class XfaLayer {
         break;
 
       case "input":
-        if (storedData.value !== null) {
-          html.setAttribute("value", storedData.value);
-        }
-
         if (element.attributes.type === "radio") {
+          if (storedData.value) {
+            html.setAttribute("checked", true);
+          }
+
+          if (intent === "print") {
+            break;
+          }
+
           html.addEventListener("change", event => {
             const {
               target
@@ -12615,7 +12615,29 @@ class XfaLayer {
               value: target.checked
             });
           });
+        } else if (element.attributes.type === "checkbox") {
+          if (storedData.value) {
+            html.setAttribute("checked", true);
+          }
+
+          if (intent === "print") {
+            break;
+          }
+
+          html.addEventListener("input", event => {
+            storage.setValue(fieldId, {
+              value: event.target.checked
+            });
+          });
         } else {
+          if (storedData.value !== null) {
+            html.setAttribute("value", storedData.value);
+          }
+
+          if (intent === "print") {
+            break;
+          }
+
           html.addEventListener("input", event => {
             storage.setValue(fieldId, {
               value: event.target.value
@@ -12645,10 +12667,14 @@ class XfaLayer {
     }
   }
 
-  static setAttributes(html, element, storage) {
+  static setAttributes(html, element, storage, intent) {
     const {
       attributes
     } = element;
+
+    if (attributes.type === "radio") {
+      attributes.name = `${attributes.name}-${intent}`;
+    }
 
     for (const [key, value] of Object.entries(attributes)) {
       if (value === null || value === undefined || key === "fieldId") {
@@ -12674,6 +12700,7 @@ class XfaLayer {
   static render(parameters) {
     const storage = parameters.annotationStorage;
     const root = parameters.xfa;
+    const intent = parameters.intent;
     const rootHtml = document.createElement(root.name);
 
     if (root.attributes) {
@@ -12683,7 +12710,15 @@ class XfaLayer {
     const stack = [[root, -1, rootHtml]];
     const rootDiv = parameters.div;
     rootDiv.appendChild(rootHtml);
-    const coeffs = parameters.viewport.transform.join(",");
+    let {
+      viewport
+    } = parameters;
+
+    if (!(viewport instanceof _display_utils.PageViewport)) {
+      viewport = new _display_utils.PageViewport(viewport);
+    }
+
+    const coeffs = viewport.transform.join(",");
     rootDiv.style.transform = `matrix(${coeffs})`;
     rootDiv.setAttribute("class", "xfaLayer xfaFont");
 
@@ -12714,7 +12749,7 @@ class XfaLayer {
       html.appendChild(childHtml);
 
       if (child.attributes) {
-        this.setAttributes(childHtml, child, storage);
+        this.setAttributes(childHtml, child, storage, intent);
       }
 
       if (child.children && child.children.length > 0) {
@@ -14578,8 +14613,8 @@ var _svg = __w_pdfjs_require__(20);
 
 var _xfa_layer = __w_pdfjs_require__(21);
 
-const pdfjsVersion = '2.9.0';
-const pdfjsBuild = 'd725ff3';
+const pdfjsVersion = '2.10.0';
+const pdfjsBuild = '1dd01b8';
 {
   const {
     isNodeJS
