@@ -1777,10 +1777,6 @@ function getDocument(src) {
     params.maxImageSize = -1;
   }
 
-  if (typeof params.useSystemFonts !== "boolean") {
-    params.useSystemFonts = !_is_node.isNodeJS;
-  }
-
   if (typeof params.useWorkerFetch !== "boolean") {
     params.useWorkerFetch = params.CMapReaderFactory === _display_utils.DOMCMapReaderFactory && params.StandardFontDataFactory === _display_utils.DOMStandardFontDataFactory;
   }
@@ -1791,6 +1787,10 @@ function getDocument(src) {
 
   if (typeof params.disableFontFace !== "boolean") {
     params.disableFontFace = _is_node.isNodeJS;
+  }
+
+  if (typeof params.useSystemFonts !== "boolean") {
+    params.useSystemFonts = !_is_node.isNodeJS && !params.disableFontFace;
   }
 
   if (typeof params.ownerDocument === "undefined") {
@@ -3947,7 +3947,7 @@ const InternalRenderTask = function InternalRenderTaskClosure() {
 
 const version = '2.10.0';
 exports.version = version;
-const build = 'a4546e8';
+const build = '94ca66f';
 exports.build = build;
 
 /***/ }),
@@ -4542,9 +4542,9 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.CanvasGraphics = void 0;
 
-var _util = __w_pdfjs_require__(2);
-
 var _pattern_helper = __w_pdfjs_require__(11);
+
+var _util = __w_pdfjs_require__(2);
 
 const MIN_FONT_SIZE = 16;
 const MAX_FONT_SIZE = 100;
@@ -4663,6 +4663,14 @@ function addContextCurrentTransform(ctx) {
 
     this._originalRotate(angle);
   };
+}
+
+function getAdjustmentTransformation(transform, width, height) {
+  let patternTransform = (0, _pattern_helper.createMatrix)(transform);
+  patternTransform = patternTransform.scale(1 / width, -1 / height);
+  patternTransform = patternTransform.translate(0, -height);
+  patternTransform = patternTransform.inverse();
+  return patternTransform;
 }
 
 class CachedCanvases {
@@ -6523,7 +6531,13 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
       maskCtx.save();
       putBinaryImageMask(maskCtx, img);
       maskCtx.globalCompositeOperation = "source-in";
-      maskCtx.fillStyle = isPatternFill ? fillColor.getPattern(maskCtx, this) : fillColor;
+      let patternTransform = null;
+
+      if (isPatternFill) {
+        patternTransform = getAdjustmentTransformation(ctx.mozCurrentTransform, width, height);
+      }
+
+      maskCtx.fillStyle = isPatternFill ? fillColor.getPattern(maskCtx, this, false, patternTransform) : fillColor;
       maskCtx.fillRect(0, 0, width, height);
       maskCtx.restore();
       this.paintInlineImageXObject(maskCanvas.canvas);
@@ -6543,10 +6557,16 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
       maskCtx.save();
       putBinaryImageMask(maskCtx, imgData);
       maskCtx.globalCompositeOperation = "source-in";
-      maskCtx.fillStyle = isPatternFill ? fillColor.getPattern(maskCtx, this) : fillColor;
+      const ctx = this.ctx;
+      let patternTransform = null;
+
+      if (isPatternFill) {
+        patternTransform = getAdjustmentTransformation(ctx.mozCurrentTransform, width, height);
+      }
+
+      maskCtx.fillStyle = isPatternFill ? fillColor.getPattern(maskCtx, this, false, patternTransform) : fillColor;
       maskCtx.fillRect(0, 0, width, height);
       maskCtx.restore();
-      const ctx = this.ctx;
 
       for (let i = 0, ii = positions.length; i < ii; i += 2) {
         ctx.save();
@@ -6575,7 +6595,13 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
         maskCtx.save();
         putBinaryImageMask(maskCtx, image);
         maskCtx.globalCompositeOperation = "source-in";
-        maskCtx.fillStyle = isPatternFill ? fillColor.getPattern(maskCtx, this) : fillColor;
+        let patternTransform = null;
+
+        if (isPatternFill) {
+          patternTransform = getAdjustmentTransformation(ctx.mozCurrentTransform, width, height);
+        }
+
+        maskCtx.fillStyle = isPatternFill ? fillColor.getPattern(maskCtx, this, false, patternTransform) : fillColor;
         maskCtx.fillRect(0, 0, width, height);
         maskCtx.restore();
         ctx.save();
@@ -6844,6 +6870,7 @@ exports.CanvasGraphics = CanvasGraphics;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
+exports.createMatrix = createMatrix;
 exports.getShadingPattern = getShadingPattern;
 exports.TilingPattern = void 0;
 
@@ -6904,8 +6931,8 @@ class RadialAxialShadingPattern extends BaseShadingPattern {
     this._matrix = IR[8];
   }
 
-  getPattern(ctx, owner, shadingFill) {
-    const tmpCanvas = owner.cachedCanvases.getCanvas("pattern", ctx.canvas.width, ctx.canvas.height, true);
+  getPattern(ctx, owner, shadingFill = false, patternTransform = null) {
+    const tmpCanvas = owner.cachedCanvases.getCanvas("pattern", owner.ctx.canvas.width, owner.ctx.canvas.height, true);
     const tmpCtx = tmpCanvas.context;
     tmpCtx.clearRect(0, 0, tmpCtx.canvas.width, tmpCtx.canvas.height);
     tmpCtx.beginPath();
@@ -6937,7 +6964,13 @@ class RadialAxialShadingPattern extends BaseShadingPattern {
     tmpCtx.fillStyle = grad;
     tmpCtx.fill();
     const pattern = ctx.createPattern(tmpCanvas.canvas, "repeat");
-    pattern.setTransform(createMatrix(ctx.mozCurrentTransformInverse));
+
+    if (patternTransform) {
+      pattern.setTransform(patternTransform);
+    } else {
+      pattern.setTransform(createMatrix(ctx.mozCurrentTransformInverse));
+    }
+
     return pattern;
   }
 
@@ -7168,7 +7201,7 @@ class MeshShadingPattern extends BaseShadingPattern {
     };
   }
 
-  getPattern(ctx, owner, shadingFill) {
+  getPattern(ctx, owner, shadingFill = false, patternTransform = null) {
     applyBoundingBox(ctx, this._bbox);
     let scale;
 
@@ -7340,7 +7373,7 @@ class TilingPattern {
     }
   }
 
-  getPattern(ctx, owner, shadingFill) {
+  getPattern(ctx, owner, shadingFill = false, patternTransform = null) {
     ctx = this.ctx;
     let matrix = ctx.mozCurrentTransformInverse;
 
@@ -14710,7 +14743,7 @@ var _svg = __w_pdfjs_require__(20);
 var _xfa_layer = __w_pdfjs_require__(21);
 
 const pdfjsVersion = '2.10.0';
-const pdfjsBuild = 'a4546e8';
+const pdfjsBuild = '94ca66f';
 {
   if (_is_node.isNodeJS) {
     const {

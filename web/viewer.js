@@ -8211,7 +8211,6 @@ class PDFScriptingManager {
     this._destroyCapability = null;
     this._scripting = null;
     this._mouseState = Object.create(null);
-    this._pageEventsReady = false;
     this._ready = false;
     this._eventBus = eventBus;
     this._sandboxBundleSrc = sandboxBundleSrc;
@@ -8245,7 +8244,13 @@ class PDFScriptingManager {
       return;
     }
 
-    this._scripting = this._createScripting();
+    try {
+      this._scripting = this._createScripting();
+    } catch (error) {
+      console.error(`PDFScriptingManager.setDocument: "${error?.message}".`);
+      await this._destroyScripting();
+      return;
+    }
 
     this._internalEvents.set("updatefromsandbox", event => {
       if (event?.source !== window) {
@@ -8488,10 +8493,9 @@ class PDFScriptingManager {
 
     if (initialize) {
       this._closeCapability = (0, _pdfjsLib.createPromiseCapability)();
-      this._pageEventsReady = true;
     }
 
-    if (!this._pageEventsReady) {
+    if (!this._closeCapability) {
       return;
     }
 
@@ -8527,7 +8531,7 @@ class PDFScriptingManager {
     const pdfDocument = this._pdfDocument,
           visitedPages = this._visitedPages;
 
-    if (!this._pageEventsReady) {
+    if (!this._closeCapability) {
       return;
     }
 
@@ -8617,7 +8621,6 @@ class PDFScriptingManager {
 
     this._scripting = null;
     delete this._mouseState.isDown;
-    this._pageEventsReady = false;
     this._ready = false;
     this._destroyCapability?.resolve();
   }
@@ -15158,7 +15161,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(3);
 
 const pdfjsVersion = '2.10.0';
-const pdfjsBuild = 'a4546e8';
+const pdfjsBuild = '94ca66f';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
