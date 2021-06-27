@@ -46,6 +46,7 @@ exports.addLinkAttributes = addLinkAttributes;
 exports.deprecated = deprecated;
 exports.getFilenameFromUrl = getFilenameFromUrl;
 exports.getPdfFilenameFromUrl = getPdfFilenameFromUrl;
+exports.getXfaPageViewport = getXfaPageViewport;
 exports.isDataScheme = isDataScheme;
 exports.isPdfFile = isPdfFile;
 exports.isValidFetchUrl = isValidFetchUrl;
@@ -527,6 +528,22 @@ class PDFDateString {
 }
 
 exports.PDFDateString = PDFDateString;
+
+function getXfaPageViewport(xfaPage, {
+  scale = 1,
+  rotation = 0
+}) {
+  const {
+    width,
+    height
+  } = xfaPage.attributes.style;
+  const viewBox = [0, 0, parseInt(width), parseInt(height)];
+  return new PageViewport({
+    viewBox,
+    scale,
+    rotation
+  });
+}
 
 /***/ }),
 /* 2 */
@@ -3555,6 +3572,7 @@ class WorkerTransport {
 
   saveDocument() {
     return this.messageHandler.sendWithPromise("SaveDocument", {
+      isPureXfa: !!this._htmlForXfa,
       numPages: this._numPages,
       annotationStorage: this.annotationStorage.serializable,
       filename: this._fullReader?.filename ?? null
@@ -3947,7 +3965,7 @@ const InternalRenderTask = function InternalRenderTaskClosure() {
 
 const version = '2.10.0';
 exports.version = version;
-const build = '94ca66f';
+const build = 'd7f8a0e';
 exports.build = build;
 
 /***/ }),
@@ -12679,7 +12697,7 @@ exports.SVGGraphics = SVGGraphics;
 
 /***/ }),
 /* 21 */
-/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
+/***/ ((__unused_webpack_module, exports) => {
 
 
 
@@ -12688,11 +12706,9 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.XfaLayer = void 0;
 
-var _display_utils = __w_pdfjs_require__(1);
-
 class XfaLayer {
-  static setupStorage(html, fieldId, element, storage, intent) {
-    const storedData = storage.getValue(fieldId, {
+  static setupStorage(html, id, element, storage, intent) {
+    const storedData = storage.getValue(id, {
       value: null
     });
 
@@ -12707,15 +12723,15 @@ class XfaLayer {
         }
 
         html.addEventListener("input", event => {
-          storage.setValue(fieldId, {
+          storage.setValue(id, {
             value: event.target.value
           });
         });
         break;
 
       case "input":
-        if (element.attributes.type === "radio") {
-          if (storedData.value) {
+        if (element.attributes.type === "radio" || element.attributes.type === "checkbox") {
+          if (storedData.value === element.attributes.exportedValue) {
             html.setAttribute("checked", true);
           }
 
@@ -12724,35 +12740,8 @@ class XfaLayer {
           }
 
           html.addEventListener("change", event => {
-            const {
-              target
-            } = event;
-
-            for (const radio of document.getElementsByName(target.name)) {
-              if (radio !== target) {
-                const id = radio.id;
-                storage.setValue(id.split("-")[0], {
-                  value: false
-                });
-              }
-            }
-
-            storage.setValue(fieldId, {
-              value: target.checked
-            });
-          });
-        } else if (element.attributes.type === "checkbox") {
-          if (storedData.value) {
-            html.setAttribute("checked", true);
-          }
-
-          if (intent === "print") {
-            break;
-          }
-
-          html.addEventListener("input", event => {
-            storage.setValue(fieldId, {
-              value: event.target.checked
+            storage.setValue(id, {
+              value: event.target.getAttribute("xfaOn")
             });
           });
         } else {
@@ -12765,7 +12754,7 @@ class XfaLayer {
           }
 
           html.addEventListener("input", event => {
-            storage.setValue(fieldId, {
+            storage.setValue(id, {
               value: event.target.value
             });
           });
@@ -12784,8 +12773,8 @@ class XfaLayer {
 
         html.addEventListener("input", event => {
           const options = event.target.options;
-          const value = options.selectedIndex === -1 ? null : options[options.selectedIndex].value;
-          storage.setValue(fieldId, {
+          const value = options.selectedIndex === -1 ? "" : options[options.selectedIndex].value;
+          storage.setValue(id, {
             value
           });
         });
@@ -12803,7 +12792,7 @@ class XfaLayer {
     }
 
     for (const [key, value] of Object.entries(attributes)) {
-      if (value === null || value === undefined || key === "fieldId") {
+      if (value === null || value === undefined || key === "dataId") {
         continue;
       }
 
@@ -12820,8 +12809,8 @@ class XfaLayer {
       }
     }
 
-    if (storage && attributes.fieldId !== undefined) {
-      this.setupStorage(html, attributes.fieldId, element, storage);
+    if (storage && attributes.dataId) {
+      this.setupStorage(html, attributes.dataId, element, storage);
     }
   }
 
@@ -12838,16 +12827,8 @@ class XfaLayer {
     const stack = [[root, -1, rootHtml]];
     const rootDiv = parameters.div;
     rootDiv.appendChild(rootHtml);
-    let {
-      viewport
-    } = parameters;
-
-    if (!(viewport instanceof _display_utils.PageViewport)) {
-      viewport = new _display_utils.PageViewport(viewport);
-    }
-
-    const coeffs = viewport.transform.join(",");
-    rootDiv.style.transform = `matrix(${coeffs})`;
+    const transform = `matrix(${parameters.viewport.transform.join(",")})`;
+    rootDiv.style.transform = transform;
     rootDiv.setAttribute("class", "xfaLayer xfaFont");
 
     while (stack.length > 0) {
@@ -12892,6 +12873,14 @@ class XfaLayer {
       } else if (child.value) {
         childHtml.appendChild(document.createTextNode(child.value));
       }
+    }
+
+    for (const el of rootDiv.querySelectorAll(".xfaDisabled input, .xfaDisabled textarea")) {
+      el.setAttribute("disabled", true);
+    }
+
+    for (const el of rootDiv.querySelectorAll(".xfaReadOnly input, .xfaReadOnly textarea")) {
+      el.setAttribute("readOnly", true);
     }
   }
 
@@ -14537,6 +14526,12 @@ Object.defineProperty(exports, "getPdfFilenameFromUrl", ({
     return _display_utils.getPdfFilenameFromUrl;
   }
 }));
+Object.defineProperty(exports, "getXfaPageViewport", ({
+  enumerable: true,
+  get: function () {
+    return _display_utils.getXfaPageViewport;
+  }
+}));
 Object.defineProperty(exports, "isPdfFile", ({
   enumerable: true,
   get: function () {
@@ -14743,7 +14738,7 @@ var _svg = __w_pdfjs_require__(20);
 var _xfa_layer = __w_pdfjs_require__(21);
 
 const pdfjsVersion = '2.10.0';
-const pdfjsBuild = '94ca66f';
+const pdfjsBuild = 'd7f8a0e';
 {
   if (_is_node.isNodeJS) {
     const {
