@@ -3968,7 +3968,7 @@ const InternalRenderTask = function InternalRenderTaskClosure() {
 
 const version = '2.10.0';
 exports.version = version;
-const build = 'd416b23';
+const build = 'f1ae7d7';
 exports.build = build;
 
 /***/ }),
@@ -6916,28 +6916,10 @@ exports.CanvasGraphics = CanvasGraphics;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.createMatrix = createMatrix;
 exports.getShadingPattern = getShadingPattern;
 exports.TilingPattern = void 0;
 
 var _util = __w_pdfjs_require__(2);
-
-var _display_utils = __w_pdfjs_require__(1);
-
-let svgElement;
-
-function createMatrix(matrix) {
-  if (typeof DOMMatrix !== "undefined") {
-    return new DOMMatrix(matrix);
-  }
-
-  if (!svgElement) {
-    const svgFactory = new _display_utils.DOMSVGFactory();
-    svgElement = svgFactory.createElement("svg");
-  }
-
-  return svgElement.createSVGMatrix(matrix);
-}
 
 function applyBoundingBox(ctx, bbox) {
   if (!bbox || typeof Path2D === "undefined") {
@@ -7009,8 +6991,15 @@ class RadialAxialShadingPattern extends BaseShadingPattern {
 
     tmpCtx.fillStyle = grad;
     tmpCtx.fill();
+    const domMatrix = new DOMMatrix(inverse);
     const pattern = ctx.createPattern(tmpCanvas.canvas, "repeat");
-    pattern.setTransform(createMatrix(inverse));
+
+    try {
+      pattern.setTransform(domMatrix);
+    } catch (ex) {
+      (0, _util.warn)(`RadialAxialShadingPattern.getPattern: "${ex?.message}".`);
+    }
+
     return pattern;
   }
 
@@ -7441,11 +7430,17 @@ class TilingPattern {
     }
 
     const temporaryPatternCanvas = this.createPatternCanvas(owner);
-    let domMatrix = createMatrix(matrix);
+    let domMatrix = new DOMMatrix(matrix);
     domMatrix = domMatrix.translate(temporaryPatternCanvas.offsetX, temporaryPatternCanvas.offsetY);
     domMatrix = domMatrix.scale(1 / temporaryPatternCanvas.scaleX, 1 / temporaryPatternCanvas.scaleY);
     const pattern = ctx.createPattern(temporaryPatternCanvas.canvas, "repeat");
-    pattern.setTransform(domMatrix);
+
+    try {
+      pattern.setTransform(domMatrix);
+    } catch (ex) {
+      (0, _util.warn)(`TilingPattern.getPattern: "${ex?.message}".`);
+    }
+
     return pattern;
   }
 
@@ -12769,7 +12764,7 @@ class XfaLayer {
 
       case "input":
         if (element.attributes.type === "radio" || element.attributes.type === "checkbox") {
-          if (storedData.value === element.attributes.exportedValue) {
+          if (storedData.value === element.attributes.xfaOn) {
             html.setAttribute("checked", true);
           }
 
@@ -14772,7 +14767,7 @@ var _svg = __w_pdfjs_require__(20);
 var _xfa_layer = __w_pdfjs_require__(21);
 
 const pdfjsVersion = '2.10.0';
-const pdfjsBuild = 'd416b23';
+const pdfjsBuild = 'f1ae7d7';
 {
   if (_is_node.isNodeJS) {
     const {

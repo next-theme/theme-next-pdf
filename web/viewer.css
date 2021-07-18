@@ -315,7 +315,6 @@
   letter-spacing: -0.01px;
   text-align: inherit;
   text-decoration: inherit;
-  vertical-align: inherit;
   box-sizing: border-box;
   background: transparent;
   padding: 0;
@@ -2551,6 +2550,10 @@ html[dir="rtl"] #documentPropertiesOverlay .row > * {
     flex-direction: column;
     justify-content: center;
     align-items: center;
+  }
+
+  #printContainer > .xfaPrintedPage .xfaPage {
+    position: initial;
   }
 
   #printContainer > .xfaPrintedPage {

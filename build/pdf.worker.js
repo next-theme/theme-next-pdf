@@ -1678,13 +1678,6 @@ const Name = function NameClosure() {
       return nameValue ? nameValue : nameCache[name] = new Name(name);
     }
 
-    static get empty() {
-      const emptyName = new Name({
-        empty: true
-      });
-      return (0, _util.shadow)(this, "empty", emptyName);
-    }
-
     static _clearCache() {
       nameCache = Object.create(null);
     }
@@ -4336,8 +4329,23 @@ class PDFDocument {
     options.ignoreErrors = true;
     promises.length = 0;
     pdfFonts.length = 0;
+    const reallyMissingFonts = new Set();
 
     for (const missing of missingFonts) {
+      if (!(0, _xfa_fonts.getXfaFontWidths)(`${missing}-Regular`)) {
+        reallyMissingFonts.add(missing);
+      }
+    }
+
+    if (reallyMissingFonts.size) {
+      missingFonts.push("PdfJS-Fallback");
+    }
+
+    for (const missing of missingFonts) {
+      if (reallyMissingFonts.has(missing)) {
+        continue;
+      }
+
       for (const fontInfo of [{
         name: "Regular",
         fontWeight: 400,
@@ -4357,11 +4365,6 @@ class PDFDocument {
       }]) {
         const name = `${missing}-${fontInfo.name}`;
         const widths = (0, _xfa_fonts.getXfaFontWidths)(name);
-
-        if (!widths) {
-          continue;
-        }
-
         const dict = new _primitives.Dict(null);
         dict.set("BaseFont", _primitives.Name.get(name));
         dict.set("Type", _primitives.Name.get("Font"));
@@ -4382,7 +4385,7 @@ class PDFDocument {
     }
 
     await Promise.all(promises);
-    this.xfaFactory.appendFonts(pdfFonts);
+    this.xfaFactory.appendFonts(pdfFonts, reallyMissingFonts);
   }
 
   async serializeXfaData(annotationStorage) {
@@ -9561,7 +9564,7 @@ class PartialEvaluator {
       task.ensureNotTerminated();
       timeSlotManager.reset();
       const operation = {};
-      let stop, i, ii, cs, name;
+      let stop, i, ii, cs, name, isValidName;
 
       while (!(stop = timeSlotManager.check())) {
         operation.args = null;
@@ -9575,9 +9578,10 @@ class PartialEvaluator {
 
         switch (fn | 0) {
           case _util.OPS.paintXObject:
+            isValidName = args[0] instanceof _primitives.Name;
             name = args[0].name;
 
-            if (name) {
+            if (isValidName) {
               const localImage = localImageCache.getByName(name);
 
               if (localImage) {
@@ -9588,7 +9592,7 @@ class PartialEvaluator {
             }
 
             next(new Promise(function (resolveXObject, rejectXObject) {
-              if (!name) {
+              if (!isValidName) {
                 throw new _util.FormatError("XObject must be referred to by name.");
               }
 
@@ -9901,9 +9905,10 @@ class PartialEvaluator {
             break;
 
           case _util.OPS.setGState:
+            isValidName = args[0] instanceof _primitives.Name;
             name = args[0].name;
 
-            if (name) {
+            if (isValidName) {
               const localGStateObj = localGStateCache.getByName(name);
 
               if (localGStateObj) {
@@ -9917,7 +9922,7 @@ class PartialEvaluator {
             }
 
             next(new Promise(function (resolveGState, rejectGState) {
-              if (!name) {
+              if (!isValidName) {
                 throw new _util.FormatError("GState must be referred to by name.");
               }
 
@@ -10701,14 +10706,15 @@ class PartialEvaluator {
               xobjs = resources.get("XObject") || _primitives.Dict.empty;
             }
 
+            var isValidName = args[0] instanceof _primitives.Name;
             var name = args[0].name;
 
-            if (name && emptyXObjectCache.getByName(name)) {
+            if (isValidName && emptyXObjectCache.getByName(name)) {
               break;
             }
 
             next(new Promise(function (resolveXObject, rejectXObject) {
-              if (!name) {
+              if (!isValidName) {
                 throw new _util.FormatError("XObject must be referred to by name.");
               }
 
@@ -10804,14 +10810,15 @@ class PartialEvaluator {
             return;
 
           case _util.OPS.setGState:
+            isValidName = args[0] instanceof _primitives.Name;
             name = args[0].name;
 
-            if (name && emptyGStateCache.getByName(name)) {
+            if (isValidName && emptyGStateCache.getByName(name)) {
               break;
             }
 
             next(new Promise(function (resolveGState, rejectGState) {
-              if (!name) {
+              if (!isValidName) {
                 throw new _util.FormatError("GState must be referred to by name.");
               }
 
@@ -14543,7 +14550,6 @@ class Lexer {
       (0, _util.warn)(`Name token is longer than allowed by the spec: ${strBuf.length}`);
     } else if (strBuf.length === 0) {
       (0, _util.warn)("Name token is empty.");
-      return _primitives.Name.empty;
     }
 
     return _primitives.Name.get(strBuf.join(""));
@@ -46913,7 +46919,7 @@ class BaseLocalCache {
 
 class LocalImageCache extends BaseLocalCache {
   set(name, ref = null, data) {
-    if (!name) {
+    if (typeof name !== "string") {
       throw new Error('LocalImageCache.set - expected "name" argument.');
     }
 
@@ -46942,7 +46948,7 @@ exports.LocalImageCache = LocalImageCache;
 
 class LocalColorSpaceCache extends BaseLocalCache {
   set(name = null, ref = null, data) {
-    if (!name && !ref) {
+    if (typeof name !== "string" && !ref) {
       throw new Error('LocalColorSpaceCache.set - expected "name" and/or "ref" argument.');
     }
 
@@ -46951,7 +46957,7 @@ class LocalColorSpaceCache extends BaseLocalCache {
         return;
       }
 
-      if (name) {
+      if (name !== null) {
         this._nameRefMap.set(name, ref);
       }
 
@@ -47000,7 +47006,7 @@ exports.LocalFunctionCache = LocalFunctionCache;
 
 class LocalGStateCache extends BaseLocalCache {
   set(name, ref = null, data) {
-    if (!name) {
+    if (typeof name !== "string") {
       throw new Error('LocalGStateCache.set - expected "name" argument.');
     }
 
@@ -47029,7 +47035,7 @@ exports.LocalGStateCache = LocalGStateCache;
 
 class LocalTilingPatternCache extends BaseLocalCache {
   set(name, ref = null, data) {
-    if (!name) {
+    if (typeof name !== "string") {
       throw new Error('LocalTilingPatternCache.set - expected "name" argument.');
     }
 
@@ -50479,25 +50485,25 @@ var _core_utils = __w_pdfjs_require__(9);
 var _fonts_utils = __w_pdfjs_require__(38);
 
 const getXFAFontMap = (0, _core_utils.getLookupTableFactory)(function (t) {
-  t["MyriadPro-Regular"] = {
+  t["MyriadPro-Regular"] = t["PdfJS-Fallback-Regular"] = {
     name: "LiberationSans-Regular",
     factors: _myriadpro_factors.MyriadProRegularFactors,
     baseWidths: _liberationsans_widths.LiberationSansRegularWidths,
     lineHeight: _myriadpro_factors.MyriadProRegularLineHeight
   };
-  t["MyriadPro-Bold"] = {
+  t["MyriadPro-Bold"] = t["PdfJS-Fallback-Bold"] = {
     name: "LiberationSans-Bold",
     factors: _myriadpro_factors.MyriadProBoldFactors,
     baseWidths: _liberationsans_widths.LiberationSansBoldWidths,
     lineHeight: _myriadpro_factors.MyriadProBoldLineHeight
   };
-  t["MyriadPro-It"] = {
+  t["MyriadPro-It"] = t["MyriadPro-Italic"] = t["PdfJS-Fallback-Italic"] = {
     name: "LiberationSans-Italic",
     factors: _myriadpro_factors.MyriadProItalicFactors,
     baseWidths: _liberationsans_widths.LiberationSansItalicWidths,
     lineHeight: _myriadpro_factors.MyriadProItalicLineHeight
   };
-  t["MyriadPro-BoldIt"] = {
+  t["MyriadPro-BoldIt"] = t["MyriadPro-BoldItalic"] = t["PdfJS-Fallback-BoldItalic"] = {
     name: "LiberationSans-BoldItalic",
     factors: _myriadpro_factors.MyriadProBoldItalicFactors,
     baseWidths: _liberationsans_widths.LiberationSansBoldItalicWidths,
@@ -50567,7 +50573,7 @@ const getXFAFontMap = (0, _core_utils.getLookupTableFactory)(function (t) {
     baseWidths: _liberationsans_widths.LiberationSansBoldItalicWidths,
     lineHeight: _segoeui_factors.SegoeuiBoldItalicLineHeight
   };
-  t["Helvetica-Regular"] = {
+  t["Helvetica-Regular"] = t.Helvetica = {
     name: "LiberationSans-Regular",
     factors: _helvetica_factors.HelveticaRegularFactors,
     baseWidths: _liberationsans_widths.LiberationSansRegularWidths,
@@ -57201,8 +57207,8 @@ class XFAFactory {
     return null;
   }
 
-  appendFonts(fonts) {
-    this.form[_xfa_object.$globalData].fontFinder.add(fonts);
+  appendFonts(fonts, reallyMissingFonts) {
+    this.form[_xfa_object.$globalData].fontFinder.add(fonts, reallyMissingFonts);
   }
 
   getPages() {
@@ -59480,7 +59486,7 @@ class Binder {
         if (dataChildren.length > 0) {
           this._bindOccurrences(child, [dataChildren[0]], null);
         } else if (this.emptyMerge) {
-          const dataChild = new _xfa_object.XmlObject(dataNode[_xfa_object.$namespaceId], child.name || "root");
+          const dataChild = child[_xfa_object.$data] = new _xfa_object.XmlObject(dataNode[_xfa_object.$namespaceId], child.name || "root");
 
           dataNode[_xfa_object.$appendChild](dataChild);
 
@@ -59593,7 +59599,7 @@ class Binder {
           match = dataNode[_xfa_object.$getRealChildrenByNameIt](child.name, false, this.emptyMerge).next().value;
 
           if (!match) {
-            match = new _xfa_object.XmlObject(dataNode[_xfa_object.$namespaceId], child.name);
+            match = child[_xfa_object.$data] = new _xfa_object.XmlObject(dataNode[_xfa_object.$namespaceId], child.name);
 
             if (this.emptyMerge) {
               match[_xfa_object.$consumed] = true;
@@ -59668,6 +59674,10 @@ const TEMPLATE_NS_ID = _namespaces.NamespaceIds.template.id;
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MAX_ATTEMPTS_FOR_LRTB_LAYOUT = 2;
 const MAX_EMPTY_PAGES = 3;
+
+function hasMargin(node) {
+  return node.margin && (node.margin.topInset || node.margin.rightInset || node.margin.bottomInset || node.margin.leftInset);
+}
 
 function _setValue(templateNode, value) {
   if (!templateNode.value) {
@@ -59836,6 +59846,10 @@ function handleOverflow(node, extraNode, space) {
   const root = node[_xfa_object.$getTemplateRoot]();
 
   const saved = root[_xfa_object.$extra].noLayoutFailure;
+  const savedMethod = extraNode[_xfa_object.$getSubformParent];
+
+  extraNode[_xfa_object.$getSubformParent] = () => node;
+
   root[_xfa_object.$extra].noLayoutFailure = true;
 
   const res = extraNode[_xfa_object.$toHTML](space);
@@ -59843,6 +59857,7 @@ function handleOverflow(node, extraNode, space) {
   node[_xfa_object.$addHTML](res.html, res.bbox);
 
   root[_xfa_object.$extra].noLayoutFailure = saved;
+  extraNode[_xfa_object.$getSubformParent] = savedMethod;
 }
 
 class AppearanceFilter extends _xfa_object.StringObject {
@@ -59895,15 +59910,15 @@ class Arc extends _xfa_object.XFAObject {
       style.fill = "transparent";
     }
 
-    style.strokeWidth = (0, _html_utils.measureToString)(edge.presence === "visible" ? Math.round(edge.thickness) : 0);
+    style.strokeWidth = (0, _html_utils.measureToString)(edge.presence === "visible" ? edge.thickness : 0);
     style.stroke = edgeStyle.color;
     let arc;
     const attributes = {
       xmlns: SVG_NS,
       style: {
-        position: "absolute",
         width: "100%",
-        height: "100%"
+        height: "100%",
+        overflow: "visible"
       }
     };
 
@@ -59939,11 +59954,30 @@ class Arc extends _xfa_object.XFAObject {
       });
     }
 
-    return _utils.HTMLResult.success({
+    const svg = {
       name: "svg",
       children: [arc],
       attributes
-    });
+    };
+
+    const parent = this[_xfa_object.$getParent]()[_xfa_object.$getParent]();
+
+    if (hasMargin(parent)) {
+      return _utils.HTMLResult.success({
+        name: "div",
+        attributes: {
+          style: {
+            display: "inline",
+            width: "100%",
+            height: "100%"
+          }
+        },
+        children: [svg]
+      });
+    }
+
+    svg.attributes.style.position = "absolute";
+    return _utils.HTMLResult.success(svg);
   }
 
 }
@@ -60055,6 +60089,10 @@ class Assist extends _xfa_object.XFAObject {
     this.usehref = attributes.usehref || "";
     this.speak = null;
     this.toolTip = null;
+  }
+
+  [_xfa_object.$toHTML]() {
+    return this.toolTip && this.toolTip[_xfa_object.$content] ? this.toolTip[_xfa_object.$content] : null;
   }
 
 }
@@ -60567,11 +60605,11 @@ class CheckButton extends _xfa_object.XFAObject {
       groupId = container[_xfa_object.$uid];
       type = "radio";
       className = "xfaRadio";
-      dataId = container[_xfa_object.$data] && container[_xfa_object.$data][_xfa_object.$uid];
+      dataId = container[_xfa_object.$data] && container[_xfa_object.$data][_xfa_object.$uid] || container[_xfa_object.$uid];
     } else {
       type = "checkbox";
       className = "xfaCheckbox";
-      dataId = field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid];
+      dataId = field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid] || field[_xfa_object.$uid];
     }
 
     const input = {
@@ -60677,7 +60715,7 @@ class ChoiceList extends _xfa_object.XFAObject {
     const selectAttributes = {
       class: ["xfaSelect"],
       fieldId: field[_xfa_object.$uid],
-      dataId: field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid],
+      dataId: field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid] || field[_xfa_object.$uid],
       style
     };
 
@@ -60888,7 +60926,7 @@ class DateTimeEdit extends _xfa_object.XFAObject {
       attributes: {
         type: "text",
         fieldId: field[_xfa_object.$uid],
-        dataId: field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid],
+        dataId: field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid] || field[_xfa_object.$uid],
         class: ["xfaTextfield"],
         style
       }
@@ -61104,6 +61142,12 @@ class Draw extends _xfa_object.XFAObject {
       attributes,
       children: []
     };
+    const assist = this.assist ? this.assist[_xfa_object.$toHTML]() : null;
+
+    if (assist) {
+      html.attributes.title = assist;
+    }
+
     const bbox = (0, _html_utils.computeBbox)(this, html, availableSpace);
     const value = this.value ? this.value[_xfa_object.$toHTML](availableSpace).html : null;
 
@@ -61493,6 +61537,7 @@ class ExclGroup extends _xfa_object.XFAObject {
       children,
       attributes,
       attempt: 0,
+      line: null,
       numberInLine: 0,
       availableSpace: {
         width: Math.min(this.w || Infinity, availableSpace.width),
@@ -61548,10 +61593,11 @@ class ExclGroup extends _xfa_object.XFAObject {
       attributes.xfaName = this.name;
     }
 
-    const maxRun = this.layout === "lr-tb" || this.layout === "rl-tb" ? MAX_ATTEMPTS_FOR_LRTB_LAYOUT : 1;
+    const isLrTb = this.layout === "lr-tb" || this.layout === "rl-tb";
+    const maxRun = isLrTb ? MAX_ATTEMPTS_FOR_LRTB_LAYOUT : 1;
 
     for (; this[_xfa_object.$extra].attempt < maxRun; this[_xfa_object.$extra].attempt++) {
-      if (this[_xfa_object.$extra].attempt === MAX_ATTEMPTS_FOR_LRTB_LAYOUT - 1) {
+      if (isLrTb && this[_xfa_object.$extra].attempt === MAX_ATTEMPTS_FOR_LRTB_LAYOUT - 1) {
         this[_xfa_object.$extra].numberInLine = 0;
       }
 
@@ -61566,6 +61612,11 @@ class ExclGroup extends _xfa_object.XFAObject {
 
       if (result.isBreak()) {
         return result;
+      }
+
+      if (isLrTb && this[_xfa_object.$extra].attempt === 0 && this[_xfa_object.$extra].numberInLine === 0 && !this[_xfa_object.$getTemplateRoot]()[_xfa_object.$extra].noLayoutFailure) {
+        this[_xfa_object.$extra].attempt = maxRun;
+        break;
       }
     }
 
@@ -61606,6 +61657,12 @@ class ExclGroup extends _xfa_object.XFAObject {
       attributes,
       children
     };
+    const assist = this.assist ? this.assist[_xfa_object.$toHTML]() : null;
+
+    if (assist) {
+      html.attributes.title = assist;
+    }
+
     delete this[_xfa_object.$extra];
     return _utils.HTMLResult.success((0, _html_utils.createWrapper)(this, html), bbox);
   }
@@ -61821,6 +61878,12 @@ class Field extends _xfa_object.XFAObject {
       attributes,
       children
     };
+    const assist = this.assist ? this.assist[_xfa_object.$toHTML]() : null;
+
+    if (assist) {
+      html.attributes.title = assist;
+    }
+
     const borderStyle = this.border ? this.border[_xfa_object.$toStyle]() : null;
     const bbox = (0, _html_utils.computeBbox)(this, html, availableSpace);
     const ui = this.ui ? this.ui[_xfa_object.$toHTML]().html : null;
@@ -62441,7 +62504,7 @@ class Line extends _xfa_object.XFAObject {
     const edgeStyle = edge[_xfa_object.$toStyle]();
 
     const style = Object.create(null);
-    const thickness = edge.presence === "visible" ? Math.round(edge.thickness) : 0;
+    const thickness = edge.presence === "visible" ? edge.thickness : 0;
     style.strokeWidth = (0, _html_utils.measureToString)(thickness);
     style.stroke = edgeStyle.color;
     let x1, y1, x2, y2;
@@ -62473,7 +62536,7 @@ class Line extends _xfa_object.XFAObject {
         style
       }
     };
-    return _utils.HTMLResult.success({
+    const svg = {
       name: "svg",
       children: [line],
       attributes: {
@@ -62481,10 +62544,27 @@ class Line extends _xfa_object.XFAObject {
         width,
         height,
         style: {
-          position: "absolute"
+          overflow: "visible"
         }
       }
-    });
+    };
+
+    if (hasMargin(parent)) {
+      return _utils.HTMLResult.success({
+        name: "div",
+        attributes: {
+          style: {
+            display: "inline",
+            width: "100%",
+            height: "100%"
+          }
+        },
+        children: [svg]
+      });
+    }
+
+    svg.attributes.style.position = "absolute";
+    return _utils.HTMLResult.success(svg);
   }
 
 }
@@ -62626,7 +62706,7 @@ class NumericEdit extends _xfa_object.XFAObject {
       attributes: {
         type: "text",
         fieldId: field[_xfa_object.$uid],
-        dataId: field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid],
+        dataId: field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid] || field[_xfa_object.$uid],
         class: ["xfaTextfield"],
         style
       }
@@ -63281,7 +63361,7 @@ class Rectangle extends _xfa_object.XFAObject {
       style.fill = "transparent";
     }
 
-    style.strokeWidth = (0, _html_utils.measureToString)(edge.presence === "visible" ? 2 * edge.thickness : 0);
+    style.strokeWidth = (0, _html_utils.measureToString)(edge.presence === "visible" ? edge.thickness : 0);
     style.stroke = edgeStyle.color;
     const corner = this.corner.children.length ? this.corner.children[0] : new Corner({});
 
@@ -63300,18 +63380,37 @@ class Rectangle extends _xfa_object.XFAObject {
         style
       }
     };
-    return _utils.HTMLResult.success({
+    const svg = {
       name: "svg",
       children: [rect],
       attributes: {
         xmlns: SVG_NS,
         style: {
-          position: "absolute"
+          overflow: "visible"
         },
         width: "100%",
         height: "100%"
       }
-    });
+    };
+
+    const parent = this[_xfa_object.$getParent]()[_xfa_object.$getParent]();
+
+    if (hasMargin(parent)) {
+      return _utils.HTMLResult.success({
+        name: "div",
+        attributes: {
+          style: {
+            display: "inline",
+            width: "100%",
+            height: "100%"
+          }
+        },
+        children: [svg]
+      });
+    }
+
+    svg.attributes.style.position = "absolute";
+    return _utils.HTMLResult.success(svg);
   }
 
 }
@@ -63666,6 +63765,7 @@ class Subform extends _xfa_object.XFAObject {
 
     Object.assign(this[_xfa_object.$extra], {
       children,
+      line: null,
       attributes,
       attempt: 0,
       numberInLine: 0,
@@ -63733,10 +63833,11 @@ class Subform extends _xfa_object.XFAObject {
       }
     }
 
-    const maxRun = this.layout === "lr-tb" || this.layout === "rl-tb" ? MAX_ATTEMPTS_FOR_LRTB_LAYOUT : 1;
+    const isLrTb = this.layout === "lr-tb" || this.layout === "rl-tb";
+    const maxRun = isLrTb ? MAX_ATTEMPTS_FOR_LRTB_LAYOUT : 1;
 
     for (; this[_xfa_object.$extra].attempt < maxRun; this[_xfa_object.$extra].attempt++) {
-      if (this[_xfa_object.$extra].attempt === MAX_ATTEMPTS_FOR_LRTB_LAYOUT - 1) {
+      if (isLrTb && this[_xfa_object.$extra].attempt === MAX_ATTEMPTS_FOR_LRTB_LAYOUT - 1) {
         this[_xfa_object.$extra].numberInLine = 0;
       }
 
@@ -63751,6 +63852,11 @@ class Subform extends _xfa_object.XFAObject {
 
       if (result.isBreak()) {
         return result;
+      }
+
+      if (isLrTb && this[_xfa_object.$extra].attempt === 0 && this[_xfa_object.$extra].numberInLine === 0 && !root[_xfa_object.$extra].noLayoutFailure) {
+        this[_xfa_object.$extra].attempt = maxRun;
+        break;
       }
     }
 
@@ -63806,6 +63912,11 @@ class Subform extends _xfa_object.XFAObject {
       attributes,
       children
     };
+    const assist = this.assist ? this.assist[_xfa_object.$toHTML]() : null;
+
+    if (assist) {
+      html.attributes.title = assist;
+    }
 
     const result = _utils.HTMLResult.success((0, _html_utils.createWrapper)(this, html), bbox);
 
@@ -64312,7 +64423,7 @@ class TextEdit extends _xfa_object.XFAObject {
       html = {
         name: "textarea",
         attributes: {
-          dataId: field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid],
+          dataId: field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid] || field[_xfa_object.$uid],
           fieldId: field[_xfa_object.$uid],
           class: ["xfaTextfield"],
           style
@@ -64323,7 +64434,7 @@ class TextEdit extends _xfa_object.XFAObject {
         name: "input",
         attributes: {
           type: "text",
-          dataId: field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid],
+          dataId: field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid] || field[_xfa_object.$uid],
           fieldId: field[_xfa_object.$uid],
           class: ["xfaTextfield"],
           style
@@ -65092,6 +65203,16 @@ var _xfa_object = __w_pdfjs_require__(75);
 
 var _html_utils = __w_pdfjs_require__(82);
 
+function createLine(node, children) {
+  return {
+    name: "div",
+    attributes: {
+      class: [node.layout === "lr-tb" ? "xfaLr" : "xfaRl"]
+    },
+    children
+  };
+}
+
 function flushHTML(node) {
   if (!node[_xfa_object.$extra]) {
     return null;
@@ -65108,7 +65229,11 @@ function flushHTML(node) {
     const htmlFromFailing = node[_xfa_object.$extra].failingNode[_xfa_object.$flushHTML]();
 
     if (htmlFromFailing) {
-      html.children.push(htmlFromFailing);
+      if (node.layout.endsWith("-tb")) {
+        html.children.push(createLine(node, [htmlFromFailing]));
+      } else {
+        html.children.push(htmlFromFailing);
+      }
     }
   }
 
@@ -65116,9 +65241,6 @@ function flushHTML(node) {
     return null;
   }
 
-  node[_xfa_object.$extra].children = [];
-  delete node[_xfa_object.$extra].line;
-  node[_xfa_object.$extra].numberInLine = 0;
   return html;
 }
 
@@ -65139,13 +65261,7 @@ function addHTML(node, html, bbox) {
     case "lr-tb":
     case "rl-tb":
       if (!extra.line || extra.attempt === 1) {
-        extra.line = {
-          name: "div",
-          attributes: {
-            class: [node.layout === "lr-tb" ? "xfaLr" : "xfaRl"]
-          },
-          children: []
-        };
+        extra.line = createLine(node, []);
         extra.children.push(extra.line);
         extra.numberInLine = 0;
       }
@@ -65332,7 +65448,15 @@ function checkDimensions(node, space) {
           }
 
           if (node.w !== "") {
-            return Math.round(w - space.width) <= ERROR;
+            if (Math.round(w - space.width) <= ERROR) {
+              return true;
+            }
+
+            if (parent[_xfa_object.$extra].numberInLine === 0) {
+              return space.height > 0;
+            }
+
+            return false;
           }
 
           return space.width > 0;
@@ -66094,7 +66218,7 @@ class FontFinder {
     this.add(pdfFonts);
   }
 
-  add(pdfFonts) {
+  add(pdfFonts, reallyMissingFonts = null) {
     for (const pdfFont of pdfFonts) {
       this.addPdfFont(pdfFont);
     }
@@ -66103,6 +66227,16 @@ class FontFinder {
       if (!pdfFont.regular) {
         pdfFont.regular = pdfFont.italic || pdfFont.bold || pdfFont.bolditalic;
       }
+    }
+
+    if (!reallyMissingFonts || reallyMissingFonts.size === 0) {
+      return;
+    }
+
+    const myriad = this.fonts.get("PdfJS-Fallback-PdfJS-XFA");
+
+    for (const missing of reallyMissingFonts) {
+      this.fonts.set(missing, myriad);
     }
   }
 
@@ -66121,14 +66255,11 @@ class FontFinder {
     }
 
     let property = "";
+    const fontWeight = parseFloat(cssFontInfo.fontWeight);
 
-    if (cssFontInfo.italicAngle !== "0") {
-      if (parseFloat(cssFontInfo.fontWeight) >= 700) {
-        property = "bolditalic";
-      } else {
-        property = "italic";
-      }
-    } else if (parseFloat(cssFontInfo.fontWeight) >= 700) {
+    if (parseFloat(cssFontInfo.italicAngle) !== 0) {
+      property = fontWeight >= 700 ? "bolditalic" : "italic";
+    } else if (fontWeight >= 700) {
       property = "bold";
     }
 
@@ -66160,7 +66291,7 @@ class FontFinder {
       return font;
     }
 
-    const pattern = /,|-| |bolditalic|bold|italic|regular|it/gi;
+    const pattern = /,|-|_| |bolditalic|bold|italic|regular|it/gi;
     let name = fontName.replace(pattern, "");
     font = this.fonts.get(name);
 
@@ -71742,7 +71873,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.10.0';
-const pdfjsBuild = 'd416b23';
+const pdfjsBuild = 'f1ae7d7';
 })();
 
 /******/ 	return __webpack_exports__;

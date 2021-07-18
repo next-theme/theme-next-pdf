@@ -15200,7 +15200,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(3);
 
 const pdfjsVersion = '2.10.0';
-const pdfjsBuild = 'd416b23';
+const pdfjsBuild = 'f1ae7d7';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
