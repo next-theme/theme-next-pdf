@@ -1839,25 +1839,8 @@ class Dict {
     dictArray,
     mergeSubDicts = false
   }) {
-    const mergedDict = new Dict(xref);
-
-    if (!mergeSubDicts) {
-      for (const dict of dictArray) {
-        if (!(dict instanceof Dict)) {
-          continue;
-        }
-
-        for (const [key, value] of Object.entries(dict._map)) {
-          if (mergedDict._map[key] === undefined) {
-            mergedDict._map[key] = value;
-          }
-        }
-      }
-
-      return mergedDict.size > 0 ? mergedDict : Dict.empty;
-    }
-
-    const properties = new Map();
+    const mergedDict = new Dict(xref),
+          properties = new Map();
 
     for (const dict of dictArray) {
       if (!(dict instanceof Dict)) {
@@ -1870,6 +1853,8 @@ class Dict {
         if (property === undefined) {
           property = [];
           properties.set(key, property);
+        } else if (!mergeSubDicts) {
+          continue;
         }
 
         property.push(value);
@@ -2970,7 +2955,7 @@ exports.readUint16 = readUint16;
 exports.readUint32 = readUint32;
 exports.toRomanNumerals = toRomanNumerals;
 exports.validateCSSFont = validateCSSFont;
-exports.XRefParseException = exports.XRefEntryException = exports.MissingDataException = void 0;
+exports.XRefParseException = exports.XRefEntryException = exports.ParserEOFException = exports.MissingDataException = void 0;
 
 var _util = __w_pdfjs_require__(2);
 
@@ -3018,6 +3003,10 @@ class MissingDataException extends _util.BaseException {
 }
 
 exports.MissingDataException = MissingDataException;
+
+class ParserEOFException extends _util.BaseException {}
+
+exports.ParserEOFException = ParserEOFException;
 
 class XRefEntryException extends _util.BaseException {}
 
@@ -3753,10 +3742,11 @@ class Page {
         };
       }
 
+      const annotationIntent = intent.startsWith("oplist-") ? intent.split("-")[1] : intent;
       const opListPromises = [];
 
       for (const annotation of annotations) {
-        if (intent === "display" && annotation.mustBeViewed(annotationStorage) || intent === "print" && annotation.mustBePrinted(annotationStorage)) {
+        if (annotationIntent === "display" && annotation.mustBeViewed(annotationStorage) || annotationIntent === "print" && annotation.mustBePrinted(annotationStorage)) {
           opListPromises.push(annotation.getOperatorList(partialEvaluator, task, renderInteractiveForms, annotationStorage).catch(function (reason) {
             (0, _util.warn)("getOperatorList - ignoring annotation data during " + `"${task.name}" task: "${reason}".`);
             return null;
@@ -5222,7 +5212,7 @@ class Annotation {
     const transform = getTransformMatrix(data.rect, bbox, matrix);
     return resourcesPromise.then(resources => {
       const opList = new _operator_list.OperatorList();
-      opList.addOp(_util.OPS.beginAnnotation, [data.rect, transform, matrix]);
+      opList.addOp(_util.OPS.beginAnnotation, [data.id, data.rect, transform, matrix]);
       return evaluator.getOperatorList({
         stream: appearance,
         task,
@@ -5669,7 +5659,7 @@ class WidgetAnnotation extends Annotation {
       const matrix = [1, 0, 0, 1, 0, 0];
       const bbox = [0, 0, this.data.rect[2] - this.data.rect[0], this.data.rect[3] - this.data.rect[1]];
       const transform = getTransformMatrix(this.data.rect, bbox, matrix);
-      operatorList.addOp(_util.OPS.beginAnnotation, [this.data.rect, transform, matrix]);
+      operatorList.addOp(_util.OPS.beginAnnotation, [this.data.id, this.data.rect, transform, matrix]);
       const stream = new _stream.StringStream(content);
       return evaluator.getOperatorList({
         stream,
@@ -6306,6 +6296,10 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
 
     if (!exportValues.includes("Off")) {
       exportValues.push("Off");
+    }
+
+    if (!exportValues.includes(this.data.fieldValue)) {
+      this.data.fieldValue = null;
     }
 
     if (exportValues.length !== 2) {
@@ -9365,7 +9359,29 @@ class PartialEvaluator {
     });
   }
 
-  handleColorN(operatorList, fn, args, cs, patterns, resources, task, localColorSpaceCache, localTilingPatternCache) {
+  parseShading({
+    keyObj,
+    shading,
+    resources,
+    localColorSpaceCache,
+    localShadingPatternCache,
+    matrix = null
+  }) {
+    let id = localShadingPatternCache.get(keyObj);
+
+    if (!id) {
+      var shadingFill = _pattern.Pattern.parseShading(shading, matrix, this.xref, resources, this.handler, this._pdfFunctionFactory, localColorSpaceCache);
+
+      const patternIR = shadingFill.getIR();
+      id = `pattern_${this.idFactory.createObjId()}`;
+      localShadingPatternCache.set(keyObj, id);
+      this.handler.send("obj", [id, this.pageIndex, "Pattern", patternIR]);
+    }
+
+    return id;
+  }
+
+  handleColorN(operatorList, fn, args, cs, patterns, resources, task, localColorSpaceCache, localTilingPatternCache, localShadingPatternCache) {
     const patternName = args.pop();
 
     if (patternName instanceof _primitives.Name) {
@@ -9381,7 +9397,7 @@ class PartialEvaluator {
         } catch (ex) {}
       }
 
-      let pattern = patterns.get(name);
+      const pattern = patterns.get(name);
 
       if (pattern) {
         const dict = (0, _primitives.isStream)(pattern) ? pattern.dict : pattern;
@@ -9393,8 +9409,15 @@ class PartialEvaluator {
         } else if (typeNum === PatternType.SHADING) {
           const shading = dict.get("Shading");
           const matrix = dict.getArray("Matrix");
-          pattern = _pattern.Pattern.parseShading(shading, matrix, this.xref, resources, this.handler, this._pdfFunctionFactory, localColorSpaceCache);
-          operatorList.addOp(fn, pattern.getIR());
+          const objId = this.parseShading({
+            keyObj: pattern,
+            shading,
+            matrix,
+            resources,
+            localColorSpaceCache,
+            localShadingPatternCache
+          });
+          operatorList.addOp(fn, ["Shading", objId]);
           return undefined;
         }
 
@@ -9535,6 +9558,7 @@ class PartialEvaluator {
     const localColorSpaceCache = new _image_utils.LocalColorSpaceCache();
     const localGStateCache = new _image_utils.LocalGStateCache();
     const localTilingPatternCache = new _image_utils.LocalTilingPatternCache();
+    const localShadingPatternCache = new Map();
 
     const xobjs = resources.get("XObject") || _primitives.Dict.empty;
 
@@ -9864,7 +9888,7 @@ class PartialEvaluator {
             cs = stateManager.state.fillColorSpace;
 
             if (cs.name === "Pattern") {
-              next(self.handleColorN(operatorList, _util.OPS.setFillColorN, args, cs, patterns, resources, task, localColorSpaceCache, localTilingPatternCache));
+              next(self.handleColorN(operatorList, _util.OPS.setFillColorN, args, cs, patterns, resources, task, localColorSpaceCache, localTilingPatternCache, localShadingPatternCache));
               return;
             }
 
@@ -9876,7 +9900,7 @@ class PartialEvaluator {
             cs = stateManager.state.strokeColorSpace;
 
             if (cs.name === "Pattern") {
-              next(self.handleColorN(operatorList, _util.OPS.setStrokeColorN, args, cs, patterns, resources, task, localColorSpaceCache, localTilingPatternCache));
+              next(self.handleColorN(operatorList, _util.OPS.setStrokeColorN, args, cs, patterns, resources, task, localColorSpaceCache, localTilingPatternCache, localShadingPatternCache));
               return;
             }
 
@@ -9897,10 +9921,14 @@ class PartialEvaluator {
               throw new _util.FormatError("No shading object found");
             }
 
-            var shadingFill = _pattern.Pattern.parseShading(shading, null, xref, resources, self.handler, self._pdfFunctionFactory, localColorSpaceCache);
-
-            var patternIR = shadingFill.getIR();
-            args = [patternIR];
+            const patternId = self.parseShading({
+              keyObj: shading,
+              shading,
+              resources,
+              localColorSpaceCache,
+              localShadingPatternCache
+            });
+            args = [patternId];
             fn = _util.OPS.shadingFill;
             break;
 
@@ -13609,11 +13637,11 @@ class Parser {
           }
 
           if ((0, _primitives.isEOF)(this.buf1)) {
-            if (!this.recoveryMode) {
-              throw new _util.FormatError("End of file inside array");
+            if (this.recoveryMode) {
+              return array;
             }
 
-            return array;
+            throw new _core_utils.ParserEOFException("End of file inside array.");
           }
 
           this.shift();
@@ -13640,11 +13668,11 @@ class Parser {
           }
 
           if ((0, _primitives.isEOF)(this.buf1)) {
-            if (!this.recoveryMode) {
-              throw new _util.FormatError("End of file inside dictionary");
+            if (this.recoveryMode) {
+              return dict;
             }
 
-            return dict;
+            throw new _core_utils.ParserEOFException("End of file inside dictionary.");
           }
 
           if ((0, _primitives.isCmd)(this.buf2, "stream")) {
@@ -45319,506 +45347,410 @@ function toNumberArray(arr) {
   return arr;
 }
 
-const PDFFunction = function PDFFunctionClosure() {
-  const CONSTRUCT_SAMPLED = 0;
-  const CONSTRUCT_INTERPOLATED = 2;
-  const CONSTRUCT_STICHED = 3;
-  const CONSTRUCT_POSTSCRIPT = 4;
-  return {
-    getSampleArray(size, outputSize, bps, stream) {
-      let i, ii;
-      let length = 1;
-
-      for (i = 0, ii = size.length; i < ii; i++) {
-        length *= size[i];
-      }
-
-      length *= outputSize;
-      const array = new Array(length);
-      let codeSize = 0;
-      let codeBuf = 0;
-      const sampleMul = 1.0 / (2.0 ** bps - 1);
-      const strBytes = stream.getBytes((length * bps + 7) / 8);
-      let strIdx = 0;
-
-      for (i = 0; i < length; i++) {
-        while (codeSize < bps) {
-          codeBuf <<= 8;
-          codeBuf |= strBytes[strIdx++];
-          codeSize += 8;
-        }
-
-        codeSize -= bps;
-        array[i] = (codeBuf >> codeSize) * sampleMul;
-        codeBuf &= (1 << codeSize) - 1;
-      }
-
-      return array;
-    },
-
-    getIR({
-      xref,
-      isEvalSupported,
-      fn
-    }) {
-      let dict = fn.dict;
-
-      if (!dict) {
-        dict = fn;
-      }
-
-      const types = [this.constructSampled, null, this.constructInterpolated, this.constructStiched, this.constructPostScript];
-      const typeNum = dict.get("FunctionType");
-      const typeFn = types[typeNum];
-
-      if (!typeFn) {
-        throw new _util.FormatError("Unknown type of function");
-      }
-
-      return typeFn.call(this, {
-        xref,
-        isEvalSupported,
-        fn,
-        dict
-      });
-    },
-
-    fromIR({
-      xref,
-      isEvalSupported,
-      IR
-    }) {
-      const type = IR[0];
-
-      switch (type) {
-        case CONSTRUCT_SAMPLED:
-          return this.constructSampledFromIR({
-            xref,
-            isEvalSupported,
-            IR
-          });
-
-        case CONSTRUCT_INTERPOLATED:
-          return this.constructInterpolatedFromIR({
-            xref,
-            isEvalSupported,
-            IR
-          });
-
-        case CONSTRUCT_STICHED:
-          return this.constructStichedFromIR({
-            xref,
-            isEvalSupported,
-            IR
-          });
-
-        default:
-          return this.constructPostScriptFromIR({
-            xref,
-            isEvalSupported,
-            IR
-          });
-      }
-    },
-
-    parse({
-      xref,
-      isEvalSupported,
-      fn
-    }) {
-      const IR = this.getIR({
-        xref,
-        isEvalSupported,
-        fn
-      });
-      return this.fromIR({
-        xref,
-        isEvalSupported,
-        IR
-      });
-    },
-
-    parseArray({
-      xref,
-      isEvalSupported,
-      fnObj
-    }) {
-      if (!Array.isArray(fnObj)) {
-        return this.parse({
-          xref,
-          isEvalSupported,
-          fn: fnObj
-        });
-      }
-
-      const fnArray = [];
-
-      for (let j = 0, jj = fnObj.length; j < jj; j++) {
-        fnArray.push(this.parse({
-          xref,
-          isEvalSupported,
-          fn: xref.fetchIfRef(fnObj[j])
-        }));
-      }
-
-      return function (src, srcOffset, dest, destOffset) {
-        for (let i = 0, ii = fnArray.length; i < ii; i++) {
-          fnArray[i](src, srcOffset, dest, destOffset + i);
-        }
-      };
-    },
-
-    constructSampled({
-      xref,
-      isEvalSupported,
-      fn,
-      dict
-    }) {
-      function toMultiArray(arr) {
-        const inputLength = arr.length;
-        const out = [];
-        let index = 0;
-
-        for (let i = 0; i < inputLength; i += 2) {
-          out[index] = [arr[i], arr[i + 1]];
-          ++index;
-        }
-
-        return out;
-      }
-
-      let domain = toNumberArray(dict.getArray("Domain"));
-      let range = toNumberArray(dict.getArray("Range"));
-
-      if (!domain || !range) {
-        throw new _util.FormatError("No domain or range");
-      }
-
-      const inputSize = domain.length / 2;
-      const outputSize = range.length / 2;
-      domain = toMultiArray(domain);
-      range = toMultiArray(range);
-      const size = toNumberArray(dict.getArray("Size"));
-      const bps = dict.get("BitsPerSample");
-      const order = dict.get("Order") || 1;
-
-      if (order !== 1) {
-        (0, _util.info)("No support for cubic spline interpolation: " + order);
-      }
-
-      let encode = toNumberArray(dict.getArray("Encode"));
-
-      if (!encode) {
-        encode = [];
-
-        for (let i = 0; i < inputSize; ++i) {
-          encode.push([0, size[i] - 1]);
-        }
-      } else {
-        encode = toMultiArray(encode);
-      }
-
-      let decode = toNumberArray(dict.getArray("Decode"));
-
-      if (!decode) {
-        decode = range;
-      } else {
-        decode = toMultiArray(decode);
-      }
-
-      const samples = this.getSampleArray(size, outputSize, bps, fn);
-      return [CONSTRUCT_SAMPLED, inputSize, domain, encode, decode, samples, size, outputSize, 2 ** bps - 1, range];
-    },
-
-    constructSampledFromIR({
-      xref,
-      isEvalSupported,
-      IR
-    }) {
-      function interpolate(x, xmin, xmax, ymin, ymax) {
-        return ymin + (x - xmin) * ((ymax - ymin) / (xmax - xmin));
-      }
-
-      return function constructSampledFromIRResult(src, srcOffset, dest, destOffset) {
-        const m = IR[1];
-        const domain = IR[2];
-        const encode = IR[3];
-        const decode = IR[4];
-        const samples = IR[5];
-        const size = IR[6];
-        const n = IR[7];
-        const range = IR[9];
-        const cubeVertices = 1 << m;
-        const cubeN = new Float64Array(cubeVertices);
-        const cubeVertex = new Uint32Array(cubeVertices);
-        let i, j;
-
-        for (j = 0; j < cubeVertices; j++) {
-          cubeN[j] = 1;
-        }
-
-        let k = n,
-            pos = 1;
-
-        for (i = 0; i < m; ++i) {
-          const domain_2i = domain[i][0];
-          const domain_2i_1 = domain[i][1];
-          const xi = Math.min(Math.max(src[srcOffset + i], domain_2i), domain_2i_1);
-          let e = interpolate(xi, domain_2i, domain_2i_1, encode[i][0], encode[i][1]);
-          const size_i = size[i];
-          e = Math.min(Math.max(e, 0), size_i - 1);
-          const e0 = e < size_i - 1 ? Math.floor(e) : e - 1;
-          const n0 = e0 + 1 - e;
-          const n1 = e - e0;
-          const offset0 = e0 * k;
-          const offset1 = offset0 + k;
-
-          for (j = 0; j < cubeVertices; j++) {
-            if (j & pos) {
-              cubeN[j] *= n1;
-              cubeVertex[j] += offset1;
-            } else {
-              cubeN[j] *= n0;
-              cubeVertex[j] += offset0;
-            }
-          }
-
-          k *= size_i;
-          pos <<= 1;
-        }
-
-        for (j = 0; j < n; ++j) {
-          let rj = 0;
-
-          for (i = 0; i < cubeVertices; i++) {
-            rj += samples[cubeVertex[i] + j] * cubeN[i];
-          }
-
-          rj = interpolate(rj, 0, 1, decode[j][0], decode[j][1]);
-          dest[destOffset + j] = Math.min(Math.max(rj, range[j][0]), range[j][1]);
-        }
-      };
-    },
-
-    constructInterpolated({
-      xref,
-      isEvalSupported,
-      fn,
-      dict
-    }) {
-      const c0 = toNumberArray(dict.getArray("C0")) || [0];
-      const c1 = toNumberArray(dict.getArray("C1")) || [1];
-      const n = dict.get("N");
-      const length = c0.length;
-      const diff = [];
-
-      for (let i = 0; i < length; ++i) {
-        diff.push(c1[i] - c0[i]);
-      }
-
-      return [CONSTRUCT_INTERPOLATED, c0, diff, n];
-    },
-
-    constructInterpolatedFromIR({
-      xref,
-      isEvalSupported,
-      IR
-    }) {
-      const c0 = IR[1];
-      const diff = IR[2];
-      const n = IR[3];
-      const length = diff.length;
-      return function constructInterpolatedFromIRResult(src, srcOffset, dest, destOffset) {
-        const x = n === 1 ? src[srcOffset] : src[srcOffset] ** n;
-
-        for (let j = 0; j < length; ++j) {
-          dest[destOffset + j] = c0[j] + x * diff[j];
-        }
-      };
-    },
-
-    constructStiched({
-      xref,
-      isEvalSupported,
-      fn,
-      dict
-    }) {
-      const domain = toNumberArray(dict.getArray("Domain"));
-
-      if (!domain) {
-        throw new _util.FormatError("No domain");
-      }
-
-      const inputSize = domain.length / 2;
-
-      if (inputSize !== 1) {
-        throw new _util.FormatError("Bad domain for stiched function");
-      }
-
-      const fnRefs = dict.get("Functions");
-      const fns = [];
-
-      for (let i = 0, ii = fnRefs.length; i < ii; ++i) {
-        fns.push(this.parse({
-          xref,
-          isEvalSupported,
-          fn: xref.fetchIfRef(fnRefs[i])
-        }));
-      }
-
-      const bounds = toNumberArray(dict.getArray("Bounds"));
-      const encode = toNumberArray(dict.getArray("Encode"));
-      return [CONSTRUCT_STICHED, domain, bounds, encode, fns];
-    },
-
-    constructStichedFromIR({
-      xref,
-      isEvalSupported,
-      IR
-    }) {
-      const domain = IR[1];
-      const bounds = IR[2];
-      const encode = IR[3];
-      const fns = IR[4];
-      const tmpBuf = new Float32Array(1);
-      return function constructStichedFromIRResult(src, srcOffset, dest, destOffset) {
-        const clip = function constructStichedFromIRClip(v, min, max) {
-          if (v > max) {
-            v = max;
-          } else if (v < min) {
-            v = min;
-          }
-
-          return v;
-        };
-
-        const v = clip(src[srcOffset], domain[0], domain[1]);
-        const length = bounds.length;
-        let i;
-
-        for (i = 0; i < length; ++i) {
-          if (v < bounds[i]) {
-            break;
-          }
-        }
-
-        let dmin = domain[0];
-
-        if (i > 0) {
-          dmin = bounds[i - 1];
-        }
-
-        let dmax = domain[1];
-
-        if (i < bounds.length) {
-          dmax = bounds[i];
-        }
-
-        const rmin = encode[2 * i];
-        const rmax = encode[2 * i + 1];
-        tmpBuf[0] = dmin === dmax ? rmin : rmin + (v - dmin) * (rmax - rmin) / (dmax - dmin);
-        fns[i](tmpBuf, 0, dest, destOffset);
-      };
-    },
-
-    constructPostScript({
-      xref,
-      isEvalSupported,
-      fn,
-      dict
-    }) {
-      const domain = toNumberArray(dict.getArray("Domain"));
-      const range = toNumberArray(dict.getArray("Range"));
-
-      if (!domain) {
-        throw new _util.FormatError("No domain.");
-      }
-
-      if (!range) {
-        throw new _util.FormatError("No range.");
-      }
-
-      const lexer = new _ps_parser.PostScriptLexer(fn);
-      const parser = new _ps_parser.PostScriptParser(lexer);
-      const code = parser.parse();
-      return [CONSTRUCT_POSTSCRIPT, domain, range, code];
-    },
-
-    constructPostScriptFromIR({
-      xref,
-      isEvalSupported,
-      IR
-    }) {
-      const domain = IR[1];
-      const range = IR[2];
-      const code = IR[3];
-
-      if (isEvalSupported && _util.IsEvalSupportedCached.value) {
-        const compiled = new PostScriptCompiler().compile(code, domain, range);
-
-        if (compiled) {
-          return new Function("src", "srcOffset", "dest", "destOffset", compiled);
-        }
-      }
-
-      (0, _util.info)("Unable to compile PS function");
-      const numOutputs = range.length >> 1;
-      const numInputs = domain.length >> 1;
-      const evaluator = new PostScriptEvaluator(code);
-      const cache = Object.create(null);
-      const MAX_CACHE_SIZE = 2048 * 4;
-      let cache_available = MAX_CACHE_SIZE;
-      const tmpBuf = new Float32Array(numInputs);
-      return function constructPostScriptFromIRResult(src, srcOffset, dest, destOffset) {
-        let i, value;
-        let key = "";
-        const input = tmpBuf;
-
-        for (i = 0; i < numInputs; i++) {
-          value = src[srcOffset + i];
-          input[i] = value;
-          key += value + "_";
-        }
-
-        const cachedValue = cache[key];
-
-        if (cachedValue !== undefined) {
-          dest.set(cachedValue, destOffset);
-          return;
-        }
-
-        const output = new Float32Array(numOutputs);
-        const stack = evaluator.execute(input);
-        const stackIndex = stack.length - numOutputs;
-
-        for (i = 0; i < numOutputs; i++) {
-          value = stack[stackIndex + i];
-          let bound = range[i * 2];
-
-          if (value < bound) {
-            value = bound;
-          } else {
-            bound = range[i * 2 + 1];
-
-            if (value > bound) {
-              value = bound;
-            }
-          }
-
-          output[i] = value;
-        }
-
-        if (cache_available > 0) {
-          cache_available--;
-          cache[key] = output;
-        }
-
-        dest.set(output, destOffset);
-      };
+class PDFFunction {
+  static getSampleArray(size, outputSize, bps, stream) {
+    let i, ii;
+    let length = 1;
+
+    for (i = 0, ii = size.length; i < ii; i++) {
+      length *= size[i];
     }
 
-  };
-}();
+    length *= outputSize;
+    const array = new Array(length);
+    let codeSize = 0;
+    let codeBuf = 0;
+    const sampleMul = 1.0 / (2.0 ** bps - 1);
+    const strBytes = stream.getBytes((length * bps + 7) / 8);
+    let strIdx = 0;
+
+    for (i = 0; i < length; i++) {
+      while (codeSize < bps) {
+        codeBuf <<= 8;
+        codeBuf |= strBytes[strIdx++];
+        codeSize += 8;
+      }
+
+      codeSize -= bps;
+      array[i] = (codeBuf >> codeSize) * sampleMul;
+      codeBuf &= (1 << codeSize) - 1;
+    }
+
+    return array;
+  }
+
+  static parse({
+    xref,
+    isEvalSupported,
+    fn
+  }) {
+    const dict = fn.dict || fn;
+    const typeNum = dict.get("FunctionType");
+
+    switch (typeNum) {
+      case 0:
+        return this.constructSampled({
+          xref,
+          isEvalSupported,
+          fn,
+          dict
+        });
+
+      case 1:
+        break;
+
+      case 2:
+        return this.constructInterpolated({
+          xref,
+          isEvalSupported,
+          dict
+        });
+
+      case 3:
+        return this.constructStiched({
+          xref,
+          isEvalSupported,
+          dict
+        });
+
+      case 4:
+        return this.constructPostScript({
+          xref,
+          isEvalSupported,
+          fn,
+          dict
+        });
+    }
+
+    throw new _util.FormatError("Unknown type of function");
+  }
+
+  static parseArray({
+    xref,
+    isEvalSupported,
+    fnObj
+  }) {
+    if (!Array.isArray(fnObj)) {
+      return this.parse({
+        xref,
+        isEvalSupported,
+        fn: fnObj
+      });
+    }
+
+    const fnArray = [];
+
+    for (let j = 0, jj = fnObj.length; j < jj; j++) {
+      fnArray.push(this.parse({
+        xref,
+        isEvalSupported,
+        fn: xref.fetchIfRef(fnObj[j])
+      }));
+    }
+
+    return function (src, srcOffset, dest, destOffset) {
+      for (let i = 0, ii = fnArray.length; i < ii; i++) {
+        fnArray[i](src, srcOffset, dest, destOffset + i);
+      }
+    };
+  }
+
+  static constructSampled({
+    xref,
+    isEvalSupported,
+    fn,
+    dict
+  }) {
+    function toMultiArray(arr) {
+      const inputLength = arr.length;
+      const out = [];
+      let index = 0;
+
+      for (let i = 0; i < inputLength; i += 2) {
+        out[index++] = [arr[i], arr[i + 1]];
+      }
+
+      return out;
+    }
+
+    function interpolate(x, xmin, xmax, ymin, ymax) {
+      return ymin + (x - xmin) * ((ymax - ymin) / (xmax - xmin));
+    }
+
+    let domain = toNumberArray(dict.getArray("Domain"));
+    let range = toNumberArray(dict.getArray("Range"));
+
+    if (!domain || !range) {
+      throw new _util.FormatError("No domain or range");
+    }
+
+    const inputSize = domain.length / 2;
+    const outputSize = range.length / 2;
+    domain = toMultiArray(domain);
+    range = toMultiArray(range);
+    const size = toNumberArray(dict.getArray("Size"));
+    const bps = dict.get("BitsPerSample");
+    const order = dict.get("Order") || 1;
+
+    if (order !== 1) {
+      (0, _util.info)("No support for cubic spline interpolation: " + order);
+    }
+
+    let encode = toNumberArray(dict.getArray("Encode"));
+
+    if (!encode) {
+      encode = [];
+
+      for (let i = 0; i < inputSize; ++i) {
+        encode.push([0, size[i] - 1]);
+      }
+    } else {
+      encode = toMultiArray(encode);
+    }
+
+    let decode = toNumberArray(dict.getArray("Decode"));
+
+    if (!decode) {
+      decode = range;
+    } else {
+      decode = toMultiArray(decode);
+    }
+
+    const samples = this.getSampleArray(size, outputSize, bps, fn);
+    return function constructSampledFn(src, srcOffset, dest, destOffset) {
+      const cubeVertices = 1 << inputSize;
+      const cubeN = new Float64Array(cubeVertices);
+      const cubeVertex = new Uint32Array(cubeVertices);
+      let i, j;
+
+      for (j = 0; j < cubeVertices; j++) {
+        cubeN[j] = 1;
+      }
+
+      let k = outputSize,
+          pos = 1;
+
+      for (i = 0; i < inputSize; ++i) {
+        const domain_2i = domain[i][0];
+        const domain_2i_1 = domain[i][1];
+        const xi = Math.min(Math.max(src[srcOffset + i], domain_2i), domain_2i_1);
+        let e = interpolate(xi, domain_2i, domain_2i_1, encode[i][0], encode[i][1]);
+        const size_i = size[i];
+        e = Math.min(Math.max(e, 0), size_i - 1);
+        const e0 = e < size_i - 1 ? Math.floor(e) : e - 1;
+        const n0 = e0 + 1 - e;
+        const n1 = e - e0;
+        const offset0 = e0 * k;
+        const offset1 = offset0 + k;
+
+        for (j = 0; j < cubeVertices; j++) {
+          if (j & pos) {
+            cubeN[j] *= n1;
+            cubeVertex[j] += offset1;
+          } else {
+            cubeN[j] *= n0;
+            cubeVertex[j] += offset0;
+          }
+        }
+
+        k *= size_i;
+        pos <<= 1;
+      }
+
+      for (j = 0; j < outputSize; ++j) {
+        let rj = 0;
+
+        for (i = 0; i < cubeVertices; i++) {
+          rj += samples[cubeVertex[i] + j] * cubeN[i];
+        }
+
+        rj = interpolate(rj, 0, 1, decode[j][0], decode[j][1]);
+        dest[destOffset + j] = Math.min(Math.max(rj, range[j][0]), range[j][1]);
+      }
+    };
+  }
+
+  static constructInterpolated({
+    xref,
+    isEvalSupported,
+    dict
+  }) {
+    const c0 = toNumberArray(dict.getArray("C0")) || [0];
+    const c1 = toNumberArray(dict.getArray("C1")) || [1];
+    const n = dict.get("N");
+    const diff = [];
+
+    for (let i = 0, ii = c0.length; i < ii; ++i) {
+      diff.push(c1[i] - c0[i]);
+    }
+
+    const length = diff.length;
+    return function constructInterpolatedFn(src, srcOffset, dest, destOffset) {
+      const x = n === 1 ? src[srcOffset] : src[srcOffset] ** n;
+
+      for (let j = 0; j < length; ++j) {
+        dest[destOffset + j] = c0[j] + x * diff[j];
+      }
+    };
+  }
+
+  static constructStiched({
+    xref,
+    isEvalSupported,
+    dict
+  }) {
+    const domain = toNumberArray(dict.getArray("Domain"));
+
+    if (!domain) {
+      throw new _util.FormatError("No domain");
+    }
+
+    const inputSize = domain.length / 2;
+
+    if (inputSize !== 1) {
+      throw new _util.FormatError("Bad domain for stiched function");
+    }
+
+    const fnRefs = dict.get("Functions");
+    const fns = [];
+
+    for (let i = 0, ii = fnRefs.length; i < ii; ++i) {
+      fns.push(this.parse({
+        xref,
+        isEvalSupported,
+        fn: xref.fetchIfRef(fnRefs[i])
+      }));
+    }
+
+    const bounds = toNumberArray(dict.getArray("Bounds"));
+    const encode = toNumberArray(dict.getArray("Encode"));
+    const tmpBuf = new Float32Array(1);
+    return function constructStichedFn(src, srcOffset, dest, destOffset) {
+      const clip = function constructStichedFromIRClip(v, min, max) {
+        if (v > max) {
+          v = max;
+        } else if (v < min) {
+          v = min;
+        }
+
+        return v;
+      };
+
+      const v = clip(src[srcOffset], domain[0], domain[1]);
+      const length = bounds.length;
+      let i;
+
+      for (i = 0; i < length; ++i) {
+        if (v < bounds[i]) {
+          break;
+        }
+      }
+
+      let dmin = domain[0];
+
+      if (i > 0) {
+        dmin = bounds[i - 1];
+      }
+
+      let dmax = domain[1];
+
+      if (i < bounds.length) {
+        dmax = bounds[i];
+      }
+
+      const rmin = encode[2 * i];
+      const rmax = encode[2 * i + 1];
+      tmpBuf[0] = dmin === dmax ? rmin : rmin + (v - dmin) * (rmax - rmin) / (dmax - dmin);
+      fns[i](tmpBuf, 0, dest, destOffset);
+    };
+  }
+
+  static constructPostScript({
+    xref,
+    isEvalSupported,
+    fn,
+    dict
+  }) {
+    const domain = toNumberArray(dict.getArray("Domain"));
+    const range = toNumberArray(dict.getArray("Range"));
+
+    if (!domain) {
+      throw new _util.FormatError("No domain.");
+    }
+
+    if (!range) {
+      throw new _util.FormatError("No range.");
+    }
+
+    const lexer = new _ps_parser.PostScriptLexer(fn);
+    const parser = new _ps_parser.PostScriptParser(lexer);
+    const code = parser.parse();
+
+    if (isEvalSupported && _util.IsEvalSupportedCached.value) {
+      const compiled = new PostScriptCompiler().compile(code, domain, range);
+
+      if (compiled) {
+        return new Function("src", "srcOffset", "dest", "destOffset", compiled);
+      }
+    }
+
+    (0, _util.info)("Unable to compile PS function");
+    const numOutputs = range.length >> 1;
+    const numInputs = domain.length >> 1;
+    const evaluator = new PostScriptEvaluator(code);
+    const cache = Object.create(null);
+    const MAX_CACHE_SIZE = 2048 * 4;
+    let cache_available = MAX_CACHE_SIZE;
+    const tmpBuf = new Float32Array(numInputs);
+    return function constructPostScriptFn(src, srcOffset, dest, destOffset) {
+      let i, value;
+      let key = "";
+      const input = tmpBuf;
+
+      for (i = 0; i < numInputs; i++) {
+        value = src[srcOffset + i];
+        input[i] = value;
+        key += value + "_";
+      }
+
+      const cachedValue = cache[key];
+
+      if (cachedValue !== undefined) {
+        dest.set(cachedValue, destOffset);
+        return;
+      }
+
+      const output = new Float32Array(numOutputs);
+      const stack = evaluator.execute(input);
+      const stackIndex = stack.length - numOutputs;
+
+      for (i = 0; i < numOutputs; i++) {
+        value = stack[stackIndex + i];
+        let bound = range[i * 2];
+
+        if (value < bound) {
+          value = bound;
+        } else {
+          bound = range[i * 2 + 1];
+
+          if (value > bound) {
+            value = bound;
+          }
+        }
+
+        output[i] = value;
+      }
+
+      if (cache_available > 0) {
+        cache_available--;
+        cache[key] = output;
+      }
+
+      dest.set(output, destOffset);
+    };
+  }
+
+}
 
 function isPDFFunction(v) {
   let fnDict;
@@ -45836,75 +45768,73 @@ function isPDFFunction(v) {
   return fnDict.has("FunctionType");
 }
 
-const PostScriptStack = function PostScriptStackClosure() {
-  const MAX_STACK_SIZE = 100;
-
-  class PostScriptStack {
-    constructor(initialStack) {
-      this.stack = !initialStack ? [] : Array.prototype.slice.call(initialStack, 0);
-    }
-
-    push(value) {
-      if (this.stack.length >= MAX_STACK_SIZE) {
-        throw new Error("PostScript function stack overflow.");
-      }
-
-      this.stack.push(value);
-    }
-
-    pop() {
-      if (this.stack.length <= 0) {
-        throw new Error("PostScript function stack underflow.");
-      }
-
-      return this.stack.pop();
-    }
-
-    copy(n) {
-      if (this.stack.length + n >= MAX_STACK_SIZE) {
-        throw new Error("PostScript function stack overflow.");
-      }
-
-      const stack = this.stack;
-
-      for (let i = stack.length - n, j = n - 1; j >= 0; j--, i++) {
-        stack.push(stack[i]);
-      }
-    }
-
-    index(n) {
-      this.push(this.stack[this.stack.length - n - 1]);
-    }
-
-    roll(n, p) {
-      const stack = this.stack;
-      const l = stack.length - n;
-      const r = stack.length - 1;
-      const c = l + (p - Math.floor(p / n) * n);
-
-      for (let i = l, j = r; i < j; i++, j--) {
-        const t = stack[i];
-        stack[i] = stack[j];
-        stack[j] = t;
-      }
-
-      for (let i = l, j = c - 1; i < j; i++, j--) {
-        const t = stack[i];
-        stack[i] = stack[j];
-        stack[j] = t;
-      }
-
-      for (let i = c, j = r; i < j; i++, j--) {
-        const t = stack[i];
-        stack[i] = stack[j];
-        stack[j] = t;
-      }
-    }
-
+class PostScriptStack {
+  static get MAX_STACK_SIZE() {
+    return (0, _util.shadow)(this, "MAX_STACK_SIZE", 100);
   }
 
-  return PostScriptStack;
-}();
+  constructor(initialStack) {
+    this.stack = !initialStack ? [] : Array.prototype.slice.call(initialStack, 0);
+  }
+
+  push(value) {
+    if (this.stack.length >= PostScriptStack.MAX_STACK_SIZE) {
+      throw new Error("PostScript function stack overflow.");
+    }
+
+    this.stack.push(value);
+  }
+
+  pop() {
+    if (this.stack.length <= 0) {
+      throw new Error("PostScript function stack underflow.");
+    }
+
+    return this.stack.pop();
+  }
+
+  copy(n) {
+    if (this.stack.length + n >= PostScriptStack.MAX_STACK_SIZE) {
+      throw new Error("PostScript function stack overflow.");
+    }
+
+    const stack = this.stack;
+
+    for (let i = stack.length - n, j = n - 1; j >= 0; j--, i++) {
+      stack.push(stack[i]);
+    }
+  }
+
+  index(n) {
+    this.push(this.stack[this.stack.length - n - 1]);
+  }
+
+  roll(n, p) {
+    const stack = this.stack;
+    const l = stack.length - n;
+    const r = stack.length - 1;
+    const c = l + (p - Math.floor(p / n) * n);
+
+    for (let i = l, j = r; i < j; i++, j--) {
+      const t = stack[i];
+      stack[i] = stack[j];
+      stack[j] = t;
+    }
+
+    for (let i = l, j = c - 1; i < j; i++, j--) {
+      const t = stack[i];
+      stack[i] = stack[j];
+      stack[j] = t;
+    }
+
+    for (let i = c, j = r; i < j; i++, j--) {
+      const t = stack[i];
+      stack[i] = stack[j];
+      stack[j] = t;
+    }
+  }
+
+}
 
 class PostScriptEvaluator {
   constructor(operators) {
@@ -46721,45 +46651,43 @@ const PostScriptTokenTypes = {
   IFELSE: 5
 };
 
-const PostScriptToken = function PostScriptTokenClosure() {
-  const opCache = Object.create(null);
-
-  class PostScriptToken {
-    constructor(type, value) {
-      this.type = type;
-      this.value = value;
-    }
-
-    static getOperator(op) {
-      const opValue = opCache[op];
-
-      if (opValue) {
-        return opValue;
-      }
-
-      return opCache[op] = new PostScriptToken(PostScriptTokenTypes.OPERATOR, op);
-    }
-
-    static get LBRACE() {
-      return (0, _util.shadow)(this, "LBRACE", new PostScriptToken(PostScriptTokenTypes.LBRACE, "{"));
-    }
-
-    static get RBRACE() {
-      return (0, _util.shadow)(this, "RBRACE", new PostScriptToken(PostScriptTokenTypes.RBRACE, "}"));
-    }
-
-    static get IF() {
-      return (0, _util.shadow)(this, "IF", new PostScriptToken(PostScriptTokenTypes.IF, "IF"));
-    }
-
-    static get IFELSE() {
-      return (0, _util.shadow)(this, "IFELSE", new PostScriptToken(PostScriptTokenTypes.IFELSE, "IFELSE"));
-    }
-
+class PostScriptToken {
+  static get opCache() {
+    return (0, _util.shadow)(this, "opCache", Object.create(null));
   }
 
-  return PostScriptToken;
-}();
+  constructor(type, value) {
+    this.type = type;
+    this.value = value;
+  }
+
+  static getOperator(op) {
+    const opValue = PostScriptToken.opCache[op];
+
+    if (opValue) {
+      return opValue;
+    }
+
+    return PostScriptToken.opCache[op] = new PostScriptToken(PostScriptTokenTypes.OPERATOR, op);
+  }
+
+  static get LBRACE() {
+    return (0, _util.shadow)(this, "LBRACE", new PostScriptToken(PostScriptTokenTypes.LBRACE, "{"));
+  }
+
+  static get RBRACE() {
+    return (0, _util.shadow)(this, "RBRACE", new PostScriptToken(PostScriptTokenTypes.RBRACE, "}"));
+  }
+
+  static get IF() {
+    return (0, _util.shadow)(this, "IF", new PostScriptToken(PostScriptTokenTypes.IF, "IF"));
+  }
+
+  static get IFELSE() {
+    return (0, _util.shadow)(this, "IFELSE", new PostScriptToken(PostScriptTokenTypes.IFELSE, "IFELSE"));
+  }
+
+}
 
 class PostScriptLexer {
   constructor(stream) {
@@ -51398,7 +51326,7 @@ class OperatorList {
   }
 
   static get CHUNK_SIZE_ABOUT() {
-    return (0, _util.shadow)(this, "CHUNK_SIZE_ABOUT", OperatorList.CHUNK_SIZE - 5);
+    return (0, _util.shadow)(this, "CHUNK_SIZE_ABOUT", this.CHUNK_SIZE - 5);
   }
 
   constructor(intent, streamSink) {
@@ -51406,7 +51334,7 @@ class OperatorList {
     this.fnArray = [];
     this.argsArray = [];
 
-    if (streamSink && intent !== "oplist") {
+    if (streamSink && !(intent && intent.startsWith("oplist-"))) {
       this.optimizer = new QueueOptimizer(this);
     } else {
       this.optimizer = new NullOptimizer(this);
@@ -57246,7 +57174,7 @@ exports.XFAFactory = XFAFactory;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.XmlObject = exports.XFAObjectArray = exports.XFAObject = exports.XFAAttribute = exports.StringObject = exports.OptionObject = exports.Option10 = exports.Option01 = exports.IntegerObject = exports.ContentObject = exports.$uid = exports.$toStyle = exports.$toString = exports.$toHTML = exports.$text = exports.$tabIndex = exports.$setValue = exports.$setSetAttributes = exports.$setId = exports.$searchNode = exports.$root = exports.$resolvePrototypes = exports.$removeChild = exports.$pushGlyphs = exports.$onText = exports.$onChildCheck = exports.$onChild = exports.$nsAttributes = exports.$nodeName = exports.$namespaceId = exports.$isUsable = exports.$isTransparent = exports.$isThereMoreWidth = exports.$isSplittable = exports.$isDescendent = exports.$isDataValue = exports.$isCDATAXml = exports.$isBindable = exports.$insertAt = exports.$indexOf = exports.$ids = exports.$hasSettableValue = exports.$globalData = exports.$getTemplateRoot = exports.$getSubformParent = exports.$getRealChildrenByNameIt = exports.$getParent = exports.$getNextPage = exports.$getExtra = exports.$getDataValue = exports.$getContainedChildren = exports.$getChildrenByNameIt = exports.$getChildrenByName = exports.$getChildrenByClass = exports.$getChildren = exports.$getAvailableSpace = exports.$getAttributes = exports.$getAttributeIt = exports.$flushHTML = exports.$finalize = exports.$extra = exports.$dump = exports.$data = exports.$content = exports.$consumed = exports.$clone = exports.$cleanup = exports.$cleanPage = exports.$clean = exports.$childrenToHTML = exports.$appendChild = exports.$addHTML = exports.$acceptWhitespace = void 0;
+exports.XmlObject = exports.XFAObjectArray = exports.XFAObject = exports.XFAAttribute = exports.StringObject = exports.OptionObject = exports.Option10 = exports.Option01 = exports.IntegerObject = exports.ContentObject = exports.$uid = exports.$toStyle = exports.$toString = exports.$toHTML = exports.$text = exports.$tabIndex = exports.$setValue = exports.$setSetAttributes = exports.$setId = exports.$searchNode = exports.$root = exports.$resolvePrototypes = exports.$removeChild = exports.$pushGlyphs = exports.$onText = exports.$onChildCheck = exports.$onChild = exports.$nsAttributes = exports.$nodeName = exports.$namespaceId = exports.$isUsable = exports.$isTransparent = exports.$isThereMoreWidth = exports.$isSplittable = exports.$isNsAgnostic = exports.$isDescendent = exports.$isDataValue = exports.$isCDATAXml = exports.$isBindable = exports.$insertAt = exports.$indexOf = exports.$ids = exports.$hasSettableValue = exports.$globalData = exports.$getTemplateRoot = exports.$getSubformParent = exports.$getRealChildrenByNameIt = exports.$getParent = exports.$getNextPage = exports.$getExtra = exports.$getDataValue = exports.$getContainedChildren = exports.$getChildrenByNameIt = exports.$getChildrenByName = exports.$getChildrenByClass = exports.$getChildren = exports.$getAvailableSpace = exports.$getAttributes = exports.$getAttributeIt = exports.$flushHTML = exports.$finalize = exports.$extra = exports.$dump = exports.$data = exports.$content = exports.$consumed = exports.$clone = exports.$cleanup = exports.$cleanPage = exports.$clean = exports.$childrenToHTML = exports.$appendChild = exports.$addHTML = exports.$acceptWhitespace = void 0;
 
 var _utils = __w_pdfjs_require__(76);
 
@@ -57336,6 +57264,8 @@ const $isDataValue = Symbol();
 exports.$isDataValue = $isDataValue;
 const $isDescendent = Symbol();
 exports.$isDescendent = $isDescendent;
+const $isNsAgnostic = Symbol();
+exports.$isNsAgnostic = $isNsAgnostic;
 const $isSplittable = Symbol();
 exports.$isSplittable = $isSplittable;
 const $isThereMoreWidth = Symbol();
@@ -57471,6 +57401,10 @@ class XFAObject {
 
   [$onChildCheck](child) {
     return this.hasOwnProperty(child[$nodeName]) && child[$namespaceId] === this[$namespaceId];
+  }
+
+  [$isNsAgnostic]() {
+    return false;
   }
 
   [$acceptWhitespace]() {
@@ -58054,6 +57988,10 @@ class XFAAttribute {
 
   [$isDataValue]() {
     return true;
+  }
+
+  [$getDataValue]() {
+    return this[$content].trim();
   }
 
   [$setValue](value) {
@@ -59236,24 +59174,28 @@ class Binder {
         continue;
       }
 
-      const [node] = (0, _som.searchNode)(this.root, dataNode, ref, false, false);
+      const nodes = (0, _som.searchNode)(this.root, dataNode, ref, false, false);
 
-      if (!node) {
+      if (!nodes) {
         (0, _util.warn)(`XFA - Invalid reference: ${ref}.`);
         continue;
       }
+
+      const [node] = nodes;
 
       if (!node[_xfa_object.$isDescendent](this.data)) {
         (0, _util.warn)(`XFA - Invalid node: must be a data node.`);
         continue;
       }
 
-      const [targetNode] = (0, _som.searchNode)(this.root, formNode, target, false, false);
+      const targetNodes = (0, _som.searchNode)(this.root, formNode, target, false, false);
 
-      if (!targetNode) {
+      if (!targetNodes) {
         (0, _util.warn)(`XFA - Invalid target: ${target}.`);
         continue;
       }
+
+      const [targetNode] = targetNodes;
 
       if (!targetNode[_xfa_object.$isDescendent](formNode)) {
         (0, _util.warn)(`XFA - Invalid target: must be a property or subproperty.`);
@@ -59344,24 +59286,28 @@ class Binder {
           continue;
         }
 
-        const [labelNode] = (0, _som.searchNode)(this.root, node, labelRef, true, false);
+        const labelNodes = (0, _som.searchNode)(this.root, node, labelRef, true, false);
 
-        if (!labelNode) {
+        if (!labelNodes) {
           (0, _util.warn)(`XFA - Invalid label: ${labelRef}.`);
           continue;
         }
+
+        const [labelNode] = labelNodes;
 
         if (!labelNode[_xfa_object.$isDescendent](this.datasets)) {
           (0, _util.warn)(`XFA - Invalid label: must be a datasets child.`);
           continue;
         }
 
-        const [valueNode] = (0, _som.searchNode)(this.root, node, valueRef, true, false);
+        const valueNodes = (0, _som.searchNode)(this.root, node, valueRef, true, false);
 
-        if (!valueNode) {
+        if (!valueNodes) {
           (0, _util.warn)(`XFA - Invalid value: ${valueRef}.`);
           continue;
         }
+
+        const [valueNode] = valueNodes;
 
         if (!valueNode[_xfa_object.$isDescendent](this.datasets)) {
           (0, _util.warn)(`XFA - Invalid value: must be a datasets child.`);
@@ -59606,6 +59552,10 @@ class Binder {
             }
 
             dataNode[_xfa_object.$appendChild](match);
+
+            this._setProperties(child, match);
+
+            this._bindItems(child, match);
 
             this._bindElement(child, match);
 
@@ -61768,6 +61718,34 @@ class Field extends _xfa_object.XFAObject {
   }
 
   [_xfa_object.$toHTML](availableSpace) {
+    if (!this.ui) {
+      this.ui = new Ui({});
+      this.ui[_xfa_object.$globalData] = this[_xfa_object.$globalData];
+
+      this[_xfa_object.$appendChild](this.ui);
+
+      let node;
+
+      switch (this.items.children.length) {
+        case 0:
+          node = new TextEdit({});
+          this.ui.textEdit = node;
+          break;
+
+        case 1:
+          node = new CheckButton({});
+          this.ui.checkButton = node;
+          break;
+
+        case 2:
+          node = new ChoiceList({});
+          this.ui.choiceList = node;
+          break;
+      }
+
+      this.ui[_xfa_object.$appendChild](node);
+    }
+
     setTabIndex(this);
 
     if (!this.ui || this.presence === "hidden" || this.presence === "inactive" || this.h === 0 || this.w === 0) {
@@ -61886,7 +61864,8 @@ class Field extends _xfa_object.XFAObject {
 
     const borderStyle = this.border ? this.border[_xfa_object.$toStyle]() : null;
     const bbox = (0, _html_utils.computeBbox)(this, html, availableSpace);
-    const ui = this.ui ? this.ui[_xfa_object.$toHTML]().html : null;
+
+    const ui = this.ui[_xfa_object.$toHTML]().html;
 
     if (!ui) {
       Object.assign(style, borderStyle);
@@ -64269,7 +64248,7 @@ class Template extends _xfa_object.XFAObject {
               i = index - 1;
             } else {
               targetPageArea = target[_xfa_object.$getParent]();
-              startIndex = targetPageArea.contentArea.children.findIndex(e => e === target) - 1;
+              startIndex = targetPageArea.contentArea.children.findIndex(e => e === target);
             }
           }
 
@@ -66822,20 +66801,20 @@ class XFAParser extends _xml_parser.XMLParserBase {
     return [namespace, prefixes, attributeObj];
   }
 
-  _getNameAndPrefix(name) {
+  _getNameAndPrefix(name, nsAgnostic) {
     const i = name.indexOf(":");
 
     if (i === -1) {
       return [name, null];
     }
 
-    return [name.substring(i + 1), name.substring(0, i)];
+    return [name.substring(i + 1), nsAgnostic ? "" : name.substring(0, i)];
   }
 
   onBeginElement(tagName, attributes, isEmpty) {
     const [namespace, prefixes, attributesObj] = this._mkAttributes(attributes, tagName);
 
-    const [name, nsPrefix] = this._getNameAndPrefix(tagName);
+    const [name, nsPrefix] = this._getNameAndPrefix(tagName, this._builder.isNsAgnostic());
 
     const node = this._builder.build({
       nsPrefix,
@@ -66958,6 +66937,7 @@ class Empty extends _xfa_object.XFAObject {
 class Builder {
   constructor() {
     this._namespaceStack = [];
+    this._nsAgnosticLevel = 0;
     this._namespacePrefixes = new Map();
     this._namespaces = new Map();
     this._nextNsId = Math.max(...Object.values(_namespaces.NamespaceIds).map(({
@@ -67016,14 +66996,23 @@ class Builder {
 
     const node = namespaceToUse && namespaceToUse[_namespaces.$buildXFAObject](name, attributes) || new Empty();
 
-    if (hasNamespaceDef || prefixes) {
+    if (node[_xfa_object.$isNsAgnostic]()) {
+      this._nsAgnosticLevel++;
+    }
+
+    if (hasNamespaceDef || prefixes || node[_xfa_object.$isNsAgnostic]()) {
       node[_xfa_object.$cleanup] = {
         hasNamespace: hasNamespaceDef,
-        prefixes
+        prefixes,
+        nsAgnostic: node[_xfa_object.$isNsAgnostic]()
       };
     }
 
     return node;
+  }
+
+  isNsAgnostic() {
+    return this._nsAgnosticLevel > 0;
   }
 
   _searchNamespace(nsName) {
@@ -67093,7 +67082,8 @@ class Builder {
   clean(data) {
     const {
       hasNamespace,
-      prefixes
+      prefixes,
+      nsAgnostic
     } = data;
 
     if (hasNamespace) {
@@ -67106,6 +67096,10 @@ class Builder {
       }) => {
         this._namespacePrefixes.get(prefix).pop();
       });
+    }
+
+    if (nsAgnostic) {
+      this._nsAgnosticLevel--;
     }
   }
 
@@ -69280,6 +69274,10 @@ class Data extends _xfa_object.XmlObject {
     super(DATASETS_NS_ID, "data", attributes);
   }
 
+  [_xfa_object.$isNsAgnostic]() {
+    return true;
+  }
+
 }
 
 class Datasets extends _xfa_object.XFAObject {
@@ -70735,17 +70733,35 @@ class XRef {
       } else if (m = objRegExp.exec(token)) {
         const num = m[1] | 0,
               gen = m[2] | 0;
+        let contentLength,
+            startPos = position + token.length,
+            updateEntries = false;
 
-        if (!this.entries[num] || this.entries[num].gen === gen) {
+        if (!this.entries[num]) {
+          updateEntries = true;
+        } else if (this.entries[num].gen === gen) {
+          try {
+            const parser = new _parser.Parser({
+              lexer: new _parser.Lexer(stream.makeSubStream(startPos))
+            });
+            parser.getObj();
+            updateEntries = true;
+          } catch (ex) {
+            if (ex instanceof _core_utils.ParserEOFException) {
+              (0, _util.warn)(`indexObjects -- checking object (${token}): "${ex}".`);
+            } else {
+              updateEntries = true;
+            }
+          }
+        }
+
+        if (updateEntries) {
           this.entries[num] = {
             offset: position - stream.start,
             gen,
             uncompressed: true
           };
         }
-
-        let contentLength,
-            startPos = position + token.length;
 
         while (startPos < buffer.length) {
           const endPos = startPos + skipUntil(buffer, startPos, objBytes) + 4;
@@ -71873,7 +71889,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.10.0';
-const pdfjsBuild = 'f1ae7d7';
+const pdfjsBuild = 'bcd6dc4';
 })();
 
 /******/ 	return __webpack_exports__;

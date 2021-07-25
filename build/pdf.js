@@ -2249,9 +2249,11 @@ class PDFPageProxy {
   getAnnotations({
     intent = null
   } = {}) {
-    if (!this._annotationsPromise || this._annotationsIntent !== intent) {
-      this._annotationsPromise = this._transport.getAnnotations(this._pageIndex, intent);
-      this._annotationsIntent = intent;
+    const renderingIntent = intent === "display" || intent === "print" ? intent : null;
+
+    if (!this._annotationsPromise || this._annotationsIntent !== renderingIntent) {
+      this._annotationsPromise = this._transport.getAnnotations(this._pageIndex, renderingIntent);
+      this._annotationsIntent = renderingIntent;
     }
 
     return this._annotationsPromise;
@@ -2393,7 +2395,9 @@ class PDFPageProxy {
     return renderTask;
   }
 
-  getOperatorList() {
+  getOperatorList({
+    intent = "display"
+  } = {}) {
     function operatorListChanged() {
       if (intentState.operatorList.lastChunk) {
         intentState.opListReadCapability.resolve(intentState.operatorList);
@@ -2401,7 +2405,7 @@ class PDFPageProxy {
       }
     }
 
-    const renderingIntent = "oplist";
+    const renderingIntent = `oplist-${intent === "print" ? "print" : "display"}`;
 
     let intentState = this._intentStates.get(renderingIntent);
 
@@ -2504,7 +2508,7 @@ class PDFPageProxy {
         force: true
       });
 
-      if (intent === "oplist") {
+      if (intent.startsWith("oplist-")) {
         continue;
       }
 
@@ -3473,6 +3477,10 @@ class WorkerTransport {
 
           break;
 
+        case "Pattern":
+          pageProxy.objs.resolve(id, imageData);
+          break;
+
         default:
           throw new Error(`Got unknown object type ${type}`);
       }
@@ -3968,7 +3976,7 @@ const InternalRenderTask = function InternalRenderTaskClosure() {
 
 const version = '2.10.0';
 exports.version = version;
-const build = 'f1ae7d7';
+const build = 'bcd6dc4';
 exports.build = build;
 
 /***/ }),
@@ -5300,6 +5308,7 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
       this.markedContentStack = [];
       this.optionalContentConfig = optionalContentConfig;
       this.cachedCanvases = new CachedCanvases(this.canvasFactory);
+      this.cachedPatterns = new Map();
 
       if (canvasCtx) {
         addContextCurrentTransform(canvasCtx);
@@ -5418,6 +5427,7 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
       }
 
       this.cachedCanvases.clear();
+      this.cachedPatterns.clear();
 
       if (this.imageLayer) {
         this.imageLayer.endLayout();
@@ -6348,7 +6358,7 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
         };
         pattern = new _pattern_helper.TilingPattern(IR, color, this.ctx, canvasGraphicsFactory, baseTransform);
       } else {
-        pattern = (0, _pattern_helper.getShadingPattern)(IR);
+        pattern = this._getPattern(IR[1]);
       }
 
       return pattern;
@@ -6378,14 +6388,26 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
       this.current.patternFill = false;
     }
 
-    shadingFill(patternIR) {
+    _getPattern(objId) {
+      if (this.cachedPatterns.has(objId)) {
+        return this.cachedPatterns.get(objId);
+      }
+
+      const pattern = (0, _pattern_helper.getShadingPattern)(this.objs.get(objId));
+      this.cachedPatterns.set(objId, pattern);
+      return pattern;
+    }
+
+    shadingFill(objId) {
       if (!this.contentVisible) {
         return;
       }
 
       const ctx = this.ctx;
       this.save();
-      const pattern = (0, _pattern_helper.getShadingPattern)(patternIR);
+
+      const pattern = this._getPattern(objId);
+
       ctx.fillStyle = pattern.getPattern(ctx, this, ctx.mozCurrentTransformInverse, true);
       const inv = ctx.mozCurrentTransformInverse;
 
@@ -6576,7 +6598,7 @@ const CanvasGraphics = function CanvasGraphicsClosure() {
       this.restore();
     }
 
-    beginAnnotation(rect, transform, matrix) {
+    beginAnnotation(id, rect, transform, matrix) {
       this.save();
       resetCtxToDefault(this.ctx);
       this.current = new CanvasExtraState();
@@ -6957,47 +6979,63 @@ class RadialAxialShadingPattern extends BaseShadingPattern {
     this._r0 = IR[6];
     this._r1 = IR[7];
     this._matrix = IR[8];
+    this._patternCache = null;
   }
 
-  getPattern(ctx, owner, inverse, shadingFill = false) {
-    const tmpCanvas = owner.cachedCanvases.getCanvas("pattern", owner.ctx.canvas.width, owner.ctx.canvas.height, true);
-    const tmpCtx = tmpCanvas.context;
-    tmpCtx.clearRect(0, 0, tmpCtx.canvas.width, tmpCtx.canvas.height);
-    tmpCtx.beginPath();
-    tmpCtx.rect(0, 0, tmpCtx.canvas.width, tmpCtx.canvas.height);
-
-    if (!shadingFill) {
-      tmpCtx.setTransform.apply(tmpCtx, owner.baseTransform);
-
-      if (this._matrix) {
-        tmpCtx.transform.apply(tmpCtx, this._matrix);
-      }
-    } else {
-      tmpCtx.setTransform.apply(tmpCtx, ctx.mozCurrentTransform);
-    }
-
-    applyBoundingBox(tmpCtx, this._bbox);
+  _createGradient(ctx) {
     let grad;
 
     if (this._type === "axial") {
-      grad = tmpCtx.createLinearGradient(this._p0[0], this._p0[1], this._p1[0], this._p1[1]);
+      grad = ctx.createLinearGradient(this._p0[0], this._p0[1], this._p1[0], this._p1[1]);
     } else if (this._type === "radial") {
-      grad = tmpCtx.createRadialGradient(this._p0[0], this._p0[1], this._r0, this._p1[0], this._p1[1], this._r1);
+      grad = ctx.createRadialGradient(this._p0[0], this._p0[1], this._r0, this._p1[0], this._p1[1], this._r1);
     }
 
     for (const colorStop of this._colorStops) {
       grad.addColorStop(colorStop[0], colorStop[1]);
     }
 
-    tmpCtx.fillStyle = grad;
-    tmpCtx.fill();
-    const domMatrix = new DOMMatrix(inverse);
-    const pattern = ctx.createPattern(tmpCanvas.canvas, "repeat");
+    return grad;
+  }
 
-    try {
-      pattern.setTransform(domMatrix);
-    } catch (ex) {
-      (0, _util.warn)(`RadialAxialShadingPattern.getPattern: "${ex?.message}".`);
+  getPattern(ctx, owner, inverse, shadingFill = false) {
+    let pattern;
+
+    if (this._patternCache) {
+      pattern = this._patternCache;
+    } else {
+      if (!shadingFill) {
+        const tmpCanvas = owner.cachedCanvases.getCanvas("pattern", owner.ctx.canvas.width, owner.ctx.canvas.height, true);
+        const tmpCtx = tmpCanvas.context;
+        tmpCtx.clearRect(0, 0, tmpCtx.canvas.width, tmpCtx.canvas.height);
+        tmpCtx.beginPath();
+        tmpCtx.rect(0, 0, tmpCtx.canvas.width, tmpCtx.canvas.height);
+        tmpCtx.setTransform.apply(tmpCtx, owner.baseTransform);
+
+        if (this._matrix) {
+          tmpCtx.transform.apply(tmpCtx, this._matrix);
+        }
+
+        applyBoundingBox(tmpCtx, this._bbox);
+        tmpCtx.fillStyle = this._createGradient(tmpCtx);
+        tmpCtx.fill();
+        pattern = ctx.createPattern(tmpCanvas.canvas, "repeat");
+      } else {
+        applyBoundingBox(ctx, this._bbox);
+        pattern = this._createGradient(ctx);
+      }
+
+      this._patternCache = pattern;
+    }
+
+    if (!shadingFill) {
+      const domMatrix = new DOMMatrix(inverse);
+
+      try {
+        pattern.setTransform(domMatrix);
+      } catch (ex) {
+        (0, _util.warn)(`RadialAxialShadingPattern.getPattern: "${ex?.message}".`);
+      }
     }
 
     return pattern;
@@ -7070,8 +7108,6 @@ function drawTriangle(data, context, p1, p2, p3, c1, c2, c3) {
 
       if (y < y1) {
         k = 0;
-      } else if (y1 === y2) {
-        k = 1;
       } else {
         k = (y1 - y) / (y1 - y2);
       }
@@ -14767,7 +14803,7 @@ var _svg = __w_pdfjs_require__(20);
 var _xfa_layer = __w_pdfjs_require__(21);
 
 const pdfjsVersion = '2.10.0';
-const pdfjsBuild = 'f1ae7d7';
+const pdfjsBuild = 'bcd6dc4';
 {
   if (_is_node.isNodeJS) {
     const {
