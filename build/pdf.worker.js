@@ -591,7 +591,6 @@ class WorkerMessageHandler {
           sink,
           task,
           intent: data.intent,
-          renderInteractiveForms: data.renderInteractiveForms,
           annotationStorage: data.annotationStorage
         }).then(function (operatorListInfo) {
           finishWorkerTask(task);
@@ -755,7 +754,7 @@ exports.stringToUTF8String = stringToUTF8String;
 exports.unreachable = unreachable;
 exports.utf8StringToString = utf8StringToString;
 exports.warn = warn;
-exports.VerbosityLevel = exports.Util = exports.UNSUPPORTED_FEATURES = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.TextRenderingMode = exports.StreamType = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.IsLittleEndianCached = exports.IsEvalSupportedCached = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FontType = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
+exports.VerbosityLevel = exports.Util = exports.UNSUPPORTED_FEATURES = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.TextRenderingMode = exports.StreamType = exports.RenderingIntentFlag = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.IsLittleEndianCached = exports.IsEvalSupportedCached = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FontType = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
 
 __w_pdfjs_require__(3);
 
@@ -763,6 +762,14 @@ const IDENTITY_MATRIX = [1, 0, 0, 1, 0, 0];
 exports.IDENTITY_MATRIX = IDENTITY_MATRIX;
 const FONT_IDENTITY_MATRIX = [0.001, 0, 0, 0.001, 0, 0];
 exports.FONT_IDENTITY_MATRIX = FONT_IDENTITY_MATRIX;
+const RenderingIntentFlag = {
+  ANY: 0x01,
+  DISPLAY: 0x02,
+  PRINT: 0x04,
+  ANNOTATION_FORMS: 0x20,
+  OPLIST: 0x100
+};
+exports.RenderingIntentFlag = RenderingIntentFlag;
 const PermissionFlag = {
   PRINT: 0x04,
   MODIFY_CONTENTS: 0x08,
@@ -1652,7 +1659,6 @@ Object.defineProperty(exports, "__esModule", ({
 exports.clearPrimitiveCaches = clearPrimitiveCaches;
 exports.isCmd = isCmd;
 exports.isDict = isDict;
-exports.isEOF = isEOF;
 exports.isName = isName;
 exports.isRef = isRef;
 exports.isRefsEqual = isRefsEqual;
@@ -1663,7 +1669,7 @@ var _util = __w_pdfjs_require__(2);
 
 var _base_stream = __w_pdfjs_require__(6);
 
-const EOF = {};
+const EOF = Symbol("EOF");
 exports.EOF = EOF;
 
 const Name = function NameClosure() {
@@ -1998,10 +2004,6 @@ class RefSetCache {
 }
 
 exports.RefSetCache = RefSetCache;
-
-function isEOF(v) {
-  return v === EOF;
-}
 
 function isName(v, name) {
   return v instanceof Name && (name === undefined || v.name === name);
@@ -3714,7 +3716,6 @@ class Page {
     sink,
     task,
     intent,
-    renderInteractiveForms,
     annotationStorage
   }) {
     const contentStreamPromise = this.getContentStream(handler);
@@ -3755,12 +3756,15 @@ class Page {
         };
       }
 
-      const annotationIntent = intent.startsWith("oplist-") ? intent.split("-")[1] : intent;
+      const renderForms = !!(intent & _util.RenderingIntentFlag.ANNOTATION_FORMS),
+            intentAny = !!(intent & _util.RenderingIntentFlag.ANY),
+            intentDisplay = !!(intent & _util.RenderingIntentFlag.DISPLAY),
+            intentPrint = !!(intent & _util.RenderingIntentFlag.PRINT);
       const opListPromises = [];
 
       for (const annotation of annotations) {
-        if (annotationIntent === "display" && annotation.mustBeViewed(annotationStorage) || annotationIntent === "print" && annotation.mustBePrinted(annotationStorage)) {
-          opListPromises.push(annotation.getOperatorList(partialEvaluator, task, renderInteractiveForms, annotationStorage).catch(function (reason) {
+        if (intentAny || intentDisplay && annotation.mustBeViewed(annotationStorage) || intentPrint && annotation.mustBePrinted(annotationStorage)) {
+          opListPromises.push(annotation.getOperatorList(partialEvaluator, task, renderForms, annotationStorage).catch(function (reason) {
             (0, _util.warn)("getOperatorList - ignoring annotation data during " + `"${task.name}" task: "${reason}".`);
             return null;
           }));
@@ -3839,9 +3843,17 @@ class Page {
     return this._parsedAnnotations.then(function (annotations) {
       const annotationsData = [];
 
-      for (let i = 0, ii = annotations.length; i < ii; i++) {
-        if (!intent || intent === "display" && annotations[i].viewable || intent === "print" && annotations[i].printable) {
-          annotationsData.push(annotations[i].data);
+      if (annotations.length === 0) {
+        return annotationsData;
+      }
+
+      const intentAny = !!(intent & _util.RenderingIntentFlag.ANY),
+            intentDisplay = !!(intent & _util.RenderingIntentFlag.DISPLAY),
+            intentPrint = !!(intent & _util.RenderingIntentFlag.PRINT);
+
+      for (const annotation of annotations) {
+        if (intentAny || intentDisplay && annotation.viewable || intentPrint && annotation.printable) {
+          annotationsData.push(annotation.data);
         }
       }
 
@@ -26301,7 +26313,7 @@ const CMapFactory = function CMapFactoryClosure() {
     while (true) {
       let obj = lexer.getObj();
 
-      if ((0, _primitives.isEOF)(obj)) {
+      if (obj === _primitives.EOF) {
         break;
       }
 
@@ -26322,7 +26334,7 @@ const CMapFactory = function CMapFactoryClosure() {
     while (true) {
       let obj = lexer.getObj();
 
-      if ((0, _primitives.isEOF)(obj)) {
+      if (obj === _primitives.EOF) {
         break;
       }
 
@@ -26344,7 +26356,7 @@ const CMapFactory = function CMapFactoryClosure() {
         obj = lexer.getObj();
         const array = [];
 
-        while (!(0, _primitives.isCmd)(obj, "]") && !(0, _primitives.isEOF)(obj)) {
+        while (!(0, _primitives.isCmd)(obj, "]") && obj !== _primitives.EOF) {
           array.push(obj);
           obj = lexer.getObj();
         }
@@ -26362,7 +26374,7 @@ const CMapFactory = function CMapFactoryClosure() {
     while (true) {
       let obj = lexer.getObj();
 
-      if ((0, _primitives.isEOF)(obj)) {
+      if (obj === _primitives.EOF) {
         break;
       }
 
@@ -26383,7 +26395,7 @@ const CMapFactory = function CMapFactoryClosure() {
     while (true) {
       let obj = lexer.getObj();
 
-      if ((0, _primitives.isEOF)(obj)) {
+      if (obj === _primitives.EOF) {
         break;
       }
 
@@ -26407,7 +26419,7 @@ const CMapFactory = function CMapFactoryClosure() {
     while (true) {
       let obj = lexer.getObj();
 
-      if ((0, _primitives.isEOF)(obj)) {
+      if (obj === _primitives.EOF) {
         break;
       }
 
@@ -26456,7 +26468,7 @@ const CMapFactory = function CMapFactoryClosure() {
       try {
         const obj = lexer.getObj();
 
-        if ((0, _primitives.isEOF)(obj)) {
+        if (obj === _primitives.EOF) {
           break;
         } else if ((0, _primitives.isName)(obj)) {
           if (obj.name === "WMode") {
@@ -26712,11 +26724,11 @@ class Parser {
         case "[":
           const array = [];
 
-          while (!(0, _primitives.isCmd)(this.buf1, "]") && !(0, _primitives.isEOF)(this.buf1)) {
+          while (!(0, _primitives.isCmd)(this.buf1, "]") && this.buf1 !== _primitives.EOF) {
             array.push(this.getObj(cipherTransform));
           }
 
-          if ((0, _primitives.isEOF)(this.buf1)) {
+          if (this.buf1 === _primitives.EOF) {
             if (this.recoveryMode) {
               return array;
             }
@@ -26730,7 +26742,7 @@ class Parser {
         case "<<":
           const dict = new _primitives.Dict(this.xref);
 
-          while (!(0, _primitives.isCmd)(this.buf1, ">>") && !(0, _primitives.isEOF)(this.buf1)) {
+          while (!(0, _primitives.isCmd)(this.buf1, ">>") && this.buf1 !== _primitives.EOF) {
             if (!(0, _primitives.isName)(this.buf1)) {
               (0, _util.info)("Malformed dictionary: key must be a name object");
               this.shift();
@@ -26740,14 +26752,14 @@ class Parser {
             const key = this.buf1.name;
             this.shift();
 
-            if ((0, _primitives.isEOF)(this.buf1)) {
+            if (this.buf1 === _primitives.EOF) {
               break;
             }
 
             dict.set(key, this.getObj(cipherTransform));
           }
 
-          if ((0, _primitives.isEOF)(this.buf1)) {
+          if (this.buf1 === _primitives.EOF) {
             if (this.recoveryMode) {
               return dict;
             }
@@ -27051,7 +27063,7 @@ class Parser {
     const dict = new _primitives.Dict(this.xref);
     let dictLength;
 
-    while (!(0, _primitives.isCmd)(this.buf1, "ID") && !(0, _primitives.isEOF)(this.buf1)) {
+    while (!(0, _primitives.isCmd)(this.buf1, "ID") && this.buf1 !== _primitives.EOF) {
       if (!(0, _primitives.isName)(this.buf1)) {
         throw new _util.FormatError("Dictionary key must be a name object");
       }
@@ -27059,7 +27071,7 @@ class Parser {
       const key = this.buf1.name;
       this.shift();
 
-      if ((0, _primitives.isEOF)(this.buf1)) {
+      if (this.buf1 === _primitives.EOF) {
         break;
       }
 
@@ -51471,12 +51483,12 @@ class OperatorList {
     return (0, _util.shadow)(this, "CHUNK_SIZE_ABOUT", this.CHUNK_SIZE - 5);
   }
 
-  constructor(intent, streamSink) {
+  constructor(intent = 0, streamSink) {
     this._streamSink = streamSink;
     this.fnArray = [];
     this.argsArray = [];
 
-    if (streamSink && !(intent && intent.startsWith("oplist-"))) {
+    if (streamSink && !(intent & _util.RenderingIntentFlag.OPLIST)) {
       this.optimizer = new QueueOptimizer(this);
     } else {
       this.optimizer = new NullOptimizer(this);
@@ -59809,6 +59821,8 @@ const TEMPLATE_NS_ID = _namespaces.NamespaceIds.template.id;
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MAX_ATTEMPTS_FOR_LRTB_LAYOUT = 2;
 const MAX_EMPTY_PAGES = 3;
+const DEFAULT_TAB_INDEX = 5000;
+const HEADING_PATTERN = /^H(\d+)$/;
 
 function getBorderDims(node) {
   if (!node || !node.border) {
@@ -59862,7 +59876,12 @@ function* getContainedChildren(node) {
 
 function setTabIndex(node) {
   while (node) {
-    if (!node.traversal || node[_xfa_object.$tabIndex]) {
+    if (!node.traversal) {
+      node[_xfa_object.$tabIndex] = node[_xfa_object.$getParent]()[_xfa_object.$tabIndex];
+      return;
+    }
+
+    if (node[_xfa_object.$tabIndex]) {
       return;
     }
 
@@ -59876,6 +59895,7 @@ function setTabIndex(node) {
     }
 
     if (!next || !next.ref) {
+      node[_xfa_object.$tabIndex] = node[_xfa_object.$getParent]()[_xfa_object.$tabIndex];
       return;
     }
 
@@ -59891,6 +59911,62 @@ function setTabIndex(node) {
 
     node = ref[0];
   }
+}
+
+function applyAssist(obj, attributes) {
+  const assist = obj.assist;
+
+  if (assist) {
+    const assistTitle = assist[_xfa_object.$toHTML]();
+
+    if (assistTitle) {
+      attributes.title = assistTitle;
+    }
+
+    const role = assist.role;
+    const match = role.match(HEADING_PATTERN);
+
+    if (match) {
+      const ariaRole = "heading";
+      const ariaLevel = match[1];
+      attributes.role = ariaRole;
+      attributes["aria-level"] = ariaLevel;
+    }
+  }
+
+  if (obj.layout === "table") {
+    attributes.role = "table";
+  } else if (obj.layout === "row") {
+    attributes.role = "row";
+  } else {
+    const parent = obj[_xfa_object.$getParent]();
+
+    if (parent.layout === "row") {
+      if (parent.assist && parent.assist.role === "TH") {
+        attributes.role = "columnheader";
+      } else {
+        attributes.role = "cell";
+      }
+    }
+  }
+}
+
+function ariaLabel(obj) {
+  if (!obj.assist) {
+    return null;
+  }
+
+  const assist = obj.assist;
+
+  if (assist.speak && assist.speak[_xfa_object.$content] !== "") {
+    return assist.speak[_xfa_object.$content];
+  }
+
+  if (assist.toolTip) {
+    return assist.toolTip[_xfa_object.$content];
+  }
+
+  return null;
 }
 
 function valueToHtml(value) {
@@ -60171,6 +60247,10 @@ class Area extends _xfa_object.XFAObject {
   }
 
   [_xfa_object.$isTransparent]() {
+    return true;
+  }
+
+  [_xfa_object.$isBindable]() {
     return true;
   }
 
@@ -60798,7 +60878,8 @@ class CheckButton extends _xfa_object.XFAObject {
         dataId,
         type,
         checked,
-        xfaOn: exportedValue.on
+        xfaOn: exportedValue.on,
+        "aria-label": ariaLabel(field)
       }
     };
 
@@ -60842,6 +60923,10 @@ class ChoiceList extends _xfa_object.XFAObject {
 
     const field = ui[_xfa_object.$getParent]();
 
+    const fontSize = field.font && field.font.size || 10;
+    const optionStyle = {
+      fontSize: `calc(${fontSize}px * var(--zoom-factor))`
+    };
     const children = [];
 
     if (field.items.children.length > 0) {
@@ -60865,7 +60950,8 @@ class ChoiceList extends _xfa_object.XFAObject {
         const option = {
           name: "option",
           attributes: {
-            value: values[i] || displayed[i]
+            value: values[i] || displayed[i],
+            style: optionStyle
           },
           value: displayed[i]
         };
@@ -60893,7 +60979,8 @@ class ChoiceList extends _xfa_object.XFAObject {
       class: ["xfaSelect"],
       fieldId: field[_xfa_object.$uid],
       dataId: field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid] || field[_xfa_object.$uid],
-      style
+      style,
+      "aria-label": ariaLabel(field)
     };
 
     if (this.open === "multiSelect") {
@@ -61105,7 +61192,8 @@ class DateTimeEdit extends _xfa_object.XFAObject {
         fieldId: field[_xfa_object.$uid],
         dataId: field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid] || field[_xfa_object.$uid],
         class: ["xfaTextfield"],
-        style
+        style,
+        "aria-label": ariaLabel(field)
       }
     };
     return _utils.HTMLResult.success({
@@ -61252,6 +61340,8 @@ class Draw extends _xfa_object.XFAObject {
   }
 
   [_xfa_object.$toHTML](availableSpace) {
+    setTabIndex(this);
+
     if (this.presence === "hidden" || this.presence === "inactive") {
       return _utils.HTMLResult.EMPTY;
     }
@@ -61327,12 +61417,7 @@ class Draw extends _xfa_object.XFAObject {
       attributes,
       children: []
     };
-    const assist = this.assist ? this.assist[_xfa_object.$toHTML]() : null;
-
-    if (assist) {
-      html.attributes.title = assist;
-    }
-
+    applyAssist(this, attributes);
     const bbox = (0, _html_utils.computeBbox)(this, html, availableSpace);
     const value = this.value ? this.value[_xfa_object.$toHTML](availableSpace).html : null;
 
@@ -61708,6 +61793,8 @@ class ExclGroup extends _xfa_object.XFAObject {
   }
 
   [_xfa_object.$toHTML](availableSpace) {
+    setTabIndex(this);
+
     if (this.presence === "hidden" || this.presence === "inactive" || this.h === 0 || this.w === 0) {
       return _utils.HTMLResult.EMPTY;
     }
@@ -61750,10 +61837,6 @@ class ExclGroup extends _xfa_object.XFAObject {
       return _utils.HTMLResult.FAILURE;
     }
 
-    availableSpace = {
-      width: this.w === "" ? availableSpace.width : this.w,
-      height: this.h === "" ? availableSpace.height : this.h
-    };
     const filter = new Set(["field"]);
 
     if (this.layout.includes("row")) {
@@ -61854,12 +61937,7 @@ class ExclGroup extends _xfa_object.XFAObject {
       attributes,
       children
     };
-    const assist = this.assist ? this.assist[_xfa_object.$toHTML]() : null;
-
-    if (assist) {
-      html.attributes.title = assist;
-    }
-
+    applyAssist(this, attributes);
     delete this[_xfa_object.$extra];
     return _utils.HTMLResult.success((0, _html_utils.createWrapper)(this, html), bbox);
   }
@@ -61965,6 +62043,8 @@ class Field extends _xfa_object.XFAObject {
   }
 
   [_xfa_object.$toHTML](availableSpace) {
+    setTabIndex(this);
+
     if (!this.ui) {
       this.ui = new Ui({});
       this.ui[_xfa_object.$globalData] = this[_xfa_object.$globalData];
@@ -61992,8 +62072,6 @@ class Field extends _xfa_object.XFAObject {
 
       this.ui[_xfa_object.$appendChild](node);
     }
-
-    setTabIndex(this);
 
     if (!this.ui || this.presence === "hidden" || this.presence === "inactive" || this.h === 0 || this.w === 0) {
       return _utils.HTMLResult.EMPTY;
@@ -62138,12 +62216,7 @@ class Field extends _xfa_object.XFAObject {
       attributes,
       children
     };
-    const assist = this.assist ? this.assist[_xfa_object.$toHTML]() : null;
-
-    if (assist) {
-      html.attributes.title = assist;
-    }
-
+    applyAssist(this, attributes);
     const borderStyle = this.border ? this.border[_xfa_object.$toStyle]() : null;
     const bbox = (0, _html_utils.computeBbox)(this, html, availableSpace);
 
@@ -62197,6 +62270,11 @@ class Field extends _xfa_object.XFAObject {
         }
 
         if (value) {
+          if (this.ui.numericEdit) {
+            value = parseFloat(value);
+            value = isNaN(value) ? "" : value.toString();
+          }
+
           if (ui.children[0].name === "textarea") {
             ui.children[0].attributes.textContent = value;
           } else {
@@ -62635,12 +62713,15 @@ class Image extends _xfa_object.StringObject {
         break;
     }
 
+    const parent = this[_xfa_object.$getParent]();
+
     return _utils.HTMLResult.success({
       name: "img",
       attributes: {
         class: ["xfaImage"],
         style,
-        src: URL.createObjectURL(blob)
+        src: URL.createObjectURL(blob),
+        alt: parent ? ariaLabel(parent[_xfa_object.$getParent]()) : null
       }
     });
   }
@@ -63004,7 +63085,8 @@ class NumericEdit extends _xfa_object.XFAObject {
         fieldId: field[_xfa_object.$uid],
         dataId: field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid] || field[_xfa_object.$uid],
         class: ["xfaTextfield"],
-        style
+        style,
+        "aria-label": ariaLabel(field)
       }
     };
     return _utils.HTMLResult.success({
@@ -64008,6 +64090,8 @@ class Subform extends _xfa_object.XFAObject {
   }
 
   [_xfa_object.$toHTML](availableSpace) {
+    setTabIndex(this);
+
     if (this.break) {
       if (this.break.after !== "auto" || this.break.afterTarget !== "") {
         const node = new BreakAfter({
@@ -64240,11 +64324,7 @@ class Subform extends _xfa_object.XFAObject {
       attributes,
       children
     };
-    const assist = this.assist ? this.assist[_xfa_object.$toHTML]() : null;
-
-    if (assist) {
-      html.attributes.title = assist;
-    }
+    applyAssist(this, attributes);
 
     const result = _utils.HTMLResult.success((0, _html_utils.createWrapper)(this, html), bbox);
 
@@ -64296,6 +64376,10 @@ class SubformSet extends _xfa_object.XFAObject {
     }
 
     return parent;
+  }
+
+  [_xfa_object.$isBindable]() {
+    return true;
   }
 
 }
@@ -64375,7 +64459,7 @@ class Template extends _xfa_object.XFAObject {
       (0, _util.warn)("XFA - Several subforms in template node: please file a bug.");
     }
 
-    this[_xfa_object.$tabIndex] = 1000;
+    this[_xfa_object.$tabIndex] = DEFAULT_TAB_INDEX;
   }
 
   [_xfa_object.$isSplittable]() {
@@ -64770,7 +64854,8 @@ class TextEdit extends _xfa_object.XFAObject {
           dataId: field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid] || field[_xfa_object.$uid],
           fieldId: field[_xfa_object.$uid],
           class: ["xfaTextfield"],
-          style
+          style,
+          "aria-label": ariaLabel(field)
         }
       };
     } else {
@@ -64781,7 +64866,8 @@ class TextEdit extends _xfa_object.XFAObject {
           dataId: field[_xfa_object.$data] && field[_xfa_object.$data][_xfa_object.$uid] || field[_xfa_object.$uid],
           fieldId: field[_xfa_object.$uid],
           class: ["xfaTextfield"],
-          style
+          style,
+          "aria-label": ariaLabel(field)
         }
       };
     }
@@ -65818,20 +65904,20 @@ function checkDimensions(node, space) {
             }
 
             if (parent[_xfa_object.$extra].numberInLine === 0) {
-              return space.height > 0;
+              return space.height > ERROR;
             }
 
             return false;
           }
 
-          return space.width > 0;
+          return space.width > ERROR;
         }
 
         if (node.w !== "") {
           return Math.round(w - space.width) <= ERROR;
         }
 
-        return space.width > 0;
+        return space.width > ERROR;
       }
 
       if (node[_xfa_object.$getTemplateRoot]()[_xfa_object.$extra].noLayoutFailure) {
@@ -65843,14 +65929,14 @@ function checkDimensions(node, space) {
       }
 
       if (node.w === "" || Math.round(w - space.width) <= ERROR) {
-        return space.height > 0;
+        return space.height > ERROR;
       }
 
       if (parent[_xfa_object.$isThereMoreWidth]()) {
         return false;
       }
 
-      return space.height > 0;
+      return space.height > ERROR;
 
     case "table":
     case "tb":
@@ -65863,14 +65949,14 @@ function checkDimensions(node, space) {
       }
 
       if (node.w === "" || Math.round(w - space.width) <= ERROR) {
-        return space.height > 0;
+        return space.height > ERROR;
       }
 
       if (parent[_xfa_object.$isThereMoreWidth]()) {
         return false;
       }
 
-      return space.height > 0;
+      return space.height > ERROR;
 
     case "position":
       if (node[_xfa_object.$getTemplateRoot]()[_xfa_object.$extra].noLayoutFailure) {
@@ -72333,7 +72419,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '222c9e7';
+const pdfjsBuild = '036b814';
 })();
 
 /******/ 	return __webpack_exports__;

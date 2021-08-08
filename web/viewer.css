@@ -69,6 +69,14 @@
   background: rgba(0, 0, 255, 1);
 }
 
+/* Avoids https://github.com/mozilla/pdf.js/issues/13840 in Chrome */
+.textLayer br::-moz-selection {
+  background: transparent;
+}
+.textLayer br::selection {
+  background: transparent;
+}
+
 .textLayer .endOfContent {
   display: block;
   position: absolute;
@@ -168,6 +176,14 @@
 .annotationLayer .choiceWidgetAnnotation select:focus {
   background: none;
   border: 1px solid transparent;
+}
+
+.annotationLayer .textWidgetAnnotation input :focus,
+.annotationLayer .textWidgetAnnotation textarea :focus,
+.annotationLayer .choiceWidgetAnnotation select :focus,
+.annotationLayer .buttonWidgetAnnotation.checkBox :focus,
+.annotationLayer .buttonWidgetAnnotation.radioButton :focus {
+  outline: auto;
 }
 
 .annotationLayer .buttonWidgetAnnotation.checkBox input:checked:before,
@@ -426,7 +442,13 @@
 .xfaSelect:focus {
   background-image: none;
   background-color: transparent;
-  outline: none;
+  outline: auto;
+  outline-offset: -1px;
+}
+
+.xfaCheckbox:focus,
+.xfaRadio:focus {
+  outline: auto;
 }
 
 .xfaTextfield,
@@ -566,6 +588,7 @@
   --page-margin: 1px auto -8px;
   --page-border: 9px solid transparent;
   --spreadHorizontalWrapped-margin-LR: -3.5px;
+  --zoom-factor: 1;
 }
 
 @media screen and (forced-colors: active) {
@@ -2582,7 +2605,7 @@ html[dir="rtl"] #documentPropertiesOverlay .row > * {
   }
 
   #printContainer > .xfaPrintedPage .xfaPage {
-    position: initial;
+    position: absolute;
   }
 
   #printContainer > .xfaPrintedPage {

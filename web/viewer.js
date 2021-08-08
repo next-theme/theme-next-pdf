@@ -541,39 +541,39 @@ const PDFViewerApplication = {
       return undefined;
     }
 
-    const hashParams = (0, _ui_utils.parseQueryString)(hash),
+    const params = (0, _ui_utils.parseQueryString)(hash),
           waitOn = [];
 
-    if ("disableworker" in hashParams && hashParams.disableworker === "true") {
+    if (params.get("disableworker") === "true") {
       waitOn.push(loadFakeWorker());
     }
 
-    if ("disablerange" in hashParams) {
-      _app_options.AppOptions.set("disableRange", hashParams.disablerange === "true");
+    if (params.has("disablerange")) {
+      _app_options.AppOptions.set("disableRange", params.get("disablerange") === "true");
     }
 
-    if ("disablestream" in hashParams) {
-      _app_options.AppOptions.set("disableStream", hashParams.disablestream === "true");
+    if (params.has("disablestream")) {
+      _app_options.AppOptions.set("disableStream", params.get("disablestream") === "true");
     }
 
-    if ("disableautofetch" in hashParams) {
-      _app_options.AppOptions.set("disableAutoFetch", hashParams.disableautofetch === "true");
+    if (params.has("disableautofetch")) {
+      _app_options.AppOptions.set("disableAutoFetch", params.get("disableautofetch") === "true");
     }
 
-    if ("disablefontface" in hashParams) {
-      _app_options.AppOptions.set("disableFontFace", hashParams.disablefontface === "true");
+    if (params.has("disablefontface")) {
+      _app_options.AppOptions.set("disableFontFace", params.get("disablefontface") === "true");
     }
 
-    if ("disablehistory" in hashParams) {
-      _app_options.AppOptions.set("disableHistory", hashParams.disablehistory === "true");
+    if (params.has("disablehistory")) {
+      _app_options.AppOptions.set("disableHistory", params.get("disablehistory") === "true");
     }
 
-    if ("verbosity" in hashParams) {
-      _app_options.AppOptions.set("verbosity", hashParams.verbosity | 0);
+    if (params.has("verbosity")) {
+      _app_options.AppOptions.set("verbosity", params.get("verbosity") | 0);
     }
 
-    if ("textlayer" in hashParams) {
-      switch (hashParams.textlayer) {
+    if (params.has("textlayer")) {
+      switch (params.get("textlayer")) {
         case "off":
           _app_options.AppOptions.set("textLayerMode", _ui_utils.TextLayerMode.DISABLE);
 
@@ -583,22 +583,22 @@ const PDFViewerApplication = {
         case "shadow":
         case "hover":
           const viewer = this.appConfig.viewerContainer;
-          viewer.classList.add("textLayer-" + hashParams.textlayer);
+          viewer.classList.add(`textLayer-${params.get("textlayer")}`);
           break;
       }
     }
 
-    if ("pdfbug" in hashParams) {
+    if (params.has("pdfbug")) {
       _app_options.AppOptions.set("pdfBug", true);
 
       _app_options.AppOptions.set("fontExtraProperties", true);
 
-      const enabled = hashParams.pdfbug.split(",");
+      const enabled = params.get("pdfbug").split(",");
       waitOn.push(loadAndEnablePDFBug(enabled));
     }
 
-    if ("locale" in hashParams) {
-      _app_options.AppOptions.set("locale", hashParams.locale);
+    if (params.has("locale")) {
+      _app_options.AppOptions.set("locale", params.get("locale"));
     }
 
     if (waitOn.length === 0) {
@@ -2191,7 +2191,7 @@ async function loadFakeWorker() {
     _pdfjsLib.GlobalWorkerOptions.workerSrc = _app_options.AppOptions.get("workerSrc");
   }
 
-  return (0, _pdfjsLib.loadScript)(_pdfjsLib.PDFWorker.getWorkerSrc());
+  return (0, _pdfjsLib.loadScript)(_pdfjsLib.PDFWorker.workerSrc);
 }
 
 function loadAndEnablePDFBug(enabledTabs) {
@@ -2226,7 +2226,7 @@ function webViewerInitialized() {
   let file;
   const queryString = document.location.search.substring(1);
   const params = (0, _ui_utils.parseQueryString)(queryString);
-  file = "file" in params ? params.file : _app_options.AppOptions.get("defaultUrl");
+  file = params.get("file") ?? _app_options.AppOptions.get("defaultUrl");
   validateFileURL(file);
   const fileInput = document.createElement("input");
   fileInput.id = appConfig.openFileInputName;
@@ -3310,14 +3310,13 @@ function watchScroll(viewAreaElement, callback) {
 }
 
 function parseQueryString(query) {
-  const parts = query.split("&");
-  const params = Object.create(null);
+  const params = new Map();
 
-  for (let i = 0, ii = parts.length; i < ii; ++i) {
-    const param = parts[i].split("=");
-    const key = param[0].toLowerCase();
-    const value = param.length > 1 ? param[1] : null;
-    params[decodeURIComponent(key)] = decodeURIComponent(value);
+  for (const part of query.split("&")) {
+    const param = part.split("="),
+          key = param[0].toLowerCase(),
+          value = param.length > 1 ? param[1] : "";
+    params.set(decodeURIComponent(key), decodeURIComponent(value));
   }
 
   return params;
@@ -4204,6 +4203,10 @@ class PDFRenderingQueue {
 
   isHighestPriority(view) {
     return this.highestPriorityPage === view.renderingId;
+  }
+
+  hasViewer() {
+    return !!this.pdfViewer;
   }
 
   renderHighestPriority(currentlyVisiblePages) {
@@ -6470,8 +6473,8 @@ class PDFHistory {
   _parseCurrentHash(checkNameddest = false) {
     const hash = unescape(getCurrentHash()).substring(1);
     const params = (0, _ui_utils.parseQueryString)(hash);
-    const nameddest = params.nameddest || "";
-    let page = params.page | 0;
+    const nameddest = params.get("nameddest") || "";
+    let page = params.get("page") | 0;
 
     if (!this._isValidPage(page) || checkNameddest && nameddest.length > 0) {
       page = null;
@@ -6629,9 +6632,7 @@ function isDestHashesEqual(destHash, pushHash) {
     return true;
   }
 
-  const {
-    nameddest
-  } = (0, _ui_utils.parseQueryString)(destHash);
+  const nameddest = (0, _ui_utils.parseQueryString)(destHash).get("nameddest");
 
   if (nameddest === pushHash) {
     return true;
@@ -7054,20 +7055,20 @@ class PDFLinkService {
     if (hash.includes("=")) {
       const params = (0, _ui_utils.parseQueryString)(hash);
 
-      if ("search" in params) {
+      if (params.has("search")) {
         this.eventBus.dispatch("findfromurlhash", {
           source: this,
-          query: params.search.replace(/"/g, ""),
-          phraseSearch: params.phrase === "true"
+          query: params.get("search").replace(/"/g, ""),
+          phraseSearch: params.get("phrase") === "true"
         });
       }
 
-      if ("page" in params) {
-        pageNumber = params.page | 0 || 1;
+      if (params.has("page")) {
+        pageNumber = params.get("page") | 0 || 1;
       }
 
-      if ("zoom" in params) {
-        const zoomArgs = params.zoom.split(",");
+      if (params.has("zoom")) {
+        const zoomArgs = params.get("zoom").split(",");
         const zoomArg = zoomArgs[0];
         const zoomArgNumber = parseFloat(zoomArg);
 
@@ -7108,15 +7109,15 @@ class PDFLinkService {
         this.page = pageNumber;
       }
 
-      if ("pagemode" in params) {
+      if (params.has("pagemode")) {
         this.eventBus.dispatch("pagemode", {
           source: this,
-          mode: params.pagemode
+          mode: params.get("pagemode")
         });
       }
 
-      if ("nameddest" in params) {
-        this.goToDestination(params.nameddest);
+      if (params.has("nameddest")) {
+        this.goToDestination(params.get("nameddest"));
       }
     } else {
       dest = unescape(hash);
@@ -9873,6 +9874,7 @@ class BaseViewer {
       this.renderingQueue = options.renderingQueue;
     }
 
+    this._doc = document.documentElement;
     this.scroll = (0, _ui_utils.watchScroll)(this.container, this._scrollUpdate.bind(this));
     this.presentationModeState = _ui_utils.PresentationModeState.UNKNOWN;
     this._onBeforeDraw = this._onAfterDraw = null;
@@ -10332,6 +10334,8 @@ class BaseViewer {
 
       return;
     }
+
+    this._doc.style.setProperty("--zoom-factor", newScale);
 
     for (let i = 0, ii = this._pages.length; i < ii; i++) {
       this._pages[i].update(newScale);
@@ -11483,6 +11487,7 @@ class PDFPageView {
     this.renderingState = _pdf_rendering_queue.RenderingStates.INITIAL;
     this.resume = null;
     this._renderError = null;
+    this._isStandalone = !this.renderingQueue?.hasViewer();
     this.annotationLayer = null;
     this.textLayer = null;
     this.zoomLayer = null;
@@ -11646,6 +11651,11 @@ class PDFPageView {
 
     if (optionalContentConfigPromise instanceof Promise) {
       this._optionalContentConfigPromise = optionalContentConfigPromise;
+    }
+
+    if (this._isStandalone) {
+      const doc = document.documentElement;
+      doc.style.setProperty("--zoom-factor", this.scale);
     }
 
     const totalRotation = (this.rotation + this.pdfPageRotate) % 360;
@@ -15222,7 +15232,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '222c9e7';
+const pdfjsBuild = '036b814';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
