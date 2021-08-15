@@ -532,13 +532,13 @@ const PDFViewerApplication = {
 
   async _parseHashParameters() {
     if (!_app_options.AppOptions.get("pdfBugEnabled")) {
-      return undefined;
+      return;
     }
 
     const hash = document.location.hash.substring(1);
 
     if (!hash) {
-      return undefined;
+      return;
     }
 
     const params = (0, _ui_utils.parseQueryString)(hash),
@@ -602,12 +602,14 @@ const PDFViewerApplication = {
     }
 
     if (waitOn.length === 0) {
-      return undefined;
+      return;
     }
 
-    return Promise.all(waitOn).catch(reason => {
+    try {
+      await Promise.all(waitOn);
+    } catch (reason) {
       console.error(`_parseHashParameters: "${reason.message}".`);
-    });
+    }
   },
 
   async _initializeL10n() {
@@ -9839,7 +9841,6 @@ class BaseViewer {
       throw new Error(`The API version "${_pdfjsLib.version}" does not match the Viewer version "${viewerVersion}".`);
     }
 
-    this._name = this.constructor.name;
     this.container = options.container;
     this.viewer = options.viewer || options.container.firstElementChild;
 
@@ -9928,7 +9929,7 @@ class BaseViewer {
     }
 
     if (!this._setCurrentPageNumber(val, true)) {
-      console.error(`${this._name}.currentPageNumber: "${val}" is not a valid page.`);
+      console.error(`currentPageNumber: "${val}" is not a valid page.`);
     }
   }
 
@@ -9981,7 +9982,7 @@ class BaseViewer {
     }
 
     if (!this._setCurrentPageNumber(page, true)) {
-      console.error(`${this._name}.currentPageLabel: "${val}" is not a valid page.`);
+      console.error(`currentPageLabel: "${val}" is not a valid page.`);
     }
   }
 
@@ -10260,7 +10261,7 @@ class BaseViewer {
       this._pageLabels = null;
     } else if (!(Array.isArray(labels) && this.pdfDocument.numPages === labels.length)) {
       this._pageLabels = null;
-      console.error(`${this._name}.setPageLabels: Invalid page labels.`);
+      console.error(`setPageLabels: Invalid page labels.`);
     } else {
       this._pageLabels = labels;
     }
@@ -10426,7 +10427,7 @@ class BaseViewer {
           break;
 
         default:
-          console.error(`${this._name}._setScale: "${value}" is an unknown zoom value.`);
+          console.error(`_setScale: "${value}" is an unknown zoom value.`);
           return;
       }
 
@@ -10473,7 +10474,7 @@ class BaseViewer {
     const pageView = Number.isInteger(pageNumber) && this._pages[pageNumber - 1];
 
     if (!pageView) {
-      console.error(`${this._name}.scrollPageIntoView: ` + `"${pageNumber}" is not a valid pageNumber parameter.`);
+      console.error(`scrollPageIntoView: "${pageNumber}" is not a valid pageNumber parameter.`);
       return;
     }
 
@@ -10543,7 +10544,7 @@ class BaseViewer {
         break;
 
       default:
-        console.error(`${this._name}.scrollPageIntoView: ` + `"${destArray[1].name}" is not a valid destination type.`);
+        console.error(`scrollPageIntoView: "${destArray[1].name}" is not a valid destination type.`);
         return;
     }
 
@@ -10706,7 +10707,7 @@ class BaseViewer {
     }
 
     if (!(Number.isInteger(pageNumber) && pageNumber > 0 && pageNumber <= this.pagesCount)) {
-      console.error(`${this._name}.isPageVisible: "${pageNumber}" is not a valid page.`);
+      console.error(`isPageVisible: "${pageNumber}" is not a valid page.`);
       return false;
     }
 
@@ -10721,7 +10722,7 @@ class BaseViewer {
     }
 
     if (!(Number.isInteger(pageNumber) && pageNumber > 0 && pageNumber <= this.pagesCount)) {
-      console.error(`${this._name}.isPageCached: "${pageNumber}" is not a valid page.`);
+      console.error(`isPageCached: "${pageNumber}" is not a valid page.`);
       return false;
     }
 
@@ -15232,7 +15233,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '036b814';
+const pdfjsBuild = 'e9146b1';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;

@@ -279,7 +279,7 @@ exports.PageViewport = PageViewport;
 
 class RenderingCancelledException extends _util.BaseException {
   constructor(msg, type) {
-    super(msg);
+    super(msg, "RenderingCancelledException");
     this.type = type;
   }
 
@@ -1016,13 +1016,13 @@ function shadow(obj, prop, value) {
 }
 
 const BaseException = function BaseExceptionClosure() {
-  function BaseException(message) {
+  function BaseException(message, name) {
     if (this.constructor === BaseException) {
       unreachable("Cannot initialize BaseException.");
     }
 
     this.message = message;
-    this.name = this.constructor.name;
+    this.name = name;
   }
 
   BaseException.prototype = new Error();
@@ -1034,7 +1034,7 @@ exports.BaseException = BaseException;
 
 class PasswordException extends BaseException {
   constructor(msg, code) {
-    super(msg);
+    super(msg, "PasswordException");
     this.code = code;
   }
 
@@ -1044,7 +1044,7 @@ exports.PasswordException = PasswordException;
 
 class UnknownErrorException extends BaseException {
   constructor(msg, details) {
-    super(msg);
+    super(msg, "UnknownErrorException");
     this.details = details;
   }
 
@@ -1052,17 +1052,27 @@ class UnknownErrorException extends BaseException {
 
 exports.UnknownErrorException = UnknownErrorException;
 
-class InvalidPDFException extends BaseException {}
+class InvalidPDFException extends BaseException {
+  constructor(msg) {
+    super(msg, "InvalidPDFException");
+  }
+
+}
 
 exports.InvalidPDFException = InvalidPDFException;
 
-class MissingPDFException extends BaseException {}
+class MissingPDFException extends BaseException {
+  constructor(msg) {
+    super(msg, "MissingPDFException");
+  }
+
+}
 
 exports.MissingPDFException = MissingPDFException;
 
 class UnexpectedResponseException extends BaseException {
   constructor(msg, status) {
-    super(msg);
+    super(msg, "UnexpectedResponseException");
     this.status = status;
   }
 
@@ -1070,11 +1080,21 @@ class UnexpectedResponseException extends BaseException {
 
 exports.UnexpectedResponseException = UnexpectedResponseException;
 
-class FormatError extends BaseException {}
+class FormatError extends BaseException {
+  constructor(msg) {
+    super(msg, "FormatError");
+  }
+
+}
 
 exports.FormatError = FormatError;
 
-class AbortException extends BaseException {}
+class AbortException extends BaseException {
+  constructor(msg) {
+    super(msg, "AbortException");
+  }
+
+}
 
 exports.AbortException = AbortException;
 const NullCharactersRegExp = /\x00/g;
@@ -2248,6 +2268,7 @@ class PDFPageProxy {
     this.cleanupAfterRender = false;
     this.pendingCleanup = false;
     this._intentStates = new Map();
+    this._annotationPromises = new Map();
     this.destroyed = false;
   }
 
@@ -2293,12 +2314,15 @@ class PDFPageProxy {
   } = {}) {
     const renderingIntent = getRenderingIntent(intent, {});
 
-    if (!this._annotationsPromise || this._annotationsIntent !== renderingIntent) {
-      this._annotationsPromise = this._transport.getAnnotations(this._pageIndex, renderingIntent);
-      this._annotationsIntent = renderingIntent;
+    let promise = this._annotationPromises.get(renderingIntent);
+
+    if (!promise) {
+      promise = this._transport.getAnnotations(this._pageIndex, renderingIntent);
+
+      this._annotationPromises.set(renderingIntent, promise);
     }
 
-    return this._annotationsPromise;
+    return promise;
   }
 
   getJSActions() {
@@ -2564,7 +2588,9 @@ class PDFPageProxy {
     }
 
     this.objs.clear();
-    this._annotationsPromise = null;
+
+    this._annotationPromises.clear();
+
     this._jsActionsPromise = null;
     this._structTreePromise = null;
     this.pendingCleanup = false;
@@ -2593,7 +2619,9 @@ class PDFPageProxy {
     this._intentStates.clear();
 
     this.objs.clear();
-    this._annotationsPromise = null;
+
+    this._annotationPromises.clear();
+
     this._jsActionsPromise = null;
     this._structTreePromise = null;
 
@@ -3382,11 +3410,9 @@ class WorkerTransport {
         case "UnknownErrorException":
           reason = new _util.UnknownErrorException(ex.message, ex.details);
           break;
-      }
 
-      if (!(reason instanceof Error)) {
-        const msg = "DocException - expected a valid Error.";
-        (0, _util.warn)(msg);
+        default:
+          (0, _util.unreachable)("DocException - expected a valid Error.");
       }
 
       loadingTask._capability.reject(reason);
@@ -4013,7 +4039,7 @@ class InternalRenderTask {
 
 const version = '2.11.0';
 exports.version = version;
-const build = '036b814';
+const build = 'e9146b1';
 exports.build = build;
 
 /***/ }),
@@ -7613,7 +7639,8 @@ const StreamKind = {
 };
 
 function wrapReason(reason) {
-  if (typeof reason !== "object" || reason === null) {
+  if (!(reason instanceof Error || typeof reason === "object" && reason !== null)) {
+    (0, _util.warn)('wrapReason: Expected "reason" to be a (possibly cloned) Error.');
     return reason;
   }
 
@@ -14923,7 +14950,7 @@ var _svg = __w_pdfjs_require__(20);
 var _xfa_layer = __w_pdfjs_require__(21);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '036b814';
+const pdfjsBuild = 'e9146b1';
 {
   if (_is_node.isNodeJS) {
     const {

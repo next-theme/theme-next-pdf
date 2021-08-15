@@ -1185,13 +1185,13 @@ function shadow(obj, prop, value) {
 }
 
 const BaseException = function BaseExceptionClosure() {
-  function BaseException(message) {
+  function BaseException(message, name) {
     if (this.constructor === BaseException) {
       unreachable("Cannot initialize BaseException.");
     }
 
     this.message = message;
-    this.name = this.constructor.name;
+    this.name = name;
   }
 
   BaseException.prototype = new Error();
@@ -1203,7 +1203,7 @@ exports.BaseException = BaseException;
 
 class PasswordException extends BaseException {
   constructor(msg, code) {
-    super(msg);
+    super(msg, "PasswordException");
     this.code = code;
   }
 
@@ -1213,7 +1213,7 @@ exports.PasswordException = PasswordException;
 
 class UnknownErrorException extends BaseException {
   constructor(msg, details) {
-    super(msg);
+    super(msg, "UnknownErrorException");
     this.details = details;
   }
 
@@ -1221,17 +1221,27 @@ class UnknownErrorException extends BaseException {
 
 exports.UnknownErrorException = UnknownErrorException;
 
-class InvalidPDFException extends BaseException {}
+class InvalidPDFException extends BaseException {
+  constructor(msg) {
+    super(msg, "InvalidPDFException");
+  }
+
+}
 
 exports.InvalidPDFException = InvalidPDFException;
 
-class MissingPDFException extends BaseException {}
+class MissingPDFException extends BaseException {
+  constructor(msg) {
+    super(msg, "MissingPDFException");
+  }
+
+}
 
 exports.MissingPDFException = MissingPDFException;
 
 class UnexpectedResponseException extends BaseException {
   constructor(msg, status) {
-    super(msg);
+    super(msg, "UnexpectedResponseException");
     this.status = status;
   }
 
@@ -1239,11 +1249,21 @@ class UnexpectedResponseException extends BaseException {
 
 exports.UnexpectedResponseException = UnexpectedResponseException;
 
-class FormatError extends BaseException {}
+class FormatError extends BaseException {
+  constructor(msg) {
+    super(msg, "FormatError");
+  }
+
+}
 
 exports.FormatError = FormatError;
 
-class AbortException extends BaseException {}
+class AbortException extends BaseException {
+  constructor(msg) {
+    super(msg, "AbortException");
+  }
+
+}
 
 exports.AbortException = AbortException;
 const NullCharactersRegExp = /\x00/g;
@@ -1860,7 +1880,7 @@ class Dict {
         if (property === undefined) {
           property = [];
           properties.set(key, property);
-        } else if (!mergeSubDicts) {
+        } else if (!mergeSubDicts || !(value instanceof Dict)) {
           continue;
         }
 
@@ -1877,10 +1897,6 @@ class Dict {
       const subDict = new Dict(xref);
 
       for (const dict of values) {
-        if (!(dict instanceof Dict)) {
-          continue;
-        }
-
         for (const [key, value] of Object.entries(dict._map)) {
           if (subDict._map[key] === undefined) {
             subDict._map[key] = value;
@@ -2998,7 +3014,7 @@ function getArrayLookupTableFactory(initializer) {
 
 class MissingDataException extends _util.BaseException {
   constructor(begin, end) {
-    super(`Missing data [${begin}, ${end})`);
+    super(`Missing data [${begin}, ${end})`, "MissingDataException");
     this.begin = begin;
     this.end = end;
   }
@@ -3007,15 +3023,30 @@ class MissingDataException extends _util.BaseException {
 
 exports.MissingDataException = MissingDataException;
 
-class ParserEOFException extends _util.BaseException {}
+class ParserEOFException extends _util.BaseException {
+  constructor(msg) {
+    super(msg, "ParserEOFException");
+  }
+
+}
 
 exports.ParserEOFException = ParserEOFException;
 
-class XRefEntryException extends _util.BaseException {}
+class XRefEntryException extends _util.BaseException {
+  constructor(msg) {
+    super(msg, "XRefEntryException");
+  }
+
+}
 
 exports.XRefEntryException = XRefEntryException;
 
-class XRefParseException extends _util.BaseException {}
+class XRefParseException extends _util.BaseException {
+  constructor(msg) {
+    super(msg, "XRefParseException");
+  }
+
+}
 
 exports.XRefParseException = XRefParseException;
 
@@ -29513,7 +29544,7 @@ var _ccitt = __w_pdfjs_require__(32);
 
 class Jbig2Error extends _util.BaseException {
   constructor(msg) {
-    super(`JBIG2 error: ${msg}`);
+    super(`JBIG2 error: ${msg}`, "Jbig2Error");
   }
 
 }
@@ -32161,20 +32192,25 @@ var _core_utils = __w_pdfjs_require__(9);
 
 class JpegError extends _util.BaseException {
   constructor(msg) {
-    super(`JPEG error: ${msg}`);
+    super(`JPEG error: ${msg}`, "JpegError");
   }
 
 }
 
 class DNLMarkerError extends _util.BaseException {
   constructor(message, scanLines) {
-    super(message);
+    super(message, "DNLMarkerError");
     this.scanLines = scanLines;
   }
 
 }
 
-class EOIMarkerError extends _util.BaseException {}
+class EOIMarkerError extends _util.BaseException {
+  constructor(msg) {
+    super(msg, "EOIMarkerError");
+  }
+
+}
 
 const dctZigZag = new Uint8Array([0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5, 12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6, 7, 14, 21, 28, 35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51, 58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63]);
 const dctCos1 = 4017;
@@ -33485,7 +33521,7 @@ var _arithmetic_decoder = __w_pdfjs_require__(36);
 
 class JpxError extends _util.BaseException {
   constructor(msg) {
-    super(`JPX error: ${msg}`);
+    super(`JPX error: ${msg}`, "JpxError");
   }
 
 }
@@ -71724,7 +71760,8 @@ const StreamKind = {
 };
 
 function wrapReason(reason) {
-  if (typeof reason !== "object" || reason === null) {
+  if (!(reason instanceof Error || typeof reason === "object" && reason !== null)) {
+    (0, _util.warn)('wrapReason: Expected "reason" to be a (possibly cloned) Error.');
     return reason;
   }
 
@@ -72419,7 +72456,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '036b814';
+const pdfjsBuild = 'e9146b1';
 })();
 
 /******/ 	return __webpack_exports__;
