@@ -594,7 +594,7 @@ const PDFViewerApplication = {
       _app_options.AppOptions.set("fontExtraProperties", true);
 
       const enabled = params.get("pdfbug").split(",");
-      waitOn.push(loadAndEnablePDFBug(enabled));
+      waitOn.push(initPDFBug(enabled));
     }
 
     if (params.has("locale")) {
@@ -1549,8 +1549,8 @@ const PDFViewerApplication = {
 
     this.documentInfo = info;
     this.metadata = metadata;
-    this._contentDispositionFilename ?? (this._contentDispositionFilename = contentDispositionFilename);
-    this._contentLength ?? (this._contentLength = contentLength);
+    this._contentDispositionFilename ??= contentDispositionFilename;
+    this._contentLength ??= contentLength;
     console.log(`PDF ${pdfDocument.fingerprints[0]} [${info.PDFFormatVersion} ` + `${(info.Producer || "-").trim()} / ${(info.Creator || "-").trim()}] ` + `(PDF.js: ${_pdfjsLib.version || "-"})`);
     let pdfTitle = info?.Title;
     const metadataTitle = metadata?.get("dc:title");
@@ -2193,17 +2193,18 @@ async function loadFakeWorker() {
     _pdfjsLib.GlobalWorkerOptions.workerSrc = _app_options.AppOptions.get("workerSrc");
   }
 
-  return (0, _pdfjsLib.loadScript)(_pdfjsLib.PDFWorker.workerSrc);
+  await (0, _pdfjsLib.loadScript)(_pdfjsLib.PDFWorker.workerSrc);
 }
 
-function loadAndEnablePDFBug(enabledTabs) {
-  const appConfig = PDFViewerApplication.appConfig;
-  return (0, _pdfjsLib.loadScript)(appConfig.debuggerScriptPath).then(function () {
-    PDFBug.enable(enabledTabs);
-    PDFBug.init({
-      OPS: _pdfjsLib.OPS
-    }, appConfig.mainContainer);
-  });
+async function initPDFBug(enabledTabs) {
+  const {
+    debuggerScriptPath,
+    mainContainer
+  } = PDFViewerApplication.appConfig;
+  await (0, _pdfjsLib.loadScript)(debuggerScriptPath);
+  PDFBug.init({
+    OPS: _pdfjsLib.OPS
+  }, mainContainer, enabledTabs);
 }
 
 function reportPageStatsPDFBug({
@@ -3676,7 +3677,7 @@ class EventBus {
       }
 
       if (external) {
-        (externalListeners || (externalListeners = [])).push(listener);
+        (externalListeners ||= []).push(listener);
         continue;
       }
 
@@ -3693,9 +3694,7 @@ class EventBus {
   }
 
   _on(eventName, listener, options = null) {
-    var _this$_listeners;
-
-    const eventListeners = (_this$_listeners = this._listeners)[eventName] || (_this$_listeners[eventName] = []);
+    const eventListeners = this._listeners[eventName] ||= [];
     eventListeners.push({
       listener,
       external: options?.external === true,
@@ -5306,7 +5305,7 @@ function normalize(text) {
           diff = normalizedCh.length - ch.length;
 
     if (diff !== 0) {
-      (diffs || (diffs = [])).push([index, diff]);
+      (diffs ||= []).push([index, diff]);
     }
 
     return normalizedCh;
@@ -8873,7 +8872,7 @@ class PDFSidebarResizer {
   }
 
   get outerContainerWidth() {
-    return this._outerContainerWidth || (this._outerContainerWidth = this.outerContainer.clientWidth);
+    return this._outerContainerWidth ||= this.outerContainer.clientWidth;
   }
 
   _updateWidth(width = 0) {
@@ -11044,7 +11043,7 @@ class BaseViewer {
             let yArray = pageLayout.get(y);
 
             if (!yArray) {
-              pageLayout.set(y, yArray || (yArray = []));
+              pageLayout.set(y, yArray ||= []);
             }
 
             yArray.push(id);
@@ -15233,7 +15232,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = 'e9146b1';
+const pdfjsBuild = '83e1064';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;

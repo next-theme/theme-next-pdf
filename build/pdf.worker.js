@@ -591,6 +591,7 @@ class WorkerMessageHandler {
           sink,
           task,
           intent: data.intent,
+          cacheKey: data.cacheKey,
           annotationStorage: data.annotationStorage
         }).then(function (operatorListInfo) {
           finishWorkerTask(task);
@@ -766,7 +767,8 @@ const RenderingIntentFlag = {
   ANY: 0x01,
   DISPLAY: 0x02,
   PRINT: 0x04,
-  ANNOTATION_FORMS: 0x20,
+  ANNOTATIONS_FORMS: 0x10,
+  ANNOTATIONS_STORAGE: 0x20,
   OPLIST: 0x100
 };
 exports.RenderingIntentFlag = RenderingIntentFlag;
@@ -3747,7 +3749,8 @@ class Page {
     sink,
     task,
     intent,
-    annotationStorage
+    cacheKey,
+    annotationStorage = null
   }) {
     const contentStreamPromise = this.getContentStream(handler);
     const resourcesPromise = this.loadResources(["ColorSpace", "ExtGState", "Font", "Pattern", "Properties", "Shading", "XObject"]);
@@ -3768,7 +3771,7 @@ class Page {
       handler.send("StartRenderPage", {
         transparency: partialEvaluator.hasBlendModes(this.resources, this.nonBlendModesSet),
         pageIndex: this.pageIndex,
-        intent
+        cacheKey
       });
       return partialEvaluator.getOperatorList({
         stream: contentStream,
@@ -3787,7 +3790,7 @@ class Page {
         };
       }
 
-      const renderForms = !!(intent & _util.RenderingIntentFlag.ANNOTATION_FORMS),
+      const renderForms = !!(intent & _util.RenderingIntentFlag.ANNOTATIONS_FORMS),
             intentAny = !!(intent & _util.RenderingIntentFlag.ANY),
             intentDisplay = !!(intent & _util.RenderingIntentFlag.DISPLAY),
             intentPrint = !!(intent & _util.RenderingIntentFlag.PRINT);
@@ -22065,7 +22068,7 @@ class PartialEvaluator {
     return transferMaps;
   }
 
-  handleTilingType(fn, color, resources, pattern, patternDict, operatorList, task, cacheKey, localTilingPatternCache) {
+  handleTilingType(fn, color, resources, pattern, patternDict, operatorList, task, localTilingPatternCache) {
     const tilingOpList = new _operator_list.OperatorList();
 
     const patternResources = _primitives.Dict.merge({
@@ -22084,8 +22087,8 @@ class PartialEvaluator {
       operatorList.addDependencies(tilingOpList.dependencies);
       operatorList.addOp(fn, tilingPatternIR);
 
-      if (cacheKey) {
-        localTilingPatternCache.set(cacheKey, patternDict.objId, {
+      if (patternDict.objId) {
+        localTilingPatternCache.set(null, patternDict.objId, {
           operatorListIR,
           dict: patternDict
         });
@@ -22510,8 +22513,8 @@ class PartialEvaluator {
     const patternName = args.pop();
 
     if (patternName instanceof _primitives.Name) {
-      const name = patternName.name;
-      const localTilingPattern = localTilingPatternCache.getByName(name);
+      const rawPattern = patterns.getRaw(patternName.name);
+      const localTilingPattern = rawPattern instanceof _primitives.Ref && localTilingPatternCache.getByRef(rawPattern);
 
       if (localTilingPattern) {
         try {
@@ -22522,7 +22525,7 @@ class PartialEvaluator {
         } catch (ex) {}
       }
 
-      const pattern = patterns.get(name);
+      const pattern = this.xref.fetchIfRef(rawPattern);
 
       if (pattern) {
         const dict = (0, _primitives.isStream)(pattern) ? pattern.dict : pattern;
@@ -22530,7 +22533,7 @@ class PartialEvaluator {
 
         if (typeNum === PatternType.TILING) {
           const color = cs.base ? cs.base.getRgb(args, 0) : null;
-          return this.handleTilingType(fn, color, resources, pattern, dict, operatorList, task, name, localTilingPatternCache);
+          return this.handleTilingType(fn, color, resources, pattern, dict, operatorList, task, localTilingPatternCache);
         } else if (typeNum === PatternType.SHADING) {
           const shading = dict.get("Shading");
           const matrix = dict.getArray("Matrix");
@@ -41343,12 +41346,17 @@ const getGlyphMapForStandardFonts = (0, _core_utils.getLookupTableFactory)(funct
   t[169] = 171;
   t[170] = 187;
   t[171] = 8230;
+  t[200] = 193;
+  t[203] = 205;
   t[210] = 218;
   t[223] = 711;
   t[224] = 321;
   t[225] = 322;
+  t[226] = 352;
   t[227] = 353;
+  t[228] = 381;
   t[229] = 382;
+  t[233] = 221;
   t[234] = 253;
   t[252] = 263;
   t[253] = 268;
@@ -41358,11 +41366,13 @@ const getGlyphMapForStandardFonts = (0, _core_utils.getLookupTableFactory)(funct
   t[261] = 261;
   t[265] = 280;
   t[266] = 281;
+  t[267] = 282;
   t[268] = 283;
   t[269] = 313;
   t[275] = 323;
   t[276] = 324;
   t[278] = 328;
+  t[283] = 344;
   t[284] = 345;
   t[285] = 346;
   t[286] = 347;
@@ -41578,14 +41588,19 @@ exports.getSupplementalGlyphMapForArialBlack = getSupplementalGlyphMapForArialBl
 const getSupplementalGlyphMapForCalibri = (0, _core_utils.getLookupTableFactory)(function (t) {
   t[1] = 32;
   t[4] = 65;
+  t[6] = 193;
   t[17] = 66;
   t[18] = 67;
+  t[21] = 268;
   t[24] = 68;
   t[28] = 69;
+  t[30] = 201;
+  t[32] = 282;
   t[38] = 70;
   t[39] = 71;
   t[44] = 72;
   t[47] = 73;
+  t[49] = 205;
   t[58] = 74;
   t[60] = 75;
   t[62] = 76;
@@ -41595,26 +41610,35 @@ const getSupplementalGlyphMapForCalibri = (0, _core_utils.getLookupTableFactory)
   t[87] = 80;
   t[89] = 81;
   t[90] = 82;
+  t[92] = 344;
   t[94] = 83;
+  t[97] = 352;
   t[100] = 84;
   t[104] = 85;
   t[115] = 86;
   t[116] = 87;
   t[121] = 88;
   t[122] = 89;
+  t[124] = 221;
   t[127] = 90;
+  t[129] = 381;
   t[258] = 97;
+  t[260] = 225;
   t[268] = 261;
   t[271] = 98;
   t[272] = 99;
   t[273] = 263;
+  t[275] = 269;
   t[282] = 100;
   t[286] = 101;
+  t[288] = 233;
+  t[290] = 283;
   t[295] = 281;
   t[296] = 102;
   t[336] = 103;
   t[346] = 104;
   t[349] = 105;
+  t[351] = 237;
   t[361] = 106;
   t[364] = 107;
   t[367] = 108;
@@ -41626,15 +41650,19 @@ const getSupplementalGlyphMapForCalibri = (0, _core_utils.getLookupTableFactory)
   t[393] = 112;
   t[395] = 113;
   t[396] = 114;
+  t[398] = 345;
   t[400] = 115;
   t[401] = 347;
+  t[403] = 353;
   t[410] = 116;
   t[437] = 117;
   t[448] = 118;
   t[449] = 119;
   t[454] = 120;
   t[455] = 121;
+  t[457] = 253;
   t[460] = 122;
+  t[462] = 382;
   t[463] = 380;
   t[853] = 44;
   t[855] = 58;
@@ -47300,7 +47328,9 @@ class BaseLocalCache {
       (0, _util.unreachable)("Cannot initialize BaseLocalCache.");
     }
 
-    if (!options || !options.onlyRefs) {
+    this._onlyRefs = (options && options.onlyRefs) === true;
+
+    if (!this._onlyRefs) {
       this._nameRefMap = new Map();
       this._imageMap = new Map();
     }
@@ -47309,6 +47339,10 @@ class BaseLocalCache {
   }
 
   getByName(name) {
+    if (this._onlyRefs) {
+      (0, _util.unreachable)("Should not call `getByName` method.");
+    }
+
     const ref = this._nameRefMap.get(name);
 
     if (ref) {
@@ -47395,10 +47429,6 @@ class LocalFunctionCache extends BaseLocalCache {
     });
   }
 
-  getByName(name) {
-    (0, _util.unreachable)("Should not call `getByName` method.");
-  }
-
   set(name = null, ref, data) {
     if (!ref) {
       throw new Error('LocalFunctionCache.set - expected "ref" argument.');
@@ -47445,28 +47475,22 @@ class LocalGStateCache extends BaseLocalCache {
 exports.LocalGStateCache = LocalGStateCache;
 
 class LocalTilingPatternCache extends BaseLocalCache {
-  set(name, ref = null, data) {
-    if (typeof name !== "string") {
-      throw new Error('LocalTilingPatternCache.set - expected "name" argument.');
+  constructor(options) {
+    super({
+      onlyRefs: true
+    });
+  }
+
+  set(name = null, ref, data) {
+    if (!ref) {
+      throw new Error('LocalTilingPatternCache.set - expected "ref" argument.');
     }
 
-    if (ref) {
-      if (this._imageCache.has(ref)) {
-        return;
-      }
-
-      this._nameRefMap.set(name, ref);
-
-      this._imageCache.put(ref, data);
-
+    if (this._imageCache.has(ref)) {
       return;
     }
 
-    if (this._imageMap.has(name)) {
-      return;
-    }
-
-    this._imageMap.set(name, data);
+    this._imageCache.put(ref, data);
   }
 
 }
@@ -72456,7 +72480,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = 'e9146b1';
+const pdfjsBuild = '83e1064';
 })();
 
 /******/ 	return __webpack_exports__;

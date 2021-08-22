@@ -597,7 +597,8 @@ const RenderingIntentFlag = {
   ANY: 0x01,
   DISPLAY: 0x02,
   PRINT: 0x04,
-  ANNOTATION_FORMS: 0x20,
+  ANNOTATIONS_FORMS: 0x10,
+  ANNOTATIONS_STORAGE: 0x20,
   OPLIST: 0x100
 };
 exports.RenderingIntentFlag = RenderingIntentFlag;
@@ -1958,39 +1959,6 @@ function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
   });
 }
 
-function getRenderingIntent(intent, {
-  renderForms = false,
-  isOpList = false
-}) {
-  let renderingIntent = _util.RenderingIntentFlag.DISPLAY;
-
-  switch (intent) {
-    case "any":
-      renderingIntent = _util.RenderingIntentFlag.ANY;
-      break;
-
-    case "display":
-      break;
-
-    case "print":
-      renderingIntent = _util.RenderingIntentFlag.PRINT;
-      break;
-
-    default:
-      (0, _util.warn)(`getRenderingIntent - invalid intent: ${intent}`);
-  }
-
-  if (renderForms) {
-    renderingIntent += _util.RenderingIntentFlag.ANNOTATION_FORMS;
-  }
-
-  if (isOpList) {
-    renderingIntent += _util.RenderingIntentFlag.OPLIST;
-  }
-
-  return renderingIntent;
-}
-
 class PDFDocumentLoadingTask {
   static get idCounters() {
     return (0, _util.shadow)(this, "idCounters", {
@@ -2312,21 +2280,21 @@ class PDFPageProxy {
   getAnnotations({
     intent = "display"
   } = {}) {
-    const renderingIntent = getRenderingIntent(intent, {});
+    const intentArgs = this._transport.getRenderingIntent(intent, {});
 
-    let promise = this._annotationPromises.get(renderingIntent);
+    let promise = this._annotationPromises.get(intentArgs.cacheKey);
 
     if (!promise) {
-      promise = this._transport.getAnnotations(this._pageIndex, renderingIntent);
+      promise = this._transport.getAnnotations(this._pageIndex, intentArgs.renderingIntent);
 
-      this._annotationPromises.set(renderingIntent, promise);
+      this._annotationPromises.set(intentArgs.cacheKey, promise);
     }
 
     return promise;
   }
 
   getJSActions() {
-    return this._jsActionsPromise || (this._jsActionsPromise = this._transport.getPageJSActions(this._pageIndex));
+    return this._jsActionsPromise ||= this._transport.getPageJSActions(this._pageIndex);
   }
 
   async getXfa() {
@@ -2345,27 +2313,27 @@ class PDFPageProxy {
     includeAnnotationStorage = false,
     optionalContentConfigPromise = null
   }) {
-    var _intentState;
-
     if (this._stats) {
       this._stats.time("Overall");
     }
 
-    const renderingIntent = getRenderingIntent(intent, {
-      renderForms: renderInteractiveForms === true
+    const intentArgs = this._transport.getRenderingIntent(intent, {
+      renderForms: renderInteractiveForms === true,
+      includeAnnotationStorage: includeAnnotationStorage === true
     });
+
     this.pendingCleanup = false;
 
     if (!optionalContentConfigPromise) {
       optionalContentConfigPromise = this._transport.getOptionalContentConfig();
     }
 
-    let intentState = this._intentStates.get(renderingIntent);
+    let intentState = this._intentStates.get(intentArgs.cacheKey);
 
     if (!intentState) {
       intentState = Object.create(null);
 
-      this._intentStates.set(renderingIntent, intentState);
+      this._intentStates.set(intentArgs.cacheKey, intentState);
     }
 
     if (intentState.streamReaderCancelTimeout) {
@@ -2376,7 +2344,7 @@ class PDFPageProxy {
     const canvasFactoryInstance = canvasFactory || new DefaultCanvasFactory({
       ownerDocument: this._ownerDocument
     });
-    const annotationStorage = includeAnnotationStorage ? this._transport.annotationStorage.serializable : null;
+    const intentPrint = !!(intentArgs.renderingIntent & _util.RenderingIntentFlag.PRINT);
 
     if (!intentState.displayReadyCapability) {
       intentState.displayReadyCapability = (0, _util.createPromiseCapability)();
@@ -2390,17 +2358,13 @@ class PDFPageProxy {
         this._stats.time("Page Request");
       }
 
-      this._pumpOperatorList({
-        pageIndex: this._pageIndex,
-        intent: renderingIntent,
-        annotationStorage
-      });
+      this._pumpOperatorList(intentArgs);
     }
 
     const complete = error => {
       intentState.renderTasks.delete(internalRenderTask);
 
-      if (this.cleanupAfterRender || renderingIntent & _util.RenderingIntentFlag.PRINT) {
+      if (this.cleanupAfterRender || intentPrint) {
         this.pendingCleanup = true;
       }
 
@@ -2411,7 +2375,7 @@ class PDFPageProxy {
 
         this._abortOperatorList({
           intentState,
-          reason: error
+          reason: error instanceof Error ? error : new Error(error)
         });
       } else {
         internalRenderTask.capability.resolve();
@@ -2438,10 +2402,10 @@ class PDFPageProxy {
       operatorList: intentState.operatorList,
       pageIndex: this._pageIndex,
       canvasFactory: canvasFactoryInstance,
-      useRequestAnimationFrame: !(renderingIntent & _util.RenderingIntentFlag.PRINT),
+      useRequestAnimationFrame: !intentPrint,
       pdfBug: this._pdfBug
     });
-    ((_intentState = intentState).renderTasks || (_intentState.renderTasks = new Set())).add(internalRenderTask);
+    (intentState.renderTasks ||= new Set()).add(internalRenderTask);
     const renderTask = internalRenderTask.task;
     Promise.all([intentState.displayReadyCapability.promise, optionalContentConfigPromise]).then(([transparency, optionalContentConfig]) => {
       if (this.pendingCleanup) {
@@ -2472,27 +2436,25 @@ class PDFPageProxy {
       }
     }
 
-    const renderingIntent = getRenderingIntent(intent, {
+    const intentArgs = this._transport.getRenderingIntent(intent, {
       isOpList: true
     });
 
-    let intentState = this._intentStates.get(renderingIntent);
+    let intentState = this._intentStates.get(intentArgs.cacheKey);
 
     if (!intentState) {
       intentState = Object.create(null);
 
-      this._intentStates.set(renderingIntent, intentState);
+      this._intentStates.set(intentArgs.cacheKey, intentState);
     }
 
     let opListTask;
 
     if (!intentState.opListReadCapability) {
-      var _intentState2;
-
       opListTask = Object.create(null);
       opListTask.operatorListChanged = operatorListChanged;
       intentState.opListReadCapability = (0, _util.createPromiseCapability)();
-      ((_intentState2 = intentState).renderTasks || (_intentState2.renderTasks = new Set())).add(opListTask);
+      (intentState.renderTasks ||= new Set()).add(opListTask);
       intentState.operatorList = {
         fnArray: [],
         argsArray: [],
@@ -2503,10 +2465,7 @@ class PDFPageProxy {
         this._stats.time("Page Request");
       }
 
-      this._pumpOperatorList({
-        pageIndex: this._pageIndex,
-        intent: renderingIntent
-      });
+      this._pumpOperatorList(intentArgs);
     }
 
     return intentState.opListReadCapability.promise;
@@ -2562,7 +2521,7 @@ class PDFPageProxy {
   }
 
   getStructTree() {
-    return this._structTreePromise || (this._structTreePromise = this._transport.getStructTree(this._pageIndex));
+    return this._structTreePromise ||= this._transport.getStructTree(this._pageIndex);
   }
 
   _destroy() {
@@ -2570,14 +2529,14 @@ class PDFPageProxy {
     this._transport.pageCache[this._pageIndex] = null;
     const waitOn = [];
 
-    for (const [intent, intentState] of this._intentStates) {
+    for (const intentState of this._intentStates.values()) {
       this._abortOperatorList({
         intentState,
         reason: new Error("Page was destroyed."),
         force: true
       });
 
-      if (intent & _util.RenderingIntentFlag.OPLIST) {
+      if (intentState.opListReadCapability) {
         continue;
       }
 
@@ -2633,8 +2592,8 @@ class PDFPageProxy {
     return true;
   }
 
-  _startRenderPage(transparency, intent) {
-    const intentState = this._intentStates.get(intent);
+  _startRenderPage(transparency, cacheKey) {
+    const intentState = this._intentStates.get(cacheKey);
 
     if (!intentState) {
       return;
@@ -2666,14 +2625,20 @@ class PDFPageProxy {
     }
   }
 
-  _pumpOperatorList(args) {
-    (0, _util.assert)(args.intent, 'PDFPageProxy._pumpOperatorList: Expected "intent" argument.');
-
-    const readableStream = this._transport.messageHandler.sendWithStream("GetOperatorList", args);
+  _pumpOperatorList({
+    renderingIntent,
+    cacheKey
+  }) {
+    const readableStream = this._transport.messageHandler.sendWithStream("GetOperatorList", {
+      pageIndex: this._pageIndex,
+      intent: renderingIntent,
+      cacheKey,
+      annotationStorage: renderingIntent & _util.RenderingIntentFlag.ANNOTATIONS_STORAGE ? this._transport.annotationStorage.serializable : null
+    });
 
     const reader = readableStream.getReader();
 
-    const intentState = this._intentStates.get(args.intent);
+    const intentState = this._intentStates.get(cacheKey);
 
     intentState.streamReader = reader;
 
@@ -2729,8 +2694,6 @@ class PDFPageProxy {
     reason,
     force = false
   }) {
-    (0, _util.assert)(reason instanceof Error || typeof reason === "object" && reason !== null, 'PDFPageProxy._abortOperatorList: Expected "reason" argument.');
-
     if (!intentState.streamReader) {
       return;
     }
@@ -2761,9 +2724,9 @@ class PDFPageProxy {
       return;
     }
 
-    for (const [intent, curIntentState] of this._intentStates) {
+    for (const [curCacheKey, curIntentState] of this._intentStates) {
       if (curIntentState === intentState) {
-        this._intentStates.delete(intent);
+        this._intentStates.delete(curCacheKey);
 
         break;
       }
@@ -3220,6 +3183,49 @@ class WorkerTransport {
     return (0, _util.shadow)(this, "annotationStorage", new _annotation_storage.AnnotationStorage());
   }
 
+  getRenderingIntent(intent, {
+    renderForms = false,
+    includeAnnotationStorage = false,
+    isOpList = false
+  }) {
+    let renderingIntent = _util.RenderingIntentFlag.DISPLAY;
+    let lastModified = "";
+
+    switch (intent) {
+      case "any":
+        renderingIntent = _util.RenderingIntentFlag.ANY;
+        break;
+
+      case "display":
+        break;
+
+      case "print":
+        renderingIntent = _util.RenderingIntentFlag.PRINT;
+        break;
+
+      default:
+        (0, _util.warn)(`getRenderingIntent - invalid intent: ${intent}`);
+    }
+
+    if (renderForms) {
+      renderingIntent += _util.RenderingIntentFlag.ANNOTATIONS_FORMS;
+    }
+
+    if (includeAnnotationStorage) {
+      renderingIntent += _util.RenderingIntentFlag.ANNOTATIONS_STORAGE;
+      lastModified = this.annotationStorage.lastModified;
+    }
+
+    if (isOpList) {
+      renderingIntent += _util.RenderingIntentFlag.OPLIST;
+    }
+
+    return {
+      renderingIntent,
+      cacheKey: `${renderingIntent}_${lastModified}`
+    };
+  }
+
   destroy() {
     if (this.destroyCapability) {
       return this.destroyCapability.promise;
@@ -3455,7 +3461,7 @@ class WorkerTransport {
 
       const page = this.pageCache[data.pageIndex];
 
-      page._startRenderPage(data.transparency, data.intent);
+      page._startRenderPage(data.transparency, data.cacheKey);
     });
     messageHandler.on("commonobj", data => {
       if (this.destroyed) {
@@ -3662,7 +3668,7 @@ class WorkerTransport {
   }
 
   hasJSActions() {
-    return this._hasJSActionsPromise || (this._hasJSActionsPromise = this.messageHandler.sendWithPromise("HasJSActions", null));
+    return this._hasJSActionsPromise ||= this.messageHandler.sendWithPromise("HasJSActions", null);
   }
 
   getCalculationOrderIds() {
@@ -4039,7 +4045,7 @@ class InternalRenderTask {
 
 const version = '2.11.0';
 exports.version = version;
-const build = 'e9146b1';
+const build = '83e1064';
 exports.build = build;
 
 /***/ }),
@@ -4553,15 +4559,14 @@ var _util = __w_pdfjs_require__(2);
 class AnnotationStorage {
   constructor() {
     this._storage = new Map();
+    this._timeStamp = Date.now();
     this._modified = false;
     this.onSetModified = null;
     this.onResetModified = null;
   }
 
   getValue(key, defaultValue) {
-    const obj = this._storage.get(key);
-
-    return obj !== undefined ? obj : defaultValue;
+    return this._storage.get(key) ?? defaultValue;
   }
 
   setValue(key, value) {
@@ -4577,12 +4582,14 @@ class AnnotationStorage {
         }
       }
     } else {
-      this._storage.set(key, value);
-
       modified = true;
+
+      this._storage.set(key, value);
     }
 
     if (modified) {
+      this._timeStamp = Date.now();
+
       this._setModified();
     }
   }
@@ -4617,6 +4624,10 @@ class AnnotationStorage {
 
   get serializable() {
     return this._storage.size > 0 ? this._storage : null;
+  }
+
+  get lastModified() {
+    return this._timeStamp.toString();
   }
 
 }
@@ -14950,7 +14961,7 @@ var _svg = __w_pdfjs_require__(20);
 var _xfa_layer = __w_pdfjs_require__(21);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = 'e9146b1';
+const pdfjsBuild = '83e1064';
 {
   if (_is_node.isNodeJS) {
     const {
