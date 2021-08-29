@@ -585,7 +585,7 @@ exports.stringToUTF8String = stringToUTF8String;
 exports.unreachable = unreachable;
 exports.utf8StringToString = utf8StringToString;
 exports.warn = warn;
-exports.VerbosityLevel = exports.Util = exports.UNSUPPORTED_FEATURES = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.TextRenderingMode = exports.StreamType = exports.RenderingIntentFlag = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.IsLittleEndianCached = exports.IsEvalSupportedCached = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FontType = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
+exports.VerbosityLevel = exports.Util = exports.UNSUPPORTED_FEATURES = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.TextRenderingMode = exports.StreamType = exports.RenderingIntentFlag = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.IsLittleEndianCached = exports.IsEvalSupportedCached = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FontType = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMode = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
 
 __w_pdfjs_require__(3);
 
@@ -599,9 +599,17 @@ const RenderingIntentFlag = {
   PRINT: 0x04,
   ANNOTATIONS_FORMS: 0x10,
   ANNOTATIONS_STORAGE: 0x20,
+  ANNOTATIONS_DISABLE: 0x40,
   OPLIST: 0x100
 };
 exports.RenderingIntentFlag = RenderingIntentFlag;
+const AnnotationMode = {
+  DISABLE: 0,
+  ENABLE: 1,
+  ENABLE_FORMS: 2,
+  ENABLE_STORAGE: 3
+};
+exports.AnnotationMode = AnnotationMode;
 const PermissionFlag = {
   PRINT: 0x04,
   MODIFY_CONTENTS: 0x08,
@@ -1714,6 +1722,8 @@ var _optional_content_config = __w_pdfjs_require__(15);
 
 var _transport_stream = __w_pdfjs_require__(16);
 
+var _xfa_text = __w_pdfjs_require__(17);
+
 const DEFAULT_RANGE_CHUNK_SIZE = 65536;
 const RENDERING_CANCELLED_TIMEOUT = 100;
 const DefaultCanvasFactory = _is_node.isNodeJS ? _node_utils.NodeCanvasFactory : _display_utils.DOMCanvasFactory;
@@ -2280,7 +2290,7 @@ class PDFPageProxy {
   getAnnotations({
     intent = "display"
   } = {}) {
-    const intentArgs = this._transport.getRenderingIntent(intent, {});
+    const intentArgs = this._transport.getRenderingIntent(intent);
 
     let promise = this._annotationPromises.get(intentArgs.cacheKey);
 
@@ -2305,22 +2315,34 @@ class PDFPageProxy {
     canvasContext,
     viewport,
     intent = "display",
-    renderInteractiveForms = false,
+    annotationMode = _util.AnnotationMode.ENABLE,
     transform = null,
     imageLayer = null,
     canvasFactory = null,
     background = null,
-    includeAnnotationStorage = false,
     optionalContentConfigPromise = null
   }) {
+    if (arguments[0]?.renderInteractiveForms !== undefined) {
+      (0, _display_utils.deprecated)("render no longer accepts the `renderInteractiveForms`-option, " + "please use the `annotationMode`-option instead.");
+
+      if (arguments[0].renderInteractiveForms === true && annotationMode === _util.AnnotationMode.ENABLE) {
+        annotationMode = _util.AnnotationMode.ENABLE_FORMS;
+      }
+    }
+
+    if (arguments[0]?.includeAnnotationStorage !== undefined) {
+      (0, _display_utils.deprecated)("render no longer accepts the `includeAnnotationStorage`-option, " + "please use the `annotationMode`-option instead.");
+
+      if (arguments[0].includeAnnotationStorage === true && annotationMode === _util.AnnotationMode.ENABLE) {
+        annotationMode = _util.AnnotationMode.ENABLE_STORAGE;
+      }
+    }
+
     if (this._stats) {
       this._stats.time("Overall");
     }
 
-    const intentArgs = this._transport.getRenderingIntent(intent, {
-      renderForms: renderInteractiveForms === true,
-      includeAnnotationStorage: includeAnnotationStorage === true
-    });
+    const intentArgs = this._transport.getRenderingIntent(intent, annotationMode);
 
     this.pendingCleanup = false;
 
@@ -2427,7 +2449,8 @@ class PDFPageProxy {
   }
 
   getOperatorList({
-    intent = "display"
+    intent = "display",
+    annotationMode = _util.AnnotationMode.ENABLE
   } = {}) {
     function operatorListChanged() {
       if (intentState.operatorList.lastChunk) {
@@ -2436,9 +2459,7 @@ class PDFPageProxy {
       }
     }
 
-    const intentArgs = this._transport.getRenderingIntent(intent, {
-      isOpList: true
-    });
+    const intentArgs = this._transport.getRenderingIntent(intent, annotationMode, true);
 
     let intentState = this._intentStates.get(intentArgs.cacheKey);
 
@@ -2493,6 +2514,12 @@ class PDFPageProxy {
   }
 
   getTextContent(params = {}) {
+    if (this._transport._htmlForXfa) {
+      return this.getXfa().then(xfa => {
+        return _xfa_text.XfaText.textContent(xfa);
+      });
+    }
+
     const readableStream = this.streamTextContent(params);
     return new Promise(function (resolve, reject) {
       function pump() {
@@ -2717,7 +2744,7 @@ class PDFPageProxy {
       }
     }
 
-    intentState.streamReader.cancel(new _util.AbortException(reason?.message)).catch(() => {});
+    intentState.streamReader.cancel(new _util.AbortException(reason.message)).catch(() => {});
     intentState.streamReader = null;
 
     if (this._transport.destroyed) {
@@ -3183,11 +3210,7 @@ class WorkerTransport {
     return (0, _util.shadow)(this, "annotationStorage", new _annotation_storage.AnnotationStorage());
   }
 
-  getRenderingIntent(intent, {
-    renderForms = false,
-    includeAnnotationStorage = false,
-    isOpList = false
-  }) {
+  getRenderingIntent(intent, annotationMode = _util.AnnotationMode.ENABLE, isOpList = false) {
     let renderingIntent = _util.RenderingIntentFlag.DISPLAY;
     let lastModified = "";
 
@@ -3207,13 +3230,25 @@ class WorkerTransport {
         (0, _util.warn)(`getRenderingIntent - invalid intent: ${intent}`);
     }
 
-    if (renderForms) {
-      renderingIntent += _util.RenderingIntentFlag.ANNOTATIONS_FORMS;
-    }
+    switch (annotationMode) {
+      case _util.AnnotationMode.DISABLE:
+        renderingIntent += _util.RenderingIntentFlag.ANNOTATIONS_DISABLE;
+        break;
 
-    if (includeAnnotationStorage) {
-      renderingIntent += _util.RenderingIntentFlag.ANNOTATIONS_STORAGE;
-      lastModified = this.annotationStorage.lastModified;
+      case _util.AnnotationMode.ENABLE:
+        break;
+
+      case _util.AnnotationMode.ENABLE_FORMS:
+        renderingIntent += _util.RenderingIntentFlag.ANNOTATIONS_FORMS;
+        break;
+
+      case _util.AnnotationMode.ENABLE_STORAGE:
+        renderingIntent += _util.RenderingIntentFlag.ANNOTATIONS_STORAGE;
+        lastModified = this.annotationStorage.lastModified;
+        break;
+
+      default:
+        (0, _util.warn)(`getRenderingIntent - invalid annotationMode: ${annotationMode}`);
     }
 
     if (isOpList) {
@@ -4045,7 +4080,7 @@ class InternalRenderTask {
 
 const version = '2.11.0';
 exports.version = version;
-const build = '83e1064';
+const build = '153d058';
 exports.build = build;
 
 /***/ }),
@@ -8736,6 +8771,70 @@ class PDFDataTransportStreamRangeReader {
 
 /***/ }),
 /* 17 */
+/***/ ((__unused_webpack_module, exports) => {
+
+
+
+Object.defineProperty(exports, "__esModule", ({
+  value: true
+}));
+exports.XfaText = void 0;
+
+class XfaText {
+  static textContent(xfa) {
+    const items = [];
+    const output = {
+      items,
+      styles: Object.create(null)
+    };
+
+    function walk(node) {
+      if (!node) {
+        return;
+      }
+
+      let str = null;
+      const name = node.name;
+
+      if (name === "#text") {
+        str = node.value;
+      } else if (!XfaText.shouldBuildText(name)) {
+        return;
+      } else if (node?.attributes?.textContent) {
+        str = node.attributes.textContent;
+      } else if (node.value) {
+        str = node.value;
+      }
+
+      if (str !== null) {
+        items.push({
+          str
+        });
+      }
+
+      if (!node.children) {
+        return;
+      }
+
+      for (const child of node.children) {
+        walk(child);
+      }
+    }
+
+    walk(xfa);
+    return output;
+  }
+
+  static shouldBuildText(name) {
+    return !(name === "textarea" || name === "input" || name === "option" || name === "select");
+  }
+
+}
+
+exports.XfaText = XfaText;
+
+/***/ }),
+/* 18 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -8751,7 +8850,7 @@ var _util = __w_pdfjs_require__(2);
 
 var _annotation_storage = __w_pdfjs_require__(9);
 
-var _scripting_utils = __w_pdfjs_require__(18);
+var _scripting_utils = __w_pdfjs_require__(19);
 
 const DEFAULT_TAB_INDEX = 1000;
 
@@ -8854,7 +8953,7 @@ class AnnotationElement {
     this.linkService = parameters.linkService;
     this.downloadManager = parameters.downloadManager;
     this.imageResourcesPath = parameters.imageResourcesPath;
-    this.renderInteractiveForms = parameters.renderInteractiveForms;
+    this.renderForms = parameters.renderForms;
     this.svgFactory = parameters.svgFactory;
     this.annotationStorage = parameters.annotationStorage;
     this.enableScripting = parameters.enableScripting;
@@ -9272,7 +9371,7 @@ class WidgetAnnotationElement extends AnnotationElement {
 
 class TextWidgetAnnotationElement extends WidgetAnnotationElement {
   constructor(parameters) {
-    const isRenderable = parameters.renderInteractiveForms || !parameters.data.hasAppearance && !!parameters.data.fieldValue;
+    const isRenderable = parameters.renderForms || !parameters.data.hasAppearance && !!parameters.data.fieldValue;
     super(parameters, {
       isRenderable
     });
@@ -9297,7 +9396,7 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
     this.container.className = "textWidgetAnnotation";
     let element = null;
 
-    if (this.renderInteractiveForms) {
+    if (this.renderForms) {
       const storedData = storage.getValue(id, {
         value: this.data.fieldValue,
         valueAsString: this.data.fieldValue
@@ -9526,7 +9625,7 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
 class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
   constructor(parameters) {
     super(parameters, {
-      isRenderable: parameters.renderInteractiveForms
+      isRenderable: parameters.renderForms
     });
   }
 
@@ -9601,7 +9700,7 @@ class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
 class RadioButtonWidgetAnnotationElement extends WidgetAnnotationElement {
   constructor(parameters) {
     super(parameters, {
-      isRenderable: parameters.renderInteractiveForms
+      isRenderable: parameters.renderForms
     });
   }
 
@@ -9697,7 +9796,7 @@ class PushButtonWidgetAnnotationElement extends LinkAnnotationElement {
 class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
   constructor(parameters) {
     super(parameters, {
-      isRenderable: parameters.renderInteractiveForms
+      isRenderable: parameters.renderForms
     });
   }
 
@@ -10507,7 +10606,7 @@ class AnnotationLayer {
         linkService: parameters.linkService,
         downloadManager: parameters.downloadManager,
         imageResourcesPath: parameters.imageResourcesPath || "",
-        renderInteractiveForms: parameters.renderInteractiveForms !== false,
+        renderForms: parameters.renderForms !== false,
         svgFactory: new _display_utils.DOMSVGFactory(),
         annotationStorage: parameters.annotationStorage || new _annotation_storage.AnnotationStorage(),
         enableScripting: parameters.enableScripting,
@@ -10560,7 +10659,7 @@ class AnnotationLayer {
 exports.AnnotationLayer = AnnotationLayer;
 
 /***/ }),
-/* 18 */
+/* 19 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -10628,7 +10727,7 @@ class ColorConverters {
 exports.ColorConverters = ColorConverters;
 
 /***/ }),
-/* 19 */
+/* 20 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -11396,7 +11495,7 @@ function renderTextLayer(renderParameters) {
 }
 
 /***/ }),
-/* 20 */
+/* 21 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -12923,8 +13022,8 @@ exports.SVGGraphics = SVGGraphics;
 }
 
 /***/ }),
-/* 21 */
-/***/ ((__unused_webpack_module, exports) => {
+/* 22 */
+/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
 
@@ -12932,6 +13031,8 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.XfaLayer = void 0;
+
+var _xfa_text = __w_pdfjs_require__(17);
 
 class XfaLayer {
   static setupStorage(html, id, element, storage, intent) {
@@ -12968,7 +13069,7 @@ class XfaLayer {
 
           html.addEventListener("change", event => {
             storage.setValue(id, {
-              value: event.target.getAttribute("xfaOn")
+              value: event.target.checked ? event.target.getAttribute("xfaOn") : event.target.getAttribute("xfaOff")
             });
           });
         } else {
@@ -13057,6 +13158,7 @@ class XfaLayer {
     const transform = `matrix(${parameters.viewport.transform.join(",")})`;
     rootDiv.style.transform = transform;
     rootDiv.setAttribute("class", "xfaLayer xfaFont");
+    const textDivs = [];
 
     while (stack.length > 0) {
       const [parent, i, html] = stack[stack.length - 1];
@@ -13077,7 +13179,9 @@ class XfaLayer {
       } = child;
 
       if (name === "#text") {
-        html.appendChild(document.createTextNode(child.value));
+        const node = document.createTextNode(child.value);
+        textDivs.push(node);
+        html.appendChild(node);
         continue;
       }
 
@@ -13098,13 +13202,23 @@ class XfaLayer {
       if (child.children && child.children.length > 0) {
         stack.push([child, -1, childHtml]);
       } else if (child.value) {
-        childHtml.appendChild(document.createTextNode(child.value));
+        const node = document.createTextNode(child.value);
+
+        if (_xfa_text.XfaText.shouldBuildText(name)) {
+          textDivs.push(node);
+        }
+
+        childHtml.appendChild(node);
       }
     }
 
     for (const el of rootDiv.querySelectorAll(".xfaNonInteractive input, .xfaNonInteractive textarea")) {
       el.setAttribute("readOnly", true);
     }
+
+    return {
+      textDivs
+    };
   }
 
   static update(parameters) {
@@ -13118,7 +13232,7 @@ class XfaLayer {
 exports.XfaLayer = XfaLayer;
 
 /***/ }),
-/* 22 */
+/* 23 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -13130,7 +13244,7 @@ exports.PDFNodeStream = void 0;
 
 var _util = __w_pdfjs_require__(2);
 
-var _network_utils = __w_pdfjs_require__(23);
+var _network_utils = __w_pdfjs_require__(24);
 
 ;
 
@@ -13584,7 +13698,7 @@ class PDFNodeStreamFsRangeReader extends BaseRangeReader {
 }
 
 /***/ }),
-/* 23 */
+/* 24 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -13599,7 +13713,7 @@ exports.validateResponseStatus = validateResponseStatus;
 
 var _util = __w_pdfjs_require__(2);
 
-var _content_disposition = __w_pdfjs_require__(24);
+var _content_disposition = __w_pdfjs_require__(25);
 
 var _display_utils = __w_pdfjs_require__(1);
 
@@ -13677,7 +13791,7 @@ function validateResponseStatus(status) {
 }
 
 /***/ }),
-/* 24 */
+/* 25 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -13864,7 +13978,7 @@ function getFilenameFromContentDispositionHeader(contentDisposition) {
 }
 
 /***/ }),
-/* 25 */
+/* 26 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -13876,7 +13990,7 @@ exports.PDFNetworkStream = void 0;
 
 var _util = __w_pdfjs_require__(2);
 
-var _network_utils = __w_pdfjs_require__(23);
+var _network_utils = __w_pdfjs_require__(24);
 
 ;
 const OK_RESPONSE = 200;
@@ -14404,7 +14518,7 @@ class PDFNetworkStreamRangeRequestReader {
 }
 
 /***/ }),
-/* 26 */
+/* 27 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -14416,7 +14530,7 @@ exports.PDFFetchStream = void 0;
 
 var _util = __w_pdfjs_require__(2);
 
-var _network_utils = __w_pdfjs_require__(23);
+var _network_utils = __w_pdfjs_require__(24);
 
 ;
 
@@ -14785,40 +14899,10 @@ Object.defineProperty(exports, "RenderingCancelledException", ({
     return _display_utils.RenderingCancelledException;
   }
 }));
-Object.defineProperty(exports, "build", ({
+Object.defineProperty(exports, "AnnotationMode", ({
   enumerable: true,
   get: function () {
-    return _api.build;
-  }
-}));
-Object.defineProperty(exports, "getDocument", ({
-  enumerable: true,
-  get: function () {
-    return _api.getDocument;
-  }
-}));
-Object.defineProperty(exports, "LoopbackPort", ({
-  enumerable: true,
-  get: function () {
-    return _api.LoopbackPort;
-  }
-}));
-Object.defineProperty(exports, "PDFDataRangeTransport", ({
-  enumerable: true,
-  get: function () {
-    return _api.PDFDataRangeTransport;
-  }
-}));
-Object.defineProperty(exports, "PDFWorker", ({
-  enumerable: true,
-  get: function () {
-    return _api.PDFWorker;
-  }
-}));
-Object.defineProperty(exports, "version", ({
-  enumerable: true,
-  get: function () {
-    return _api.version;
+    return _util.AnnotationMode;
   }
 }));
 Object.defineProperty(exports, "CMapCompressionType", ({
@@ -14911,6 +14995,42 @@ Object.defineProperty(exports, "VerbosityLevel", ({
     return _util.VerbosityLevel;
   }
 }));
+Object.defineProperty(exports, "build", ({
+  enumerable: true,
+  get: function () {
+    return _api.build;
+  }
+}));
+Object.defineProperty(exports, "getDocument", ({
+  enumerable: true,
+  get: function () {
+    return _api.getDocument;
+  }
+}));
+Object.defineProperty(exports, "LoopbackPort", ({
+  enumerable: true,
+  get: function () {
+    return _api.LoopbackPort;
+  }
+}));
+Object.defineProperty(exports, "PDFDataRangeTransport", ({
+  enumerable: true,
+  get: function () {
+    return _api.PDFDataRangeTransport;
+  }
+}));
+Object.defineProperty(exports, "PDFWorker", ({
+  enumerable: true,
+  get: function () {
+    return _api.PDFWorker;
+  }
+}));
+Object.defineProperty(exports, "version", ({
+  enumerable: true,
+  get: function () {
+    return _api.version;
+  }
+}));
 Object.defineProperty(exports, "AnnotationLayer", ({
   enumerable: true,
   get: function () {
@@ -14944,29 +15064,29 @@ Object.defineProperty(exports, "XfaLayer", ({
 
 var _display_utils = __w_pdfjs_require__(1);
 
-var _api = __w_pdfjs_require__(6);
-
 var _util = __w_pdfjs_require__(2);
 
-var _annotation_layer = __w_pdfjs_require__(17);
+var _api = __w_pdfjs_require__(6);
+
+var _annotation_layer = __w_pdfjs_require__(18);
 
 var _worker_options = __w_pdfjs_require__(12);
 
 var _is_node = __w_pdfjs_require__(4);
 
-var _text_layer = __w_pdfjs_require__(19);
+var _text_layer = __w_pdfjs_require__(20);
 
-var _svg = __w_pdfjs_require__(20);
+var _svg = __w_pdfjs_require__(21);
 
-var _xfa_layer = __w_pdfjs_require__(21);
+var _xfa_layer = __w_pdfjs_require__(22);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '83e1064';
+const pdfjsBuild = '153d058';
 {
   if (_is_node.isNodeJS) {
     const {
       PDFNodeStream
-    } = __w_pdfjs_require__(22);
+    } = __w_pdfjs_require__(23);
 
     (0, _api.setPDFNetworkStreamFactory)(params => {
       return new PDFNodeStream(params);
@@ -14974,11 +15094,11 @@ const pdfjsBuild = '83e1064';
   } else {
     const {
       PDFNetworkStream
-    } = __w_pdfjs_require__(25);
+    } = __w_pdfjs_require__(26);
 
     const {
       PDFFetchStream
-    } = __w_pdfjs_require__(26);
+    } = __w_pdfjs_require__(27);
 
     (0, _api.setPDFNetworkStreamFactory)(params => {
       if ((0, _display_utils.isValidFetchUrl)(params.url)) {

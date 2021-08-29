@@ -755,7 +755,7 @@ exports.stringToUTF8String = stringToUTF8String;
 exports.unreachable = unreachable;
 exports.utf8StringToString = utf8StringToString;
 exports.warn = warn;
-exports.VerbosityLevel = exports.Util = exports.UNSUPPORTED_FEATURES = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.TextRenderingMode = exports.StreamType = exports.RenderingIntentFlag = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.IsLittleEndianCached = exports.IsEvalSupportedCached = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FontType = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
+exports.VerbosityLevel = exports.Util = exports.UNSUPPORTED_FEATURES = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.TextRenderingMode = exports.StreamType = exports.RenderingIntentFlag = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.IsLittleEndianCached = exports.IsEvalSupportedCached = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FontType = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMode = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
 
 __w_pdfjs_require__(3);
 
@@ -769,9 +769,17 @@ const RenderingIntentFlag = {
   PRINT: 0x04,
   ANNOTATIONS_FORMS: 0x10,
   ANNOTATIONS_STORAGE: 0x20,
+  ANNOTATIONS_DISABLE: 0x40,
   OPLIST: 0x100
 };
 exports.RenderingIntentFlag = RenderingIntentFlag;
+const AnnotationMode = {
+  DISABLE: 0,
+  ENABLE: 1,
+  ENABLE_FORMS: 2,
+  ENABLE_STORAGE: 3
+};
+exports.AnnotationMode = AnnotationMode;
 const PermissionFlag = {
   PRINT: 0x04,
   MODIFY_CONTENTS: 0x08,
@@ -3783,7 +3791,7 @@ class Page {
       });
     });
     return Promise.all([pageListPromise, this._parsedAnnotations]).then(function ([pageOpList, annotations]) {
-      if (annotations.length === 0) {
+      if (annotations.length === 0 || intent & _util.RenderingIntentFlag.ANNOTATIONS_DISABLE) {
         pageOpList.flush(true);
         return {
           length: pageOpList.totalLength
@@ -4241,7 +4249,7 @@ class PDFDocument {
   }
 
   get xfaFactory() {
-    if (this.pdfManager.enableXfa && this.formInfo.hasXfa && !this.formInfo.hasAcroForm) {
+    if (this.pdfManager.enableXfa && this.catalog.needsRendering && this.formInfo.hasXfa && !this.formInfo.hasAcroForm) {
       const data = this.xfaData;
       return (0, _util.shadow)(this, "xfaFactory", data ? new _factory.XFAFactory(data) : null);
     }
@@ -52412,6 +52420,16 @@ class Catalog {
     return (0, _util.shadow)(this, "version", version.name);
   }
 
+  get needsRendering() {
+    const needsRendering = this._catDict.get("NeedsRendering");
+
+    if (!(0, _util.isBool)(needsRendering)) {
+      return (0, _util.shadow)(this, "needsRendering", false);
+    }
+
+    return (0, _util.shadow)(this, "needsRendering", needsRendering);
+  }
+
   get collection() {
     let collection = null;
 
@@ -60907,8 +60925,8 @@ class CheckButton extends _xfa_object.XFAObject {
 
     const items = field.items.children.length && field.items.children[0][_xfa_object.$toHTML]().html || [];
     const exportedValue = {
-      on: (items[0] || "on").toString(),
-      off: (items[1] || "off").toString()
+      on: (items[0] !== undefined ? items[0] : "on").toString(),
+      off: (items[1] !== undefined ? items[1] : "off").toString()
     };
     const value = field.value && field.value[_xfa_object.$text]() || "off";
     const checked = value === exportedValue.on || undefined;
@@ -60939,6 +60957,7 @@ class CheckButton extends _xfa_object.XFAObject {
         type,
         checked,
         xfaOn: exportedValue.on,
+        xfaOff: exportedValue.off,
         "aria-label": ariaLabel(field)
       }
     };
@@ -72480,7 +72499,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '83e1064';
+const pdfjsBuild = '153d058';
 })();
 
 /******/ 	return __webpack_exports__;
