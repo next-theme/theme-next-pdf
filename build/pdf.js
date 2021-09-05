@@ -1926,9 +1926,9 @@ function getDocument(src) {
   return task;
 }
 
-function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
+async function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
   if (worker.destroyed) {
-    return Promise.reject(new Error("Worker was destroyed"));
+    throw new Error("Worker was destroyed");
   }
 
   if (pdfDataRangeTransport) {
@@ -1938,7 +1938,7 @@ function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
     source.contentDispositionFilename = pdfDataRangeTransport.contentDispositionFilename;
   }
 
-  return worker.messageHandler.sendWithPromise("GetDocRequest", {
+  const workerId = await worker.messageHandler.sendWithPromise("GetDocRequest", {
     docId,
     apiVersion: '2.11.0',
     source: {
@@ -1960,13 +1960,13 @@ function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
     useSystemFonts: source.useSystemFonts,
     cMapUrl: source.useWorkerFetch ? source.cMapUrl : null,
     standardFontDataUrl: source.useWorkerFetch ? source.standardFontDataUrl : null
-  }).then(function (workerId) {
-    if (worker.destroyed) {
-      throw new Error("Worker was destroyed");
-    }
-
-    return workerId;
   });
+
+  if (worker.destroyed) {
+    throw new Error("Worker was destroyed");
+  }
+
+  return workerId;
 }
 
 class PDFDocumentLoadingTask {
@@ -1991,18 +1991,16 @@ class PDFDocumentLoadingTask {
     return this._capability.promise;
   }
 
-  destroy() {
+  async destroy() {
     this.destroyed = true;
-    const transportDestroyed = !this._transport ? Promise.resolve() : this._transport.destroy();
-    return transportDestroyed.then(() => {
-      this._transport = null;
+    await this._transport?.destroy();
+    this._transport = null;
 
-      if (this._worker) {
-        this._worker.destroy();
+    if (this._worker) {
+      this._worker.destroy();
 
-        this._worker = null;
-      }
-    });
+      this._worker = null;
+    }
   }
 
 }
@@ -3675,8 +3673,6 @@ class WorkerTransport {
   getPageIndex(ref) {
     return this.messageHandler.sendWithPromise("GetPageIndex", {
       ref
-    }).catch(function (reason) {
-      return Promise.reject(new Error(reason));
     });
   }
 
@@ -4080,7 +4076,7 @@ class InternalRenderTask {
 
 const version = '2.11.0';
 exports.version = version;
-const build = '153d058';
+const build = '1b20f61';
 exports.build = build;
 
 /***/ }),
@@ -7697,6 +7693,9 @@ function wrapReason(reason) {
     case "MissingPDFException":
       return new _util.MissingPDFException(reason.message);
 
+    case "PasswordException":
+      return new _util.PasswordException(reason.message, reason.code);
+
     case "UnexpectedResponseException":
       return new _util.UnexpectedResponseException(reason.message, reason.status);
 
@@ -8302,6 +8301,10 @@ class OptionalContentConfig {
   }
 
   isVisible(group) {
+    if (this._groups.size === 0) {
+      return true;
+    }
+
     if (!group) {
       (0, _util.warn)("Optional content group not defined.");
       return true;
@@ -14008,11 +14011,10 @@ function getArrayBuffer(xhr) {
 }
 
 class NetworkManager {
-  constructor(url, args) {
+  constructor(url, args = {}) {
     this.url = url;
-    args = args || {};
     this.isHttp = /^https?:/i.test(url);
-    this.httpHeaders = this.isHttp && args.httpHeaders || {};
+    this.httpHeaders = this.isHttp && args.httpHeaders || Object.create(null);
     this.withCredentials = args.withCredentials || false;
 
     this.getXhr = args.getXhr || function NetworkManager_getXhr() {
@@ -14091,9 +14093,7 @@ class NetworkManager {
       return;
     }
 
-    if (pendingRequest.onProgress) {
-      pendingRequest.onProgress(evt);
-    }
+    pendingRequest.onProgress?.(evt);
   }
 
   onStateChange(xhrId, evt) {
@@ -14121,10 +14121,7 @@ class NetworkManager {
     delete this.pendingRequests[xhrId];
 
     if (xhr.status === 0 && this.isHttp) {
-      if (pendingRequest.onError) {
-        pendingRequest.onError(xhr.status);
-      }
-
+      pendingRequest.onError?.(xhr.status);
       return;
     }
 
@@ -14132,10 +14129,7 @@ class NetworkManager {
     const ok_response_on_range_request = xhrStatus === OK_RESPONSE && pendingRequest.expectedStatus === PARTIAL_CONTENT_RESPONSE;
 
     if (!ok_response_on_range_request && xhrStatus !== pendingRequest.expectedStatus) {
-      if (pendingRequest.onError) {
-        pendingRequest.onError(xhr.status);
-      }
-
+      pendingRequest.onError?.(xhr.status);
       return;
     }
 
@@ -14153,8 +14147,8 @@ class NetworkManager {
         begin: 0,
         chunk
       });
-    } else if (pendingRequest.onError) {
-      pendingRequest.onError(xhr.status);
+    } else {
+      pendingRequest.onError?.(xhr.status);
     }
   }
 
@@ -14210,9 +14204,7 @@ class PDFNetworkStream {
   }
 
   cancelAllRequests(reason) {
-    if (this._fullRequestReader) {
-      this._fullRequestReader.cancel(reason);
-    }
+    this._fullRequestReader?.cancel(reason);
 
     for (const reader of this._rangeRequestReaders.slice(0)) {
       reader.cancel(reason);
@@ -14286,17 +14278,17 @@ class PDFNetworkStreamFullRequestReader {
     this._headersReceivedCapability.resolve();
   }
 
-  _onDone(args) {
-    if (args) {
+  _onDone(data) {
+    if (data) {
       if (this._requests.length > 0) {
         const requestCapability = this._requests.shift();
 
         requestCapability.resolve({
-          value: args.chunk,
+          value: data.chunk,
           done: false
         });
       } else {
-        this._cachedChunks.push(args.chunk);
+        this._cachedChunks.push(data.chunk);
       }
     }
 
@@ -14317,27 +14309,23 @@ class PDFNetworkStreamFullRequestReader {
   }
 
   _onError(status) {
-    const url = this._url;
-    const exception = (0, _network_utils.createResponseStatusError)(status, url);
-    this._storedError = exception;
+    this._storedError = (0, _network_utils.createResponseStatusError)(status, this._url);
 
-    this._headersReceivedCapability.reject(exception);
+    this._headersReceivedCapability.reject(this._storedError);
 
     for (const requestCapability of this._requests) {
-      requestCapability.reject(exception);
+      requestCapability.reject(this._storedError);
     }
 
     this._requests.length = 0;
     this._cachedChunks.length = 0;
   }
 
-  _onProgress(data) {
-    if (this.onProgress) {
-      this.onProgress({
-        loaded: data.loaded,
-        total: data.lengthComputable ? data.total : this._contentLength
-      });
-    }
+  _onProgress(evt) {
+    this.onProgress?.({
+      loaded: evt.loaded,
+      total: evt.lengthComputable ? evt.total : this._contentLength
+    });
   }
 
   get filename() {
@@ -14416,20 +14404,21 @@ class PDFNetworkStreamRangeRequestReader {
     this._manager = manager;
     const args = {
       onDone: this._onDone.bind(this),
+      onError: this._onError.bind(this),
       onProgress: this._onProgress.bind(this)
     };
+    this._url = manager.url;
     this._requestId = manager.requestRange(begin, end, args);
     this._requests = [];
     this._queuedChunk = null;
     this._done = false;
+    this._storedError = undefined;
     this.onProgress = null;
     this.onClosed = null;
   }
 
   _close() {
-    if (this.onClosed) {
-      this.onClosed(this);
-    }
+    this.onClosed?.(this);
   }
 
   _onDone(data) {
@@ -14460,9 +14449,20 @@ class PDFNetworkStreamRangeRequestReader {
     this._close();
   }
 
+  _onError(status) {
+    this._storedError = (0, _network_utils.createResponseStatusError)(status, this._url);
+
+    for (const requestCapability of this._requests) {
+      requestCapability.reject(this._storedError);
+    }
+
+    this._requests.length = 0;
+    this._queuedChunk = null;
+  }
+
   _onProgress(evt) {
-    if (!this.isStreamingSupported && this.onProgress) {
-      this.onProgress({
+    if (!this.isStreamingSupported) {
+      this.onProgress?.({
         loaded: evt.loaded
       });
     }
@@ -14473,6 +14473,10 @@ class PDFNetworkStreamRangeRequestReader {
   }
 
   async read() {
+    if (this._storedError) {
+      throw this._storedError;
+    }
+
     if (this._queuedChunk !== null) {
       const chunk = this._queuedChunk;
       this._queuedChunk = null;
@@ -14753,13 +14757,7 @@ class PDFFetchStreamRangeReader {
       this._readCapability.resolve();
 
       this._reader = response.body.getReader();
-    }).catch(reason => {
-      if (reason?.name === "AbortError") {
-        return;
-      }
-
-      throw reason;
-    });
+    }).catch(this._readCapability.reject);
     this.onProgress = null;
   }
 
@@ -15081,7 +15079,7 @@ var _svg = __w_pdfjs_require__(21);
 var _xfa_layer = __w_pdfjs_require__(22);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '153d058';
+const pdfjsBuild = '1b20f61';
 {
   if (_is_node.isNodeJS) {
     const {

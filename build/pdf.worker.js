@@ -495,7 +495,7 @@ class WorkerMessageHandler {
       filename
     }) {
       pdfManager.requestLoadedStream();
-      const promises = [pdfManager.onLoadedStream(), pdfManager.ensureCatalog("acroForm"), pdfManager.ensureDoc("xref"), pdfManager.ensureDoc("startXRef")];
+      const promises = [pdfManager.onLoadedStream(), pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("acroFormRef"), pdfManager.ensureDoc("xref"), pdfManager.ensureDoc("startXRef")];
 
       if (isPureXfa) {
         promises.push(pdfManager.serializeXfaData(annotationStorage));
@@ -510,7 +510,7 @@ class WorkerMessageHandler {
         }
       }
 
-      return Promise.all(promises).then(function ([stream, acroForm, xref, startXRef, ...refs]) {
+      return Promise.all(promises).then(function ([stream, acroForm, acroFormRef, xref, startXRef, ...refs]) {
         let newRefs = [];
         let xfaData = null;
 
@@ -530,16 +530,24 @@ class WorkerMessageHandler {
           }
         }
 
-        const xfa = acroForm instanceof _primitives.Dict && acroForm.get("XFA") || [];
+        const xfa = acroForm instanceof _primitives.Dict && acroForm.get("XFA") || null;
         let xfaDatasets = null;
+        let hasDatasets = false;
 
         if (Array.isArray(xfa)) {
           for (let i = 0, ii = xfa.length; i < ii; i += 2) {
             if (xfa[i] === "datasets") {
               xfaDatasets = xfa[i + 1];
+              acroFormRef = null;
+              hasDatasets = true;
             }
           }
+
+          if (xfaDatasets === null) {
+            xfaDatasets = xref.getNewRef();
+          }
         } else {
+          acroFormRef = null;
           (0, _util.warn)("Unsupported XFA type.");
         }
 
@@ -576,6 +584,9 @@ class WorkerMessageHandler {
           newRefs,
           xref,
           datasetsRef: xfaDatasets,
+          hasDatasets,
+          acroFormRef,
+          acroForm,
           xfaData
         });
       });
@@ -2676,7 +2687,7 @@ class ChunkedStreamManager {
 
     let chunks = [],
         loaded = 0;
-    const promise = new Promise((resolve, reject) => {
+    return new Promise((resolve, reject) => {
       const readChunk = chunk => {
         try {
           if (!chunk.done) {
@@ -2703,8 +2714,7 @@ class ChunkedStreamManager {
       };
 
       rangeReader.read().then(readChunk, reject);
-    });
-    promise.then(data => {
+    }).then(data => {
       if (this.aborted) {
         return;
       }
@@ -2766,7 +2776,7 @@ class ChunkedStreamManager {
       for (const groupedChunk of groupedChunksToRequest) {
         const begin = groupedChunk.beginChunk * this.chunkSize;
         const end = Math.min(groupedChunk.endChunk * this.chunkSize, this.length);
-        this.sendRequest(begin, end);
+        this.sendRequest(begin, end).catch(capability.reject);
       }
     }
 
@@ -3142,7 +3152,7 @@ function isWhiteSpace(ch) {
 }
 
 function parseXFAPath(path) {
-  const positionPattern = /(.+)\[([0-9]+)\]$/;
+  const positionPattern = /(.+)\[(\d+)\]$/;
   return path.split(".").map(component => {
     const m = component.match(positionPattern);
 
@@ -3360,7 +3370,7 @@ function validateCSSFont(cssFontInfo) {
     }
   } else {
     for (const ident of fontFamily.split(/[ \t]+/)) {
-      if (/^([0-9]|(-([0-9]|-)))/.test(ident) || !/^[a-zA-Z0-9\-_\\]+$/.test(ident)) {
+      if (/^(\d|(-(\d|-)))/.test(ident) || !/^[\w-\\]+$/.test(ident)) {
         (0, _util.warn)(`XFA - FontFamily contains some invalid <custom-ident>: ${fontFamily}.`);
         return false;
       }
@@ -3940,7 +3950,7 @@ const STARTXREF_SIGNATURE = new Uint8Array([0x73, 0x74, 0x61, 0x72, 0x74, 0x78, 
 const ENDOBJ_SIGNATURE = new Uint8Array([0x65, 0x6e, 0x64, 0x6f, 0x62, 0x6a]);
 const FINGERPRINT_FIRST_BYTES = 1024;
 const EMPTY_FINGERPRINT = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
-const PDF_HEADER_VERSION_REGEXP = /^[1-9]\.[0-9]$/;
+const PDF_HEADER_VERSION_REGEXP = /^[1-9]\.\d$/;
 
 function find(stream, signature, limit = 1024, backwards = false) {
   const signatureLength = signature.length;
@@ -4357,7 +4367,7 @@ class PDFDocument {
       }
 
       let fontFamily = descriptor.get("FontFamily");
-      fontFamily = fontFamily.replace(/[ ]+([0-9])/g, "$1");
+      fontFamily = fontFamily.replace(/[ ]+(\d)/g, "$1");
       const fontWeight = descriptor.get("FontWeight");
       const italicAngle = -descriptor.get("ItalicAngle");
       const cssFontInfo = {
@@ -21782,11 +21792,13 @@ class PartialEvaluator {
       bbox = null;
     }
 
-    let optionalContent = null,
-        groupOptions;
+    let optionalContent, groupOptions;
 
     if (dict.has("OC")) {
       optionalContent = await this.parseMarkedContentProps(dict.get("OC"), resources);
+    }
+
+    if (optionalContent !== undefined) {
       operatorList.addOp(_util.OPS.beginMarkedContentProps, ["OC", optionalContent]);
     }
 
@@ -21846,7 +21858,7 @@ class PartialEvaluator {
         operatorList.addOp(_util.OPS.endGroup, [groupOptions]);
       }
 
-      if (optionalContent) {
+      if (optionalContent !== undefined) {
         operatorList.addOp(_util.OPS.endMarkedContent, []);
       }
     });
@@ -21878,14 +21890,24 @@ class PartialEvaluator {
 
     if (!(w && (0, _util.isNum)(w)) || !(h && (0, _util.isNum)(h))) {
       (0, _util.warn)("Image dimensions are missing, or not numbers.");
-      return undefined;
+      return;
     }
 
     const maxImageSize = this.options.maxImageSize;
 
     if (maxImageSize !== -1 && w * h > maxImageSize) {
       (0, _util.warn)("Image exceeded maximum allowed size and was removed.");
-      return undefined;
+      return;
+    }
+
+    let optionalContent;
+
+    if (dict.has("OC")) {
+      optionalContent = await this.parseMarkedContentProps(dict.get("OC"), resources);
+    }
+
+    if (optionalContent !== undefined) {
+      operatorList.addOp(_util.OPS.beginMarkedContentProps, ["OC", optionalContent]);
     }
 
     const imageMask = dict.get("ImageMask", "IM") || false;
@@ -21915,7 +21937,11 @@ class PartialEvaluator {
         });
       }
 
-      return undefined;
+      if (optionalContent !== undefined) {
+        operatorList.addOp(_util.OPS.endMarkedContent, []);
+      }
+
+      return;
     }
 
     const softMask = dict.get("SMask", "SM") || false;
@@ -21933,7 +21959,12 @@ class PartialEvaluator {
       });
       imgData = imageObj.createImageData(true);
       operatorList.addOp(_util.OPS.paintInlineImageXObject, [imgData]);
-      return undefined;
+
+      if (optionalContent !== undefined) {
+        operatorList.addOp(_util.OPS.endMarkedContent, []);
+      }
+
+      return;
     }
 
     let objId = `img_${this.idFactory.createObjId()}`,
@@ -21995,7 +22026,9 @@ class PartialEvaluator {
       }
     }
 
-    return undefined;
+    if (optionalContent !== undefined) {
+      operatorList.addOp(_util.OPS.endMarkedContent, []);
+    }
   }
 
   handleSMask(smask, resources, operatorList, task, stateManager, localColorSpaceCache) {
@@ -34750,6 +34783,12 @@ function parseTilePackets(context, data, offset, dataLength) {
           zeroBitPlanesTree = new TagTree(width, height);
           precinct.inclusionTree = inclusionTree;
           precinct.zeroBitPlanesTree = zeroBitPlanesTree;
+
+          for (let l = 0; l < layerNumber; l++) {
+            if (readBits(1) !== 0) {
+              throw new JpxError("Invalid tag tree");
+            }
+          }
         }
 
         if (inclusionTree.reset(codeblockColumn, codeblockRow, layerNumber)) {
@@ -38523,7 +38562,8 @@ class Font {
       const cmapEncodingId = cmapTable.encodingId;
       const cmapMappings = cmapTable.mappings;
       const cmapMappingsLength = cmapMappings.length;
-      let baseEncoding = [];
+      let baseEncoding = [],
+          forcePostTable = false;
 
       if (properties.hasEncoding && (properties.baseEncodingName === "MacRomanEncoding" || properties.baseEncodingName === "WinAnsiEncoding")) {
         baseEncoding = (0, _encodings.getEncoding)(properties.baseEncodingName);
@@ -38537,7 +38577,7 @@ class Font {
 
           if (this.differences[charCode] !== undefined) {
             glyphName = this.differences[charCode];
-          } else if (baseEncoding[charCode] !== "") {
+          } else if (baseEncoding.length && baseEncoding[charCode] !== "") {
             glyphName = baseEncoding[charCode];
           } else {
             glyphName = _encodings.StandardEncoding[charCode];
@@ -38556,6 +38596,20 @@ class Font {
             unicodeOrCharCode = _encodings.MacRomanEncoding.indexOf(standardGlyphName);
           }
 
+          if (unicodeOrCharCode === undefined) {
+            if (!properties.glyphNames && properties.hasIncludedToUnicodeMap && !(this.toUnicode instanceof _to_unicode_map.IdentityToUnicodeMap)) {
+              const unicode = this.toUnicode.get(charCode);
+
+              if (unicode) {
+                unicodeOrCharCode = unicode.codePointAt(0);
+              }
+            }
+
+            if (unicodeOrCharCode === undefined) {
+              continue;
+            }
+          }
+
           for (let i = 0; i < cmapMappingsLength; ++i) {
             if (cmapMappings[i].charCode !== unicodeOrCharCode) {
               continue;
@@ -38569,6 +38623,8 @@ class Font {
         for (let i = 0; i < cmapMappingsLength; ++i) {
           charCodeToGlyphId[cmapMappings[i].charCode] = cmapMappings[i].glyphId;
         }
+
+        forcePostTable = true;
       } else {
         for (let i = 0; i < cmapMappingsLength; ++i) {
           let charCode = cmapMappings[i].charCode;
@@ -38583,7 +38639,7 @@ class Font {
 
       if (properties.glyphNames && (baseEncoding.length || this.differences.length)) {
         for (let i = 0; i < 256; ++i) {
-          if (charCodeToGlyphId[i] !== undefined) {
+          if (!forcePostTable && charCodeToGlyphId[i] !== undefined) {
             continue;
           }
 
@@ -41015,6 +41071,12 @@ const getNonStdFontMap = (0, _core_utils.getLookupTableFactory)(function (t) {
   t["ComicSansMS-Bold"] = "Comic Sans MS-Bold";
   t["ComicSansMS-BoldItalic"] = "Comic Sans MS-BoldItalic";
   t["ComicSansMS-Italic"] = "Comic Sans MS-Italic";
+  t["ItcSymbol-Bold"] = "Helvetica-Bold";
+  t["ItcSymbol-BoldItalic"] = "Helvetica-BoldOblique";
+  t["ItcSymbol-Book"] = "Helvetica";
+  t["ItcSymbol-BookItalic"] = "Helvetica-Oblique";
+  t["ItcSymbol-Medium"] = "Helvetica";
+  t["ItcSymbol-MediumItalic"] = "Helvetica-Oblique";
   t.LucidaConsole = "Courier";
   t["LucidaConsole-Bold"] = "Courier-Bold";
   t["LucidaConsole-BoldItalic"] = "Courier-BoldOblique";
@@ -52470,6 +52532,12 @@ class Catalog {
     return (0, _util.shadow)(this, "acroForm", acroForm);
   }
 
+  get acroFormRef() {
+    const value = this._catDict.getRaw("AcroForm");
+
+    return (0, _util.shadow)(this, "acroFormRef", (0, _primitives.isRef)(value) ? value : null);
+  }
+
   get metadata() {
     const streamRef = this._catDict.getRaw("Metadata");
 
@@ -55500,9 +55568,46 @@ function writeXFADataForAcroform(str, newRefs) {
   return buffer.join("");
 }
 
-function updateXFA(xfaData, datasetsRef, newRefs, xref) {
-  if (datasetsRef === null || xref === null) {
+function updateXFA({
+  xfaData,
+  datasetsRef,
+  hasDatasets,
+  acroFormRef,
+  acroForm,
+  newRefs,
+  xref,
+  xrefInfo
+}) {
+  if (xref === null) {
     return;
+  }
+
+  if (!hasDatasets) {
+    if (!acroFormRef) {
+      (0, _util.warn)("XFA - Cannot save it");
+      return;
+    }
+
+    const oldXfa = acroForm.get("XFA");
+    const newXfa = oldXfa.slice();
+    newXfa.splice(2, 0, "datasets");
+    newXfa.splice(3, 0, datasetsRef);
+    acroForm.set("XFA", newXfa);
+    const encrypt = xref.encrypt;
+    let transform = null;
+
+    if (encrypt) {
+      transform = encrypt.createCipherTransform(acroFormRef.num, acroFormRef.gen);
+    }
+
+    const buffer = [`${acroFormRef.num} ${acroFormRef.gen} obj\n`];
+    writeDict(acroForm, buffer, transform);
+    buffer.push("\n");
+    acroForm.set("XFA", oldXfa);
+    newRefs.push({
+      ref: acroFormRef,
+      data: buffer.join("")
+    });
   }
 
   if (xfaData === null) {
@@ -55530,9 +55635,21 @@ function incrementalUpdate({
   newRefs,
   xref = null,
   datasetsRef = null,
+  hasDatasets = false,
+  acroFormRef = null,
+  acroForm = null,
   xfaData = null
 }) {
-  updateXFA(xfaData, datasetsRef, newRefs, xref);
+  updateXFA({
+    xfaData,
+    datasetsRef,
+    hasDatasets,
+    acroFormRef,
+    acroForm,
+    newRefs,
+    xref,
+    xrefInfo
+  });
   const newXref = new _primitives.Dict(null);
   const refForXrefTable = xrefInfo.newRef;
   let buffer, baseOffset;
@@ -56822,11 +56939,7 @@ class CipherTransform {
     if (cipher instanceof AESBaseCipher) {
       const strLen = s.length;
       const pad = 16 - strLen % 16;
-
-      if (pad !== 16) {
-        s = s.padEnd(16 * Math.ceil(strLen / 16), String.fromCharCode(pad));
-      }
-
+      s += String.fromCharCode(pad).repeat(pad);
       const iv = new Uint8Array(16);
 
       if (typeof crypto !== "undefined") {
@@ -58469,8 +58582,12 @@ class XmlObject extends XFAObject {
     this[$content] = value.toString();
   }
 
-  [$dump]() {
+  [$dump](hasNS = false) {
     const dumped = Object.create(null);
+
+    if (hasNS) {
+      dumped.$ns = this[$namespaceId];
+    }
 
     if (this[$content]) {
       dumped.$content = this[$content];
@@ -58480,7 +58597,7 @@ class XmlObject extends XFAObject {
     dumped.children = [];
 
     for (const child of this[_children]) {
-      dumped.children.push(child[$dump]());
+      dumped.children.push(child[$dump](hasNS));
     }
 
     dumped.attributes = Object.create(null);
@@ -58617,7 +58734,7 @@ const dimConverters = {
   in: x => x * 72,
   px: x => x
 };
-const measurementPattern = /([+-]?[0-9]+\.?[0-9]*)(.*)/;
+const measurementPattern = /([+-]?\d+\.?\d*)(.*)/;
 
 function stripQuotes(str) {
   if (str.startsWith("'") || str.startsWith('"')) {
@@ -58948,6 +59065,8 @@ exports.searchNode = searchNode;
 
 var _xfa_object = __w_pdfjs_require__(75);
 
+var _namespaces = __w_pdfjs_require__(77);
+
 var _util = __w_pdfjs_require__(2);
 
 const namePattern = /^[^.[]+/;
@@ -58961,6 +59080,7 @@ const operators = {
 };
 const shortcuts = new Map([["$data", (root, current) => root.datasets.data], ["$template", (root, current) => root.template], ["$connectionSet", (root, current) => root.connectionSet], ["$form", (root, current) => root.form], ["$layout", (root, current) => root.layout], ["$host", (root, current) => root.host], ["$dataWindow", (root, current) => root.dataWindow], ["$event", (root, current) => root.event], ["!", (root, current) => root.datasets], ["$xfa", (root, current) => root], ["xfa", (root, current) => root], ["$", (root, current) => current]]);
 const somCache = new WeakMap();
+const NS_DATASETS = _namespaces.NamespaceIds.datasets.id;
 
 function parseIndex(index) {
   index = index.trim();
@@ -59186,7 +59306,8 @@ function createNodes(root, path) {
     index
   } of path) {
     for (let i = 0, ii = !isFinite(index) ? 0 : index; i <= ii; i++) {
-      node = new _xfa_object.XmlObject(root[_xfa_object.$namespaceId], name);
+      const nsId = root[_xfa_object.$namespaceId] === NS_DATASETS ? -1 : root[_xfa_object.$namespaceId];
+      node = new _xfa_object.XmlObject(nsId, name);
 
       root[_xfa_object.$appendChild](node);
     }
@@ -59298,6 +59419,8 @@ var _som = __w_pdfjs_require__(78);
 var _namespaces = __w_pdfjs_require__(77);
 
 var _util = __w_pdfjs_require__(2);
+
+const NS_DATASETS = _namespaces.NamespaceIds.datasets.id;
 
 function createText(content) {
   const node = new _template.Text({});
@@ -59710,7 +59833,8 @@ class Binder {
         if (dataChildren.length > 0) {
           this._bindOccurrences(child, [dataChildren[0]], null);
         } else if (this.emptyMerge) {
-          const dataChild = child[_xfa_object.$data] = new _xfa_object.XmlObject(dataNode[_xfa_object.$namespaceId], child.name || "root");
+          const nsId = dataNode[_xfa_object.$namespaceId] === NS_DATASETS ? -1 : dataNode[_xfa_object.$namespaceId];
+          const dataChild = child[_xfa_object.$data] = new _xfa_object.XmlObject(nsId, child.name || "root");
 
           dataNode[_xfa_object.$appendChild](dataChild);
 
@@ -59823,7 +59947,8 @@ class Binder {
           match = dataNode[_xfa_object.$getRealChildrenByNameIt](child.name, false, this.emptyMerge).next().value;
 
           if (!match) {
-            match = child[_xfa_object.$data] = new _xfa_object.XmlObject(dataNode[_xfa_object.$namespaceId], child.name);
+            const nsId = dataNode[_xfa_object.$namespaceId] === NS_DATASETS ? -1 : dataNode[_xfa_object.$namespaceId];
+            match = child[_xfa_object.$data] = new _xfa_object.XmlObject(nsId, child.name);
 
             if (this.emptyMerge) {
               match[_xfa_object.$consumed] = true;
@@ -60419,7 +60544,7 @@ class Barcode extends _xfa_object.XFAObject {
     this.charEncoding = (0, _utils.getKeyword)({
       data: attributes.charEncoding ? attributes.charEncoding.toLowerCase() : "",
       defaultValue: "",
-      validate: k => ["utf-8", "big-five", "fontspecific", "gbk", "gb-18030", "gb-2312", "ksc-5601", "none", "shift-jis", "ucs-2", "utf-16"].includes(k) || k.match(/iso-8859-[0-9]{2}/)
+      validate: k => ["utf-8", "big-five", "fontspecific", "gbk", "gb-18030", "gb-2312", "ksc-5601", "none", "shift-jis", "ucs-2", "utf-16"].includes(k) || k.match(/iso-8859-\d{2}/)
     });
     this.checksum = (0, _utils.getStringOption)(attributes.checksum, ["none", "1mod10", "1mod10_1mod11", "2mod10", "auto"]);
     this.dataColumnCount = (0, _utils.getInteger)({
@@ -64509,7 +64634,7 @@ class Submit extends _xfa_object.XFAObject {
     this.textEncoding = (0, _utils.getKeyword)({
       data: attributes.textEncoding ? attributes.textEncoding.toLowerCase() : "",
       defaultValue: "",
-      validate: k => ["utf-8", "big-five", "fontspecific", "gbk", "gb-18030", "gb-2312", "ksc-5601", "none", "shift-jis", "ucs-2", "utf-16"].includes(k) || k.match(/iso-8859-[0-9]{2}/)
+      validate: k => ["utf-8", "big-five", "fontspecific", "gbk", "gb-18030", "gb-2312", "ksc-5601", "none", "shift-jis", "ucs-2", "utf-16"].includes(k) || k.match(/iso-8859-\d{2}/)
     });
     this.use = attributes.use || "";
     this.usehref = attributes.usehref || "";
@@ -71815,6 +71940,9 @@ function wrapReason(reason) {
     case "MissingPDFException":
       return new _util.MissingPDFException(reason.message);
 
+    case "PasswordException":
+      return new _util.PasswordException(reason.message, reason.code);
+
     case "UnexpectedResponseException":
       return new _util.UnexpectedResponseException(reason.message, reason.status);
 
@@ -72499,7 +72627,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '153d058';
+const pdfjsBuild = '1b20f61';
 })();
 
 /******/ 	return __webpack_exports__;

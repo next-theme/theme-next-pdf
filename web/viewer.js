@@ -9073,9 +9073,12 @@ class PDFThumbnailViewer {
     }
 
     this._pagesRotation = rotation;
+    const updateArgs = {
+      rotation
+    };
 
-    for (let i = 0, ii = this._thumbnails.length; i < ii; i++) {
-      this._thumbnails[i].update(rotation);
+    for (const thumbnail of this._thumbnails) {
+      thumbnail.update(updateArgs);
     }
   }
 
@@ -9393,8 +9396,10 @@ class PDFThumbnailView {
     }
   }
 
-  update(rotation) {
-    if (typeof rotation !== "undefined") {
+  update({
+    rotation = null
+  }) {
+    if (typeof rotation === "number") {
       this.rotation = rotation;
     }
 
@@ -10023,10 +10028,12 @@ class BaseViewer {
 
     this._pagesRotation = rotation;
     const pageNumber = this._currentPageNumber;
+    const updateArgs = {
+      rotation
+    };
 
-    for (let i = 0, ii = this._pages.length; i < ii; i++) {
-      const pageView = this._pages[i];
-      pageView.update(pageView.scale, rotation);
+    for (const pageView of this._pages) {
+      pageView.update(updateArgs);
     }
 
     if (this._currentScaleValue) {
@@ -10324,8 +10331,12 @@ class BaseViewer {
 
     this._doc.style.setProperty("--zoom-factor", newScale);
 
-    for (let i = 0, ii = this._pages.length; i < ii; i++) {
-      this._pages[i].update(newScale);
+    const updateArgs = {
+      scale: newScale
+    };
+
+    for (const pageView of this._pages) {
+      pageView.update(updateArgs);
     }
 
     this._currentScale = newScale;
@@ -10893,9 +10904,12 @@ class BaseViewer {
     }
 
     this._optionalContentConfigPromise = promise;
+    const updateArgs = {
+      optionalContentConfigPromise: promise
+    };
 
     for (const pageView of this._pages) {
-      pageView.update(pageView.scale, pageView.rotation, promise);
+      pageView.update(updateArgs);
     }
 
     this.update();
@@ -11223,11 +11237,7 @@ class AnnotationLayerBuilder {
     return Promise.all([this.pdfPage.getAnnotations({
       intent
     }), this._hasJSActionsPromise]).then(([annotations, hasJSActions = false]) => {
-      if (this._cancelled) {
-        return;
-      }
-
-      if (annotations.length === 0) {
+      if (this._cancelled || annotations.length === 0) {
         return;
       }
 
@@ -11654,10 +11664,24 @@ class PDFPageView {
     div.appendChild(this.loadingIconDiv);
   }
 
-  update(scale, rotation, optionalContentConfigPromise = null) {
+  update({
+    scale = 0,
+    rotation = null,
+    optionalContentConfigPromise = null
+  }) {
+    if (typeof arguments[0] !== "object") {
+      console.error("PDFPageView.update called with separate parameters, please use an object instead.");
+      this.update({
+        scale: arguments[0],
+        rotation: arguments[1],
+        optionalContentConfigPromise: arguments[2]
+      });
+      return;
+    }
+
     this.scale = scale || this.scale;
 
-    if (typeof rotation !== "undefined") {
+    if (typeof rotation === "number") {
       this.rotation = rotation;
     }
 
@@ -12654,12 +12678,8 @@ class TextLayerBuilder {
     }
 
     this.cancel();
-    this.textDivs = [];
-
-    if (this.highlighter) {
-      this.highlighter.setTextMapping(this.textDivs, this.textContentItemsStr);
-    }
-
+    this.textDivs.length = 0;
+    this.highlighter?.setTextMapping(this.textDivs, this.textContentItemsStr);
     const textLayerFrag = document.createDocumentFragment();
     this.textLayerRenderTask = (0, _pdfjsLib.renderTextLayer)({
       textContent: this.textContent,
@@ -12790,13 +12810,13 @@ class XfaLayerBuilder {
   constructor({
     pageDiv,
     pdfPage,
-    xfaHtml,
-    annotationStorage
+    annotationStorage,
+    xfaHtml
   }) {
     this.pageDiv = pageDiv;
     this.pdfPage = pdfPage;
-    this.xfaHtml = xfaHtml;
     this.annotationStorage = annotationStorage;
+    this.xfaHtml = xfaHtml;
     this.div = null;
     this._cancelled = false;
   }
@@ -12817,14 +12837,16 @@ class XfaLayerBuilder {
       this.pageDiv.appendChild(div);
       parameters.div = div;
 
-      _pdfjsLib.XfaLayer.render(parameters);
+      const result = _pdfjsLib.XfaLayer.render(parameters);
 
-      return Promise.resolve();
+      return Promise.resolve(result);
     }
 
     return this.pdfPage.getXfa().then(xfa => {
-      if (this._cancelled) {
-        return Promise.resolve();
+      if (this._cancelled || !xfa) {
+        return {
+          textDivs: []
+        };
       }
 
       const parameters = {
@@ -15323,7 +15345,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '153d058';
+const pdfjsBuild = '1b20f61';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
