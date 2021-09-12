@@ -628,11 +628,6 @@ class WorkerMessageHandler {
     });
     handler.on("GetTextContent", function wphExtractText(data, sink) {
       const pageIndex = data.pageIndex;
-
-      sink.onPull = function (desiredSize) {};
-
-      sink.onCancel = function (reason) {};
-
       pdfManager.getPage(pageIndex).then(function (page) {
         const task = new WorkerTask("GetTextContent: page " + pageIndex);
         startWorkerTask(task);
@@ -21435,6 +21430,7 @@ const PatternType = {
   TILING: 1,
   SHADING: 2
 };
+const TEXT_CHUNK_BATCH_SIZE = 10;
 const deferred = Promise.resolve();
 
 function normalizeBlendMode(value, parsingArray = false) {
@@ -21911,6 +21907,7 @@ class PartialEvaluator {
     }
 
     const imageMask = dict.get("ImageMask", "IM") || false;
+    const interpolate = dict.get("Interpolate", "I");
     let imgData, args;
 
     if (imageMask) {
@@ -21924,7 +21921,8 @@ class PartialEvaluator {
         width,
         height,
         imageIsFromDecodeStream: image instanceof _decode_stream.DecodeStream,
-        inverseDecode: !!decode && decode[0] > 0
+        inverseDecode: !!decode && decode[0] > 0,
+        interpolate
       });
       imgData.cached = !!cacheKey;
       args = [imgData];
@@ -23615,8 +23613,6 @@ class PartialEvaluator {
       if (textContentItem.initialized) {
         textContentItem.hasEOL = true;
         flushTextContentItem();
-      } else if (textContent.items.length > 0) {
-        textContent.items[textContent.items.length - 1].hasEOL = true;
       } else {
         textContent.items.push({
           str: "",
@@ -23690,20 +23686,26 @@ class PartialEvaluator {
       textContentItem.str.length = 0;
     }
 
-    function enqueueChunk() {
+    function enqueueChunk(batch = false) {
       const length = textContent.items.length;
 
-      if (length > 0) {
-        sink.enqueue(textContent, length);
-        textContent.items = [];
-        textContent.styles = Object.create(null);
+      if (length === 0) {
+        return;
       }
+
+      if (batch && length < TEXT_CHUNK_BATCH_SIZE) {
+        return;
+      }
+
+      sink.enqueue(textContent, length);
+      textContent.items = [];
+      textContent.styles = Object.create(null);
     }
 
     const timeSlotManager = new TimeSlotManager();
     return new Promise(function promiseBody(resolve, reject) {
       const next = function (promise) {
-        enqueueChunk();
+        enqueueChunk(true);
         Promise.all([promise, sink.ready]).then(function () {
           try {
             promiseBody(resolve, reject);
@@ -37167,9 +37169,7 @@ class Font {
         }
       }
 
-      const isIdentityUnicode = this.toUnicode instanceof _to_unicode_map.IdentityToUnicodeMap;
-
-      if (!isIdentityUnicode) {
+      if (!(this.toUnicode instanceof _to_unicode_map.IdentityToUnicodeMap)) {
         this.toUnicode.forEach(function (charCode, unicodeCharCode) {
           map[+charCode] = unicodeCharCode;
         });
@@ -37186,7 +37186,15 @@ class Font {
 
       this.toFontChar = buildToFontChar(_encodings.ZapfDingbatsEncoding, (0, _glyphlist.getDingbatsGlyphsUnicode)(), this.differences);
     } else if (isStandardFont) {
-      this.toFontChar = buildToFontChar(this.defaultEncoding, (0, _glyphlist.getGlyphsUnicode)(), this.differences);
+      const map = buildToFontChar(this.defaultEncoding, (0, _glyphlist.getGlyphsUnicode)(), this.differences);
+
+      if (type === "CIDFontType2" && !this.cidEncoding.startsWith("Identity-") && !(this.toUnicode instanceof _to_unicode_map.IdentityToUnicodeMap)) {
+        this.toUnicode.forEach(function (charCode, unicodeCharCode) {
+          map[+charCode] = unicodeCharCode;
+        });
+      }
+
+      this.toFontChar = map;
     } else {
       const glyphsUnicodeMap = (0, _glyphlist.getGlyphsUnicode)();
       const map = [];
@@ -51866,7 +51874,7 @@ class PDFImage {
 
     this.width = width;
     this.height = height;
-    this.interpolate = dict.get("Interpolate", "I") || false;
+    this.interpolate = dict.get("Interpolate", "I");
     this.imageMask = dict.get("ImageMask", "IM") || false;
     this.matte = dict.get("Matte") || false;
     let bitsPerComponent = image.bitsPerComponent;
@@ -52011,7 +52019,8 @@ class PDFImage {
     width,
     height,
     imageIsFromDecodeStream,
-    inverseDecode
+    inverseDecode,
+    interpolate
   }) {
     const computedLength = (width + 7 >> 3) * height;
     const actualLength = imgArray.byteLength;
@@ -52041,7 +52050,8 @@ class PDFImage {
     return {
       data,
       width,
-      height
+      height,
+      interpolate
     };
   }
 
@@ -52271,6 +52281,7 @@ class PDFImage {
     const imgData = {
       width: drawWidth,
       height: drawHeight,
+      interpolate: this.interpolate,
       kind: 0,
       data: null
     };
@@ -59078,7 +59089,7 @@ const operators = {
   dotBracket: 3,
   dotParen: 4
 };
-const shortcuts = new Map([["$data", (root, current) => root.datasets.data], ["$template", (root, current) => root.template], ["$connectionSet", (root, current) => root.connectionSet], ["$form", (root, current) => root.form], ["$layout", (root, current) => root.layout], ["$host", (root, current) => root.host], ["$dataWindow", (root, current) => root.dataWindow], ["$event", (root, current) => root.event], ["!", (root, current) => root.datasets], ["$xfa", (root, current) => root], ["xfa", (root, current) => root], ["$", (root, current) => current]]);
+const shortcuts = new Map([["$data", (root, current) => root.datasets ? root.datasets.data : root], ["$record", (root, current) => (root.datasets ? root.datasets.data : root)[_xfa_object.$getChildren]()[0]], ["$template", (root, current) => root.template], ["$connectionSet", (root, current) => root.connectionSet], ["$form", (root, current) => root.form], ["$layout", (root, current) => root.layout], ["$host", (root, current) => root.host], ["$dataWindow", (root, current) => root.dataWindow], ["$event", (root, current) => root.event], ["!", (root, current) => root.datasets], ["$xfa", (root, current) => root], ["xfa", (root, current) => root], ["$", (root, current) => current]]);
 const somCache = new WeakMap();
 const NS_DATASETS = _namespaces.NamespaceIds.datasets.id;
 
@@ -72276,7 +72287,7 @@ class MessageHandler {
         this.streamSinks[streamId].desiredSize = data.desiredSize;
         const {
           onPull
-        } = this.streamSinks[data.streamId];
+        } = this.streamSinks[streamId];
         new Promise(function (resolve) {
           resolve(onPull && onPull());
         }).then(function () {
@@ -72348,7 +72359,7 @@ class MessageHandler {
 
         const {
           onCancel
-        } = this.streamSinks[data.streamId];
+        } = this.streamSinks[streamId];
         new Promise(function (resolve) {
           resolve(onCancel && onCancel(wrapReason(data.reason)));
         }).then(function () {
@@ -72627,7 +72638,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '1b20f61';
+const pdfjsBuild = '6a24002';
 })();
 
 /******/ 	return __webpack_exports__;

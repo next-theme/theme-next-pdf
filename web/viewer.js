@@ -720,11 +720,14 @@ const PDFViewerApplication = {
       l10n: this.l10n
     });
     pdfRenderingQueue.setThumbnailViewer(this.pdfThumbnailViewer);
-    this.pdfHistory = new _pdf_history.PDFHistory({
-      linkService: pdfLinkService,
-      eventBus
-    });
-    pdfLinkService.setHistory(this.pdfHistory);
+
+    if (!this.isViewerEmbedded && !_app_options.AppOptions.get("disableHistory")) {
+      this.pdfHistory = new _pdf_history.PDFHistory({
+        linkService: pdfLinkService,
+        eventBus
+      });
+      pdfLinkService.setHistory(this.pdfHistory);
+    }
 
     if (!this.supportsIntegratedFind) {
       this.findBar = new _pdf_find_bar.PDFFindBar(appConfig.findBar, eventBus, this.l10n);
@@ -1649,7 +1652,7 @@ const PDFViewerApplication = {
     viewOnLoad,
     initialDest = null
   }) {
-    if (this.isViewerEmbedded || _app_options.AppOptions.get("disableHistory")) {
+    if (!this.pdfHistory) {
       return;
     }
 
@@ -2484,7 +2487,7 @@ function webViewerHashchange(evt) {
 
   if (!PDFViewerApplication.isInitialViewSet) {
     PDFViewerApplication.initialBookmark = hash;
-  } else if (!PDFViewerApplication.pdfHistory.popStateInProgress) {
+  } else if (!PDFViewerApplication.pdfHistory?.popStateInProgress) {
     PDFViewerApplication.pdfLinkService.setHash(hash);
   }
 }
@@ -3112,7 +3115,7 @@ exports.PDFPrintServiceFactory = PDFPrintServiceFactory;
 
 /***/ }),
 /* 3 */
-/***/ ((__unused_webpack_module, exports) => {
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 
@@ -3142,7 +3145,10 @@ exports.scrollIntoView = scrollIntoView;
 exports.waitOnEventOrTimeout = waitOnEventOrTimeout;
 exports.watchScroll = watchScroll;
 exports.WaitOnType = exports.VERTICAL_PADDING = exports.UNKNOWN_SCALE = exports.TextLayerMode = exports.SpreadMode = exports.SidebarView = exports.ScrollMode = exports.SCROLLBAR_PADDING = exports.RendererType = exports.ProgressBar = exports.PresentationModeState = exports.MIN_SCALE = exports.MAX_SCALE = exports.MAX_AUTO_SCALE = exports.EventBus = exports.DEFAULT_SCALE_VALUE = exports.DEFAULT_SCALE = exports.CSS_UNITS = exports.AutoPrintRegExp = exports.animationStarted = void 0;
-const CSS_UNITS = 96.0 / 72.0;
+
+var _pdfjsLib = __webpack_require__(4);
+
+const CSS_UNITS = _pdfjsLib.PixelsPerInch.CSS / _pdfjsLib.PixelsPerInch.PDF;
 exports.CSS_UNITS = CSS_UNITS;
 const DEFAULT_SCALE_VALUE = "auto";
 exports.DEFAULT_SCALE_VALUE = DEFAULT_SCALE_VALUE;
@@ -7122,17 +7128,11 @@ class PDFLinkService {
   executeNamedAction(action) {
     switch (action) {
       case "GoBack":
-        if (this.pdfHistory) {
-          this.pdfHistory.back();
-        }
-
+        this.pdfHistory?.back();
         break;
 
       case "GoForward":
-        if (this.pdfHistory) {
-          this.pdfHistory.forward();
-        }
-
+        this.pdfHistory?.forward();
         break;
 
       case "NextPage":
@@ -14968,9 +14968,9 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.PDFPrintService = PDFPrintService;
 
-var _app = __webpack_require__(2);
-
 var _pdfjsLib = __webpack_require__(4);
+
+var _app = __webpack_require__(2);
 
 var _app_options = __webpack_require__(1);
 
@@ -14981,7 +14981,7 @@ let overlayManager = null;
 
 function renderPage(activeServiceOnEntry, pdfDocument, pageNumber, size, printResolution, optionalContentConfigPromise) {
   const scratchCanvas = activeService.scratchCanvas;
-  const PRINT_UNITS = printResolution / 72.0;
+  const PRINT_UNITS = printResolution / _pdfjsLib.PixelsPerInch.PDF;
   scratchCanvas.width = Math.floor(size.width * PRINT_UNITS);
   scratchCanvas.height = Math.floor(size.height * PRINT_UNITS);
   const ctx = scratchCanvas.getContext("2d");
@@ -15345,7 +15345,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '1b20f61';
+const pdfjsBuild = '6a24002';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
