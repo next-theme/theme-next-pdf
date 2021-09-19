@@ -193,7 +193,7 @@ const defaultOptions = {
     kind: OptionKind.API
   },
   enableXfa: {
-    value: false,
+    value: true,
     kind: OptionKind.API + OptionKind.PREFERENCE
   },
   fontExtraProperties: {
@@ -481,6 +481,7 @@ const PDFViewerApplication = {
   isViewerEmbedded: window.parent !== window,
   url: "",
   baseUrl: "",
+  _downloadUrl: "",
   externalServices: DefaultExternalServices,
   _boundEvents: Object.create(null),
   documentInfo: null,
@@ -659,10 +660,20 @@ const PDFViewerApplication = {
   },
 
   async _initializeViewerComponents() {
-    const appConfig = this.appConfig;
-    const eventBus = appConfig.eventBus || new _ui_utils.EventBus({
-      isInAutomation: this.externalServices.isInAutomation
-    });
+    const {
+      appConfig,
+      externalServices
+    } = this;
+    let eventBus;
+
+    if (appConfig.eventBus) {
+      eventBus = appConfig.eventBus;
+    } else if (externalServices.isInAutomation) {
+      eventBus = new _ui_utils.AutomationEventBus();
+    } else {
+      eventBus = new _ui_utils.EventBus();
+    }
+
     this.eventBus = eventBus;
     this.overlayManager = new _overlay_manager.OverlayManager();
     const pdfRenderingQueue = new _pdf_rendering_queue.PDFRenderingQueue();
@@ -675,7 +686,7 @@ const PDFViewerApplication = {
       ignoreDestinationZoom: _app_options.AppOptions.get("ignoreDestinationZoom")
     });
     this.pdfLinkService = pdfLinkService;
-    const downloadManager = this.externalServices.createDownloadManager();
+    const downloadManager = externalServices.createDownloadManager();
     this.downloadManager = downloadManager;
     const findController = new _pdf_find_controller.PDFFindController({
       linkService: pdfLinkService,
@@ -685,7 +696,7 @@ const PDFViewerApplication = {
     const pdfScriptingManager = new _pdf_scripting_manager.PDFScriptingManager({
       eventBus,
       sandboxBundleSrc: _app_options.AppOptions.get("sandboxBundleSrc"),
-      scriptingFactory: this.externalServices,
+      scriptingFactory: externalServices,
       docPropertiesLookup: this._scriptingDocProperties.bind(this)
     });
     this.pdfScriptingManager = pdfScriptingManager;
@@ -870,9 +881,14 @@ const PDFViewerApplication = {
     throw new Error("Not implemented: initPassiveLoading");
   },
 
-  setTitleUsingUrl(url = "") {
+  setTitleUsingUrl(url = "", downloadUrl = null) {
     this.url = url;
     this.baseUrl = url.split("#")[0];
+
+    if (downloadUrl) {
+      this._downloadUrl = downloadUrl === url ? this.baseUrl : downloadUrl.split("#")[0];
+    }
+
     let title = (0, _pdfjsLib.getPdfFilenameFromUrl)(url, "");
 
     if (!title) {
@@ -898,6 +914,15 @@ const PDFViewerApplication = {
     return this._contentDispositionFilename || (0, _pdfjsLib.getPdfFilenameFromUrl)(this.url);
   },
 
+  _hideViewBookmark() {
+    const {
+      toolbar,
+      secondaryToolbar
+    } = this.appConfig;
+    toolbar.viewBookmark.hidden = true;
+    secondaryToolbar.viewBookmarkButton.hidden = true;
+  },
+
   _cancelIdleCallbacks() {
     if (!this._idleCallbacks.size) {
       return;
@@ -912,6 +937,8 @@ const PDFViewerApplication = {
 
   async close() {
     this._unblockDocumentLoadEvent();
+
+    this._hideViewBookmark();
 
     const {
       container
@@ -950,6 +977,7 @@ const PDFViewerApplication = {
     this.downloadComplete = false;
     this.url = "";
     this.baseUrl = "";
+    this._downloadUrl = "";
     this.documentInfo = null;
     this.metadata = null;
     this._contentDispositionFilename = null;
@@ -989,12 +1017,12 @@ const PDFViewerApplication = {
     const parameters = Object.create(null);
 
     if (typeof file === "string") {
-      this.setTitleUsingUrl(file);
+      this.setTitleUsingUrl(file, file);
       parameters.url = file;
     } else if (file && "byteLength" in file) {
       parameters.data = file;
     } else if (file.url && file.originalUrl) {
-      this.setTitleUsingUrl(file.originalUrl);
+      this.setTitleUsingUrl(file.originalUrl, file.url);
       parameters.url = file.url;
     }
 
@@ -1069,7 +1097,7 @@ const PDFViewerApplication = {
   async download({
     sourceEventType = "download"
   } = {}) {
-    const url = this.baseUrl,
+    const url = this._downloadUrl,
           filename = this._docFilename;
 
     try {
@@ -1094,7 +1122,7 @@ const PDFViewerApplication = {
 
     this._saveInProgress = true;
     await this.pdfScriptingManager.dispatchWillSave();
-    const url = this.baseUrl,
+    const url = this._downloadUrl,
           filename = this._docFilename;
 
     try {
@@ -2299,6 +2327,8 @@ function webViewerInitialized() {
 function webViewerOpenFileViaURL(file) {
   if (file) {
     PDFViewerApplication.open(file);
+  } else {
+    PDFViewerApplication._hideViewBookmark();
   }
 }
 
@@ -2523,12 +2553,6 @@ let webViewerFileInputChange, webViewerOpenFile;
 
       fileReader.readAsArrayBuffer(file);
     }
-
-    const appConfig = PDFViewerApplication.appConfig;
-    appConfig.toolbar.viewBookmark.hidden = true;
-    appConfig.secondaryToolbar.viewBookmarkButton.hidden = true;
-    appConfig.toolbar.download.hidden = true;
-    appConfig.secondaryToolbar.downloadButton.hidden = true;
   };
 
   webViewerOpenFile = function (evt) {
@@ -3144,7 +3168,7 @@ exports.roundToDivide = roundToDivide;
 exports.scrollIntoView = scrollIntoView;
 exports.waitOnEventOrTimeout = waitOnEventOrTimeout;
 exports.watchScroll = watchScroll;
-exports.WaitOnType = exports.VERTICAL_PADDING = exports.UNKNOWN_SCALE = exports.TextLayerMode = exports.SpreadMode = exports.SidebarView = exports.ScrollMode = exports.SCROLLBAR_PADDING = exports.RendererType = exports.ProgressBar = exports.PresentationModeState = exports.MIN_SCALE = exports.MAX_SCALE = exports.MAX_AUTO_SCALE = exports.EventBus = exports.DEFAULT_SCALE_VALUE = exports.DEFAULT_SCALE = exports.CSS_UNITS = exports.AutoPrintRegExp = exports.animationStarted = void 0;
+exports.WaitOnType = exports.VERTICAL_PADDING = exports.UNKNOWN_SCALE = exports.TextLayerMode = exports.SpreadMode = exports.SidebarView = exports.ScrollMode = exports.SCROLLBAR_PADDING = exports.RendererType = exports.ProgressBar = exports.PresentationModeState = exports.MIN_SCALE = exports.MAX_SCALE = exports.MAX_AUTO_SCALE = exports.EventBus = exports.DEFAULT_SCALE_VALUE = exports.DEFAULT_SCALE = exports.CSS_UNITS = exports.AutoPrintRegExp = exports.AutomationEventBus = exports.animationStarted = void 0;
 
 var _pdfjsLib = __webpack_require__(4);
 
@@ -3619,12 +3643,8 @@ const animationStarted = new Promise(function (resolve) {
 });
 exports.animationStarted = animationStarted;
 
-function dispatchDOMEvent(eventName, args = null) {
-  throw new Error("Not implemented: dispatchDOMEvent");
-}
-
 class EventBus {
-  constructor(options) {
+  constructor() {
     this._listeners = Object.create(null);
   }
 
@@ -3705,6 +3725,15 @@ class EventBus {
 }
 
 exports.EventBus = EventBus;
+
+class AutomationEventBus extends EventBus {
+  dispatch(eventName) {
+    throw new Error("Not implemented: AutomationEventBus.dispatch");
+  }
+
+}
+
+exports.AutomationEventBus = AutomationEventBus;
 
 function clamp(v, min, max) {
   return Math.min(Math.max(v, min), max);
@@ -8288,6 +8317,53 @@ class PDFScriptingManager {
 
           this._pdfViewer.currentScaleValue = value;
           break;
+
+        case "SaveAs":
+          this._eventBus.dispatch("save", {
+            source: this
+          });
+
+          break;
+
+        case "FirstPage":
+          this._pdfViewer.currentPageNumber = 1;
+          break;
+
+        case "LastPage":
+          this._pdfViewer.currentPageNumber = this._pdfViewer.pagesCount;
+          break;
+
+        case "NextPage":
+          this._pdfViewer.nextPage();
+
+          break;
+
+        case "PrevPage":
+          this._pdfViewer.previousPage();
+
+          break;
+
+        case "ZoomViewIn":
+          if (isInPresentationMode) {
+            return;
+          }
+
+          this._eventBus.dispatch("zoomin", {
+            source: this
+          });
+
+          break;
+
+        case "ZoomViewOut":
+          if (isInPresentationMode) {
+            return;
+          }
+
+          this._eventBus.dispatch("zoomout", {
+            source: this
+          });
+
+          break;
       }
 
       return;
@@ -12785,7 +12861,8 @@ class DefaultTextLayerFactory {
       pageIndex,
       viewport,
       enhanceTextSelection,
-      eventBus
+      eventBus,
+      highlighter
     });
   }
 
@@ -13365,8 +13442,6 @@ exports.Toolbar = void 0;
 var _ui_utils = __webpack_require__(3);
 
 const PAGE_NUMBER_LOADING_INDICATOR = "visiblePageIsLoading";
-const SCALE_SELECT_CONTAINER_WIDTH = 140;
-const SCALE_SELECT_WIDTH = 162;
 
 class Toolbar {
   constructor(options, eventBus, l10n) {
@@ -13404,7 +13479,6 @@ class Toolbar {
     this.items = {
       numPages: options.numPages,
       pageNumber: options.pageNumber,
-      scaleSelectContainer: options.scaleSelectContainer,
       scaleSelect: options.scaleSelect,
       customScaleOption: options.customScaleOption,
       previous: options.previous,
@@ -13586,17 +13660,16 @@ class Toolbar {
       l10n
     } = this;
     const predefinedValuesPromise = Promise.all([l10n.get("page_scale_auto"), l10n.get("page_scale_actual"), l10n.get("page_scale_fit"), l10n.get("page_scale_width")]);
+    const style = getComputedStyle(items.scaleSelect),
+          scaleSelectContainerWidth = parseInt(style.getPropertyValue("--scale-select-container-width"), 10),
+          scaleSelectOverflow = parseInt(style.getPropertyValue("--scale-select-overflow"), 10);
     let canvas = document.createElement("canvas");
     canvas.mozOpaque = true;
     let ctx = canvas.getContext("2d", {
       alpha: false
     });
     await _ui_utils.animationStarted;
-    const {
-      fontSize,
-      fontFamily
-    } = getComputedStyle(items.scaleSelect);
-    ctx.font = `${fontSize} ${fontFamily}`;
+    ctx.font = `${style.fontSize} ${style.fontFamily}`;
     let maxWidth = 0;
 
     for (const predefinedValue of await predefinedValuesPromise) {
@@ -13609,12 +13682,11 @@ class Toolbar {
       }
     }
 
-    const overflow = SCALE_SELECT_WIDTH - SCALE_SELECT_CONTAINER_WIDTH;
-    maxWidth += 2 * overflow;
+    maxWidth += 2 * scaleSelectOverflow;
 
-    if (maxWidth > SCALE_SELECT_CONTAINER_WIDTH) {
-      items.scaleSelect.style.width = `${maxWidth + overflow}px`;
-      items.scaleSelectContainer.style.width = `${maxWidth}px`;
+    if (maxWidth > scaleSelectContainerWidth) {
+      const doc = document.documentElement;
+      doc.style.setProperty("--scale-select-container-width", `${maxWidth}px`);
     }
 
     canvas.width = 0;
@@ -13826,7 +13898,7 @@ class BasePreferences {
         "disableFontFace": false,
         "disableRange": false,
         "disableStream": false,
-        "enableXfa": false
+        "enableXfa": true
       }),
       writable: false,
       enumerable: true,
@@ -13958,6 +14030,7 @@ class DownloadManager {
 
   downloadUrl(url, filename) {
     if (!(0, _pdfjsLib.createValidAbsoluteUrl)(url, "http://example.com")) {
+      console.error(`downloadUrl - not a valid URL: ${url}`);
       return;
     }
 
@@ -15345,7 +15418,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '6a24002';
+const pdfjsBuild = '83d3bb4';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
@@ -15377,7 +15450,6 @@ function getViewerConfiguration() {
       container: document.getElementById("toolbarViewer"),
       numPages: document.getElementById("numPages"),
       pageNumber: document.getElementById("pageNumber"),
-      scaleSelectContainer: document.getElementById("scaleSelectContainer"),
       scaleSelect: document.getElementById("scaleSelect"),
       customScaleOption: document.getElementById("customScaleOption"),
       previous: document.getElementById("previous"),

@@ -546,7 +546,7 @@ class WorkerMessageHandler {
           if (xfaDatasets === null) {
             xfaDatasets = xref.getNewRef();
           }
-        } else {
+        } else if (xfa) {
           acroFormRef = null;
           (0, _util.warn)("Unsupported XFA type.");
         }
@@ -19435,6 +19435,12 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
       return;
     }
 
+    const asValue = this._decodeFormValue(params.dict.get("AS"));
+
+    if (typeof asValue === "string") {
+      this.data.fieldValue = asValue;
+    }
+
     const exportValues = normalAppearance.getKeys();
 
     if (!exportValues.includes("Off")) {
@@ -24397,6 +24403,11 @@ class PartialEvaluator {
 
         const map = new Array(cmap.length);
         cmap.forEach(function (charCode, token) {
+          if (typeof token === "number") {
+            map[charCode] = String.fromCodePoint(token);
+            return;
+          }
+
           const str = [];
 
           for (let k = 0; k < token.length; k += 2) {
@@ -27902,6 +27913,16 @@ class Lexer {
     }
 
     let str = String.fromCharCode(ch);
+
+    if (ch < 0x20 || ch > 0x7f) {
+      const nextCh = this.peekChar();
+
+      if (nextCh >= 0x20 && nextCh <= 0x7f) {
+        this.nextChar();
+        return _primitives.Cmd.get(str);
+      }
+    }
+
     const knownCommands = this.knownCommands;
     let knownCommandFound = knownCommands && knownCommands[str] !== undefined;
 
@@ -36612,6 +36633,12 @@ function getFontFileType(file, {
   return [fileType, fileSubtype];
 }
 
+function applyStandardFontGlyphMap(map, glyphMap) {
+  for (const charCode in glyphMap) {
+    map[+charCode] = glyphMap[charCode];
+  }
+}
+
 function buildToFontChar(encoding, glyphsUnicodeMap, differences) {
   const toFontChar = [];
   let unicode;
@@ -37137,26 +37164,14 @@ class Font {
     this.remeasure = (!isStandardFont || isNarrow) && Object.keys(this.widths).length > 0;
 
     if ((isStandardFont || isMappedToStandardFont) && type === "CIDFontType2" && this.cidEncoding.startsWith("Identity-")) {
-      const GlyphMapForStandardFonts = (0, _standard_fonts.getGlyphMapForStandardFonts)(),
-            cidToGidMap = properties.cidToGidMap;
+      const cidToGidMap = properties.cidToGidMap;
       const map = [];
-
-      for (const charCode in GlyphMapForStandardFonts) {
-        map[+charCode] = GlyphMapForStandardFonts[charCode];
-      }
+      applyStandardFontGlyphMap(map, (0, _standard_fonts.getGlyphMapForStandardFonts)());
 
       if (/Arial-?Black/i.test(name)) {
-        const SupplementalGlyphMapForArialBlack = (0, _standard_fonts.getSupplementalGlyphMapForArialBlack)();
-
-        for (const charCode in SupplementalGlyphMapForArialBlack) {
-          map[+charCode] = SupplementalGlyphMapForArialBlack[charCode];
-        }
+        applyStandardFontGlyphMap(map, (0, _standard_fonts.getSupplementalGlyphMapForArialBlack)());
       } else if (/Calibri/i.test(name)) {
-        const SupplementalGlyphMapForCalibri = (0, _standard_fonts.getSupplementalGlyphMapForCalibri)();
-
-        for (const charCode in SupplementalGlyphMapForCalibri) {
-          map[+charCode] = SupplementalGlyphMapForCalibri[charCode];
-        }
+        applyStandardFontGlyphMap(map, (0, _standard_fonts.getSupplementalGlyphMapForCalibri)());
       }
 
       if (cidToGidMap) {
@@ -37166,6 +37181,16 @@ class Font {
           if (cidToGidMap[cid] !== undefined) {
             map[+charCode] = cidToGidMap[cid];
           }
+        }
+
+        if (cidToGidMap.length !== this.toUnicode.length && properties.hasIncludedToUnicodeMap && this.toUnicode instanceof _to_unicode_map.IdentityToUnicodeMap) {
+          this.toUnicode.forEach(function (charCode, unicodeCharCode) {
+            const cid = map[charCode];
+
+            if (cidToGidMap[cid] === undefined) {
+              map[+charCode] = unicodeCharCode;
+            }
+          });
         }
       }
 
@@ -37213,11 +37238,7 @@ class Font {
 
       if (this.composite && this.toUnicode instanceof _to_unicode_map.IdentityToUnicodeMap) {
         if (/Verdana/i.test(name)) {
-          const GlyphMapForStandardFonts = (0, _standard_fonts.getGlyphMapForStandardFonts)();
-
-          for (const charCode in GlyphMapForStandardFonts) {
-            map[+charCode] = GlyphMapForStandardFonts[charCode];
-          }
+          applyStandardFontGlyphMap(map, (0, _standard_fonts.getGlyphMapForStandardFonts)());
         }
       }
 
@@ -55500,10 +55521,16 @@ function writeValue(value, buffer, transform) {
     buffer.push(`(${(0, _util.escapeString)(value)})`);
   } else if (typeof value === "number") {
     buffer.push(numberToString(value));
+  } else if (typeof value === "boolean") {
+    buffer.push(value.toString());
   } else if ((0, _primitives.isDict)(value)) {
     writeDict(value, buffer, transform);
   } else if ((0, _primitives.isStream)(value)) {
     writeStream(value, buffer, transform);
+  } else if (value === null) {
+    buffer.push("null");
+  } else {
+    (0, _util.warn)(`Unhandled value in writer: ${typeof value}, please file a bug.`);
   }
 }
 
@@ -60037,6 +60064,8 @@ const MAX_ATTEMPTS_FOR_LRTB_LAYOUT = 2;
 const MAX_EMPTY_PAGES = 3;
 const DEFAULT_TAB_INDEX = 5000;
 const HEADING_PATTERN = /^H(\d+)$/;
+const MIMES = new Set(["image/gif", "image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/apng", "image/x-png", "image/bmp", "image/x-ms-bmp", "image/tiff", "image/tif"]);
+const IMAGES_HEADERS = [[[0x42, 0x4d], "image/bmp"], [[0xff, 0xd8, 0xff], "image/jpeg"], [[0x49, 0x49, 0x2a, 0x00], "image/tiff"], [[0x4d, 0x4d, 0x00, 0x2a], "image/tiff"], [[0x47, 0x49, 0x46, 0x38, 0x39, 0x61], "image/gif"], [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], "image/png"]];
 
 function getBorderDims(node) {
   if (!node || !node.border) {
@@ -62881,6 +62910,10 @@ class Image extends _xfa_object.StringObject {
   }
 
   [_xfa_object.$toHTML]() {
+    if (this.contentType && !MIMES.has(this.contentType.toLowerCase())) {
+      return _utils.HTMLResult.EMPTY;
+    }
+
     let buffer = this[_xfa_object.$globalData].images && this[_xfa_object.$globalData].images.get(this.href);
 
     if (!buffer && (this.href || !this[_xfa_object.$content])) {
@@ -62893,6 +62926,19 @@ class Image extends _xfa_object.StringObject {
 
     if (!buffer) {
       return _utils.HTMLResult.EMPTY;
+    }
+
+    if (!this.contentType) {
+      for (const [header, type] of IMAGES_HEADERS) {
+        if (buffer.length > header.length && header.every((x, i) => x === buffer[i])) {
+          this.contentType = type;
+          break;
+        }
+      }
+
+      if (!this.contentType) {
+        return _utils.HTMLResult.EMPTY;
+      }
     }
 
     const blob = new Blob([buffer], {
@@ -72638,7 +72684,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '6a24002';
+const pdfjsBuild = '83d3bb4';
 })();
 
 /******/ 	return __webpack_exports__;

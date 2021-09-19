@@ -1701,7 +1701,7 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.getDocument = getDocument;
 exports.setPDFNetworkStreamFactory = setPDFNetworkStreamFactory;
-exports.version = exports.PDFWorker = exports.PDFPageProxy = exports.PDFDocumentProxy = exports.PDFDataRangeTransport = exports.LoopbackPort = exports.DefaultStandardFontDataFactory = exports.DefaultCMapReaderFactory = exports.DefaultCanvasFactory = exports.build = void 0;
+exports.version = exports.RenderTask = exports.PDFWorker = exports.PDFPageProxy = exports.PDFDocumentProxy = exports.PDFDocumentLoadingTask = exports.PDFDataRangeTransport = exports.LoopbackPort = exports.DefaultStandardFontDataFactory = exports.DefaultCMapReaderFactory = exports.DefaultCanvasFactory = exports.build = void 0;
 
 var _util = __w_pdfjs_require__(2);
 
@@ -2009,6 +2009,8 @@ class PDFDocumentLoadingTask {
   }
 
 }
+
+exports.PDFDocumentLoadingTask = PDFDocumentLoadingTask;
 
 class PDFDataRangeTransport {
   constructor(length, initialData, progressiveDone = false, contentDispositionFilename = null) {
@@ -3909,6 +3911,8 @@ class RenderTask {
 
 }
 
+exports.RenderTask = RenderTask;
+
 class InternalRenderTask {
   static get canvasInUse() {
     return (0, _util.shadow)(this, "canvasInUse", new WeakSet());
@@ -4081,7 +4085,7 @@ class InternalRenderTask {
 
 const version = '2.11.0';
 exports.version = version;
-const build = '6a24002';
+const build = '83d3bb4';
 exports.build = build;
 
 /***/ }),
@@ -4602,7 +4606,13 @@ class AnnotationStorage {
   }
 
   getValue(key, defaultValue) {
-    return this._storage.get(key) ?? defaultValue;
+    const value = this._storage.get(key);
+
+    if (value === undefined) {
+      return defaultValue;
+    }
+
+    return Object.assign(defaultValue, value);
   }
 
   setValue(key, value) {
@@ -9225,6 +9235,10 @@ class LinkAnnotationElement extends AnnotationElement {
       };
     }
 
+    if (!link.onclick) {
+      link.onclick = () => false;
+    }
+
     link.className = "internalLink";
   }
 
@@ -9671,20 +9685,22 @@ class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
     const element = document.createElement("input");
     element.disabled = data.readOnly;
     element.type = "checkbox";
-    element.name = this.data.fieldName;
+    element.name = data.fieldName;
 
     if (value) {
       element.setAttribute("checked", true);
     }
 
     element.setAttribute("id", id);
+    element.setAttribute("exportValue", data.exportValue);
     element.tabIndex = DEFAULT_TAB_INDEX;
     element.addEventListener("change", function (event) {
       const name = event.target.name;
+      const checked = event.target.checked;
 
       for (const checkbox of document.getElementsByName(name)) {
         if (checkbox !== event.target) {
-          checkbox.checked = false;
+          checkbox.checked = checked && checkbox.getAttribute("exportValue") === data.exportValue;
           storage.setValue(checkbox.parentNode.getAttribute("data-annotation-id"), {
             value: false
           });
@@ -9692,7 +9708,7 @@ class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
       }
 
       storage.setValue(id, {
-        value: event.target.checked
+        value: checked
       });
     });
 
@@ -15121,7 +15137,7 @@ var _svg = __w_pdfjs_require__(21);
 var _xfa_layer = __w_pdfjs_require__(22);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '6a24002';
+const pdfjsBuild = '83d3bb4';
 {
   if (_is_node.isNodeJS) {
     const {
