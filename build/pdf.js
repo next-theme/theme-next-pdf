@@ -62,7 +62,12 @@ exports.DEFAULT_LINK_REL = DEFAULT_LINK_REL;
 const SVG_NS = "http://www.w3.org/2000/svg";
 const PixelsPerInch = {
   CSS: 96.0,
-  PDF: 72.0
+  PDF: 72.0,
+
+  get PDF_TO_CSS_UNITS() {
+    return (0, _util.shadow)(this, "PDF_TO_CSS_UNITS", this.CSS / this.PDF);
+  }
+
 };
 exports.PixelsPerInch = PixelsPerInch;
 
@@ -2303,6 +2308,32 @@ class PDFPageProxy {
       promise = this._transport.getAnnotations(this._pageIndex, intentArgs.renderingIntent);
 
       this._annotationPromises.set(intentArgs.cacheKey, promise);
+
+      promise = promise.then(annotations => {
+        for (const annotation of annotations) {
+          if (annotation.titleObj !== undefined) {
+            Object.defineProperty(annotation, "title", {
+              get() {
+                (0, _display_utils.deprecated)("`title`-property on annotation, please use `titleObj` instead.");
+                return annotation.titleObj.str;
+              }
+
+            });
+          }
+
+          if (annotation.contentsObj !== undefined) {
+            Object.defineProperty(annotation, "contents", {
+              get() {
+                (0, _display_utils.deprecated)("`contents`-property on annotation, please use `contentsObj` instead.");
+                return annotation.contentsObj.str;
+              }
+
+            });
+          }
+        }
+
+        return annotations;
+      });
     }
 
     return promise;
@@ -3298,6 +3329,7 @@ class WorkerTransport {
     Promise.all(waitOn).then(() => {
       this.commonObjs.clear();
       this.fontLoader.clear();
+      this._getFieldObjectsPromise = null;
       this._hasJSActionsPromise = null;
 
       if (this._networkStream) {
@@ -3702,7 +3734,7 @@ class WorkerTransport {
   }
 
   getFieldObjects() {
-    return this.messageHandler.sendWithPromise("GetFieldObjects", null);
+    return this._getFieldObjectsPromise ||= this.messageHandler.sendWithPromise("GetFieldObjects", null);
   }
 
   hasJSActions() {
@@ -3831,13 +3863,15 @@ class WorkerTransport {
       this.fontLoader.clear();
     }
 
+    this._getFieldObjectsPromise = null;
     this._hasJSActionsPromise = null;
   }
 
   get loadingParams() {
     const params = this._params;
     return (0, _util.shadow)(this, "loadingParams", {
-      disableAutoFetch: params.disableAutoFetch
+      disableAutoFetch: params.disableAutoFetch,
+      enableXfa: params.enableXfa
     });
   }
 
@@ -4085,7 +4119,7 @@ class InternalRenderTask {
 
 const version = '2.11.0';
 exports.version = version;
-const build = '83d3bb4';
+const build = 'f1ceb00';
 exports.build = build;
 
 /***/ }),
@@ -5444,7 +5478,7 @@ function getImageSmoothingEnabled(transform, interpolate) {
 
   scale[0] = Math.fround(scale[0]);
   scale[1] = Math.fround(scale[1]);
-  const actualScale = Math.fround((globalThis.devicePixelRatio || 1) * _display_utils.PixelsPerInch.CSS / _display_utils.PixelsPerInch.PDF);
+  const actualScale = Math.fround((globalThis.devicePixelRatio || 1) * _display_utils.PixelsPerInch.PDF_TO_CSS_UNITS);
 
   if (interpolate !== undefined) {
     return interpolate;
@@ -7867,10 +7901,10 @@ class MessageHandler {
   }
 
   sendWithStream(actionName, data, queueingStrategy, transfers) {
-    const streamId = this.streamId++;
-    const sourceName = this.sourceName;
-    const targetName = this.targetName;
-    const comObj = this.comObj;
+    const streamId = this.streamId++,
+          sourceName = this.sourceName,
+          targetName = this.targetName,
+          comObj = this.comObj;
     return new ReadableStream({
       start: controller => {
         const startCapability = (0, _util.createPromiseCapability)();
@@ -7923,12 +7957,12 @@ class MessageHandler {
   }
 
   _createStreamSink(data) {
-    const self = this;
-    const action = this.actionHandler[data.action];
-    const streamId = data.streamId;
-    const sourceName = this.sourceName;
-    const targetName = data.sourceName;
-    const comObj = this.comObj;
+    const streamId = data.streamId,
+          sourceName = this.sourceName,
+          targetName = data.sourceName,
+          comObj = this.comObj;
+    const self = this,
+          action = this.actionHandler[data.action];
     const streamSink = {
       enqueue(chunk, size = 1, transfers) {
         if (this.isCancelled) {
@@ -8016,32 +8050,34 @@ class MessageHandler {
   }
 
   _processStreamMessage(data) {
-    const streamId = data.streamId;
-    const sourceName = this.sourceName;
-    const targetName = data.sourceName;
-    const comObj = this.comObj;
+    const streamId = data.streamId,
+          sourceName = this.sourceName,
+          targetName = data.sourceName,
+          comObj = this.comObj;
+    const streamController = this.streamControllers[streamId],
+          streamSink = this.streamSinks[streamId];
 
     switch (data.stream) {
       case StreamKind.START_COMPLETE:
         if (data.success) {
-          this.streamControllers[streamId].startCall.resolve();
+          streamController.startCall.resolve();
         } else {
-          this.streamControllers[streamId].startCall.reject(wrapReason(data.reason));
+          streamController.startCall.reject(wrapReason(data.reason));
         }
 
         break;
 
       case StreamKind.PULL_COMPLETE:
         if (data.success) {
-          this.streamControllers[streamId].pullCall.resolve();
+          streamController.pullCall.resolve();
         } else {
-          this.streamControllers[streamId].pullCall.reject(wrapReason(data.reason));
+          streamController.pullCall.reject(wrapReason(data.reason));
         }
 
         break;
 
       case StreamKind.PULL:
-        if (!this.streamSinks[streamId]) {
+        if (!streamSink) {
           comObj.postMessage({
             sourceName,
             targetName,
@@ -8052,16 +8088,13 @@ class MessageHandler {
           break;
         }
 
-        if (this.streamSinks[streamId].desiredSize <= 0 && data.desiredSize > 0) {
-          this.streamSinks[streamId].sinkCapability.resolve();
+        if (streamSink.desiredSize <= 0 && data.desiredSize > 0) {
+          streamSink.sinkCapability.resolve();
         }
 
-        this.streamSinks[streamId].desiredSize = data.desiredSize;
-        const {
-          onPull
-        } = this.streamSinks[streamId];
+        streamSink.desiredSize = data.desiredSize;
         new Promise(function (resolve) {
-          resolve(onPull && onPull());
+          resolve(streamSink.onPull && streamSink.onPull());
         }).then(function () {
           comObj.postMessage({
             sourceName,
@@ -8082,58 +8115,55 @@ class MessageHandler {
         break;
 
       case StreamKind.ENQUEUE:
-        (0, _util.assert)(this.streamControllers[streamId], "enqueue should have stream controller");
+        (0, _util.assert)(streamController, "enqueue should have stream controller");
 
-        if (this.streamControllers[streamId].isClosed) {
+        if (streamController.isClosed) {
           break;
         }
 
-        this.streamControllers[streamId].controller.enqueue(data.chunk);
+        streamController.controller.enqueue(data.chunk);
         break;
 
       case StreamKind.CLOSE:
-        (0, _util.assert)(this.streamControllers[streamId], "close should have stream controller");
+        (0, _util.assert)(streamController, "close should have stream controller");
 
-        if (this.streamControllers[streamId].isClosed) {
+        if (streamController.isClosed) {
           break;
         }
 
-        this.streamControllers[streamId].isClosed = true;
-        this.streamControllers[streamId].controller.close();
+        streamController.isClosed = true;
+        streamController.controller.close();
 
-        this._deleteStreamController(streamId);
+        this._deleteStreamController(streamController, streamId);
 
         break;
 
       case StreamKind.ERROR:
-        (0, _util.assert)(this.streamControllers[streamId], "error should have stream controller");
-        this.streamControllers[streamId].controller.error(wrapReason(data.reason));
+        (0, _util.assert)(streamController, "error should have stream controller");
+        streamController.controller.error(wrapReason(data.reason));
 
-        this._deleteStreamController(streamId);
+        this._deleteStreamController(streamController, streamId);
 
         break;
 
       case StreamKind.CANCEL_COMPLETE:
         if (data.success) {
-          this.streamControllers[streamId].cancelCall.resolve();
+          streamController.cancelCall.resolve();
         } else {
-          this.streamControllers[streamId].cancelCall.reject(wrapReason(data.reason));
+          streamController.cancelCall.reject(wrapReason(data.reason));
         }
 
-        this._deleteStreamController(streamId);
+        this._deleteStreamController(streamController, streamId);
 
         break;
 
       case StreamKind.CANCEL:
-        if (!this.streamSinks[streamId]) {
+        if (!streamSink) {
           break;
         }
 
-        const {
-          onCancel
-        } = this.streamSinks[streamId];
         new Promise(function (resolve) {
-          resolve(onCancel && onCancel(wrapReason(data.reason)));
+          resolve(streamSink.onCancel && streamSink.onCancel(wrapReason(data.reason)));
         }).then(function () {
           comObj.postMessage({
             sourceName,
@@ -8151,8 +8181,8 @@ class MessageHandler {
             reason: wrapReason(reason)
           });
         });
-        this.streamSinks[streamId].sinkCapability.reject(wrapReason(data.reason));
-        this.streamSinks[streamId].isCancelled = true;
+        streamSink.sinkCapability.reject(wrapReason(data.reason));
+        streamSink.isCancelled = true;
         delete this.streamSinks[streamId];
         break;
 
@@ -8161,10 +8191,8 @@ class MessageHandler {
     }
   }
 
-  async _deleteStreamController(streamId) {
-    await Promise.allSettled([this.streamControllers[streamId].startCall, this.streamControllers[streamId].pullCall, this.streamControllers[streamId].cancelCall].map(function (capability) {
-      return capability && capability.promise;
-    }));
+  async _deleteStreamController(streamController, streamId) {
+    await Promise.allSettled([streamController.startCall && streamController.startCall.promise, streamController.pullCall && streamController.pullCall.promise, streamController.cancelCall && streamController.cancelCall.promise]);
     delete this.streamControllers[streamId];
   }
 
@@ -8886,6 +8914,7 @@ var _annotation_storage = __w_pdfjs_require__(9);
 var _scripting_utils = __w_pdfjs_require__(19);
 
 const DEFAULT_TAB_INDEX = 1000;
+const GetElementsByNameSet = new WeakSet();
 
 class AnnotationElementFactory {
   static create(parameters) {
@@ -8991,6 +9020,7 @@ class AnnotationElement {
     this.annotationStorage = parameters.annotationStorage;
     this.enableScripting = parameters.enableScripting;
     this.hasJSActions = parameters.hasJSActions;
+    this._fieldObjects = parameters.fieldObjects;
     this._mouseState = parameters.mouseState;
 
     if (isRenderable) {
@@ -9107,9 +9137,9 @@ class AnnotationElement {
       container,
       trigger,
       color: data.color,
-      title: data.title,
+      titleObj: data.titleObj,
       modificationDate: data.modificationDate,
-      contents: data.contents,
+      contentsObj: data.contentsObj,
       hideWrapper: true
     });
     const popup = popupElement.render();
@@ -9127,6 +9157,69 @@ class AnnotationElement {
 
   render() {
     (0, _util.unreachable)("Abstract method `AnnotationElement.render` called");
+  }
+
+  _getElementsByName(name, skipId = null) {
+    const fields = [];
+
+    if (this._fieldObjects) {
+      const fieldObj = this._fieldObjects[name];
+
+      if (fieldObj) {
+        for (const {
+          page,
+          id,
+          exportValues
+        } of fieldObj) {
+          if (page === -1) {
+            continue;
+          }
+
+          if (id === skipId) {
+            continue;
+          }
+
+          const exportValue = typeof exportValues === "string" ? exportValues : null;
+          const domElement = document.getElementById(id);
+
+          if (domElement && !GetElementsByNameSet.has(domElement)) {
+            (0, _util.warn)(`_getElementsByName - element not allowed: ${id}`);
+            continue;
+          }
+
+          fields.push({
+            id,
+            exportValue,
+            domElement
+          });
+        }
+      }
+
+      return fields;
+    }
+
+    for (const domElement of document.getElementsByName(name)) {
+      const {
+        id,
+        exportValue
+      } = domElement;
+
+      if (id === skipId) {
+        continue;
+      }
+
+      if (!GetElementsByNameSet.has(domElement)) {
+        continue;
+      }
+
+      fields.push({
+        id,
+        exportValue,
+        domElement
+      });
+    }
+
+    return fields;
   }
 
   static get platform() {
@@ -9246,7 +9339,7 @@ class LinkAnnotationElement extends AnnotationElement {
 
 class TextAnnotationElement extends AnnotationElement {
   constructor(parameters) {
-    const isRenderable = !!(parameters.data.hasPopup || parameters.data.title || parameters.data.contents);
+    const isRenderable = !!(parameters.data.hasPopup || parameters.data.titleObj?.str || parameters.data.contentsObj?.str);
     super(parameters, {
       isRenderable
     });
@@ -9417,13 +9510,14 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
   setPropertyOnSiblings(base, key, value, keyInStorage) {
     const storage = this.annotationStorage;
 
-    for (const element of document.getElementsByName(base.name)) {
-      if (element !== base) {
-        element[key] = value;
-        const data = Object.create(null);
-        data[keyInStorage] = value;
-        storage.setValue(element.getAttribute("id"), data);
+    for (const element of this._getElementsByName(base.name, base.id)) {
+      if (element.domElement) {
+        element.domElement[key] = value;
       }
+
+      storage.setValue(element.id, {
+        [keyInStorage]: value
+      });
     }
   }
 
@@ -9455,6 +9549,9 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
         element.setAttribute("value", textContent);
       }
 
+      GetElementsByNameSet.add(element);
+      element.disabled = this.data.readOnly;
+      element.name = this.data.fieldName;
       element.tabIndex = DEFAULT_TAB_INDEX;
       elementData.userValue = textContent;
       element.setAttribute("id", id);
@@ -9612,9 +9709,6 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
         element.addEventListener("blur", blurListener);
       }
 
-      element.disabled = this.data.readOnly;
-      element.name = this.data.fieldName;
-
       if (this.data.maxLen !== null) {
         element.maxLength = this.data.maxLen;
       }
@@ -9671,7 +9765,7 @@ class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
     const data = this.data;
     const id = data.id;
     let value = storage.getValue(id, {
-      value: data.fieldValue && (data.exportValue && data.exportValue === data.fieldValue || !data.exportValue && data.fieldValue !== "Off")
+      value: data.exportValue === data.fieldValue
     }).value;
 
     if (typeof value === "string") {
@@ -9683,6 +9777,7 @@ class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
 
     this.container.className = "buttonWidgetAnnotation checkBox";
     const element = document.createElement("input");
+    GetElementsByNameSet.add(element);
     element.disabled = data.readOnly;
     element.type = "checkbox";
     element.name = data.fieldName;
@@ -9694,17 +9789,22 @@ class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
     element.setAttribute("id", id);
     element.setAttribute("exportValue", data.exportValue);
     element.tabIndex = DEFAULT_TAB_INDEX;
-    element.addEventListener("change", function (event) {
-      const name = event.target.name;
-      const checked = event.target.checked;
+    element.addEventListener("change", event => {
+      const {
+        name,
+        checked
+      } = event.target;
 
-      for (const checkbox of document.getElementsByName(name)) {
-        if (checkbox !== event.target) {
-          checkbox.checked = checked && checkbox.getAttribute("exportValue") === data.exportValue;
-          storage.setValue(checkbox.parentNode.getAttribute("data-annotation-id"), {
-            value: false
-          });
+      for (const checkbox of this._getElementsByName(name, id)) {
+        const curChecked = checked && checkbox.exportValue === data.exportValue;
+
+        if (checkbox.domElement) {
+          checkbox.domElement.checked = curChecked;
         }
+
+        storage.setValue(checkbox.id, {
+          value: curChecked
+        });
       }
 
       storage.setValue(id, {
@@ -9760,6 +9860,7 @@ class RadioButtonWidgetAnnotationElement extends WidgetAnnotationElement {
     }
 
     const element = document.createElement("input");
+    GetElementsByNameSet.add(element);
     element.disabled = data.readOnly;
     element.type = "radio";
     element.name = data.fieldName;
@@ -9770,21 +9871,20 @@ class RadioButtonWidgetAnnotationElement extends WidgetAnnotationElement {
 
     element.setAttribute("id", id);
     element.tabIndex = DEFAULT_TAB_INDEX;
-    element.addEventListener("change", function (event) {
+    element.addEventListener("change", event => {
       const {
-        target
-      } = event;
+        name,
+        checked
+      } = event.target;
 
-      for (const radio of document.getElementsByName(target.name)) {
-        if (radio !== target) {
-          storage.setValue(radio.getAttribute("id"), {
-            value: false
-          });
-        }
+      for (const radio of this._getElementsByName(name, id)) {
+        storage.setValue(radio.id, {
+          value: false
+        });
       }
 
       storage.setValue(id, {
-        value: target.checked
+        value: checked
       });
     });
 
@@ -9792,18 +9892,21 @@ class RadioButtonWidgetAnnotationElement extends WidgetAnnotationElement {
       const pdfButtonValue = data.buttonValue;
       element.addEventListener("updatefromsandbox", jsEvent => {
         const actions = {
-          value(event) {
+          value: event => {
             const checked = pdfButtonValue === event.detail.value;
 
-            for (const radio of document.getElementsByName(event.target.name)) {
-              const radioId = radio.getAttribute("id");
-              radio.checked = radioId === id && checked;
-              storage.setValue(radioId, {
-                value: radio.checked
+            for (const radio of this._getElementsByName(event.target.name)) {
+              const curChecked = checked && radio.id === id;
+
+              if (radio.domElement) {
+                radio.domElement.checked = curChecked;
+              }
+
+              storage.setValue(radio.id, {
+                value: curChecked
               });
             }
           }
-
         };
 
         this._dispatchEventFromSandbox(actions, jsEvent);
@@ -9856,6 +9959,7 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
 
     const fontSizeStyle = `calc(${fontSize}px * var(--zoom-factor))`;
     const selectElement = document.createElement("select");
+    GetElementsByNameSet.add(selectElement);
     selectElement.disabled = this.data.readOnly;
     selectElement.name = this.data.fieldName;
     selectElement.setAttribute("id", id);
@@ -10059,7 +10163,7 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
 
 class PopupAnnotationElement extends AnnotationElement {
   constructor(parameters) {
-    const isRenderable = !!(parameters.data.title || parameters.data.contents);
+    const isRenderable = !!(parameters.data.titleObj?.str || parameters.data.contentsObj?.str);
     super(parameters, {
       isRenderable
     });
@@ -10084,9 +10188,9 @@ class PopupAnnotationElement extends AnnotationElement {
       container: this.container,
       trigger: Array.from(parentElements),
       color: this.data.color,
-      title: this.data.title,
+      titleObj: this.data.titleObj,
       modificationDate: this.data.modificationDate,
-      contents: this.data.contents
+      contentsObj: this.data.contentsObj
     });
     const page = this.page;
 
@@ -10108,9 +10212,9 @@ class PopupElement {
     this.container = parameters.container;
     this.trigger = parameters.trigger;
     this.color = parameters.color;
-    this.title = parameters.title;
+    this.titleObj = parameters.titleObj;
     this.modificationDate = parameters.modificationDate;
-    this.contents = parameters.contents;
+    this.contentsObj = parameters.contentsObj;
     this.hideWrapper = parameters.hideWrapper || false;
     this.pinned = false;
   }
@@ -10133,7 +10237,8 @@ class PopupElement {
     }
 
     const title = document.createElement("h1");
-    title.textContent = this.title;
+    title.dir = this.titleObj.dir;
+    title.textContent = this.titleObj.str;
     popup.appendChild(title);
 
     const dateObject = _display_utils.PDFDateString.toDateObject(this.modificationDate);
@@ -10149,7 +10254,7 @@ class PopupElement {
       popup.appendChild(modificationDate);
     }
 
-    const contents = this._formatContents(this.contents);
+    const contents = this._formatContents(this.contentsObj);
 
     popup.appendChild(contents);
 
@@ -10168,9 +10273,13 @@ class PopupElement {
     return wrapper;
   }
 
-  _formatContents(contents) {
+  _formatContents({
+    str,
+    dir
+  }) {
     const p = document.createElement("p");
-    const lines = contents.split(/(?:\r\n?|\n)/);
+    p.dir = dir;
+    const lines = str.split(/(?:\r\n?|\n)/);
 
     for (let i = 0, ii = lines.length; i < ii; ++i) {
       const line = lines[i];
@@ -10218,7 +10327,7 @@ class PopupElement {
 
 class FreeTextAnnotationElement extends AnnotationElement {
   constructor(parameters) {
-    const isRenderable = !!(parameters.data.hasPopup || parameters.data.title || parameters.data.contents);
+    const isRenderable = !!(parameters.data.hasPopup || parameters.data.titleObj?.str || parameters.data.contentsObj?.str);
     super(parameters, {
       isRenderable,
       ignoreBorder: true
@@ -10239,7 +10348,7 @@ class FreeTextAnnotationElement extends AnnotationElement {
 
 class LineAnnotationElement extends AnnotationElement {
   constructor(parameters) {
-    const isRenderable = !!(parameters.data.hasPopup || parameters.data.title || parameters.data.contents);
+    const isRenderable = !!(parameters.data.hasPopup || parameters.data.titleObj?.str || parameters.data.contentsObj?.str);
     super(parameters, {
       isRenderable,
       ignoreBorder: true
@@ -10271,7 +10380,7 @@ class LineAnnotationElement extends AnnotationElement {
 
 class SquareAnnotationElement extends AnnotationElement {
   constructor(parameters) {
-    const isRenderable = !!(parameters.data.hasPopup || parameters.data.title || parameters.data.contents);
+    const isRenderable = !!(parameters.data.hasPopup || parameters.data.titleObj?.str || parameters.data.contentsObj?.str);
     super(parameters, {
       isRenderable,
       ignoreBorder: true
@@ -10305,7 +10414,7 @@ class SquareAnnotationElement extends AnnotationElement {
 
 class CircleAnnotationElement extends AnnotationElement {
   constructor(parameters) {
-    const isRenderable = !!(parameters.data.hasPopup || parameters.data.title || parameters.data.contents);
+    const isRenderable = !!(parameters.data.hasPopup || parameters.data.titleObj?.str || parameters.data.contentsObj?.str);
     super(parameters, {
       isRenderable,
       ignoreBorder: true
@@ -10339,7 +10448,7 @@ class CircleAnnotationElement extends AnnotationElement {
 
 class PolylineAnnotationElement extends AnnotationElement {
   constructor(parameters) {
-    const isRenderable = !!(parameters.data.hasPopup || parameters.data.title || parameters.data.contents);
+    const isRenderable = !!(parameters.data.hasPopup || parameters.data.titleObj?.str || parameters.data.contentsObj?.str);
     super(parameters, {
       isRenderable,
       ignoreBorder: true
@@ -10389,7 +10498,7 @@ class PolygonAnnotationElement extends PolylineAnnotationElement {
 
 class CaretAnnotationElement extends AnnotationElement {
   constructor(parameters) {
-    const isRenderable = !!(parameters.data.hasPopup || parameters.data.title || parameters.data.contents);
+    const isRenderable = !!(parameters.data.hasPopup || parameters.data.titleObj?.str || parameters.data.contentsObj?.str);
     super(parameters, {
       isRenderable,
       ignoreBorder: true
@@ -10410,7 +10519,7 @@ class CaretAnnotationElement extends AnnotationElement {
 
 class InkAnnotationElement extends AnnotationElement {
   constructor(parameters) {
-    const isRenderable = !!(parameters.data.hasPopup || parameters.data.title || parameters.data.contents);
+    const isRenderable = !!(parameters.data.hasPopup || parameters.data.titleObj?.str || parameters.data.contentsObj?.str);
     super(parameters, {
       isRenderable,
       ignoreBorder: true
@@ -10455,7 +10564,7 @@ class InkAnnotationElement extends AnnotationElement {
 
 class HighlightAnnotationElement extends AnnotationElement {
   constructor(parameters) {
-    const isRenderable = !!(parameters.data.hasPopup || parameters.data.title || parameters.data.contents);
+    const isRenderable = !!(parameters.data.hasPopup || parameters.data.titleObj?.str || parameters.data.contentsObj?.str);
     super(parameters, {
       isRenderable,
       ignoreBorder: true,
@@ -10480,7 +10589,7 @@ class HighlightAnnotationElement extends AnnotationElement {
 
 class UnderlineAnnotationElement extends AnnotationElement {
   constructor(parameters) {
-    const isRenderable = !!(parameters.data.hasPopup || parameters.data.title || parameters.data.contents);
+    const isRenderable = !!(parameters.data.hasPopup || parameters.data.titleObj?.str || parameters.data.contentsObj?.str);
     super(parameters, {
       isRenderable,
       ignoreBorder: true,
@@ -10505,7 +10614,7 @@ class UnderlineAnnotationElement extends AnnotationElement {
 
 class SquigglyAnnotationElement extends AnnotationElement {
   constructor(parameters) {
-    const isRenderable = !!(parameters.data.hasPopup || parameters.data.title || parameters.data.contents);
+    const isRenderable = !!(parameters.data.hasPopup || parameters.data.titleObj?.str || parameters.data.contentsObj?.str);
     super(parameters, {
       isRenderable,
       ignoreBorder: true,
@@ -10530,7 +10639,7 @@ class SquigglyAnnotationElement extends AnnotationElement {
 
 class StrikeOutAnnotationElement extends AnnotationElement {
   constructor(parameters) {
-    const isRenderable = !!(parameters.data.hasPopup || parameters.data.title || parameters.data.contents);
+    const isRenderable = !!(parameters.data.hasPopup || parameters.data.titleObj?.str || parameters.data.contentsObj?.str);
     super(parameters, {
       isRenderable,
       ignoreBorder: true,
@@ -10555,7 +10664,7 @@ class StrikeOutAnnotationElement extends AnnotationElement {
 
 class StampAnnotationElement extends AnnotationElement {
   constructor(parameters) {
-    const isRenderable = !!(parameters.data.hasPopup || parameters.data.title || parameters.data.contents);
+    const isRenderable = !!(parameters.data.hasPopup || parameters.data.titleObj?.str || parameters.data.contentsObj?.str);
     super(parameters, {
       isRenderable,
       ignoreBorder: true
@@ -10600,7 +10709,7 @@ class FileAttachmentAnnotationElement extends AnnotationElement {
     trigger.style.width = this.container.style.width;
     trigger.addEventListener("dblclick", this._download.bind(this));
 
-    if (!this.data.hasPopup && (this.data.title || this.data.contents)) {
+    if (!this.data.hasPopup && (this.data.titleObj?.str || this.data.contentsObj?.str)) {
       this._createPopup(trigger, this.data);
     }
 
@@ -10650,6 +10759,7 @@ class AnnotationLayer {
         annotationStorage: parameters.annotationStorage || new _annotation_storage.AnnotationStorage(),
         enableScripting: parameters.enableScripting,
         hasJSActions: parameters.hasJSActions,
+        fieldObjects: parameters.fieldObjects,
         mouseState: parameters.mouseState || {
           isDown: false
         }
@@ -15137,7 +15247,7 @@ var _svg = __w_pdfjs_require__(21);
 var _xfa_layer = __w_pdfjs_require__(22);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '83d3bb4';
+const pdfjsBuild = 'f1ceb00';
 {
   if (_is_node.isNodeJS) {
     const {

@@ -531,20 +531,20 @@ class WorkerMessageHandler {
         }
 
         const xfa = acroForm instanceof _primitives.Dict && acroForm.get("XFA") || null;
-        let xfaDatasets = null;
-        let hasDatasets = false;
+        let xfaDatasetsRef = null;
+        let hasXfaDatasetsEntry = false;
 
         if (Array.isArray(xfa)) {
           for (let i = 0, ii = xfa.length; i < ii; i += 2) {
             if (xfa[i] === "datasets") {
-              xfaDatasets = xfa[i + 1];
+              xfaDatasetsRef = xfa[i + 1];
               acroFormRef = null;
-              hasDatasets = true;
+              hasXfaDatasetsEntry = true;
             }
           }
 
-          if (xfaDatasets === null) {
-            xfaDatasets = xref.getNewRef();
+          if (xfaDatasetsRef === null) {
+            xfaDatasetsRef = xref.getNewRef();
           }
         } else if (xfa) {
           acroFormRef = null;
@@ -583,8 +583,9 @@ class WorkerMessageHandler {
           xrefInfo: newXrefInfo,
           newRefs,
           xref,
-          datasetsRef: xfaDatasets,
-          hasDatasets,
+          hasXfa: !!xfa,
+          xfaDatasetsRef,
+          hasXfaDatasetsEntry,
           acroFormRef,
           acroForm,
           xfaData
@@ -2975,6 +2976,7 @@ exports.ChunkedStreamManager = ChunkedStreamManager;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
+exports.addDefaultProtocolToUrl = addDefaultProtocolToUrl;
 exports.collectActions = collectActions;
 exports.encodeToXmlString = encodeToXmlString;
 exports.escapePDFName = escapePDFName;
@@ -2988,6 +2990,7 @@ exports.readInt8 = readInt8;
 exports.readUint16 = readUint16;
 exports.readUint32 = readUint32;
 exports.toRomanNumerals = toRomanNumerals;
+exports.tryConvertUrlEncoding = tryConvertUrlEncoding;
 exports.validateCSSFont = validateCSSFont;
 exports.XRefParseException = exports.XRefEntryException = exports.ParserEOFException = exports.MissingDataException = void 0;
 
@@ -3377,6 +3380,18 @@ function validateCSSFont(cssFontInfo) {
   const angle = parseFloat(italicAngle);
   cssFontInfo.italicAngle = isNaN(angle) || angle < -90 || angle > 90 ? DEFAULT_CSS_FONT_OBLIQUE : italicAngle.toString();
   return true;
+}
+
+function addDefaultProtocolToUrl(url) {
+  return url.startsWith("www.") ? `http://${url}` : url;
+}
+
+function tryConvertUrlEncoding(url) {
+  try {
+    return (0, _util.stringToUTF8String)(url);
+  } catch (e) {
+    return url;
+  }
 }
 
 /***/ }),
@@ -17877,6 +17892,8 @@ var _default_appearance = __w_pdfjs_require__(23);
 
 var _primitives = __w_pdfjs_require__(5);
 
+var _bidi = __w_pdfjs_require__(59);
+
 var _catalog = __w_pdfjs_require__(64);
 
 var _colorspace = __w_pdfjs_require__(24);
@@ -18128,6 +18145,7 @@ function getTransformMatrix(rect, bbox, matrix) {
 class Annotation {
   constructor(params) {
     const dict = params.dict;
+    this.setTitle(dict.get("T"));
     this.setContents(dict.get("Contents"));
     this.setModificationDate(dict.get("M"));
     this.setFlags(dict.get("F"));
@@ -18145,7 +18163,7 @@ class Annotation {
       annotationFlags: this.flags,
       borderStyle: this.borderStyle,
       color: this.color,
-      contents: this.contents,
+      contentsObj: this._contents,
       hasAppearance: !!this.appearance,
       id: params.id,
       modificationDate: this.modificationDate,
@@ -18234,8 +18252,21 @@ class Annotation {
     return this._isPrintable(this.flags);
   }
 
+  _parseStringHelper(data) {
+    const str = typeof data === "string" ? (0, _util.stringToPDFString)(data) : "";
+    const dir = str && (0, _bidi.bidi)(str).dir === "rtl" ? "rtl" : "ltr";
+    return {
+      str,
+      dir
+    };
+  }
+
+  setTitle(title) {
+    this._title = this._parseStringHelper(title);
+  }
+
   setContents(contents) {
-    this.contents = (0, _util.stringToPDFString)(contents || "");
+    this._contents = this._parseStringHelper(contents);
   }
 
   setModificationDate(modificationDate) {
@@ -18553,9 +18584,10 @@ class MarkupAnnotation extends Annotation {
 
     if (this.data.replyType === _util.AnnotationReplyType.GROUP) {
       const parent = dict.get("IRT");
-      this.data.title = (0, _util.stringToPDFString)(parent.get("T") || "");
+      this.setTitle(parent.get("T"));
+      this.data.titleObj = this._title;
       this.setContents(parent.get("Contents"));
-      this.data.contents = this.contents;
+      this.data.contentsObj = this._contents;
 
       if (!parent.has("CreationDate")) {
         this.data.creationDate = null;
@@ -18580,7 +18612,7 @@ class MarkupAnnotation extends Annotation {
         this.data.color = this.color;
       }
     } else {
-      this.data.title = (0, _util.stringToPDFString)(dict.get("T") || "");
+      this.data.titleObj = this._title;
       this.setCreationDate(dict.get("CreationDate"));
       this.data.creationDate = this.creationDate;
       this.data.hasPopup = dict.has("Popup");
@@ -19244,39 +19276,41 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
     }
   }
 
-  getOperatorList(evaluator, task, renderForms, annotationStorage) {
+  async getOperatorList(evaluator, task, renderForms, annotationStorage) {
     if (this.data.pushButton) {
       return super.getOperatorList(evaluator, task, false, annotationStorage);
     }
 
+    let value = null;
+
     if (annotationStorage) {
       const storageEntry = annotationStorage.get(this.data.id);
-      const value = storageEntry && storageEntry.value;
+      value = storageEntry ? storageEntry.value : null;
+    }
 
-      if (value === undefined) {
+    if (value === null) {
+      if (this.appearance) {
         return super.getOperatorList(evaluator, task, renderForms, annotationStorage);
       }
 
-      let appearance;
-
-      if (value) {
-        appearance = this.checkedAppearance;
+      if (this.data.checkBox) {
+        value = this.data.fieldValue === this.data.exportValue;
       } else {
-        appearance = this.uncheckedAppearance;
+        value = this.data.fieldValue === this.data.buttonValue;
       }
-
-      if (appearance) {
-        const savedAppearance = this.appearance;
-        this.appearance = appearance;
-        const operatorList = super.getOperatorList(evaluator, task, renderForms, annotationStorage);
-        this.appearance = savedAppearance;
-        return operatorList;
-      }
-
-      return Promise.resolve(new _operator_list.OperatorList());
     }
 
-    return super.getOperatorList(evaluator, task, renderForms, annotationStorage);
+    const appearance = value ? this.checkedAppearance : this.uncheckedAppearance;
+
+    if (appearance) {
+      const savedAppearance = this.appearance;
+      this.appearance = appearance;
+      const operatorList = super.getOperatorList(evaluator, task, renderForms, annotationStorage);
+      this.appearance = savedAppearance;
+      return operatorList;
+    }
+
+    return new _operator_list.OperatorList();
   }
 
   async save(evaluator, task, annotationStorage) {
@@ -19303,7 +19337,7 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
       return null;
     }
 
-    const defaultValue = this.data.fieldValue && this.data.fieldValue !== "Off";
+    const defaultValue = this.data.fieldValue === this.data.exportValue;
 
     if (defaultValue === value) {
       return null;
@@ -19422,6 +19456,51 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
     return newRefs;
   }
 
+  _getDefaultCheckedAppearance(params, type) {
+    const width = this.data.rect[2] - this.data.rect[0];
+    const height = this.data.rect[3] - this.data.rect[1];
+    const bbox = [0, 0, width, height];
+    const FONT_RATIO = 0.8;
+    const fontSize = Math.min(width, height) * FONT_RATIO;
+    let metrics, char;
+
+    if (type === "check") {
+      metrics = {
+        width: 0.755 * fontSize,
+        height: 0.705 * fontSize
+      };
+      char = "\x33";
+    } else if (type === "disc") {
+      metrics = {
+        width: 0.791 * fontSize,
+        height: 0.705 * fontSize
+      };
+      char = "\x6C";
+    } else {
+      (0, _util.unreachable)(`_getDefaultCheckedAppearance - unsupported type: ${type}`);
+    }
+
+    const xShift = (width - metrics.width) / 2;
+    const yShift = (height - metrics.height) / 2;
+    const appearance = `q BT /PdfJsZaDb ${fontSize} Tf 0 g ${xShift} ${yShift} Td (${char}) Tj ET Q`;
+    const appearanceStreamDict = new _primitives.Dict(params.xref);
+    appearanceStreamDict.set("FormType", 1);
+    appearanceStreamDict.set("Subtype", _primitives.Name.get("Form"));
+    appearanceStreamDict.set("Type", _primitives.Name.get("XObject"));
+    appearanceStreamDict.set("BBox", bbox);
+    appearanceStreamDict.set("Matrix", [1, 0, 0, 1, 0, 0]);
+    appearanceStreamDict.set("Length", appearance.length);
+    const resources = new _primitives.Dict(params.xref);
+    const font = new _primitives.Dict(params.xref);
+    font.set("PdfJsZaDb", this.fallbackFontDict);
+    resources.set("Font", font);
+    appearanceStreamDict.set("Resources", resources);
+    this.checkedAppearance = new _stream.StringStream(appearance);
+    this.checkedAppearance.dict = appearanceStreamDict;
+
+    this._streams.push(this.checkedAppearance);
+  }
+
   _processCheckBox(params) {
     const customAppearance = params.dict.get("AP");
 
@@ -19441,25 +19520,39 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
       this.data.fieldValue = asValue;
     }
 
+    const yes = this.data.fieldValue !== null && this.data.fieldValue !== "Off" ? this.data.fieldValue : "Yes";
     const exportValues = normalAppearance.getKeys();
 
-    if (!exportValues.includes("Off")) {
-      exportValues.push("Off");
+    if (exportValues.length === 0) {
+      exportValues.push("Off", yes);
+    } else if (exportValues.length === 1) {
+      if (exportValues[0] === "Off") {
+        exportValues.push(yes);
+      } else {
+        exportValues.unshift("Off");
+      }
+    } else if (exportValues.includes(yes)) {
+      exportValues.length = 0;
+      exportValues.push("Off", yes);
+    } else {
+      const otherYes = exportValues.find(v => v !== "Off");
+      exportValues.length = 0;
+      exportValues.push("Off", otherYes);
     }
 
     if (!exportValues.includes(this.data.fieldValue)) {
-      this.data.fieldValue = null;
+      this.data.fieldValue = "Off";
     }
 
-    if (exportValues.length !== 2) {
-      return;
-    }
-
-    this.data.exportValue = exportValues[0] === "Off" ? exportValues[1] : exportValues[0];
-    this.checkedAppearance = normalAppearance.get(this.data.exportValue);
+    this.data.exportValue = exportValues[1];
+    this.checkedAppearance = normalAppearance.get(this.data.exportValue) || null;
     this.uncheckedAppearance = normalAppearance.get("Off") || null;
 
-    this._streams.push(this.checkedAppearance);
+    if (this.checkedAppearance) {
+      this._streams.push(this.checkedAppearance);
+    } else {
+      this._getDefaultCheckedAppearance(params, "check");
+    }
 
     if (this.uncheckedAppearance) {
       this._streams.push(this.uncheckedAppearance);
@@ -19500,10 +19593,14 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
       }
     }
 
-    this.checkedAppearance = normalAppearance.get(this.data.buttonValue);
+    this.checkedAppearance = normalAppearance.get(this.data.buttonValue) || null;
     this.uncheckedAppearance = normalAppearance.get("Off") || null;
 
-    this._streams.push(this.checkedAppearance);
+    if (this.checkedAppearance) {
+      this._streams.push(this.checkedAppearance);
+    } else {
+      this._getDefaultCheckedAppearance(params, "disc");
+    }
 
     if (this.uncheckedAppearance) {
       this._streams.push(this.uncheckedAppearance);
@@ -19733,8 +19830,10 @@ class PopupAnnotation extends Annotation {
       }
     }
 
-    this.data.title = (0, _util.stringToPDFString)(parentItem.get("T") || "");
-    this.data.contents = (0, _util.stringToPDFString)(parentItem.get("Contents") || "");
+    this.setTitle(parentItem.get("T"));
+    this.data.titleObj = this._title;
+    this.setContents(parentItem.get("Contents"));
+    this.data.contentsObj = this._contents;
   }
 
 }
@@ -24801,6 +24900,7 @@ class PartialEvaluator {
           loadedName: baseDict.loadedName,
           widths: metrics.widths,
           defaultWidth: metrics.defaultWidth,
+          isSimulatedFlags: true,
           flags,
           firstChar,
           lastChar,
@@ -36415,8 +36515,8 @@ var _type1_font = __w_pdfjs_require__(53);
 
 const PRIVATE_USE_AREAS = [[0xe000, 0xf8ff], [0x100000, 0x10fffd]];
 const PDF_GLYPH_SPACE_UNITS = 1000;
-const EXPORT_DATA_PROPERTIES = ["ascent", "bbox", "black", "bold", "charProcOperatorList", "composite", "cssFontInfo", "data", "defaultVMetrics", "defaultWidth", "descent", "fallbackName", "fontMatrix", "fontType", "isMonospace", "isSerifFont", "isType3Font", "italic", "loadedName", "mimetype", "missingFile", "name", "remeasure", "subtype", "type", "vertical"];
-const EXPORT_DATA_EXTRA_PROPERTIES = ["cMap", "defaultEncoding", "differences", "isSymbolicFont", "seacMap", "toFontChar", "toUnicode", "vmetrics", "widths"];
+const EXPORT_DATA_PROPERTIES = ["ascent", "bbox", "black", "bold", "charProcOperatorList", "composite", "cssFontInfo", "data", "defaultVMetrics", "defaultWidth", "descent", "fallbackName", "fontMatrix", "fontType", "isType3Font", "italic", "loadedName", "mimetype", "missingFile", "name", "remeasure", "subtype", "type", "vertical"];
+const EXPORT_DATA_EXTRA_PROPERTIES = ["cMap", "defaultEncoding", "differences", "isMonospace", "isSerifFont", "isSymbolicFont", "seacMap", "toFontChar", "toUnicode", "vmetrics", "widths"];
 
 function adjustWidths(properties) {
   if (!properties.fontMatrix) {
@@ -36458,8 +36558,8 @@ function adjustToUnicode(properties, builtInEncoding) {
       if (properties.toUnicode.has(charCode)) {
         continue;
       }
-    } else {
-      if (properties.hasEncoding && properties.differences[charCode] !== undefined) {
+    } else if (properties.hasEncoding) {
+      if (properties.differences.length === 0 || properties.differences[charCode] !== undefined) {
         continue;
       }
     }
@@ -37014,7 +37114,21 @@ class Font {
     this.cssFontInfo = properties.cssFontInfo;
     this._charsCache = Object.create(null);
     this._glyphCache = Object.create(null);
-    this.isSerifFont = !!(properties.flags & _fonts_utils.FontFlags.Serif);
+    let isSerifFont = !!(properties.flags & _fonts_utils.FontFlags.Serif);
+
+    if (!isSerifFont && !properties.isSimulatedFlags) {
+      const baseName = name.replace(/[,_]/g, "-").split("-")[0],
+            serifFonts = (0, _standard_fonts.getSerifFonts)();
+
+      for (const namePart of baseName.split("+")) {
+        if (serifFonts[namePart]) {
+          isSerifFont = true;
+          break;
+        }
+      }
+    }
+
+    this.isSerifFont = isSerifFont;
     this.isSymbolicFont = !!(properties.flags & _fonts_utils.FontFlags.Symbolic);
     this.isMonospace = !!(properties.flags & _fonts_utils.FontFlags.FixedPitch);
     let type = properties.type;
@@ -41214,6 +41328,7 @@ const getSerifFonts = (0, _core_utils.getLookupTableFactory)(function (t) {
   t.Joanna = true;
   t.Korinna = true;
   t.Lexicon = true;
+  t.LiberationSerif = true;
   t["Liberation Serif"] = true;
   t["Linux Libertine"] = true;
   t.Literaturnaya = true;
@@ -47796,7 +47911,7 @@ function createBidiText(str, isLTR, vertical = false) {
 const chars = [];
 const types = [];
 
-function bidi(str, startLevel, vertical) {
+function bidi(str, startLevel = -1, vertical = false) {
   let isLTR = true;
   const strLength = str.length;
 
@@ -52459,9 +52574,9 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.Catalog = void 0;
 
-var _primitives = __w_pdfjs_require__(5);
-
 var _core_utils = __w_pdfjs_require__(9);
+
+var _primitives = __w_pdfjs_require__(5);
 
 var _util = __w_pdfjs_require__(2);
 
@@ -53778,18 +53893,6 @@ class Catalog {
   }
 
   static parseDestDictionary(params) {
-    function addDefaultProtocolToUrl(url) {
-      return url.startsWith("www.") ? `http://${url}` : url;
-    }
-
-    function tryConvertUrlEncoding(url) {
-      try {
-        return (0, _util.stringToUTF8String)(url);
-      } catch (e) {
-        return url;
-      }
-    }
-
     const destDict = params.destDict;
 
     if (!(0, _primitives.isDict)(destDict)) {
@@ -53842,7 +53945,7 @@ class Catalog {
           if ((0, _primitives.isName)(url)) {
             url = "/" + url.name;
           } else if ((0, _util.isString)(url)) {
-            url = addDefaultProtocolToUrl(url);
+            url = (0, _core_utils.addDefaultProtocolToUrl)(url);
           }
 
           break;
@@ -53935,7 +54038,7 @@ class Catalog {
     }
 
     if ((0, _util.isString)(url)) {
-      url = tryConvertUrlEncoding(url);
+      url = (0, _core_utils.tryConvertUrlEncoding)(url);
       const absoluteUrl = (0, _util.createValidAbsoluteUrl)(url, docBaseUrl);
 
       if (absoluteUrl) {
@@ -55608,8 +55711,8 @@ function writeXFADataForAcroform(str, newRefs) {
 
 function updateXFA({
   xfaData,
-  datasetsRef,
-  hasDatasets,
+  xfaDatasetsRef,
+  hasXfaDatasetsEntry,
   acroFormRef,
   acroForm,
   newRefs,
@@ -55620,7 +55723,7 @@ function updateXFA({
     return;
   }
 
-  if (!hasDatasets) {
+  if (!hasXfaDatasetsEntry) {
     if (!acroFormRef) {
       (0, _util.warn)("XFA - Cannot save it");
       return;
@@ -55629,7 +55732,7 @@ function updateXFA({
     const oldXfa = acroForm.get("XFA");
     const newXfa = oldXfa.slice();
     newXfa.splice(2, 0, "datasets");
-    newXfa.splice(3, 0, datasetsRef);
+    newXfa.splice(3, 0, xfaDatasetsRef);
     acroForm.set("XFA", newXfa);
     const encrypt = xref.encrypt;
     let transform = null;
@@ -55649,20 +55752,20 @@ function updateXFA({
   }
 
   if (xfaData === null) {
-    const datasets = xref.fetchIfRef(datasetsRef);
+    const datasets = xref.fetchIfRef(xfaDatasetsRef);
     xfaData = writeXFADataForAcroform(datasets.getString(), newRefs);
   }
 
   const encrypt = xref.encrypt;
 
   if (encrypt) {
-    const transform = encrypt.createCipherTransform(datasetsRef.num, datasetsRef.gen);
+    const transform = encrypt.createCipherTransform(xfaDatasetsRef.num, xfaDatasetsRef.gen);
     xfaData = transform.encryptString(xfaData);
   }
 
-  const data = `${datasetsRef.num} ${datasetsRef.gen} obj\n` + `<< /Type /EmbeddedFile /Length ${xfaData.length}>>\nstream\n` + xfaData + "\nendstream\nendobj\n";
+  const data = `${xfaDatasetsRef.num} ${xfaDatasetsRef.gen} obj\n` + `<< /Type /EmbeddedFile /Length ${xfaData.length}>>\nstream\n` + xfaData + "\nendstream\nendobj\n";
   newRefs.push({
-    ref: datasetsRef,
+    ref: xfaDatasetsRef,
     data
   });
 }
@@ -55672,22 +55775,26 @@ function incrementalUpdate({
   xrefInfo,
   newRefs,
   xref = null,
-  datasetsRef = null,
-  hasDatasets = false,
+  hasXfa = false,
+  xfaDatasetsRef = null,
+  hasXfaDatasetsEntry = false,
   acroFormRef = null,
   acroForm = null,
   xfaData = null
 }) {
-  updateXFA({
-    xfaData,
-    datasetsRef,
-    hasDatasets,
-    acroFormRef,
-    acroForm,
-    newRefs,
-    xref,
-    xrefInfo
-  });
+  if (hasXfa) {
+    updateXFA({
+      xfaData,
+      xfaDatasetsRef,
+      hasXfaDatasetsEntry,
+      acroFormRef,
+      acroForm,
+      newRefs,
+      xref,
+      xrefInfo
+    });
+  }
+
   const newXref = new _primitives.Dict(null);
   const refForXrefTable = xrefInfo.newRef;
   let buffer, baseOffset;
@@ -59853,6 +59960,14 @@ class Binder {
     return [occur.min, max];
   }
 
+  _setAndBind(formNode, dataNode) {
+    this._setProperties(formNode, dataNode);
+
+    this._bindItems(formNode, dataNode);
+
+    this._bindElement(formNode, dataNode);
+  }
+
   _bindElement(formNode, dataNode) {
     const uselessNodes = [];
 
@@ -59894,7 +60009,7 @@ class Binder {
       if (child.bind) {
         switch (child.bind.match) {
           case "none":
-            this._bindElement(child, dataNode);
+            this._setAndBind(child, dataNode);
 
             continue;
 
@@ -59906,7 +60021,7 @@ class Binder {
             if (!child.bind.ref) {
               (0, _util.warn)(`XFA - ref is empty in node ${child[_xfa_object.$nodeName]}.`);
 
-              this._bindElement(child, dataNode);
+              this._setAndBind(child, dataNode);
 
               continue;
             }
@@ -59939,7 +60054,7 @@ class Binder {
             match[_xfa_object.$consumed] = true;
           }
 
-          this._bindElement(child, match);
+          this._setAndBind(child, match);
 
           continue;
         } else {
@@ -59961,7 +60076,7 @@ class Binder {
         }
       } else {
         if (!child.name) {
-          this._bindElement(child, dataNode);
+          this._setAndBind(child, dataNode);
 
           continue;
         }
@@ -59994,11 +60109,7 @@ class Binder {
 
             dataNode[_xfa_object.$appendChild](match);
 
-            this._setProperties(child, match);
-
-            this._bindItems(child, match);
-
-            this._bindElement(child, match);
+            this._setAndBind(child, match);
 
             continue;
           }
@@ -60014,11 +60125,7 @@ class Binder {
       if (match) {
         this._bindOccurrences(child, match, picture);
       } else if (min > 0) {
-        this._setProperties(child, dataNode);
-
-        this._bindItems(child, dataNode);
-
-        this._bindElement(child, dataNode);
+        this._setAndBind(child, dataNode);
       } else {
         uselessNodes.push(child);
       }
@@ -64322,12 +64429,6 @@ class Subform extends _xfa_object.XFAObject {
       return false;
     }
 
-    const contentArea = this[_xfa_object.$getTemplateRoot]()[_xfa_object.$extra].currentContentArea;
-
-    if (this.overflow && this.overflow[_xfa_object.$getExtra]().target === contentArea) {
-      return false;
-    }
-
     if (this[_xfa_object.$extra]._isSplittable !== undefined) {
       return this[_xfa_object.$extra]._isSplittable;
     }
@@ -64448,12 +64549,7 @@ class Subform extends _xfa_object.XFAObject {
 
     const root = this[_xfa_object.$getTemplateRoot]();
 
-    const currentContentArea = root[_xfa_object.$extra].currentContentArea;
     const savedNoLayoutFailure = root[_xfa_object.$extra].noLayoutFailure;
-
-    if (this.overflow) {
-      root[_xfa_object.$extra].noLayoutFailure = root[_xfa_object.$extra].noLayoutFailure || this.overflow[_xfa_object.$getExtra]().target === currentContentArea;
-    }
 
     const isSplittable = this[_xfa_object.$isSplittable]();
 
@@ -64932,6 +65028,7 @@ class Template extends _xfa_object.XFAObject {
           overflowExtra.addLeader = overflowExtra.leader !== null;
           overflowExtra.addTrailer = overflowExtra.trailer !== null;
           flush(i);
+          const currentIndex = i;
           i = Infinity;
 
           if (target instanceof PageArea) {
@@ -64940,7 +65037,11 @@ class Template extends _xfa_object.XFAObject {
             const index = contentAreas.findIndex(e => e === target);
 
             if (index !== -1) {
-              i = index - 1;
+              if (index > currentIndex) {
+                i = index - 1;
+              } else {
+                startIndex = index;
+              }
             } else {
               targetPageArea = target[_xfa_object.$getParent]();
               startIndex = targetPageArea.contentArea.children.findIndex(e => e === target);
@@ -70600,9 +70701,13 @@ var _xfa_object = __w_pdfjs_require__(75);
 
 var _namespaces = __w_pdfjs_require__(77);
 
+var _core_utils = __w_pdfjs_require__(9);
+
 var _html_utils = __w_pdfjs_require__(82);
 
 var _utils = __w_pdfjs_require__(76);
+
+var _util = __w_pdfjs_require__(2);
 
 const XHTML_NS_ID = _namespaces.NamespaceIds.xhtml.id;
 const VALID_STYLES = new Set(["color", "font", "font-family", "font-size", "font-stretch", "font-style", "font-weight", "margin", "margin-bottom", "margin-left", "margin-right", "margin-top", "letter-spacing", "line-height", "orphans", "page-break-after", "page-break-before", "page-break-inside", "tab-interval", "tab-stop", "text-align", "text-decoration", "text-indent", "vertical-align", "widows", "kerning-mode", "xfa-font-horizontal-scale", "xfa-font-vertical-scale", "xfa-spacerun", "xfa-tab-stops"]);
@@ -70838,7 +70943,19 @@ class XhtmlObject extends _xfa_object.XmlObject {
 class A extends XhtmlObject {
   constructor(attributes) {
     super(attributes, "a");
-    this.href = attributes.href || "";
+    let href = "";
+
+    if (typeof attributes.href === "string") {
+      let url = (0, _core_utils.addDefaultProtocolToUrl)(attributes.href);
+      url = (0, _core_utils.tryConvertUrlEncoding)(url);
+      const absoluteUrl = (0, _util.createValidAbsoluteUrl)(url);
+
+      if (absoluteUrl) {
+        href = absoluteUrl.href;
+      }
+    }
+
+    this.href = href;
   }
 
 }
@@ -72141,10 +72258,10 @@ class MessageHandler {
   }
 
   sendWithStream(actionName, data, queueingStrategy, transfers) {
-    const streamId = this.streamId++;
-    const sourceName = this.sourceName;
-    const targetName = this.targetName;
-    const comObj = this.comObj;
+    const streamId = this.streamId++,
+          sourceName = this.sourceName,
+          targetName = this.targetName,
+          comObj = this.comObj;
     return new ReadableStream({
       start: controller => {
         const startCapability = (0, _util.createPromiseCapability)();
@@ -72197,12 +72314,12 @@ class MessageHandler {
   }
 
   _createStreamSink(data) {
-    const self = this;
-    const action = this.actionHandler[data.action];
-    const streamId = data.streamId;
-    const sourceName = this.sourceName;
-    const targetName = data.sourceName;
-    const comObj = this.comObj;
+    const streamId = data.streamId,
+          sourceName = this.sourceName,
+          targetName = data.sourceName,
+          comObj = this.comObj;
+    const self = this,
+          action = this.actionHandler[data.action];
     const streamSink = {
       enqueue(chunk, size = 1, transfers) {
         if (this.isCancelled) {
@@ -72290,32 +72407,34 @@ class MessageHandler {
   }
 
   _processStreamMessage(data) {
-    const streamId = data.streamId;
-    const sourceName = this.sourceName;
-    const targetName = data.sourceName;
-    const comObj = this.comObj;
+    const streamId = data.streamId,
+          sourceName = this.sourceName,
+          targetName = data.sourceName,
+          comObj = this.comObj;
+    const streamController = this.streamControllers[streamId],
+          streamSink = this.streamSinks[streamId];
 
     switch (data.stream) {
       case StreamKind.START_COMPLETE:
         if (data.success) {
-          this.streamControllers[streamId].startCall.resolve();
+          streamController.startCall.resolve();
         } else {
-          this.streamControllers[streamId].startCall.reject(wrapReason(data.reason));
+          streamController.startCall.reject(wrapReason(data.reason));
         }
 
         break;
 
       case StreamKind.PULL_COMPLETE:
         if (data.success) {
-          this.streamControllers[streamId].pullCall.resolve();
+          streamController.pullCall.resolve();
         } else {
-          this.streamControllers[streamId].pullCall.reject(wrapReason(data.reason));
+          streamController.pullCall.reject(wrapReason(data.reason));
         }
 
         break;
 
       case StreamKind.PULL:
-        if (!this.streamSinks[streamId]) {
+        if (!streamSink) {
           comObj.postMessage({
             sourceName,
             targetName,
@@ -72326,16 +72445,13 @@ class MessageHandler {
           break;
         }
 
-        if (this.streamSinks[streamId].desiredSize <= 0 && data.desiredSize > 0) {
-          this.streamSinks[streamId].sinkCapability.resolve();
+        if (streamSink.desiredSize <= 0 && data.desiredSize > 0) {
+          streamSink.sinkCapability.resolve();
         }
 
-        this.streamSinks[streamId].desiredSize = data.desiredSize;
-        const {
-          onPull
-        } = this.streamSinks[streamId];
+        streamSink.desiredSize = data.desiredSize;
         new Promise(function (resolve) {
-          resolve(onPull && onPull());
+          resolve(streamSink.onPull && streamSink.onPull());
         }).then(function () {
           comObj.postMessage({
             sourceName,
@@ -72356,58 +72472,55 @@ class MessageHandler {
         break;
 
       case StreamKind.ENQUEUE:
-        (0, _util.assert)(this.streamControllers[streamId], "enqueue should have stream controller");
+        (0, _util.assert)(streamController, "enqueue should have stream controller");
 
-        if (this.streamControllers[streamId].isClosed) {
+        if (streamController.isClosed) {
           break;
         }
 
-        this.streamControllers[streamId].controller.enqueue(data.chunk);
+        streamController.controller.enqueue(data.chunk);
         break;
 
       case StreamKind.CLOSE:
-        (0, _util.assert)(this.streamControllers[streamId], "close should have stream controller");
+        (0, _util.assert)(streamController, "close should have stream controller");
 
-        if (this.streamControllers[streamId].isClosed) {
+        if (streamController.isClosed) {
           break;
         }
 
-        this.streamControllers[streamId].isClosed = true;
-        this.streamControllers[streamId].controller.close();
+        streamController.isClosed = true;
+        streamController.controller.close();
 
-        this._deleteStreamController(streamId);
+        this._deleteStreamController(streamController, streamId);
 
         break;
 
       case StreamKind.ERROR:
-        (0, _util.assert)(this.streamControllers[streamId], "error should have stream controller");
-        this.streamControllers[streamId].controller.error(wrapReason(data.reason));
+        (0, _util.assert)(streamController, "error should have stream controller");
+        streamController.controller.error(wrapReason(data.reason));
 
-        this._deleteStreamController(streamId);
+        this._deleteStreamController(streamController, streamId);
 
         break;
 
       case StreamKind.CANCEL_COMPLETE:
         if (data.success) {
-          this.streamControllers[streamId].cancelCall.resolve();
+          streamController.cancelCall.resolve();
         } else {
-          this.streamControllers[streamId].cancelCall.reject(wrapReason(data.reason));
+          streamController.cancelCall.reject(wrapReason(data.reason));
         }
 
-        this._deleteStreamController(streamId);
+        this._deleteStreamController(streamController, streamId);
 
         break;
 
       case StreamKind.CANCEL:
-        if (!this.streamSinks[streamId]) {
+        if (!streamSink) {
           break;
         }
 
-        const {
-          onCancel
-        } = this.streamSinks[streamId];
         new Promise(function (resolve) {
-          resolve(onCancel && onCancel(wrapReason(data.reason)));
+          resolve(streamSink.onCancel && streamSink.onCancel(wrapReason(data.reason)));
         }).then(function () {
           comObj.postMessage({
             sourceName,
@@ -72425,8 +72538,8 @@ class MessageHandler {
             reason: wrapReason(reason)
           });
         });
-        this.streamSinks[streamId].sinkCapability.reject(wrapReason(data.reason));
-        this.streamSinks[streamId].isCancelled = true;
+        streamSink.sinkCapability.reject(wrapReason(data.reason));
+        streamSink.isCancelled = true;
         delete this.streamSinks[streamId];
         break;
 
@@ -72435,10 +72548,8 @@ class MessageHandler {
     }
   }
 
-  async _deleteStreamController(streamId) {
-    await Promise.allSettled([this.streamControllers[streamId].startCall, this.streamControllers[streamId].pullCall, this.streamControllers[streamId].cancelCall].map(function (capability) {
-      return capability && capability.promise;
-    }));
+  async _deleteStreamController(streamController, streamId) {
+    await Promise.allSettled([streamController.startCall && streamController.startCall.promise, streamController.pullCall && streamController.pullCall.promise, streamController.cancelCall && streamController.cancelCall.promise]);
     delete this.streamControllers[streamId];
   }
 
@@ -72684,7 +72795,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '83d3bb4';
+const pdfjsBuild = 'f1ceb00';
 })();
 
 /******/ 	return __webpack_exports__;

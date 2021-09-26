@@ -312,6 +312,10 @@ class AppOptions {
     delete userOptions[name];
   }
 
+  static _hasUserOptions() {
+    return Object.keys(userOptions).length > 0;
+  }
+
 }
 
 exports.AppOptions = AppOptions;
@@ -375,7 +379,6 @@ var _toolbar = __webpack_require__(37);
 
 var _view_history = __webpack_require__(38);
 
-const DEFAULT_SCALE_DELTA = 1.1;
 const DISABLE_AUTO_FETCH_LOADING_BAR_TIMEOUT = 5000;
 const FORCE_PAGES_LOADED_TIMEOUT = 10000;
 const WHEEL_ZOOM_DISABLED_TIMEOUT = 1000;
@@ -522,6 +525,10 @@ const PDFViewerApplication = {
   async _readPreferences() {
     if (_app_options.AppOptions.get("disablePreferences")) {
       return;
+    }
+
+    if (_app_options.AppOptions._hasUserOptions()) {
+      console.warn("_readPreferences: The Preferences may override manually set AppOptions; " + 'please use the "disablePreferences"-option in order to prevent that.');
     }
 
     try {
@@ -800,36 +807,20 @@ const PDFViewerApplication = {
     return this._initializedCapability.promise;
   },
 
-  zoomIn(ticks) {
+  zoomIn(steps) {
     if (this.pdfViewer.isInPresentationMode) {
       return;
     }
 
-    let newScale = this.pdfViewer.currentScale;
-
-    do {
-      newScale = (newScale * DEFAULT_SCALE_DELTA).toFixed(2);
-      newScale = Math.ceil(newScale * 10) / 10;
-      newScale = Math.min(_ui_utils.MAX_SCALE, newScale);
-    } while (--ticks > 0 && newScale < _ui_utils.MAX_SCALE);
-
-    this.pdfViewer.currentScaleValue = newScale;
+    this.pdfViewer.increaseScale(steps);
   },
 
-  zoomOut(ticks) {
+  zoomOut(steps) {
     if (this.pdfViewer.isInPresentationMode) {
       return;
     }
 
-    let newScale = this.pdfViewer.currentScale;
-
-    do {
-      newScale = (newScale / DEFAULT_SCALE_DELTA).toFixed(2);
-      newScale = Math.floor(newScale * 10) / 10;
-      newScale = Math.max(_ui_utils.MIN_SCALE, newScale);
-    } while (--ticks > 0 && newScale > _ui_utils.MIN_SCALE);
-
-    this.pdfViewer.currentScaleValue = newScale;
+    this.pdfViewer.decreaseScale(steps);
   },
 
   zoomReset() {
@@ -1134,6 +1125,7 @@ const PDFViewerApplication = {
       });
       await this.downloadManager.download(blob, url, filename, sourceEventType);
     } catch (reason) {
+      console.error(`Error when saving the document: ${reason.message}`);
       await this.download({
         sourceEventType
       });
@@ -1585,7 +1577,12 @@ const PDFViewerApplication = {
     }
 
     if (info.IsXFAPresent && !info.IsAcroFormPresent && !pdfDocument.isPureXfa) {
-      console.warn("Warning: XFA support is not enabled");
+      if (pdfDocument.loadingParams.enableXfa) {
+        console.warn("Warning: XFA Foreground documents are not supported");
+      } else {
+        console.warn("Warning: XFA support is not enabled");
+      }
+
       this.fallback(_pdfjsLib.UNSUPPORTED_FEATURES.forms);
     } else if ((info.IsAcroFormPresent || info.IsXFAPresent) && !this.pdfViewer.renderForms) {
       console.warn("Warning: Interactive form support is not enabled");
@@ -3139,7 +3136,7 @@ exports.PDFPrintServiceFactory = PDFPrintServiceFactory;
 
 /***/ }),
 /* 3 */
-/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+/***/ ((__unused_webpack_module, exports) => {
 
 
 
@@ -3168,16 +3165,13 @@ exports.roundToDivide = roundToDivide;
 exports.scrollIntoView = scrollIntoView;
 exports.waitOnEventOrTimeout = waitOnEventOrTimeout;
 exports.watchScroll = watchScroll;
-exports.WaitOnType = exports.VERTICAL_PADDING = exports.UNKNOWN_SCALE = exports.TextLayerMode = exports.SpreadMode = exports.SidebarView = exports.ScrollMode = exports.SCROLLBAR_PADDING = exports.RendererType = exports.ProgressBar = exports.PresentationModeState = exports.MIN_SCALE = exports.MAX_SCALE = exports.MAX_AUTO_SCALE = exports.EventBus = exports.DEFAULT_SCALE_VALUE = exports.DEFAULT_SCALE = exports.CSS_UNITS = exports.AutoPrintRegExp = exports.AutomationEventBus = exports.animationStarted = void 0;
-
-var _pdfjsLib = __webpack_require__(4);
-
-const CSS_UNITS = _pdfjsLib.PixelsPerInch.CSS / _pdfjsLib.PixelsPerInch.PDF;
-exports.CSS_UNITS = CSS_UNITS;
+exports.WaitOnType = exports.VERTICAL_PADDING = exports.UNKNOWN_SCALE = exports.TextLayerMode = exports.SpreadMode = exports.SidebarView = exports.ScrollMode = exports.SCROLLBAR_PADDING = exports.RendererType = exports.ProgressBar = exports.PresentationModeState = exports.MIN_SCALE = exports.MAX_SCALE = exports.MAX_AUTO_SCALE = exports.EventBus = exports.DEFAULT_SCALE_VALUE = exports.DEFAULT_SCALE_DELTA = exports.DEFAULT_SCALE = exports.AutoPrintRegExp = exports.AutomationEventBus = exports.animationStarted = void 0;
 const DEFAULT_SCALE_VALUE = "auto";
 exports.DEFAULT_SCALE_VALUE = DEFAULT_SCALE_VALUE;
 const DEFAULT_SCALE = 1.0;
 exports.DEFAULT_SCALE = DEFAULT_SCALE;
+const DEFAULT_SCALE_DELTA = 1.1;
+exports.DEFAULT_SCALE_DELTA = DEFAULT_SCALE_DELTA;
 const MIN_SCALE = 0.1;
 exports.MIN_SCALE = MIN_SCALE;
 const MAX_SCALE = 10.0;
@@ -3662,14 +3656,13 @@ class EventBus {
     });
   }
 
-  dispatch(eventName) {
+  dispatch(eventName, data) {
     const eventListeners = this._listeners[eventName];
 
     if (!eventListeners || eventListeners.length === 0) {
       return;
     }
 
-    const args = Array.prototype.slice.call(arguments, 1);
     let externalListeners;
 
     for (const {
@@ -3686,12 +3679,12 @@ class EventBus {
         continue;
       }
 
-      listener.apply(null, args);
+      listener(data);
     }
 
     if (externalListeners) {
       for (const listener of externalListeners) {
-        listener.apply(null, args);
+        listener(data);
       }
 
       externalListeners = null;
@@ -3727,7 +3720,7 @@ class EventBus {
 exports.EventBus = EventBus;
 
 class AutomationEventBus extends EventBus {
-  dispatch(eventName) {
+  dispatch(eventName, data) {
     throw new Error("Not implemented: AutomationEventBus.dispatch");
   }
 
@@ -8348,9 +8341,7 @@ class PDFScriptingManager {
             return;
           }
 
-          this._eventBus.dispatch("zoomin", {
-            source: this
-          });
+          this._pdfViewer.increaseScale();
 
           break;
 
@@ -8359,9 +8350,7 @@ class PDFScriptingManager {
             return;
           }
 
-          this._eventBus.dispatch("zoomout", {
-            source: this
-          });
+          this._pdfViewer.decreaseScale();
 
           break;
       }
@@ -10220,7 +10209,7 @@ class BaseViewer {
       this._optionalContentConfigPromise = optionalContentConfigPromise;
       const scale = this.currentScale;
       const viewport = firstPdfPage.getViewport({
-        scale: scale * _ui_utils.CSS_UNITS
+        scale: scale * _pdfjsLib.PixelsPerInch.PDF_TO_CSS_UNITS
       });
       const textLayerFactory = this.textLayerMode !== _ui_utils.TextLayerMode.DISABLE && !isPureXfa ? this : null;
       const annotationLayerFactory = this._annotationMode !== _pdfjsLib.AnnotationMode.DISABLE ? this : null;
@@ -10564,8 +10553,8 @@ class BaseViewer {
         widthScale,
         heightScale;
     const changeOrientation = pageView.rotation % 180 !== 0;
-    const pageWidth = (changeOrientation ? pageView.height : pageView.width) / pageView.scale / _ui_utils.CSS_UNITS;
-    const pageHeight = (changeOrientation ? pageView.width : pageView.height) / pageView.scale / _ui_utils.CSS_UNITS;
+    const pageWidth = (changeOrientation ? pageView.height : pageView.width) / pageView.scale / _pdfjsLib.PixelsPerInch.PDF_TO_CSS_UNITS;
+    const pageHeight = (changeOrientation ? pageView.width : pageView.height) / pageView.scale / _pdfjsLib.PixelsPerInch.PDF_TO_CSS_UNITS;
     let scale = 0;
 
     switch (destArray[1].name) {
@@ -10611,8 +10600,8 @@ class BaseViewer {
         height = destArray[5] - y;
         const hPadding = this.removePageBorders ? 0 : _ui_utils.SCROLLBAR_PADDING;
         const vPadding = this.removePageBorders ? 0 : _ui_utils.VERTICAL_PADDING;
-        widthScale = (this.container.clientWidth - hPadding) / width / _ui_utils.CSS_UNITS;
-        heightScale = (this.container.clientHeight - vPadding) / height / _ui_utils.CSS_UNITS;
+        widthScale = (this.container.clientWidth - hPadding) / width / _pdfjsLib.PixelsPerInch.PDF_TO_CSS_UNITS;
+        heightScale = (this.container.clientHeight - vPadding) / height / _pdfjsLib.PixelsPerInch.PDF_TO_CSS_UNITS;
         scale = Math.min(Math.abs(widthScale), Math.abs(heightScale));
         break;
 
@@ -10888,7 +10877,7 @@ class BaseViewer {
     });
   }
 
-  createAnnotationLayerBuilder(pageDiv, pdfPage, annotationStorage = null, imageResourcesPath = "", renderForms = true, l10n = _l10n_utils.NullL10n, enableScripting = null, hasJSActionsPromise = null, mouseState = null) {
+  createAnnotationLayerBuilder(pageDiv, pdfPage, annotationStorage = null, imageResourcesPath = "", renderForms = true, l10n = _l10n_utils.NullL10n, enableScripting = null, hasJSActionsPromise = null, mouseState = null, fieldObjectsPromise = null) {
     return new _annotation_layer_builder.AnnotationLayerBuilder({
       pageDiv,
       pdfPage,
@@ -10900,6 +10889,7 @@ class BaseViewer {
       l10n,
       enableScripting: enableScripting ?? this.enableScripting,
       hasJSActionsPromise: hasJSActionsPromise || this.pdfDocument?.hasJSActions(),
+      fieldObjectsPromise: fieldObjectsPromise || this.pdfDocument?.getFieldObjects(),
       mouseState: mouseState || this._scriptingManager?.mouseState
     });
   }
@@ -11259,6 +11249,30 @@ class BaseViewer {
     return true;
   }
 
+  increaseScale(steps = 1) {
+    let newScale = this._currentScale;
+
+    do {
+      newScale = (newScale * _ui_utils.DEFAULT_SCALE_DELTA).toFixed(2);
+      newScale = Math.ceil(newScale * 10) / 10;
+      newScale = Math.min(_ui_utils.MAX_SCALE, newScale);
+    } while (--steps > 0 && newScale < _ui_utils.MAX_SCALE);
+
+    this.currentScaleValue = newScale;
+  }
+
+  decreaseScale(steps = 1) {
+    let newScale = this._currentScale;
+
+    do {
+      newScale = (newScale / _ui_utils.DEFAULT_SCALE_DELTA).toFixed(2);
+      newScale = Math.floor(newScale * 10) / 10;
+      newScale = Math.max(_ui_utils.MIN_SCALE, newScale);
+    } while (--steps > 0 && newScale > _ui_utils.MIN_SCALE);
+
+    this.currentScaleValue = newScale;
+  }
+
 }
 
 exports.BaseViewer = BaseViewer;
@@ -11292,6 +11306,7 @@ class AnnotationLayerBuilder {
     l10n = _l10n_utils.NullL10n,
     enableScripting = false,
     hasJSActionsPromise = null,
+    fieldObjectsPromise = null,
     mouseState = null
   }) {
     this.pageDiv = pageDiv;
@@ -11304,49 +11319,51 @@ class AnnotationLayerBuilder {
     this.annotationStorage = annotationStorage;
     this.enableScripting = enableScripting;
     this._hasJSActionsPromise = hasJSActionsPromise;
+    this._fieldObjectsPromise = fieldObjectsPromise;
     this._mouseState = mouseState;
     this.div = null;
     this._cancelled = false;
   }
 
-  render(viewport, intent = "display") {
-    return Promise.all([this.pdfPage.getAnnotations({
+  async render(viewport, intent = "display") {
+    const [annotations, hasJSActions = false, fieldObjects = null] = await Promise.all([this.pdfPage.getAnnotations({
       intent
-    }), this._hasJSActionsPromise]).then(([annotations, hasJSActions = false]) => {
-      if (this._cancelled || annotations.length === 0) {
-        return;
-      }
+    }), this._hasJSActionsPromise, this._fieldObjectsPromise]);
 
-      const parameters = {
-        viewport: viewport.clone({
-          dontFlip: true
-        }),
-        div: this.div,
-        annotations,
-        page: this.pdfPage,
-        imageResourcesPath: this.imageResourcesPath,
-        renderForms: this.renderForms,
-        linkService: this.linkService,
-        downloadManager: this.downloadManager,
-        annotationStorage: this.annotationStorage,
-        enableScripting: this.enableScripting,
-        hasJSActions,
-        mouseState: this._mouseState
-      };
+    if (this._cancelled || annotations.length === 0) {
+      return;
+    }
 
-      if (this.div) {
-        _pdfjsLib.AnnotationLayer.update(parameters);
-      } else {
-        this.div = document.createElement("div");
-        this.div.className = "annotationLayer";
-        this.pageDiv.appendChild(this.div);
-        parameters.div = this.div;
+    const parameters = {
+      viewport: viewport.clone({
+        dontFlip: true
+      }),
+      div: this.div,
+      annotations,
+      page: this.pdfPage,
+      imageResourcesPath: this.imageResourcesPath,
+      renderForms: this.renderForms,
+      linkService: this.linkService,
+      downloadManager: this.downloadManager,
+      annotationStorage: this.annotationStorage,
+      enableScripting: this.enableScripting,
+      hasJSActions,
+      fieldObjects,
+      mouseState: this._mouseState
+    };
 
-        _pdfjsLib.AnnotationLayer.render(parameters);
+    if (this.div) {
+      _pdfjsLib.AnnotationLayer.update(parameters);
+    } else {
+      this.div = document.createElement("div");
+      this.div.className = "annotationLayer";
+      this.pageDiv.appendChild(this.div);
+      parameters.div = this.div;
 
-        this.l10n.translate(this.div);
-      }
-    });
+      _pdfjsLib.AnnotationLayer.render(parameters);
+
+      this.l10n.translate(this.div);
+    }
   }
 
   cancel() {
@@ -11366,7 +11383,7 @@ class AnnotationLayerBuilder {
 exports.AnnotationLayerBuilder = AnnotationLayerBuilder;
 
 class DefaultAnnotationLayerFactory {
-  createAnnotationLayerBuilder(pageDiv, pdfPage, annotationStorage = null, imageResourcesPath = "", renderForms = true, l10n = _l10n_utils.NullL10n, enableScripting = false, hasJSActionsPromise = null, mouseState = null) {
+  createAnnotationLayerBuilder(pageDiv, pdfPage, annotationStorage = null, imageResourcesPath = "", renderForms = true, l10n = _l10n_utils.NullL10n, enableScripting = false, hasJSActionsPromise = null, mouseState = null, fieldObjectsPromise = null) {
     return new AnnotationLayerBuilder({
       pageDiv,
       pdfPage,
@@ -11377,6 +11394,7 @@ class DefaultAnnotationLayerFactory {
       annotationStorage,
       enableScripting,
       hasJSActionsPromise,
+      fieldObjectsPromise,
       mouseState
     });
   }
@@ -11595,7 +11613,7 @@ class PDFPageView {
     this.pdfPageRotate = pdfPage.rotate;
     const totalRotation = (this.rotation + this.pdfPageRotate) % 360;
     this.viewport = pdfPage.getViewport({
-      scale: this.scale * _ui_utils.CSS_UNITS,
+      scale: this.scale * _pdfjsLib.PixelsPerInch.PDF_TO_CSS_UNITS,
       rotation: totalRotation
     });
     this.reset();
@@ -11772,7 +11790,7 @@ class PDFPageView {
 
     const totalRotation = (this.rotation + this.pdfPageRotate) % 360;
     this.viewport = this.viewport.clone({
-      scale: this.scale * _ui_utils.CSS_UNITS,
+      scale: this.scale * _pdfjsLib.PixelsPerInch.PDF_TO_CSS_UNITS,
       rotation: totalRotation
     });
 
@@ -12086,7 +12104,7 @@ class PDFPageView {
 
     if (this._annotationMode !== _pdfjsLib.AnnotationMode.DISABLE && this.annotationLayerFactory) {
       if (!this.annotationLayer) {
-        this.annotationLayer = this.annotationLayerFactory.createAnnotationLayerBuilder(div, pdfPage, null, this.imageResourcesPath, this._annotationMode === _pdfjsLib.AnnotationMode.ENABLE_FORMS, this.l10n, null, null, null);
+        this.annotationLayer = this.annotationLayerFactory.createAnnotationLayerBuilder(div, pdfPage, null, this.imageResourcesPath, this._annotationMode === _pdfjsLib.AnnotationMode.ENABLE_FORMS, this.l10n, null, null, null, null);
       }
 
       this._renderAnnotationLayer();
@@ -12179,7 +12197,7 @@ class PDFPageView {
 
     if (this.useOnlyCssZoom) {
       const actualSizeViewport = viewport.clone({
-        scale: _ui_utils.CSS_UNITS
+        scale: _pdfjsLib.PixelsPerInch.PDF_TO_CSS_UNITS
       });
       outputScale.sx *= actualSizeViewport.width / viewport.width;
       outputScale.sy *= actualSizeViewport.height / viewport.height;
@@ -12248,10 +12266,10 @@ class PDFPageView {
 
     const pdfPage = this.pdfPage;
     const actualSizeViewport = this.viewport.clone({
-      scale: _ui_utils.CSS_UNITS
+      scale: _pdfjsLib.PixelsPerInch.PDF_TO_CSS_UNITS
     });
     const promise = pdfPage.getOperatorList({
-      annotationMode: this._annotatationMode
+      annotationMode: this._annotationMode
     }).then(opList => {
       ensureNotCancelled();
       const svgGfx = new _pdfjsLib.SVGGraphics(pdfPage.commonObjs, pdfPage.objs, _app_options.compatibilityParams.disableCreateObjectURL);
@@ -15340,16 +15358,14 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.getXfaHtmlForPrinting = getXfaHtmlForPrinting;
 
-var _ui_utils = __webpack_require__(3);
+var _pdfjsLib = __webpack_require__(4);
 
 var _xfa_layer_builder = __webpack_require__(34);
-
-var _pdfjsLib = __webpack_require__(4);
 
 function getXfaHtmlForPrinting(printContainer, pdfDocument) {
   const xfaHtml = pdfDocument.allXfaHtml;
   const factory = new _xfa_layer_builder.DefaultXfaLayerFactory();
-  const scale = Math.round(_ui_utils.CSS_UNITS * 100) / 100;
+  const scale = Math.round(_pdfjsLib.PixelsPerInch.PDF_TO_CSS_UNITS * 100) / 100;
 
   for (const xfaPage of xfaHtml.children) {
     const page = document.createElement("div");
@@ -15418,7 +15434,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.11.0';
-const pdfjsBuild = '83d3bb4';
+const pdfjsBuild = 'f1ceb00';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
