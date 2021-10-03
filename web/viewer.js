@@ -4242,7 +4242,7 @@ class PDFRenderingQueue {
     }
   }
 
-  getHighestPriority(visible, views, scrolledDown) {
+  getHighestPriority(visible, views, scrolledDown, preRenderExtra = false) {
     const visibleViews = visible.views;
     const numVisible = visibleViews.length;
 
@@ -4258,17 +4258,19 @@ class PDFRenderingQueue {
       }
     }
 
-    if (scrolledDown) {
-      const nextPageIndex = visible.last.id;
+    let preRenderIndex = scrolledDown ? visible.last.id : visible.first.id - 2;
+    let preRenderView = views[preRenderIndex];
 
-      if (views[nextPageIndex] && !this.isViewFinished(views[nextPageIndex])) {
-        return views[nextPageIndex];
-      }
-    } else {
-      const previousPageIndex = visible.first.id - 2;
+    if (preRenderView && !this.isViewFinished(preRenderView)) {
+      return preRenderView;
+    }
 
-      if (views[previousPageIndex] && !this.isViewFinished(views[previousPageIndex])) {
-        return views[previousPageIndex];
+    if (preRenderExtra) {
+      preRenderIndex += scrolledDown ? 1 : -1;
+      preRenderView = views[preRenderIndex];
+
+      if (preRenderView && !this.isViewFinished(preRenderView)) {
+        return preRenderView;
       }
     }
 
@@ -6888,6 +6890,8 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.SimpleLinkService = exports.PDFLinkService = void 0;
 
+var _pdfjsLib = __webpack_require__(4);
+
 var _ui_utils = __webpack_require__(3);
 
 class PDFLinkService {
@@ -7030,6 +7034,15 @@ class PDFLinkService {
 
     this.pdfViewer.scrollPageIntoView({
       pageNumber
+    });
+  }
+
+  addLinkAttributes(link, url, newWindow = false) {
+    (0, _pdfjsLib.addLinkAttributes)(link, {
+      url,
+      target: newWindow ? _pdfjsLib.LinkTarget.BLANK : this.externalLinkTarget,
+      rel: this.externalLinkRel,
+      enabled: this.externalLinkEnabled
     });
   }
 
@@ -7281,10 +7294,7 @@ function isValidExplicitDestination(dest) {
 
 class SimpleLinkService {
   constructor() {
-    this.externalLinkTarget = null;
-    this.externalLinkRel = null;
     this.externalLinkEnabled = true;
-    this._ignoreDestinationZoom = false;
   }
 
   get pagesCount() {
@@ -7306,6 +7316,13 @@ class SimpleLinkService {
   async goToDestination(dest) {}
 
   goToPage(val) {}
+
+  addLinkAttributes(link, url, newWindow = false) {
+    (0, _pdfjsLib.addLinkAttributes)(link, {
+      url,
+      enabled: this.externalLinkEnabled
+    });
+  }
 
   getDestinationHash(dest) {
     return "#";
@@ -7344,9 +7361,9 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.PDFOutlineViewer = void 0;
 
-var _pdfjsLib = __webpack_require__(4);
-
 var _base_tree_viewer = __webpack_require__(11);
+
+var _pdfjsLib = __webpack_require__(4);
 
 var _ui_utils = __webpack_require__(3);
 
@@ -7416,12 +7433,7 @@ class PDFOutlineViewer extends _base_tree_viewer.BaseTreeViewer {
     } = this;
 
     if (url) {
-      (0, _pdfjsLib.addLinkAttributes)(element, {
-        url,
-        target: newWindow ? _pdfjsLib.LinkTarget.BLANK : linkService.externalLinkTarget,
-        rel: linkService.externalLinkRel,
-        enabled: linkService.externalLinkEnabled
-      });
+      linkService.addLinkAttributes(element, url, newWindow);
       return;
     }
 
@@ -9885,7 +9897,7 @@ class BaseViewer {
       throw new Error("Cannot initialize BaseViewer.");
     }
 
-    const viewerVersion = '2.11.0';
+    const viewerVersion = '2.12.0';
 
     if (_pdfjsLib.version !== viewerVersion) {
       throw new Error(`The API version "${_pdfjsLib.version}" does not match the Viewer version "${viewerVersion}".`);
@@ -10845,7 +10857,8 @@ class BaseViewer {
     const visiblePages = currentlyVisiblePages || this._getVisiblePages();
 
     const scrollAhead = this._isScrollModeHorizontal ? this.scroll.right : this.scroll.down;
-    const pageView = this.renderingQueue.getHighestPriority(visiblePages, this._pages, scrollAhead);
+    const preRenderExtra = this._scrollMode === _ui_utils.ScrollMode.VERTICAL && this._spreadMode !== _ui_utils.SpreadMode.NONE && !this.isInPresentationMode;
+    const pageView = this.renderingQueue.getHighestPriority(visiblePages, this._pages, scrollAhead, preRenderExtra);
 
     if (pageView) {
       this._ensurePdfPageLoaded(pageView).then(() => {
@@ -10898,7 +10911,8 @@ class BaseViewer {
     return new _xfa_layer_builder.XfaLayerBuilder({
       pageDiv,
       pdfPage,
-      annotationStorage: annotationStorage || this.pdfDocument?.annotationStorage
+      annotationStorage: annotationStorage || this.pdfDocument?.annotationStorage,
+      linkService: this.linkService
     });
   }
 
@@ -12899,6 +12913,8 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.XfaLayerBuilder = exports.DefaultXfaLayerFactory = void 0;
 
+var _pdf_link_service = __webpack_require__(18);
+
 var _pdfjsLib = __webpack_require__(4);
 
 class XfaLayerBuilder {
@@ -12906,11 +12922,13 @@ class XfaLayerBuilder {
     pageDiv,
     pdfPage,
     annotationStorage,
+    linkService,
     xfaHtml
   }) {
     this.pageDiv = pageDiv;
     this.pdfPage = pdfPage;
     this.annotationStorage = annotationStorage;
+    this.linkService = linkService;
     this.xfaHtml = xfaHtml;
     this.div = null;
     this._cancelled = false;
@@ -12926,6 +12944,7 @@ class XfaLayerBuilder {
         xfa: this.xfaHtml,
         page: null,
         annotationStorage: this.annotationStorage,
+        linkService: this.linkService,
         intent
       };
       const div = document.createElement("div");
@@ -12952,6 +12971,7 @@ class XfaLayerBuilder {
         xfa,
         page: this.pdfPage,
         annotationStorage: this.annotationStorage,
+        linkService: this.linkService,
         intent
       };
 
@@ -12990,6 +13010,7 @@ class DefaultXfaLayerFactory {
       pageDiv,
       pdfPage,
       annotationStorage,
+      linkService: new _pdf_link_service.SimpleLinkService(),
       xfaHtml
     });
   }
@@ -15433,8 +15454,8 @@ var _app_options = __webpack_require__(1);
 
 var _app = __webpack_require__(2);
 
-const pdfjsVersion = '2.11.0';
-const pdfjsBuild = 'f1ceb00';
+const pdfjsVersion = '2.12.0';
+const pdfjsBuild = 'a474d6c';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;

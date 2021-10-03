@@ -125,7 +125,7 @@ class WorkerMessageHandler {
     const WorkerTasks = [];
     const verbosity = (0, _util.getVerbosityLevel)();
     const apiVersion = docParams.apiVersion;
-    const workerVersion = '2.11.0';
+    const workerVersion = '2.12.0';
 
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
@@ -1175,12 +1175,28 @@ function _isValidProtocol(url) {
   }
 }
 
-function createValidAbsoluteUrl(url, baseUrl) {
+function createValidAbsoluteUrl(url, baseUrl = null, options = null) {
   if (!url) {
     return null;
   }
 
   try {
+    if (options && typeof url === "string") {
+      if (options.addDefaultProtocol && url.startsWith("www.")) {
+        const dots = url.match(/\./g);
+
+        if (dots && dots.length >= 2) {
+          url = `http://${url}`;
+        }
+      }
+
+      if (options.tryConvertEncoding) {
+        try {
+          url = stringToUTF8String(url);
+        } catch (ex) {}
+      }
+    }
+
     const absoluteUrl = baseUrl ? new URL(url, baseUrl) : new URL(url);
 
     if (_isValidProtocol(absoluteUrl)) {
@@ -2976,7 +2992,6 @@ exports.ChunkedStreamManager = ChunkedStreamManager;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.addDefaultProtocolToUrl = addDefaultProtocolToUrl;
 exports.collectActions = collectActions;
 exports.encodeToXmlString = encodeToXmlString;
 exports.escapePDFName = escapePDFName;
@@ -2989,8 +3004,8 @@ exports.parseXFAPath = parseXFAPath;
 exports.readInt8 = readInt8;
 exports.readUint16 = readUint16;
 exports.readUint32 = readUint32;
+exports.recoverJsURL = recoverJsURL;
 exports.toRomanNumerals = toRomanNumerals;
-exports.tryConvertUrlEncoding = tryConvertUrlEncoding;
 exports.validateCSSFont = validateCSSFont;
 exports.XRefParseException = exports.XRefEntryException = exports.ParserEOFException = exports.MissingDataException = void 0;
 
@@ -3382,16 +3397,26 @@ function validateCSSFont(cssFontInfo) {
   return true;
 }
 
-function addDefaultProtocolToUrl(url) {
-  return url.startsWith("www.") ? `http://${url}` : url;
-}
+function recoverJsURL(str) {
+  const URL_OPEN_METHODS = ["app.launchURL", "window.open", "xfa.host.gotoURL"];
+  const regex = new RegExp("^\\s*(" + URL_OPEN_METHODS.join("|").split(".").join("\\.") + ")\\((?:'|\")([^'\"]*)(?:'|\")(?:,\\s*(\\w+)\\)|\\))", "i");
+  const jsUrl = regex.exec(str);
 
-function tryConvertUrlEncoding(url) {
-  try {
-    return (0, _util.stringToUTF8String)(url);
-  } catch (e) {
-    return url;
+  if (jsUrl && jsUrl[2]) {
+    const url = jsUrl[2];
+    let newWindow = false;
+
+    if (jsUrl[3] === "true" && jsUrl[1] === "app.launchURL") {
+      newWindow = true;
+    }
+
+    return {
+      url,
+      newWindow
+    };
   }
+
+  return null;
 }
 
 /***/ }),
@@ -18050,12 +18075,12 @@ class AnnotationFactory {
 
 exports.AnnotationFactory = AnnotationFactory;
 
-function getRgbColor(color) {
-  const rgbColor = new Uint8ClampedArray(3);
-
+function getRgbColor(color, defaultColor = new Uint8ClampedArray(3)) {
   if (!Array.isArray(color)) {
-    return rgbColor;
+    return defaultColor;
   }
+
+  const rgbColor = defaultColor || new Uint8ClampedArray(3);
 
   switch (color.length) {
     case 0:
@@ -18077,7 +18102,7 @@ function getRgbColor(color) {
       return rgbColor;
 
     default:
-      return rgbColor;
+      return defaultColor;
   }
 }
 
@@ -18153,6 +18178,7 @@ class Annotation {
     this.setColor(dict.getArray("C"));
     this.setBorderStyle(dict);
     this.setAppearance(dict);
+    this.setBorderAndBackgroundColors(dict.get("MK"));
     this._streams = [];
 
     if (this.appearance) {
@@ -18163,6 +18189,8 @@ class Annotation {
       annotationFlags: this.flags,
       borderStyle: this.borderStyle,
       color: this.color,
+      backgroundColor: this.backgroundColor,
+      borderColor: this.borderColor,
       contentsObj: this._contents,
       hasAppearance: !!this.appearance,
       id: params.id,
@@ -18293,6 +18321,15 @@ class Annotation {
     this.color = getRgbColor(color);
   }
 
+  setBorderAndBackgroundColors(mk) {
+    if (mk instanceof _primitives.Dict) {
+      this.borderColor = getRgbColor(mk.getArray("BC"), null);
+      this.backgroundColor = getRgbColor(mk.getArray("BG"), null);
+    } else {
+      this.borderColor = this.backgroundColor = null;
+    }
+  }
+
   setBorderStyle(borderStyle) {
     this.borderStyle = new AnnotationBorderStyle();
 
@@ -18406,6 +18443,8 @@ class Annotation {
         id: this.data.id,
         actions: this.data.actions,
         name: this.data.fieldName,
+        strokeColor: this.data.borderColor,
+        fillColor: this.data.backgroundColor,
         type: "",
         kidIds: this.data.kidIds,
         page: this.data.pageIndex
@@ -19249,6 +19288,8 @@ class TextWidgetAnnotation extends WidgetAnnotation {
       rect: this.data.rect,
       actions: this.data.actions,
       page: this.data.pageIndex,
+      strokeColor: this.data.borderColor,
+      fillColor: this.data.backgroundColor,
       type: "text"
     };
   }
@@ -19647,6 +19688,8 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
       hidden: this.data.hidden,
       actions: this.data.actions,
       page: this.data.pageIndex,
+      strokeColor: this.data.borderColor,
+      fillColor: this.data.backgroundColor,
       type
     };
   }
@@ -19711,6 +19754,8 @@ class ChoiceWidgetAnnotation extends WidgetAnnotation {
       actions: this.data.actions,
       items: this.data.options,
       page: this.data.pageIndex,
+      strokeColor: this.data.borderColor,
+      fillColor: this.data.backgroundColor,
       type
     };
   }
@@ -19860,7 +19905,7 @@ class LineAnnotation extends MarkupAnnotation {
           interiorColor = parameters.dict.getArray("IC");
 
       if (interiorColor) {
-        interiorColor = getRgbColor(interiorColor);
+        interiorColor = getRgbColor(interiorColor, null);
         fillColor = interiorColor ? Array.from(interiorColor).map(c => c / 255) : null;
       }
 
@@ -19902,7 +19947,7 @@ class SquareAnnotation extends MarkupAnnotation {
           interiorColor = parameters.dict.getArray("IC");
 
       if (interiorColor) {
-        interiorColor = getRgbColor(interiorColor);
+        interiorColor = getRgbColor(interiorColor, null);
         fillColor = interiorColor ? Array.from(interiorColor).map(c => c / 255) : null;
       }
 
@@ -19948,7 +19993,7 @@ class CircleAnnotation extends MarkupAnnotation {
       let interiorColor = parameters.dict.getArray("IC");
 
       if (interiorColor) {
-        interiorColor = getRgbColor(interiorColor);
+        interiorColor = getRgbColor(interiorColor, null);
         fillColor = interiorColor ? Array.from(interiorColor).map(c => c / 255) : null;
       }
 
@@ -36762,6 +36807,25 @@ function buildToFontChar(encoding, glyphsUnicodeMap, differences) {
   return toFontChar;
 }
 
+function convertCidString(charCode, cid, shouldThrow = false) {
+  switch (cid.length) {
+    case 1:
+      return cid.charCodeAt(0);
+
+    case 2:
+      return cid.charCodeAt(0) << 8 | cid.charCodeAt(1);
+  }
+
+  const msg = `Unsupported CID string (charCode ${charCode}): "${cid}".`;
+
+  if (shouldThrow) {
+    throw new _util.FormatError(msg);
+  }
+
+  (0, _util.warn)(msg);
+  return cid;
+}
+
 function adjustMapping(charCodeToGlyphId, hasGlyph, newGlyphZeroId) {
   const newMap = Object.create(null);
   const toFontChar = [];
@@ -37168,7 +37232,7 @@ class Font {
       return;
     }
 
-    this.cidEncoding = properties.cidEncoding;
+    this.cidEncoding = properties.cidEncoding || "";
     this.vertical = !!properties.vertical;
 
     if (this.vertical) {
@@ -38683,6 +38747,10 @@ class Font {
       const cidToGidMap = properties.cidToGidMap || [];
       const isCidToGidMapEmpty = cidToGidMap.length === 0;
       properties.cMap.forEach(function (charCode, cid) {
+        if (typeof cid === "string") {
+          cid = convertCidString(charCode, cid, true);
+        }
+
         if (cid > 0xffff) {
           throw new _util.FormatError("Max size of CID is 65,535");
         }
@@ -39008,6 +39076,10 @@ class Font {
 
       if (this.composite && this.cMap.contains(glyphUnicode)) {
         charcode = this.cMap.lookup(glyphUnicode);
+
+        if (typeof charcode === "string") {
+          charcode = convertCidString(glyphUnicode, charcode);
+        }
       }
 
       if (!charcode && this.toUnicode) {
@@ -39035,6 +39107,10 @@ class Font {
 
     if (this.cMap && this.cMap.contains(charcode)) {
       widthCode = this.cMap.lookup(charcode);
+
+      if (typeof widthCode === "string") {
+        widthCode = convertCidString(charcode, widthCode);
+      }
     }
 
     width = this.widths[widthCode];
@@ -52574,9 +52650,9 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.Catalog = void 0;
 
-var _core_utils = __w_pdfjs_require__(9);
-
 var _primitives = __w_pdfjs_require__(5);
+
+var _core_utils = __w_pdfjs_require__(9);
 
 var _util = __w_pdfjs_require__(2);
 
@@ -53939,13 +54015,32 @@ class Catalog {
       const actionName = actionType.name;
 
       switch (actionName) {
+        case "ResetForm":
+          const flags = action.get("Flags");
+          const include = (((0, _util.isNum)(flags) ? flags : 0) & 1) === 0;
+          const fields = [];
+          const refs = [];
+
+          for (const obj of action.get("Fields") || []) {
+            if ((0, _primitives.isRef)(obj)) {
+              refs.push(obj.toString());
+            } else if ((0, _util.isString)(obj)) {
+              fields.push((0, _util.stringToPDFString)(obj));
+            }
+          }
+
+          resultObj.resetForm = {
+            fields,
+            refs,
+            include
+          };
+          break;
+
         case "URI":
           url = action.get("URI");
 
-          if ((0, _primitives.isName)(url)) {
+          if (url instanceof _primitives.Name) {
             url = "/" + url.name;
-          } else if ((0, _util.isString)(url)) {
-            url = (0, _core_utils.addDefaultProtocolToUrl)(url);
           }
 
           break;
@@ -54009,24 +54104,16 @@ class Catalog {
             js = jsAction;
           }
 
-          if (js) {
-            const URL_OPEN_METHODS = ["app.launchURL", "window.open"];
-            const regex = new RegExp("^\\s*(" + URL_OPEN_METHODS.join("|").split(".").join("\\.") + ")\\((?:'|\")([^'\"]*)(?:'|\")(?:,\\s*(\\w+)\\)|\\))", "i");
-            const jsUrl = regex.exec((0, _util.stringToPDFString)(js));
+          const jsURL = js && (0, _core_utils.recoverJsURL)((0, _util.stringToPDFString)(js));
 
-            if (jsUrl && jsUrl[2]) {
-              url = jsUrl[2];
-
-              if (jsUrl[3] === "true" && jsUrl[1] === "app.launchURL") {
-                resultObj.newWindow = true;
-              }
-
-              break;
-            }
+          if (jsURL) {
+            url = jsURL.url;
+            resultObj.newWindow = jsURL.newWindow;
+            break;
           }
 
         default:
-          if (actionName === "JavaScript" || actionName === "ResetForm" || actionName === "SubmitForm") {
+          if (actionName === "JavaScript" || actionName === "SubmitForm") {
             break;
           }
 
@@ -54038,8 +54125,10 @@ class Catalog {
     }
 
     if ((0, _util.isString)(url)) {
-      url = (0, _core_utils.tryConvertUrlEncoding)(url);
-      const absoluteUrl = (0, _util.createValidAbsoluteUrl)(url, docBaseUrl);
+      const absoluteUrl = (0, _util.createValidAbsoluteUrl)(url, docBaseUrl, {
+        addDefaultProtocol: true,
+        tryConvertEncoding: true
+      });
 
       if (absoluteUrl) {
         resultObj.url = absoluteUrl.href;
@@ -60163,6 +60252,8 @@ var _util = __w_pdfjs_require__(2);
 
 var _fonts = __w_pdfjs_require__(83);
 
+var _core_utils = __w_pdfjs_require__(9);
+
 var _som = __w_pdfjs_require__(78);
 
 const TEMPLATE_NS_ID = _namespaces.NamespaceIds.template.id;
@@ -60980,7 +61071,11 @@ class Button extends _xfa_object.XFAObject {
   }
 
   [_xfa_object.$toHTML](availableSpace) {
-    return _utils.HTMLResult.success({
+    const parent = this[_xfa_object.$getParent]();
+
+    const grandpa = parent[_xfa_object.$getParent]();
+
+    const htmlButton = {
       name: "button",
       attributes: {
         id: this[_xfa_object.$uid],
@@ -60988,7 +61083,39 @@ class Button extends _xfa_object.XFAObject {
         style: {}
       },
       children: []
-    });
+    };
+
+    for (const event of grandpa.event.children) {
+      if (event.activity !== "click" || !event.script) {
+        continue;
+      }
+
+      const jsURL = (0, _core_utils.recoverJsURL)(event.script[_xfa_object.$content]);
+
+      if (!jsURL) {
+        continue;
+      }
+
+      const href = (0, _html_utils.fixURL)(jsURL.url);
+
+      if (!href) {
+        continue;
+      }
+
+      htmlButton.children.push({
+        name: "a",
+        attributes: {
+          id: "link" + this[_xfa_object.$uid],
+          href,
+          newWindow: jsURL.newWindow,
+          class: ["xfaLink"],
+          style: {}
+        },
+        children: []
+      });
+    }
+
+    return _utils.HTMLResult.success(htmlButton);
   }
 
 }
@@ -62590,7 +62717,13 @@ class Field extends _xfa_object.XFAObject {
       ui.attributes.style = Object.create(null);
     }
 
+    let aElement = null;
+
     if (this.ui.button) {
+      if (ui.children.length === 1) {
+        [aElement] = ui.children.splice(0, 1);
+      }
+
       Object.assign(ui.attributes.style, borderStyle);
     } else {
       Object.assign(style, borderStyle);
@@ -62651,6 +62784,10 @@ class Field extends _xfa_object.XFAObject {
       } else {
         ui.children[0].attributes.style.height = "100%";
       }
+    }
+
+    if (aElement) {
+      ui.children.push(aElement);
     }
 
     if (!caption) {
@@ -66363,6 +66500,7 @@ exports.computeBbox = computeBbox;
 exports.createWrapper = createWrapper;
 exports.fixDimensions = fixDimensions;
 exports.fixTextIndent = fixTextIndent;
+exports.fixURL = fixURL;
 exports.isPrintOnly = isPrintOnly;
 exports.layoutClass = layoutClass;
 exports.layoutNode = layoutNode;
@@ -66375,13 +66513,13 @@ exports.toStyle = toStyle;
 
 var _xfa_object = __w_pdfjs_require__(75);
 
+var _util = __w_pdfjs_require__(2);
+
 var _utils = __w_pdfjs_require__(76);
 
 var _fonts = __w_pdfjs_require__(83);
 
 var _text = __w_pdfjs_require__(84);
-
-var _util = __w_pdfjs_require__(2);
 
 function measureToString(m) {
   if (typeof m === "string") {
@@ -67018,6 +67156,14 @@ function setFontFamily(xfaFont, node, fontFinder, style) {
       style.lineHeight = Math.max(1.2, pdfFont.lineHeight);
     }
   }
+}
+
+function fixURL(str) {
+  const absoluteUrl = (0, _util.createValidAbsoluteUrl)(str, null, {
+    addDefaultProtocol: true,
+    tryConvertEncoding: true
+  });
+  return absoluteUrl ? absoluteUrl.href : null;
 }
 
 /***/ }),
@@ -70701,13 +70847,9 @@ var _xfa_object = __w_pdfjs_require__(75);
 
 var _namespaces = __w_pdfjs_require__(77);
 
-var _core_utils = __w_pdfjs_require__(9);
-
 var _html_utils = __w_pdfjs_require__(82);
 
 var _utils = __w_pdfjs_require__(76);
-
-var _util = __w_pdfjs_require__(2);
 
 const XHTML_NS_ID = _namespaces.NamespaceIds.xhtml.id;
 const VALID_STYLES = new Set(["color", "font", "font-family", "font-size", "font-stretch", "font-style", "font-weight", "margin", "margin-bottom", "margin-left", "margin-right", "margin-top", "letter-spacing", "line-height", "orphans", "page-break-after", "page-break-before", "page-break-inside", "tab-interval", "tab-stop", "text-align", "text-decoration", "text-indent", "vertical-align", "widows", "kerning-mode", "xfa-font-horizontal-scale", "xfa-font-vertical-scale", "xfa-spacerun", "xfa-tab-stops"]);
@@ -70943,19 +71085,7 @@ class XhtmlObject extends _xfa_object.XmlObject {
 class A extends XhtmlObject {
   constructor(attributes) {
     super(attributes, "a");
-    let href = "";
-
-    if (typeof attributes.href === "string") {
-      let url = (0, _core_utils.addDefaultProtocolToUrl)(attributes.href);
-      url = (0, _core_utils.tryConvertUrlEncoding)(url);
-      const absoluteUrl = (0, _util.createValidAbsoluteUrl)(url);
-
-      if (absoluteUrl) {
-        href = absoluteUrl.href;
-      }
-    }
-
-    this.href = href;
+    this.href = (0, _html_utils.fixURL)(attributes.href) || "";
   }
 
 }
@@ -72794,8 +72924,8 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 
 var _worker = __w_pdfjs_require__(1);
 
-const pdfjsVersion = '2.11.0';
-const pdfjsBuild = 'f1ceb00';
+const pdfjsVersion = '2.12.0';
+const pdfjsBuild = 'a474d6c';
 })();
 
 /******/ 	return __webpack_exports__;

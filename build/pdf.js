@@ -51,14 +51,13 @@ exports.isDataScheme = isDataScheme;
 exports.isPdfFile = isPdfFile;
 exports.isValidFetchUrl = isValidFetchUrl;
 exports.loadScript = loadScript;
-exports.StatTimer = exports.RenderingCancelledException = exports.PixelsPerInch = exports.PDFDateString = exports.PageViewport = exports.LinkTarget = exports.DOMSVGFactory = exports.DOMStandardFontDataFactory = exports.DOMCMapReaderFactory = exports.DOMCanvasFactory = exports.DEFAULT_LINK_REL = void 0;
+exports.StatTimer = exports.RenderingCancelledException = exports.PixelsPerInch = exports.PDFDateString = exports.PageViewport = exports.LinkTarget = exports.DOMSVGFactory = exports.DOMStandardFontDataFactory = exports.DOMCMapReaderFactory = exports.DOMCanvasFactory = void 0;
 
 var _util = __w_pdfjs_require__(2);
 
 var _base_factory = __w_pdfjs_require__(5);
 
 const DEFAULT_LINK_REL = "noopener noreferrer nofollow";
-exports.DEFAULT_LINK_REL = DEFAULT_LINK_REL;
 const SVG_NS = "http://www.w3.org/2000/svg";
 const PixelsPerInch = {
   CSS: 96.0,
@@ -1008,12 +1007,28 @@ function _isValidProtocol(url) {
   }
 }
 
-function createValidAbsoluteUrl(url, baseUrl) {
+function createValidAbsoluteUrl(url, baseUrl = null, options = null) {
   if (!url) {
     return null;
   }
 
   try {
+    if (options && typeof url === "string") {
+      if (options.addDefaultProtocol && url.startsWith("www.")) {
+        const dots = url.match(/\./g);
+
+        if (dots && dots.length >= 2) {
+          url = `http://${url}`;
+        }
+      }
+
+      if (options.tryConvertEncoding) {
+        try {
+          url = stringToUTF8String(url);
+        } catch (ex) {}
+      }
+    }
+
     const absoluteUrl = baseUrl ? new URL(url, baseUrl) : new URL(url);
 
     if (_isValidProtocol(absoluteUrl)) {
@@ -1950,7 +1965,7 @@ async function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
 
   const workerId = await worker.messageHandler.sendWithPromise("GetDocRequest", {
     docId,
-    apiVersion: '2.11.0',
+    apiVersion: '2.12.0',
     source: {
       data: source.data,
       url: source.url,
@@ -4117,9 +4132,9 @@ class InternalRenderTask {
 
 }
 
-const version = '2.11.0';
+const version = '2.12.0';
 exports.version = version;
-const build = 'f1ceb00';
+const build = 'a474d6c';
 exports.build = build;
 
 /***/ }),
@@ -8905,9 +8920,9 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.AnnotationLayer = void 0;
 
-var _display_utils = __w_pdfjs_require__(1);
-
 var _util = __w_pdfjs_require__(2);
+
+var _display_utils = __w_pdfjs_require__(1);
 
 var _annotation_storage = __w_pdfjs_require__(9);
 
@@ -9087,7 +9102,9 @@ class AnnotationElement {
           break;
       }
 
-      if (data.color) {
+      const borderColor = data.borderColor || data.color || null;
+
+      if (borderColor) {
         container.style.borderColor = _util.Util.makeHexColor(data.color[0] | 0, data.color[1] | 0, data.color[2] | 0);
       } else {
         container.style.borderWidth = 0;
@@ -9234,7 +9251,7 @@ class AnnotationElement {
 
 class LinkAnnotationElement extends AnnotationElement {
   constructor(parameters) {
-    const isRenderable = !!(parameters.data.url || parameters.data.dest || parameters.data.action || parameters.data.isTooltipOnly || parameters.data.actions && (parameters.data.actions.Action || parameters.data.actions["Mouse Up"] || parameters.data.actions["Mouse Down"]));
+    const isRenderable = !!(parameters.data.url || parameters.data.dest || parameters.data.action || parameters.data.isTooltipOnly || parameters.data.resetForm || parameters.data.actions && (parameters.data.actions.Action || parameters.data.actions["Mouse Up"] || parameters.data.actions["Mouse Down"]));
     super(parameters, {
       isRenderable,
       createQuadrilaterals: true
@@ -9249,20 +9266,29 @@ class LinkAnnotationElement extends AnnotationElement {
     const link = document.createElement("a");
 
     if (data.url) {
-      (0, _display_utils.addLinkAttributes)(link, {
-        url: data.url,
-        target: data.newWindow ? _display_utils.LinkTarget.BLANK : linkService.externalLinkTarget,
-        rel: linkService.externalLinkRel,
-        enabled: linkService.externalLinkEnabled
-      });
+      if (!linkService.addLinkAttributes) {
+        (0, _util.warn)("LinkAnnotationElement.render - missing `addLinkAttributes`-method on the `linkService`-instance.");
+      }
+
+      linkService.addLinkAttributes?.(link, data.url, data.newWindow);
     } else if (data.action) {
       this._bindNamedAction(link, data.action);
     } else if (data.dest) {
       this._bindLink(link, data.dest);
-    } else if (data.actions && (data.actions.Action || data.actions["Mouse Up"] || data.actions["Mouse Down"]) && this.enableScripting && this.hasJSActions) {
-      this._bindJSAction(link, data);
     } else {
-      this._bindLink(link, "");
+      let hasClickAction = false;
+
+      if (data.actions && (data.actions.Action || data.actions["Mouse Up"] || data.actions["Mouse Down"]) && this.enableScripting && this.hasJSActions) {
+        hasClickAction = true;
+
+        this._bindJSAction(link, data);
+      }
+
+      if (data.resetForm) {
+        this._bindResetFormAction(link, data.resetForm);
+      } else if (!hasClickAction) {
+        this._bindLink(link, "");
+      }
     }
 
     if (this.quadrilaterals) {
@@ -9333,6 +9359,131 @@ class LinkAnnotationElement extends AnnotationElement {
     }
 
     link.className = "internalLink";
+  }
+
+  _bindResetFormAction(link, resetForm) {
+    const otherClickAction = link.onclick;
+
+    if (!otherClickAction) {
+      link.href = this.linkService.getAnchorUrl("");
+    }
+
+    link.className = "internalLink";
+
+    if (!this._fieldObjects) {
+      (0, _util.warn)(`_bindResetFormAction - "resetForm" action not supported, ` + "ensure that the `fieldObjects` parameter is provided.");
+
+      if (!otherClickAction) {
+        link.onclick = () => false;
+      }
+
+      return;
+    }
+
+    link.onclick = () => {
+      if (otherClickAction) {
+        otherClickAction();
+      }
+
+      const {
+        fields: resetFormFields,
+        refs: resetFormRefs,
+        include
+      } = resetForm;
+      const allFields = [];
+
+      if (resetFormFields.length !== 0 || resetFormRefs.length !== 0) {
+        const fieldIds = new Set(resetFormRefs);
+
+        for (const fieldName of resetFormFields) {
+          const fields = this._fieldObjects[fieldName] || [];
+
+          for (const {
+            id
+          } of fields) {
+            fieldIds.add(id);
+          }
+        }
+
+        for (const fields of Object.values(this._fieldObjects)) {
+          for (const field of fields) {
+            if (fieldIds.has(field.id) === include) {
+              allFields.push(field);
+            }
+          }
+        }
+      } else {
+        for (const fields of Object.values(this._fieldObjects)) {
+          allFields.push(...fields);
+        }
+      }
+
+      const storage = this.annotationStorage;
+      const allIds = [];
+
+      for (const field of allFields) {
+        const {
+          id
+        } = field;
+        allIds.push(id);
+
+        switch (field.type) {
+          case "text":
+            {
+              const value = field.defaultValue || "";
+              storage.setValue(id, {
+                value,
+                valueAsString: value
+              });
+              break;
+            }
+
+          case "checkbox":
+          case "radiobutton":
+            {
+              const value = field.defaultValue === field.exportValues;
+              storage.setValue(id, {
+                value
+              });
+              break;
+            }
+
+          case "combobox":
+          case "listbox":
+            {
+              const value = field.defaultValue || "";
+              storage.setValue(id, {
+                value
+              });
+              break;
+            }
+
+          default:
+            continue;
+        }
+
+        const domElement = document.getElementById(id);
+
+        if (!domElement || !GetElementsByNameSet.has(domElement)) {
+          continue;
+        }
+
+        domElement.dispatchEvent(new Event("resetform"));
+      }
+
+      if (this.enableScripting) {
+        this.linkService.eventBus?.dispatch("dispatcheventinsandbox", {
+          source: this,
+          detail: {
+            id: "app",
+            ids: allIds,
+            name: "ResetForm"
+          }
+        });
+      }
+
+      return false;
+    };
   }
 
 }
@@ -9418,6 +9569,11 @@ class WidgetAnnotationElement extends AnnotationElement {
         this._setEventListener(element, baseName, eventName, getter);
       }
     }
+  }
+
+  _setBackgroundColor(element) {
+    const color = this.data.backgroundColor || null;
+    element.style.backgroundColor = color === null ? "transparent" : _util.Util.makeHexColor(color[0], color[1], color[2]);
   }
 
   _dispatchEventFromSandbox(actions, jsEvent) {
@@ -9560,6 +9716,11 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
           value: event.target.value
         });
         this.setPropertyOnSiblings(element, "value", event.target.value, "value");
+      });
+      element.addEventListener("resetform", event => {
+        const defaultValue = this.data.defaultFieldValue || "";
+        element.value = elementData.userValue = defaultValue;
+        delete elementData.formattedValue;
       });
 
       let blurListener = event => {
@@ -9728,6 +9889,8 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
 
     this._setTextStyle(element);
 
+    this._setBackgroundColor(element);
+
     this.container.appendChild(element);
     return this.container;
   }
@@ -9811,6 +9974,10 @@ class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
         value: checked
       });
     });
+    element.addEventListener("resetform", event => {
+      const defaultValue = data.defaultFieldValue || "Off";
+      event.target.checked = defaultValue === data.exportValue;
+    });
 
     if (this.enableScripting && this.hasJSActions) {
       element.addEventListener("updatefromsandbox", jsEvent => {
@@ -9829,6 +9996,8 @@ class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
 
       this._setEventListeners(element, [["change", "Validate"], ["change", "Action"], ["focus", "Focus"], ["blur", "Blur"], ["mousedown", "Mouse Down"], ["mouseenter", "Mouse Enter"], ["mouseleave", "Mouse Exit"], ["mouseup", "Mouse Up"]], event => event.target.checked);
     }
+
+    this._setBackgroundColor(element);
 
     this.container.appendChild(element);
     return this.container;
@@ -9887,6 +10056,10 @@ class RadioButtonWidgetAnnotationElement extends WidgetAnnotationElement {
         value: checked
       });
     });
+    element.addEventListener("resetform", event => {
+      const defaultValue = data.defaultFieldValue;
+      event.target.checked = defaultValue !== null && defaultValue !== undefined && defaultValue === data.buttonValue;
+    });
 
     if (this.enableScripting && this.hasJSActions) {
       const pdfButtonValue = data.buttonValue;
@@ -9914,6 +10087,8 @@ class RadioButtonWidgetAnnotationElement extends WidgetAnnotationElement {
 
       this._setEventListeners(element, [["change", "Validate"], ["change", "Action"], ["focus", "Focus"], ["blur", "Blur"], ["mousedown", "Mouse Down"], ["mouseenter", "Mouse Enter"], ["mouseleave", "Mouse Exit"], ["mouseup", "Mouse Up"]], event => event.target.checked);
     }
+
+    this._setBackgroundColor(element);
 
     this.container.appendChild(element);
     return this.container;
@@ -9974,6 +10149,14 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
       }
     }
 
+    selectElement.addEventListener("resetform", event => {
+      const defaultValue = this.data.defaultFieldValue;
+
+      for (const option of selectElement.options) {
+        option.selected = option.value === defaultValue;
+      }
+    });
+
     for (const option of this.data.options) {
       const optionElement = document.createElement("option");
       optionElement.textContent = option.displayValue;
@@ -10015,12 +10198,13 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
       selectElement.addEventListener("updatefromsandbox", jsEvent => {
         const actions = {
           value(event) {
-            const options = selectElement.options;
             const value = event.detail.value;
             const values = new Set(Array.isArray(value) ? value : [value]);
-            Array.prototype.forEach.call(options, option => {
+
+            for (const option of selectElement.options) {
               option.selected = values.has(option.value);
-            });
+            }
+
             storage.setValue(id, {
               value: getValue(event, true)
             });
@@ -10109,10 +10293,11 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
 
           indices(event) {
             const indices = new Set(event.detail.indices);
-            const options = event.target.options;
-            Array.prototype.forEach.call(options, (option, i) => {
-              option.selected = indices.has(i);
-            });
+
+            for (const option of event.target.options) {
+              option.selected = indices.has(option.index);
+            }
+
             storage.setValue(id, {
               value: getValue(event, true)
             });
@@ -10154,6 +10339,8 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
         });
       });
     }
+
+    this._setBackgroundColor(selectElement);
 
     this.container.appendChild(selectElement);
     return this.container;
@@ -13195,6 +13382,8 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.XfaLayer = void 0;
 
+var _util = __w_pdfjs_require__(2);
+
 var _xfa_text = __w_pdfjs_require__(17);
 
 class XfaLayer {
@@ -13275,10 +13464,17 @@ class XfaLayer {
     }
   }
 
-  static setAttributes(html, element, storage, intent) {
+  static setAttributes({
+    html,
+    element,
+    storage = null,
+    intent,
+    linkService
+  }) {
     const {
       attributes
     } = element;
+    const isHTMLAnchorElement = html instanceof HTMLAnchorElement;
 
     if (attributes.type === "radio") {
       attributes.name = `${attributes.name}-${intent}`;
@@ -13295,11 +13491,23 @@ class XfaLayer {
         } else if (key === "class") {
           html.setAttribute(key, value.join(" "));
         } else {
+          if (isHTMLAnchorElement && (key === "href" || key === "newWindow")) {
+            continue;
+          }
+
           html.setAttribute(key, value);
         }
       } else {
         Object.assign(html.style, value);
       }
+    }
+
+    if (isHTMLAnchorElement) {
+      if (!linkService.addLinkAttributes) {
+        (0, _util.warn)("XfaLayer.setAttribute - missing `addLinkAttributes`-method on the `linkService`-instance.");
+      }
+
+      linkService.addLinkAttributes?.(html, attributes.href, attributes.newWindow);
     }
 
     if (storage && attributes.dataId) {
@@ -13309,12 +13517,18 @@ class XfaLayer {
 
   static render(parameters) {
     const storage = parameters.annotationStorage;
+    const linkService = parameters.linkService;
     const root = parameters.xfa;
     const intent = parameters.intent || "display";
     const rootHtml = document.createElement(root.name);
 
     if (root.attributes) {
-      this.setAttributes(rootHtml, root);
+      this.setAttributes({
+        html: rootHtml,
+        element: root,
+        intent,
+        linkService
+      });
     }
 
     const stack = [[root, -1, rootHtml]];
@@ -13361,7 +13575,13 @@ class XfaLayer {
       html.appendChild(childHtml);
 
       if (child.attributes) {
-        this.setAttributes(childHtml, child, storage, intent);
+        this.setAttributes({
+          html: childHtml,
+          element: child,
+          storage,
+          intent,
+          linkService
+        });
       }
 
       if (child.children && child.children.length > 0) {
@@ -15246,8 +15466,8 @@ var _svg = __w_pdfjs_require__(21);
 
 var _xfa_layer = __w_pdfjs_require__(22);
 
-const pdfjsVersion = '2.11.0';
-const pdfjsBuild = 'f1ceb00';
+const pdfjsVersion = '2.12.0';
+const pdfjsBuild = 'a474d6c';
 {
   if (_is_node.isNodeJS) {
     const {
