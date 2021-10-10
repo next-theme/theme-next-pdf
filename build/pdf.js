@@ -2824,84 +2824,92 @@ exports.PDFPageProxy = PDFPageProxy;
 class LoopbackPort {
   constructor() {
     this._listeners = [];
-    this._deferred = Promise.resolve(undefined);
+    this._deferred = Promise.resolve();
   }
 
   postMessage(obj, transfers) {
-    function cloneValue(value) {
-      if (typeof value === "function" || typeof value === "symbol" || value instanceof URL) {
-        throw new Error(`LoopbackPort.postMessage - cannot clone: ${value?.toString()}`);
+    function cloneValue(object) {
+      if (globalThis.structuredClone) {
+        return globalThis.structuredClone(object, transfers);
       }
 
-      if (typeof value !== "object" || value === null) {
-        return value;
-      }
-
-      if (cloned.has(value)) {
-        return cloned.get(value);
-      }
-
-      let buffer, result;
-
-      if ((buffer = value.buffer) && (0, _util.isArrayBuffer)(buffer)) {
-        if (transfers?.includes(buffer)) {
-          result = new value.constructor(buffer, value.byteOffset, value.byteLength);
-        } else {
-          result = new value.constructor(value);
+      function fallbackCloneValue(value) {
+        if (typeof value === "function" || typeof value === "symbol" || value instanceof URL) {
+          throw new Error(`LoopbackPort.postMessage - cannot clone: ${value?.toString()}`);
         }
 
+        if (typeof value !== "object" || value === null) {
+          return value;
+        }
+
+        if (cloned.has(value)) {
+          return cloned.get(value);
+        }
+
+        let buffer, result;
+
+        if ((buffer = value.buffer) && (0, _util.isArrayBuffer)(buffer)) {
+          if (transfers?.includes(buffer)) {
+            result = new value.constructor(buffer, value.byteOffset, value.byteLength);
+          } else {
+            result = new value.constructor(value);
+          }
+
+          cloned.set(value, result);
+          return result;
+        }
+
+        if (value instanceof Map) {
+          result = new Map();
+          cloned.set(value, result);
+
+          for (const [key, val] of value) {
+            result.set(key, fallbackCloneValue(val));
+          }
+
+          return result;
+        }
+
+        if (value instanceof Set) {
+          result = new Set();
+          cloned.set(value, result);
+
+          for (const val of value) {
+            result.add(fallbackCloneValue(val));
+          }
+
+          return result;
+        }
+
+        result = Array.isArray(value) ? [] : Object.create(null);
         cloned.set(value, result);
+
+        for (const i in value) {
+          let desc,
+              p = value;
+
+          while (!(desc = Object.getOwnPropertyDescriptor(p, i))) {
+            p = Object.getPrototypeOf(p);
+          }
+
+          if (typeof desc.value === "undefined") {
+            continue;
+          }
+
+          if (typeof desc.value === "function" && !value.hasOwnProperty?.(i)) {
+            continue;
+          }
+
+          result[i] = fallbackCloneValue(desc.value);
+        }
+
         return result;
       }
 
-      if (value instanceof Map) {
-        result = new Map();
-        cloned.set(value, result);
-
-        for (const [key, val] of value) {
-          result.set(key, cloneValue(val));
-        }
-
-        return result;
-      }
-
-      if (value instanceof Set) {
-        result = new Set();
-        cloned.set(value, result);
-
-        for (const val of value) {
-          result.add(cloneValue(val));
-        }
-
-        return result;
-      }
-
-      result = Array.isArray(value) ? [] : Object.create(null);
-      cloned.set(value, result);
-
-      for (const i in value) {
-        let desc,
-            p = value;
-
-        while (!(desc = Object.getOwnPropertyDescriptor(p, i))) {
-          p = Object.getPrototypeOf(p);
-        }
-
-        if (typeof desc.value === "undefined") {
-          continue;
-        }
-
-        if (typeof desc.value === "function" && !value.hasOwnProperty?.(i)) {
-          continue;
-        }
-
-        result[i] = cloneValue(desc.value);
-      }
-
-      return result;
+      const cloned = new WeakMap();
+      return fallbackCloneValue(object);
     }
 
-    const cloned = new WeakMap();
     const event = {
       data: cloneValue(obj)
     };
@@ -4134,7 +4142,7 @@ class InternalRenderTask {
 
 const version = '2.12.0';
 exports.version = version;
-const build = 'a474d6c';
+const build = '56e3ef6';
 exports.build = build;
 
 /***/ }),
@@ -15467,7 +15475,7 @@ var _svg = __w_pdfjs_require__(21);
 var _xfa_layer = __w_pdfjs_require__(22);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = 'a474d6c';
+const pdfjsBuild = '56e3ef6';
 {
   if (_is_node.isNodeJS) {
     const {

@@ -21548,6 +21548,8 @@ var _image_utils = __w_pdfjs_require__(58);
 
 var _stream = __w_pdfjs_require__(10);
 
+var _base_stream = __w_pdfjs_require__(6);
+
 var _bidi = __w_pdfjs_require__(59);
 
 var _colorspace = __w_pdfjs_require__(24);
@@ -24293,7 +24295,7 @@ class PartialEvaluator {
 
       const cidToGidMap = dict.get("CIDToGIDMap");
 
-      if ((0, _primitives.isStream)(cidToGidMap)) {
+      if (cidToGidMap instanceof _base_stream.BaseStream) {
         cidToGidBytes = cidToGidMap.getBytes();
       }
     }
@@ -24892,6 +24894,16 @@ class PartialEvaluator {
           }
 
           hash.update(widthsBuf.join());
+        }
+
+        const cidToGidMap = dict.getRaw("CIDToGIDMap") || baseDict.getRaw("CIDToGIDMap");
+
+        if (cidToGidMap instanceof _primitives.Name) {
+          hash.update(cidToGidMap.name);
+        } else if (cidToGidMap instanceof _primitives.Ref) {
+          hash.update(cidToGidMap.toString());
+        } else if (cidToGidMap instanceof _base_stream.BaseStream) {
+          hash.update(cidToGidMap.peekBytes());
         }
       }
     }
@@ -27901,8 +27913,6 @@ class Lexer {
 
     if (strBuf.length > 127) {
       (0, _util.warn)(`Name token is longer than allowed by the spec: ${strBuf.length}`);
-    } else if (strBuf.length === 0) {
-      (0, _util.warn)("Name token is empty.");
     }
 
     return _primitives.Name.get(strBuf.join(""));
@@ -72925,7 +72935,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = 'a474d6c';
+const pdfjsBuild = '56e3ef6';
 })();
 
 /******/ 	return __webpack_exports__;

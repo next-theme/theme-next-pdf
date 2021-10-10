@@ -15455,7 +15455,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = 'a474d6c';
+const pdfjsBuild = '56e3ef6';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
