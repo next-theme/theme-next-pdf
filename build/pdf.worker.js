@@ -3747,13 +3747,9 @@ class Page {
   }
 
   get xfaData() {
-    if (this.xfaFactory) {
-      return (0, _util.shadow)(this, "xfaData", {
-        bbox: this.xfaFactory.getBoundingBox(this.pageIndex)
-      });
-    }
-
-    return (0, _util.shadow)(this, "xfaData", null);
+    return (0, _util.shadow)(this, "xfaData", this.xfaFactory ? {
+      bbox: this.xfaFactory.getBoundingBox(this.pageIndex)
+    } : null);
   }
 
   save(handler, task, annotationStorage) {
@@ -4189,12 +4185,16 @@ class PDFDocument {
   }
 
   get numPages() {
+    let num = 0;
+
     if (this.xfaFactory) {
-      return (0, _util.shadow)(this, "numPages", this.xfaFactory.numberPages);
+      num = this.xfaFactory.numPages;
+    } else if (this.linearization) {
+      num = this.linearization.numPages;
+    } else {
+      num = this.catalog.numPages;
     }
 
-    const linearization = this.linearization;
-    const num = linearization ? linearization.numPages : this.catalog.numPages;
     return (0, _util.shadow)(this, "numPages", num);
   }
 
@@ -4294,24 +4294,21 @@ class PDFDocument {
   }
 
   get xfaFactory() {
+    let data;
+
     if (this.pdfManager.enableXfa && this.catalog.needsRendering && this.formInfo.hasXfa && !this.formInfo.hasAcroForm) {
-      const data = this.xfaData;
-      return (0, _util.shadow)(this, "xfaFactory", data ? new _factory.XFAFactory(data) : null);
+      data = this.xfaData;
     }
 
-    return (0, _util.shadow)(this, "xfaFaxtory", null);
+    return (0, _util.shadow)(this, "xfaFactory", data ? new _factory.XFAFactory(data) : null);
   }
 
   get isPureXfa() {
-    return this.xfaFactory && this.xfaFactory.isValid();
+    return this.xfaFactory ? this.xfaFactory.isValid() : false;
   }
 
   get htmlForXfa() {
-    if (this.xfaFactory) {
-      return this.xfaFactory.getPages();
-    }
-
-    return null;
+    return this.xfaFactory ? this.xfaFactory.getPages() : null;
   }
 
   async loadXfaImages() {
@@ -4483,11 +4480,7 @@ class PDFDocument {
   }
 
   async serializeXfaData(annotationStorage) {
-    if (this.xfaFactory) {
-      return this.xfaFactory.serializeData(annotationStorage);
-    }
-
-    return null;
+    return this.xfaFactory ? this.xfaFactory.serializeData(annotationStorage) : null;
   }
 
   get formInfo() {
@@ -37705,6 +37698,54 @@ class Font {
         }
 
         hasShortCmap = true;
+      } else if (format === 2) {
+        const subHeaderKeys = [];
+        let maxSubHeaderKey = 0;
+
+        for (let i = 0; i < 256; i++) {
+          const subHeaderKey = file.getUint16() >> 3;
+          subHeaderKeys.push(subHeaderKey);
+          maxSubHeaderKey = Math.max(subHeaderKey, maxSubHeaderKey);
+        }
+
+        const subHeaders = [];
+
+        for (let i = 0; i <= maxSubHeaderKey; i++) {
+          subHeaders.push({
+            firstCode: file.getUint16(),
+            entryCount: file.getUint16(),
+            idDelta: signedInt16(file.getByte(), file.getByte()),
+            idRangePos: file.pos + file.getUint16()
+          });
+        }
+
+        for (let i = 0; i < 256; i++) {
+          if (subHeaderKeys[i] === 0) {
+            file.pos = subHeaders[0].idRangePos + 2 * i;
+            glyphId = file.getUint16();
+            mappings.push({
+              charCode: i,
+              glyphId
+            });
+          } else {
+            const s = subHeaders[subHeaderKeys[i]];
+
+            for (j = 0; j < s.entryCount; j++) {
+              const charCode = (i << 8) + j + s.firstCode;
+              file.pos = s.idRangePos + 2 * j;
+              glyphId = file.getUint16();
+
+              if (glyphId !== 0) {
+                glyphId = (glyphId + s.idDelta) % 65536;
+              }
+
+              mappings.push({
+                charCode,
+                glyphId
+              });
+            }
+          }
+        }
       } else if (format === 4) {
         const segCount = file.getUint16() >> 1;
         file.skip(6);
@@ -52708,21 +52749,13 @@ class Catalog {
   get version() {
     const version = this._catDict.get("Version");
 
-    if (!(0, _primitives.isName)(version)) {
-      return (0, _util.shadow)(this, "version", null);
-    }
-
-    return (0, _util.shadow)(this, "version", version.name);
+    return (0, _util.shadow)(this, "version", version instanceof _primitives.Name ? version.name : null);
   }
 
   get needsRendering() {
     const needsRendering = this._catDict.get("NeedsRendering");
 
-    if (!(0, _util.isBool)(needsRendering)) {
-      return (0, _util.shadow)(this, "needsRendering", false);
-    }
-
-    return (0, _util.shadow)(this, "needsRendering", needsRendering);
+    return (0, _util.shadow)(this, "needsRendering", typeof needsRendering === "boolean" ? needsRendering : false);
   }
 
   get collection() {
@@ -57691,7 +57724,7 @@ class XFAFactory {
     return this.dims[pageIndex];
   }
 
-  get numberPages() {
+  get numPages() {
     if (!this.pages) {
       this._createPages();
     }
@@ -60272,7 +60305,7 @@ const MAX_ATTEMPTS_FOR_LRTB_LAYOUT = 2;
 const MAX_EMPTY_PAGES = 3;
 const DEFAULT_TAB_INDEX = 5000;
 const HEADING_PATTERN = /^H(\d+)$/;
-const MIMES = new Set(["image/gif", "image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/apng", "image/x-png", "image/bmp", "image/x-ms-bmp", "image/tiff", "image/tif"]);
+const MIMES = new Set(["image/gif", "image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/apng", "image/x-png", "image/bmp", "image/x-ms-bmp", "image/tiff", "image/tif", "application/octet-stream"]);
 const IMAGES_HEADERS = [[[0x42, 0x4d], "image/bmp"], [[0xff, 0xd8, 0xff], "image/jpeg"], [[0x49, 0x49, 0x2a, 0x00], "image/tiff"], [[0x4d, 0x4d, 0x00, 0x2a], "image/tiff"], [[0x47, 0x49, 0x46, 0x38, 0x39, 0x61], "image/gif"], [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], "image/png"]];
 
 function getBorderDims(node) {
@@ -72935,7 +72968,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = '56e3ef6';
+const pdfjsBuild = '52fce0d';
 })();
 
 /******/ 	return __webpack_exports__;

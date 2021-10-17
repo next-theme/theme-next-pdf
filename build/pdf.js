@@ -3419,17 +3419,15 @@ class WorkerTransport {
       const fullReader = this._fullReader;
       fullReader.headersReady.then(() => {
         if (!fullReader.isStreamingSupported || !fullReader.isRangeSupported) {
-          if (this._lastProgress && loadingTask.onProgress) {
-            loadingTask.onProgress(this._lastProgress);
+          if (this._lastProgress) {
+            loadingTask.onProgress?.(this._lastProgress);
           }
 
           fullReader.onProgress = evt => {
-            if (loadingTask.onProgress) {
-              loadingTask.onProgress({
-                loaded: evt.loaded,
-                total: evt.total
-              });
-            }
+            loadingTask.onProgress?.({
+              loaded: evt.loaded,
+              total: evt.total
+            });
           };
         }
 
@@ -3540,13 +3538,10 @@ class WorkerTransport {
       return this._passwordCapability.promise;
     });
     messageHandler.on("DataLoaded", data => {
-      if (loadingTask.onProgress) {
-        loadingTask.onProgress({
-          loaded: data.length,
-          total: data.length
-        });
-      }
-
+      loadingTask.onProgress?.({
+        loaded: data.length,
+        total: data.length
+      });
       this.downloadInfoCapability.resolve(data);
     });
     messageHandler.on("StartRenderPage", data => {
@@ -3622,14 +3617,14 @@ class WorkerTransport {
     });
     messageHandler.on("obj", data => {
       if (this.destroyed) {
-        return undefined;
+        return;
       }
 
       const [id, pageIndex, type, imageData] = data;
       const pageProxy = this.pageCache[pageIndex];
 
       if (pageProxy.objs.has(id)) {
-        return undefined;
+        return;
       }
 
       switch (type) {
@@ -3650,20 +3645,16 @@ class WorkerTransport {
         default:
           throw new Error(`Got unknown object type ${type}`);
       }
-
-      return undefined;
     });
     messageHandler.on("DocProgress", data => {
       if (this.destroyed) {
         return;
       }
 
-      if (loadingTask.onProgress) {
-        loadingTask.onProgress({
-          loaded: data.loaded,
-          total: data.total
-        });
-      }
+      loadingTask.onProgress?.({
+        loaded: data.loaded,
+        total: data.total
+      });
     });
     messageHandler.on("UnsupportedFeature", this._onUnsupportedFeature.bind(this));
     messageHandler.on("FetchBuiltInCMap", data => {
@@ -3697,9 +3688,7 @@ class WorkerTransport {
       return;
     }
 
-    if (this.loadingTask.onUnsupportedFeature) {
-      this.loadingTask.onUnsupportedFeature(featureId);
-    }
+    this.loadingTask.onUnsupportedFeature?.(featureId);
   }
 
   getData() {
@@ -4142,7 +4131,7 @@ class InternalRenderTask {
 
 const version = '2.12.0';
 exports.version = version;
-const build = '56e3ef6';
+const build = '52fce0d';
 exports.build = build;
 
 /***/ }),
@@ -10563,6 +10552,7 @@ class LineAnnotationElement extends AnnotationElement {
     line.setAttribute("y2", data.rect[3] - data.lineCoordinates[3]);
     line.setAttribute("stroke-width", data.borderStyle.width || 1);
     line.setAttribute("stroke", "transparent");
+    line.setAttribute("fill", "transparent");
     svg.appendChild(line);
     this.container.append(svg);
 
@@ -10596,7 +10586,7 @@ class SquareAnnotationElement extends AnnotationElement {
     square.setAttribute("height", height - borderWidth);
     square.setAttribute("stroke-width", borderWidth || 1);
     square.setAttribute("stroke", "transparent");
-    square.setAttribute("fill", "none");
+    square.setAttribute("fill", "transparent");
     svg.appendChild(square);
     this.container.append(svg);
 
@@ -10630,7 +10620,7 @@ class CircleAnnotationElement extends AnnotationElement {
     circle.setAttribute("ry", height / 2 - borderWidth / 2);
     circle.setAttribute("stroke-width", borderWidth || 1);
     circle.setAttribute("stroke", "transparent");
-    circle.setAttribute("fill", "none");
+    circle.setAttribute("fill", "transparent");
     svg.appendChild(circle);
     this.container.append(svg);
 
@@ -10671,7 +10661,7 @@ class PolylineAnnotationElement extends AnnotationElement {
     polyline.setAttribute("points", points);
     polyline.setAttribute("stroke-width", data.borderStyle.width || 1);
     polyline.setAttribute("stroke", "transparent");
-    polyline.setAttribute("fill", "none");
+    polyline.setAttribute("fill", "transparent");
     svg.appendChild(polyline);
     this.container.append(svg);
 
@@ -10744,7 +10734,7 @@ class InkAnnotationElement extends AnnotationElement {
       polyline.setAttribute("points", points);
       polyline.setAttribute("stroke-width", data.borderStyle.width || 1);
       polyline.setAttribute("stroke", "transparent");
-      polyline.setAttribute("fill", "none");
+      polyline.setAttribute("fill", "transparent");
 
       this._createPopup(polyline, data);
 
@@ -15475,7 +15465,7 @@ var _svg = __w_pdfjs_require__(21);
 var _xfa_layer = __w_pdfjs_require__(22);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = '56e3ef6';
+const pdfjsBuild = '52fce0d';
 {
   if (_is_node.isNodeJS) {
     const {
