@@ -1533,6 +1533,75 @@ class Util {
     return result;
   }
 
+  static bezierBoundingBox(x0, y0, x1, y1, x2, y2, x3, y3) {
+    const tvalues = [],
+          bounds = [[], []];
+    let a, b, c, t, t1, t2, b2ac, sqrtb2ac;
+
+    for (let i = 0; i < 2; ++i) {
+      if (i === 0) {
+        b = 6 * x0 - 12 * x1 + 6 * x2;
+        a = -3 * x0 + 9 * x1 - 9 * x2 + 3 * x3;
+        c = 3 * x1 - 3 * x0;
+      } else {
+        b = 6 * y0 - 12 * y1 + 6 * y2;
+        a = -3 * y0 + 9 * y1 - 9 * y2 + 3 * y3;
+        c = 3 * y1 - 3 * y0;
+      }
+
+      if (Math.abs(a) < 1e-12) {
+        if (Math.abs(b) < 1e-12) {
+          continue;
+        }
+
+        t = -c / b;
+
+        if (0 < t && t < 1) {
+          tvalues.push(t);
+        }
+
+        continue;
+      }
+
+      b2ac = b * b - 4 * c * a;
+      sqrtb2ac = Math.sqrt(b2ac);
+
+      if (b2ac < 0) {
+        continue;
+      }
+
+      t1 = (-b + sqrtb2ac) / (2 * a);
+
+      if (0 < t1 && t1 < 1) {
+        tvalues.push(t1);
+      }
+
+      t2 = (-b - sqrtb2ac) / (2 * a);
+
+      if (0 < t2 && t2 < 1) {
+        tvalues.push(t2);
+      }
+    }
+
+    let j = tvalues.length,
+        mt;
+    const jlen = j;
+
+    while (j--) {
+      t = tvalues[j];
+      mt = 1 - t;
+      bounds[0][j] = mt * mt * mt * x0 + 3 * mt * mt * t * x1 + 3 * mt * t * t * x2 + t * t * t * x3;
+      bounds[1][j] = mt * mt * mt * y0 + 3 * mt * mt * t * y1 + 3 * mt * t * t * y2 + t * t * t * y3;
+    }
+
+    bounds[0][jlen] = x0;
+    bounds[1][jlen] = y0;
+    bounds[0][jlen + 1] = x3;
+    bounds[1][jlen + 1] = y3;
+    bounds[0].length = bounds[1].length = jlen + 2;
+    return [Math.min(...bounds[0]), Math.min(...bounds[1]), Math.max(...bounds[0]), Math.max(...bounds[1])];
+  }
+
 }
 
 exports.Util = Util;
@@ -1654,7 +1723,7 @@ function createPromiseCapability() {
 }
 
 function createObjectURL(data, contentType = "", forceDataSchema = false) {
-  if (URL.createObjectURL && !forceDataSchema) {
+  if (URL.createObjectURL && typeof Blob !== "undefined" && !forceDataSchema) {
     return URL.createObjectURL(new Blob([data], {
       type: contentType
     }));
@@ -4541,6 +4610,7 @@ class PDFDocument {
 
     const docInfo = {
       PDFFormatVersion: version,
+      Language: this.catalog.lang,
       IsLinearized: !!this.linearization,
       IsAcroFormPresent: this.formInfo.hasAcroForm,
       IsXFAPresent: this.formInfo.hasXfa,
@@ -19946,6 +20016,10 @@ class SquareAnnotation extends MarkupAnnotation {
 
       const fillAlpha = fillColor ? strokeAlpha : null;
 
+      if (this.borderStyle.width === 0 && !fillColor) {
+        return;
+      }
+
       this._setDefaultAppearance({
         xref: parameters.xref,
         extra: `${this.borderStyle.width} w`,
@@ -19991,6 +20065,11 @@ class CircleAnnotation extends MarkupAnnotation {
       }
 
       const fillAlpha = fillColor ? strokeAlpha : null;
+
+      if (this.borderStyle.width === 0 && !fillColor) {
+        return;
+      }
+
       const controlPointsDistance = 4 / 3 * Math.tan(Math.PI / (2 * 4));
 
       this._setDefaultAppearance({
@@ -23408,6 +23487,8 @@ class PartialEvaluator {
     resources = resources || _primitives.Dict.empty;
     stateManager = stateManager || new StateManager(new TextState());
     const WhitespaceRegexp = /\s/g;
+    const DiacriticRegExp = new RegExp("^\\p{Mn}$", "u");
+    const NormalizedUnicodes = (0, _unicode.getNormalizedUnicodes)();
     const textContent = {
       items: [],
       styles: Object.create(null)
@@ -23420,21 +23501,20 @@ class PartialEvaluator {
       width: 0,
       height: 0,
       vertical: false,
-      lastCharSize: 0,
       prevTransform: null,
       textAdvanceScale: 0,
-      spaceWidth: 0,
       spaceInFlowMin: 0,
       spaceInFlowMax: 0,
       trackingSpaceMin: Infinity,
+      negativeSpaceMax: -Infinity,
       transform: null,
       fontName: null,
-      hasEOL: false,
-      isLastCharWhiteSpace: false
+      hasEOL: false
     };
-    const TRACKING_SPACE_FACTOR = 0.3;
-    const SPACE_IN_FLOW_MIN_FACTOR = 0.3;
-    const SPACE_IN_FLOW_MAX_FACTOR = 1.3;
+    const TRACKING_SPACE_FACTOR = 0.1;
+    const NEGATIVE_SPACE_FACTOR = -0.2;
+    const SPACE_IN_FLOW_MIN_FACTOR = 0.1;
+    const SPACE_IN_FLOW_MAX_FACTOR = 0.6;
     const self = this;
     const xref = this.xref;
     const showSpacedTextBuffer = [];
@@ -23493,19 +23573,10 @@ class PartialEvaluator {
       const scaleLineX = Math.hypot(textState.textLineMatrix[0], textState.textLineMatrix[1]);
       const scaleCtmX = Math.hypot(textState.ctm[0], textState.ctm[1]);
       textContentItem.textAdvanceScale = scaleCtmX * scaleLineX;
-      textContentItem.lastCharSize = textContentItem.lastCharSize || 0;
-      const spaceWidth = font.spaceWidth / 1000 * textState.fontSize;
-
-      if (spaceWidth) {
-        textContentItem.spaceWidth = spaceWidth;
-        textContentItem.trackingSpaceMin = spaceWidth * TRACKING_SPACE_FACTOR;
-        textContentItem.spaceInFlowMin = spaceWidth * SPACE_IN_FLOW_MIN_FACTOR;
-        textContentItem.spaceInFlowMax = spaceWidth * SPACE_IN_FLOW_MAX_FACTOR;
-      } else {
-        textContentItem.spaceWidth = 0;
-        textContentItem.trackingSpaceMin = Infinity;
-      }
-
+      textContentItem.trackingSpaceMin = textState.fontSize * TRACKING_SPACE_FACTOR;
+      textContentItem.negativeSpaceMax = textState.fontSize * NEGATIVE_SPACE_FACTOR;
+      textContentItem.spaceInFlowMin = textState.fontSize * SPACE_IN_FLOW_MIN_FACTOR;
+      textContentItem.spaceInFlowMax = textState.fontSize * SPACE_IN_FLOW_MAX_FACTOR;
       textContentItem.hasEOL = false;
       textContentItem.initialized = true;
       return textContentItem;
@@ -23577,38 +23648,69 @@ class PartialEvaluator {
       });
     }
 
-    function compareWithLastPosition(fontSize) {
+    function compareWithLastPosition() {
       if (!combineTextItems || !textState.font || !textContentItem.prevTransform) {
         return;
       }
 
       const currentTransform = getCurrentTextTransform();
-      const posX = currentTransform[4];
-      const posY = currentTransform[5];
-      const lastPosX = textContentItem.prevTransform[4];
-      const lastPosY = textContentItem.prevTransform[5];
+      let posX = currentTransform[4];
+      let posY = currentTransform[5];
+      let lastPosX = textContentItem.prevTransform[4];
+      let lastPosY = textContentItem.prevTransform[5];
 
       if (lastPosX === posX && lastPosY === posY) {
         return;
       }
 
-      const advanceX = (posX - lastPosX) / textContentItem.textAdvanceScale;
-      const advanceY = (posY - lastPosY) / textContentItem.textAdvanceScale;
-      const HALF_LAST_CHAR = -0.5 * textContentItem.lastCharSize;
+      let rotate = 0;
+
+      if (currentTransform[0] && currentTransform[1] === 0 && currentTransform[2] === 0) {
+        rotate = currentTransform[0] > 0 ? 0 : 180;
+      } else if (currentTransform[1] && currentTransform[0] === 0 && currentTransform[3] === 0) {
+        rotate += currentTransform[1] > 0 ? 90 : 270;
+      }
+
+      if (rotate !== 0) {
+        switch (rotate) {
+          case 90:
+            [posX, posY] = [posY, posX];
+            [lastPosX, lastPosY] = [lastPosY, lastPosX];
+            break;
+
+          case 180:
+            [posX, posY, lastPosX, lastPosY] = [-posX, -posY, -lastPosX, -lastPosY];
+            break;
+
+          case 270:
+            [posX, posY] = [-posY, -posX];
+            [lastPosX, lastPosY] = [-lastPosY, -lastPosX];
+            break;
+        }
+      }
 
       if (textState.font.vertical) {
-        if (Math.abs(advanceX) > textContentItem.width / textContentItem.textAdvanceScale) {
+        const advanceY = (lastPosY - posY) / textContentItem.textAdvanceScale;
+        const advanceX = posX - lastPosX;
+
+        if (advanceY < textContentItem.negativeSpaceMax) {
+          if (Math.abs(advanceX) > 0.5 * textContentItem.width) {
+            appendEOL();
+            return;
+          }
+
+          flushTextContentItem();
+          return;
+        }
+
+        if (Math.abs(advanceX) > textContentItem.height) {
           appendEOL();
           return;
         }
 
-        if (HALF_LAST_CHAR > advanceY) {
-          return;
-        }
-
-        if (advanceY > textContentItem.trackingSpaceMin) {
+        if (advanceY <= textContentItem.trackingSpaceMin) {
           textContentItem.height += advanceY;
-        } else if (!addFakeSpaces(advanceY, 0, textContentItem.prevTransform)) {
+        } else if (!addFakeSpaces(advanceY, textContentItem.prevTransform)) {
           if (textContentItem.str.length === 0) {
             textContent.items.push({
               str: " ",
@@ -23619,7 +23721,6 @@ class PartialEvaluator {
               fontName: textContentItem.fontName,
               hasEOL: false
             });
-            textContentItem.isLastCharWhiteSpace = true;
           } else {
             textContentItem.height += advanceY;
           }
@@ -23628,18 +23729,27 @@ class PartialEvaluator {
         return;
       }
 
-      if (Math.abs(advanceY) > textContentItem.height / textContentItem.textAdvanceScale) {
-        appendEOL();
+      const advanceX = (posX - lastPosX) / textContentItem.textAdvanceScale;
+      const advanceY = posY - lastPosY;
+
+      if (advanceX < textContentItem.negativeSpaceMax) {
+        if (Math.abs(advanceY) > 0.5 * textContentItem.height) {
+          appendEOL();
+          return;
+        }
+
+        flushTextContentItem();
         return;
       }
 
-      if (HALF_LAST_CHAR > advanceX) {
+      if (Math.abs(advanceY) > textContentItem.height) {
+        appendEOL();
         return;
       }
 
       if (advanceX <= textContentItem.trackingSpaceMin) {
         textContentItem.width += advanceX;
-      } else if (!addFakeSpaces(advanceX, 0, textContentItem.prevTransform)) {
+      } else if (!addFakeSpaces(advanceX, textContentItem.prevTransform)) {
         if (textContentItem.str.length === 0) {
           textContent.items.push({
             str: " ",
@@ -23650,7 +23760,6 @@ class PartialEvaluator {
             fontName: textContentItem.fontName,
             hasEOL: false
           });
-          textContentItem.isLastCharWhiteSpace = true;
         } else {
           textContentItem.width += advanceX;
         }
@@ -23659,8 +23768,7 @@ class PartialEvaluator {
 
     function buildTextContentItem({
       chars,
-      extraSpacing,
-      isFirstChunk
+      extraSpacing
     }) {
       const font = textState.font;
 
@@ -23671,87 +23779,73 @@ class PartialEvaluator {
           if (!font.vertical) {
             textState.translateTextMatrix(charSpacing * textState.textHScale, 0);
           } else {
-            textState.translateTextMatrix(0, charSpacing);
+            textState.translateTextMatrix(0, -charSpacing);
           }
         }
 
         return;
       }
 
-      const NormalizedUnicodes = (0, _unicode.getNormalizedUnicodes)();
       const glyphs = font.charsToGlyphs(chars);
       const scale = textState.fontMatrix[0] * textState.fontSize;
 
-      if (isFirstChunk) {
-        compareWithLastPosition(scale);
-      }
-
-      let textChunk = ensureTextContentItem();
-      let size = 0;
-      let lastCharSize = 0;
-
       for (let i = 0, ii = glyphs.length; i < ii; i++) {
         const glyph = glyphs[i];
-        let charSpacing = textState.charSpacing + (i === ii - 1 ? extraSpacing : 0);
-        let glyphUnicode = glyph.unicode;
+        let charSpacing = textState.charSpacing + (i + 1 === ii ? extraSpacing : 0);
+        let glyphWidth = glyph.width;
 
-        if (glyph.isSpace) {
-          charSpacing += textState.wordSpacing;
-          textChunk.isLastCharWhiteSpace = true;
-        } else {
-          glyphUnicode = NormalizedUnicodes[glyphUnicode] || glyphUnicode;
-          glyphUnicode = (0, _unicode.reverseIfRtl)(glyphUnicode);
-          textChunk.isLastCharWhiteSpace = false;
+        if (font.vertical) {
+          glyphWidth = glyph.vmetric ? glyph.vmetric[0] : -glyphWidth;
         }
 
-        textChunk.str.push(glyphUnicode);
-        const glyphWidth = font.vertical && glyph.vmetric ? glyph.vmetric[0] : glyph.width;
         let scaledDim = glyphWidth * scale;
+        let glyphUnicode = glyph.unicode;
+
+        if (glyphUnicode === " " && (i === 0 || i + 1 === ii || glyphs[i - 1].unicode === " " || glyphs[i + 1].unicode === " ")) {
+          if (!font.vertical) {
+            charSpacing += scaledDim + textState.wordSpacing;
+            textState.translateTextMatrix(charSpacing * textState.textHScale, 0);
+          } else {
+            charSpacing += -scaledDim + textState.wordSpacing;
+            textState.translateTextMatrix(0, -charSpacing);
+          }
+
+          continue;
+        }
+
+        compareWithLastPosition();
+        const textChunk = ensureTextContentItem();
+
+        if (DiacriticRegExp.test(glyph.unicode)) {
+          scaledDim = 0;
+        }
 
         if (!font.vertical) {
           scaledDim *= textState.textHScale;
           textState.translateTextMatrix(scaledDim, 0);
+          textChunk.width += scaledDim;
         } else {
           textState.translateTextMatrix(0, scaledDim);
           scaledDim = Math.abs(scaledDim);
+          textChunk.height += scaledDim;
         }
 
-        size += scaledDim;
+        if (scaledDim) {
+          textChunk.prevTransform = getCurrentTextTransform();
+        }
+
+        glyphUnicode = NormalizedUnicodes[glyphUnicode] || glyphUnicode;
+        glyphUnicode = (0, _unicode.reverseIfRtl)(glyphUnicode);
+        textChunk.str.push(glyphUnicode);
 
         if (charSpacing) {
           if (!font.vertical) {
-            charSpacing *= textState.textHScale;
-          }
-
-          scaledDim += charSpacing;
-          const wasSplit = charSpacing > textContentItem.trackingSpaceMin && addFakeSpaces(charSpacing, size);
-
-          if (!font.vertical) {
-            textState.translateTextMatrix(charSpacing, 0);
+            textState.translateTextMatrix(charSpacing * textState.textHScale, 0);
           } else {
-            textState.translateTextMatrix(0, charSpacing);
-          }
-
-          if (wasSplit) {
-            textChunk = ensureTextContentItem();
-            size = 0;
-          } else {
-            size += charSpacing;
+            textState.translateTextMatrix(0, -charSpacing);
           }
         }
-
-        lastCharSize = scaledDim;
       }
-
-      textChunk.lastCharSize = lastCharSize;
-
-      if (!font.vertical) {
-        textChunk.width += size;
-      } else {
-        textChunk.height += size;
-      }
-
-      textChunk.prevTransform = getCurrentTextTransform();
     }
 
     function appendEOL() {
@@ -23769,16 +23863,12 @@ class PartialEvaluator {
           hasEOL: true
         });
       }
-
-      textContentItem.isLastCharWhiteSpace = false;
-      textContentItem.lastCharSize = 0;
     }
 
-    function addFakeSpaces(width, size, transf = null) {
+    function addFakeSpaces(width, transf) {
       if (textContentItem.spaceInFlowMin <= width && width <= textContentItem.spaceInFlowMax) {
         if (textContentItem.initialized) {
           textContentItem.str.push(" ");
-          textContentItem.isLastCharWhiteSpace = true;
         }
 
         return false;
@@ -23786,29 +23876,19 @@ class PartialEvaluator {
 
       const fontName = textContentItem.fontName;
       let height = 0;
-      width *= textContentItem.textAdvanceScale;
 
-      if (!textContentItem.vertical) {
-        textContentItem.width += size;
-      } else {
-        textContentItem.height += size;
+      if (textContentItem.vertical) {
         height = width;
         width = 0;
       }
 
       flushTextContentItem();
-
-      if (textContentItem.isLastCharWhiteSpace) {
-        return true;
-      }
-
-      textContentItem.isLastCharWhiteSpace = true;
       textContent.items.push({
         str: " ",
         dir: "ltr",
         width,
         height,
-        transform: transf ? transf : getCurrentTextTransform(),
+        transform: transf || getCurrentTextTransform(),
         fontName,
         hasEOL: false
       });
@@ -23894,17 +23974,14 @@ class PartialEvaluator {
             return;
 
           case _util.OPS.setTextRise:
-            flushTextContentItem();
             textState.textRise = args[0];
             break;
 
           case _util.OPS.setHScale:
-            flushTextContentItem();
             textState.textHScale = args[0] / 100;
             break;
 
           case _util.OPS.setLeading:
-            flushTextContentItem();
             textState.leading = args[0];
             break;
 
@@ -23914,14 +23991,12 @@ class PartialEvaluator {
             break;
 
           case _util.OPS.setLeadingMoveText:
-            flushTextContentItem();
             textState.leading = -args[1];
             textState.translateTextLineMatrix(args[0], args[1]);
             textState.textMatrix = textState.textLineMatrix.slice();
             break;
 
           case _util.OPS.nextLine:
-            appendEOL();
             textState.carriageReturn();
             break;
 
@@ -23940,7 +24015,6 @@ class PartialEvaluator {
             break;
 
           case _util.OPS.beginText:
-            flushTextContentItem();
             textState.textMatrix = _util.IDENTITY_MATRIX.slice();
             textState.textLineMatrix = _util.IDENTITY_MATRIX.slice();
             break;
@@ -23953,7 +24027,6 @@ class PartialEvaluator {
 
             const spaceFactor = (textState.font.vertical ? 1 : -1) * textState.fontSize / 1000;
             const elements = args[0];
-            let isFirstChunk = true;
 
             for (let i = 0, ii = elements.length; i < ii - 1; i++) {
               const item = elements[i];
@@ -23965,13 +24038,8 @@ class PartialEvaluator {
                 showSpacedTextBuffer.length = 0;
                 buildTextContentItem({
                   chars: str,
-                  extraSpacing: item * spaceFactor,
-                  isFirstChunk
+                  extraSpacing: item * spaceFactor
                 });
-
-                if (str && isFirstChunk) {
-                  isFirstChunk = false;
-                }
               }
             }
 
@@ -23986,8 +24054,7 @@ class PartialEvaluator {
               showSpacedTextBuffer.length = 0;
               buildTextContentItem({
                 chars: str,
-                extraSpacing: 0,
-                isFirstChunk
+                extraSpacing: 0
               });
             }
 
@@ -24001,8 +24068,7 @@ class PartialEvaluator {
 
             buildTextContentItem({
               chars: args[0],
-              extraSpacing: 0,
-              isFirstChunk: true
+              extraSpacing: 0
             });
             break;
 
@@ -24012,13 +24078,10 @@ class PartialEvaluator {
               continue;
             }
 
-            textContentItem.hasEOL = true;
-            flushTextContentItem();
             textState.carriageReturn();
             buildTextContentItem({
               chars: args[0],
-              extraSpacing: 0,
-              isFirstChunk: true
+              extraSpacing: 0
             });
             break;
 
@@ -24028,15 +24091,12 @@ class PartialEvaluator {
               continue;
             }
 
-            textContentItem.hasEOL = true;
-            flushTextContentItem();
             textState.wordSpacing = args[0];
             textState.charSpacing = args[1];
             textState.carriageReturn();
             buildTextContentItem({
               chars: args[2],
-              extraSpacing: 0,
-              isFirstChunk: true
+              extraSpacing: 0
             });
             break;
 
@@ -52752,6 +52812,12 @@ class Catalog {
     return (0, _util.shadow)(this, "version", version instanceof _primitives.Name ? version.name : null);
   }
 
+  get lang() {
+    const lang = this._catDict.get("Lang");
+
+    return (0, _util.shadow)(this, "lang", typeof lang === "string" ? (0, _util.stringToPDFString)(lang) : null);
+  }
+
   get needsRendering() {
     const needsRendering = this._catDict.get("NeedsRendering");
 
@@ -72968,7 +73034,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = '52fce0d';
+const pdfjsBuild = '0aaa4e3';
 })();
 
 /******/ 	return __webpack_exports__;

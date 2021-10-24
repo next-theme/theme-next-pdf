@@ -1365,6 +1365,75 @@ class Util {
     return result;
   }
 
+  static bezierBoundingBox(x0, y0, x1, y1, x2, y2, x3, y3) {
+    const tvalues = [],
+          bounds = [[], []];
+    let a, b, c, t, t1, t2, b2ac, sqrtb2ac;
+
+    for (let i = 0; i < 2; ++i) {
+      if (i === 0) {
+        b = 6 * x0 - 12 * x1 + 6 * x2;
+        a = -3 * x0 + 9 * x1 - 9 * x2 + 3 * x3;
+        c = 3 * x1 - 3 * x0;
+      } else {
+        b = 6 * y0 - 12 * y1 + 6 * y2;
+        a = -3 * y0 + 9 * y1 - 9 * y2 + 3 * y3;
+        c = 3 * y1 - 3 * y0;
+      }
+
+      if (Math.abs(a) < 1e-12) {
+        if (Math.abs(b) < 1e-12) {
+          continue;
+        }
+
+        t = -c / b;
+
+        if (0 < t && t < 1) {
+          tvalues.push(t);
+        }
+
+        continue;
+      }
+
+      b2ac = b * b - 4 * c * a;
+      sqrtb2ac = Math.sqrt(b2ac);
+
+      if (b2ac < 0) {
+        continue;
+      }
+
+      t1 = (-b + sqrtb2ac) / (2 * a);
+
+      if (0 < t1 && t1 < 1) {
+        tvalues.push(t1);
+      }
+
+      t2 = (-b - sqrtb2ac) / (2 * a);
+
+      if (0 < t2 && t2 < 1) {
+        tvalues.push(t2);
+      }
+    }
+
+    let j = tvalues.length,
+        mt;
+    const jlen = j;
+
+    while (j--) {
+      t = tvalues[j];
+      mt = 1 - t;
+      bounds[0][j] = mt * mt * mt * x0 + 3 * mt * mt * t * x1 + 3 * mt * t * t * x2 + t * t * t * x3;
+      bounds[1][j] = mt * mt * mt * y0 + 3 * mt * mt * t * y1 + 3 * mt * t * t * y2 + t * t * t * y3;
+    }
+
+    bounds[0][jlen] = x0;
+    bounds[1][jlen] = y0;
+    bounds[0][jlen + 1] = x3;
+    bounds[1][jlen + 1] = y3;
+    bounds[0].length = bounds[1].length = jlen + 2;
+    return [Math.min(...bounds[0]), Math.min(...bounds[1]), Math.max(...bounds[0]), Math.max(...bounds[1])];
+  }
+
 }
 
 exports.Util = Util;
@@ -1486,7 +1555,7 @@ function createPromiseCapability() {
 }
 
 function createObjectURL(data, contentType = "", forceDataSchema = false) {
-  if (URL.createObjectURL && !forceDataSchema) {
+  if (URL.createObjectURL && typeof Blob !== "undefined" && !forceDataSchema) {
     return URL.createObjectURL(new Blob([data], {
       type: contentType
     }));
@@ -4131,7 +4200,7 @@ class InternalRenderTask {
 
 const version = '2.12.0';
 exports.version = version;
-const build = '52fce0d';
+const build = '0aaa4e3';
 exports.build = build;
 
 /***/ }),
@@ -4754,6 +4823,137 @@ const MAX_SIZE_TO_COMPILE = 1000;
 const FULL_CHUNK_HEIGHT = 16;
 const LINEWIDTH_SCALE_FACTOR = 1.000001;
 
+function mirrorContextOperations(ctx, destCtx) {
+  if (ctx._removeMirroring) {
+    throw new Error("Context is already forwarding operations.");
+  }
+
+  ctx.__originalSave = ctx.save;
+  ctx.__originalRestore = ctx.restore;
+  ctx.__originalRotate = ctx.rotate;
+  ctx.__originalScale = ctx.scale;
+  ctx.__originalTranslate = ctx.translate;
+  ctx.__originalTransform = ctx.transform;
+  ctx.__originalSetTransform = ctx.setTransform;
+  ctx.__originalResetTransform = ctx.resetTransform;
+  ctx.__originalClip = ctx.clip;
+  ctx.__originalMoveTo = ctx.moveTo;
+  ctx.__originalLineTo = ctx.lineTo;
+  ctx.__originalBezierCurveTo = ctx.bezierCurveTo;
+  ctx.__originalRect = ctx.rect;
+  ctx.__originalClosePath = ctx.closePath;
+  ctx.__originalBeginPath = ctx.beginPath;
+
+  ctx._removeMirroring = () => {
+    ctx.save = ctx.__originalSave;
+    ctx.restore = ctx.__originalRestore;
+    ctx.rotate = ctx.__originalRotate;
+    ctx.scale = ctx.__originalScale;
+    ctx.translate = ctx.__originalTranslate;
+    ctx.transform = ctx.__originalTransform;
+    ctx.setTransform = ctx.__originalSetTransform;
+    ctx.resetTransform = ctx.__originalResetTransform;
+    ctx.clip = ctx.__originalClip;
+    ctx.moveTo = ctx.__originalMoveTo;
+    ctx.lineTo = ctx.__originalLineTo;
+    ctx.bezierCurveTo = ctx.__originalBezierCurveTo;
+    ctx.rect = ctx.__originalRect;
+    ctx.closePath = ctx.__originalClosePath;
+    ctx.beginPath = ctx.__originalBeginPath;
+    delete ctx._removeMirroring;
+  };
+
+  ctx.save = function ctxSave() {
+    destCtx.save();
+
+    this.__originalSave();
+  };
+
+  ctx.restore = function ctxRestore() {
+    destCtx.restore();
+
+    this.__originalRestore();
+  };
+
+  ctx.translate = function ctxTranslate(x, y) {
+    destCtx.translate(x, y);
+
+    this.__originalTranslate(x, y);
+  };
+
+  ctx.scale = function ctxScale(x, y) {
+    destCtx.scale(x, y);
+
+    this.__originalScale(x, y);
+  };
+
+  ctx.transform = function ctxTransform(a, b, c, d, e, f) {
+    destCtx.transform(a, b, c, d, e, f);
+
+    this.__originalTransform(a, b, c, d, e, f);
+  };
+
+  ctx.setTransform = function ctxSetTransform(a, b, c, d, e, f) {
+    destCtx.setTransform(a, b, c, d, e, f);
+
+    this.__originalSetTransform(a, b, c, d, e, f);
+  };
+
+  ctx.resetTransform = function ctxResetTransform() {
+    destCtx.resetTransform();
+
+    this.__originalResetTransform();
+  };
+
+  ctx.rotate = function ctxRotate(angle) {
+    destCtx.rotate(angle);
+
+    this.__originalRotate(angle);
+  };
+
+  ctx.clip = function ctxRotate(rule) {
+    destCtx.clip(rule);
+
+    this.__originalClip(rule);
+  };
+
+  ctx.moveTo = function (x, y) {
+    destCtx.moveTo(x, y);
+
+    this.__originalMoveTo(x, y);
+  };
+
+  ctx.lineTo = function (x, y) {
+    destCtx.lineTo(x, y);
+
+    this.__originalLineTo(x, y);
+  };
+
+  ctx.bezierCurveTo = function (cp1x, cp1y, cp2x, cp2y, x, y) {
+    destCtx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y);
+
+    this.__originalBezierCurveTo(cp1x, cp1y, cp2x, cp2y, x, y);
+  };
+
+  ctx.rect = function (x, y, width, height) {
+    destCtx.rect(x, y, width, height);
+
+    this.__originalRect(x, y, width, height);
+  };
+
+  ctx.closePath = function () {
+    destCtx.closePath();
+
+    this.__originalClosePath();
+  };
+
+  ctx.beginPath = function () {
+    destCtx.beginPath();
+
+    this.__originalBeginPath();
+  };
+}
+
 function addContextCurrentTransform(ctx) {
   if (ctx.mozCurrentTransform) {
     return;
@@ -5114,7 +5314,7 @@ function compileType3Glyph(imgData) {
 }
 
 class CanvasExtraState {
-  constructor() {
+  constructor(width, height) {
     this.alphaIsShape = false;
     this.fontSize = 0;
     this.fontSizeScale = 1;
@@ -5138,17 +5338,56 @@ class CanvasExtraState {
     this.strokeAlpha = 1;
     this.lineWidth = 1;
     this.activeSMask = null;
-    this.resumeSMaskCtx = null;
     this.transferMaps = null;
+    this.startNewPathAndClipBox([0, 0, width, height]);
   }
 
   clone() {
-    return Object.create(this);
+    const clone = Object.create(this);
+    clone.clipBox = this.clipBox.slice();
+    return clone;
   }
 
   setCurrentPoint(x, y) {
     this.x = x;
     this.y = y;
+  }
+
+  updatePathMinMax(transform, x, y) {
+    [x, y] = _util.Util.applyTransform([x, y], transform);
+    this.minX = Math.min(this.minX, x);
+    this.minY = Math.min(this.minY, y);
+    this.maxX = Math.max(this.maxX, x);
+    this.maxY = Math.max(this.maxY, y);
+  }
+
+  updateCurvePathMinMax(transform, x0, y0, x1, y1, x2, y2, x3, y3) {
+    const box = _util.Util.bezierBoundingBox(x0, y0, x1, y1, x2, y2, x3, y3);
+
+    this.updatePathMinMax(transform, box[0], box[1]);
+    this.updatePathMinMax(transform, box[2], box[3]);
+  }
+
+  getPathBoundingBox() {
+    return [this.minX, this.minY, this.maxX, this.maxY];
+  }
+
+  updateClipFromPath() {
+    const intersect = _util.Util.intersect(this.clipBox, this.getPathBoundingBox());
+
+    this.startNewPathAndClipBox(intersect || [0, 0, 0, 0]);
+  }
+
+  startNewPathAndClipBox(box) {
+    this.clipBox = box;
+    this.minX = Infinity;
+    this.minY = Infinity;
+    this.maxX = 0;
+    this.maxY = 0;
+  }
+
+  getClippedPathBoundingBox() {
+    return _util.Util.intersect(this.clipBox, this.getPathBoundingBox());
   }
 
 }
@@ -5447,7 +5686,7 @@ function composeSMaskLuminosity(maskData, layerData, transferMap) {
   }
 }
 
-function genericComposeSMask(maskCtx, layerCtx, width, height, subtype, backdrop, transferMap) {
+function genericComposeSMask(maskCtx, layerCtx, width, height, subtype, backdrop, transferMap, layerOffsetX, layerOffsetY, maskOffsetX, maskOffsetY) {
   const hasBackdrop = !!backdrop;
   const r0 = hasBackdrop ? backdrop[0] : 0;
   const g0 = hasBackdrop ? backdrop[1] : 0;
@@ -5465,24 +5704,35 @@ function genericComposeSMask(maskCtx, layerCtx, width, height, subtype, backdrop
 
   for (let row = 0; row < height; row += chunkSize) {
     const chunkHeight = Math.min(chunkSize, height - row);
-    const maskData = maskCtx.getImageData(0, row, width, chunkHeight);
-    const layerData = layerCtx.getImageData(0, row, width, chunkHeight);
+    const maskData = maskCtx.getImageData(layerOffsetX - maskOffsetX, row + (layerOffsetY - maskOffsetY), width, chunkHeight);
+    const layerData = layerCtx.getImageData(layerOffsetX, row + layerOffsetY, width, chunkHeight);
 
     if (hasBackdrop) {
       composeSMaskBackdrop(maskData.data, r0, g0, b0);
     }
 
     composeFn(maskData.data, layerData.data, transferMap);
-    maskCtx.putImageData(layerData, 0, row);
+    layerCtx.putImageData(layerData, layerOffsetX, row + layerOffsetY);
   }
 }
 
-function composeSMask(ctx, smask, layerCtx) {
-  const mask = smask.canvas;
-  const maskCtx = smask.context;
-  ctx.setTransform(smask.scaleX, 0, 0, smask.scaleY, smask.offsetX, smask.offsetY);
-  genericComposeSMask(maskCtx, layerCtx, mask.width, mask.height, smask.subtype, smask.backdrop, smask.transferMap);
-  ctx.drawImage(mask, 0, 0);
+function composeSMask(ctx, smask, layerCtx, layerBox) {
+  const layerOffsetX = layerBox[0];
+  const layerOffsetY = layerBox[1];
+  const layerWidth = layerBox[2] - layerOffsetX;
+  const layerHeight = layerBox[3] - layerOffsetY;
+
+  if (layerWidth === 0 || layerHeight === 0) {
+    return;
+  }
+
+  genericComposeSMask(smask.context, layerCtx, layerWidth, layerHeight, smask.subtype, smask.backdrop, smask.transferMap, layerOffsetX, layerOffsetY, smask.offsetX, smask.offsetY);
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(layerCtx.canvas, 0, 0);
+  ctx.restore();
 }
 
 function getImageSmoothingEnabled(transform, interpolate) {
@@ -5509,7 +5759,7 @@ const EO_CLIP = {};
 class CanvasGraphics {
   constructor(canvasCtx, commonObjs, objs, canvasFactory, imageLayer, optionalContentConfig) {
     this.ctx = canvasCtx;
-    this.current = new CanvasExtraState();
+    this.current = new CanvasExtraState(this.ctx.canvas.width, this.ctx.canvas.height);
     this.stateStack = [];
     this.pendingClip = null;
     this.pendingEOFill = false;
@@ -5527,6 +5777,7 @@ class CanvasGraphics {
     this.smaskStack = [];
     this.smaskCounter = 0;
     this.tempSMask = null;
+    this.suspendedCtx = null;
     this.contentVisible = true;
     this.markedContentStack = [];
     this.optionalContentConfig = optionalContentConfig;
@@ -5830,21 +6081,9 @@ class CanvasGraphics {
           break;
 
         case "SMask":
-          if (this.current.activeSMask) {
-            if (this.stateStack.length > 0 && this.stateStack[this.stateStack.length - 1].activeSMask === this.current.activeSMask) {
-              this.suspendSMaskGroup();
-            } else {
-              this.endSMaskGroup();
-            }
-          }
-
           this.current.activeSMask = value ? this.tempSMask : null;
-
-          if (this.current.activeSMask) {
-            this.beginSMaskGroup();
-          }
-
           this.tempSMask = null;
+          this.checkSMaskState();
           break;
 
         case "TR":
@@ -5853,65 +6092,68 @@ class CanvasGraphics {
     }
   }
 
-  beginSMaskGroup() {
-    const activeSMask = this.current.activeSMask;
-    const drawnWidth = activeSMask.canvas.width;
-    const drawnHeight = activeSMask.canvas.height;
+  checkSMaskState() {
+    const inSMaskMode = !!this.suspendedCtx;
+
+    if (this.current.activeSMask && !inSMaskMode) {
+      this.beginSMaskMode();
+    } else if (!this.current.activeSMask && inSMaskMode) {
+      this.endSMaskMode();
+    }
+  }
+
+  beginSMaskMode() {
+    if (this.suspendedCtx) {
+      throw new Error("beginSMaskMode called while already in smask mode");
+    }
+
+    const drawnWidth = this.ctx.canvas.width;
+    const drawnHeight = this.ctx.canvas.height;
     const cacheId = "smaskGroupAt" + this.groupLevel;
     const scratchCanvas = this.cachedCanvases.getCanvas(cacheId, drawnWidth, drawnHeight, true);
-    const currentCtx = this.ctx;
-    const currentTransform = currentCtx.mozCurrentTransform;
-    this.ctx.save();
-    const groupCtx = scratchCanvas.context;
-    groupCtx.scale(1 / activeSMask.scaleX, 1 / activeSMask.scaleY);
-    groupCtx.translate(-activeSMask.offsetX, -activeSMask.offsetY);
-    groupCtx.transform.apply(groupCtx, currentTransform);
-    activeSMask.startTransformInverse = groupCtx.mozCurrentTransformInverse;
-    copyCtxState(currentCtx, groupCtx);
-    this.ctx = groupCtx;
+    this.suspendedCtx = this.ctx;
+    this.ctx = scratchCanvas.context;
+    const ctx = this.ctx;
+    ctx.setTransform.apply(ctx, this.suspendedCtx.mozCurrentTransform);
+    copyCtxState(this.suspendedCtx, ctx);
+    mirrorContextOperations(ctx, this.suspendedCtx);
     this.setGState([["BM", "source-over"], ["ca", 1], ["CA", 1]]);
-    this.groupStack.push(currentCtx);
-    this.groupLevel++;
   }
 
-  suspendSMaskGroup() {
-    const groupCtx = this.ctx;
-    this.groupLevel--;
-    this.ctx = this.groupStack.pop();
-    composeSMask(this.ctx, this.current.activeSMask, groupCtx);
-    this.ctx.restore();
+  endSMaskMode() {
+    if (!this.suspendedCtx) {
+      throw new Error("endSMaskMode called while not in smask mode");
+    }
+
+    this.ctx._removeMirroring();
+
+    copyCtxState(this.ctx, this.suspendedCtx);
+    this.ctx = this.suspendedCtx;
+    this.current.activeSMask = null;
+    this.suspendedCtx = null;
+  }
+
+  compose(dirtyBox) {
+    if (!this.current.activeSMask) {
+      return;
+    }
+
+    if (!dirtyBox) {
+      dirtyBox = [0, 0, this.ctx.canvas.width, this.ctx.canvas.height];
+    } else {
+      dirtyBox[0] = Math.floor(dirtyBox[0]);
+      dirtyBox[1] = Math.floor(dirtyBox[1]);
+      dirtyBox[2] = Math.ceil(dirtyBox[2]);
+      dirtyBox[3] = Math.ceil(dirtyBox[3]);
+    }
+
+    const smask = this.current.activeSMask;
+    const suspendedCtx = this.suspendedCtx;
+    composeSMask(suspendedCtx, smask, this.ctx, dirtyBox);
     this.ctx.save();
-    copyCtxState(groupCtx, this.ctx);
-    this.current.resumeSMaskCtx = groupCtx;
-
-    const deltaTransform = _util.Util.transform(this.current.activeSMask.startTransformInverse, groupCtx.mozCurrentTransform);
-
-    this.ctx.transform.apply(this.ctx, deltaTransform);
-    groupCtx.save();
-    groupCtx.setTransform(1, 0, 0, 1, 0, 0);
-    groupCtx.clearRect(0, 0, groupCtx.canvas.width, groupCtx.canvas.height);
-    groupCtx.restore();
-  }
-
-  resumeSMaskGroup() {
-    const groupCtx = this.current.resumeSMaskCtx;
-    const currentCtx = this.ctx;
-    this.ctx = groupCtx;
-    this.groupStack.push(currentCtx);
-    this.groupLevel++;
-  }
-
-  endSMaskGroup() {
-    const groupCtx = this.ctx;
-    this.groupLevel--;
-    this.ctx = this.groupStack.pop();
-    composeSMask(this.ctx, this.current.activeSMask, groupCtx);
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
     this.ctx.restore();
-    copyCtxState(groupCtx, this.ctx);
-
-    const deltaTransform = _util.Util.transform(this.current.activeSMask.startTransformInverse, groupCtx.mozCurrentTransform);
-
-    this.ctx.transform.apply(this.ctx, deltaTransform);
   }
 
   save() {
@@ -5919,25 +6161,19 @@ class CanvasGraphics {
     const old = this.current;
     this.stateStack.push(old);
     this.current = old.clone();
-    this.current.resumeSMaskCtx = null;
   }
 
   restore() {
-    if (this.current.resumeSMaskCtx) {
-      this.resumeSMaskGroup();
-    }
-
-    if (this.current.activeSMask !== null && (this.stateStack.length === 0 || this.stateStack[this.stateStack.length - 1].activeSMask !== this.current.activeSMask)) {
-      this.endSMaskGroup();
+    if (this.stateStack.length === 0 && this.current.activeSMask) {
+      this.endSMaskMode();
     }
 
     if (this.stateStack.length !== 0) {
       this.current = this.stateStack.pop();
       this.ctx.restore();
+      this.checkSMaskState();
       this.pendingClip = null;
       this._cachedGetSinglePixelWidth = null;
-    } else {
-      this.current.activeSMask = null;
     }
   }
 
@@ -5951,6 +6187,7 @@ class CanvasGraphics {
     const current = this.current;
     let x = current.x,
         y = current.y;
+    let startX, startY;
 
     for (let i = 0, j = 0, ii = ops.length; i < ii; i++) {
       switch (ops[i] | 0) {
@@ -5971,6 +6208,8 @@ class CanvasGraphics {
             ctx.lineTo(x, yh);
           }
 
+          current.updatePathMinMax(ctx.mozCurrentTransform, x, y);
+          current.updatePathMinMax(ctx.mozCurrentTransform, xw, yh);
           ctx.closePath();
           break;
 
@@ -5978,32 +6217,43 @@ class CanvasGraphics {
           x = args[j++];
           y = args[j++];
           ctx.moveTo(x, y);
+          current.updatePathMinMax(ctx.mozCurrentTransform, x, y);
           break;
 
         case _util.OPS.lineTo:
           x = args[j++];
           y = args[j++];
           ctx.lineTo(x, y);
+          current.updatePathMinMax(ctx.mozCurrentTransform, x, y);
           break;
 
         case _util.OPS.curveTo:
+          startX = x;
+          startY = y;
           x = args[j + 4];
           y = args[j + 5];
           ctx.bezierCurveTo(args[j], args[j + 1], args[j + 2], args[j + 3], x, y);
+          current.updateCurvePathMinMax(ctx.mozCurrentTransform, startX, startY, args[j], args[j + 1], args[j + 2], args[j + 3], x, y);
           j += 6;
           break;
 
         case _util.OPS.curveTo2:
+          startX = x;
+          startY = y;
           ctx.bezierCurveTo(x, y, args[j], args[j + 1], args[j + 2], args[j + 3]);
+          current.updateCurvePathMinMax(ctx.mozCurrentTransform, startX, startY, x, y, args[j], args[j + 1], args[j + 2], args[j + 3]);
           x = args[j + 2];
           y = args[j + 3];
           j += 4;
           break;
 
         case _util.OPS.curveTo3:
+          startX = x;
+          startY = y;
           x = args[j + 2];
           y = args[j + 3];
           ctx.bezierCurveTo(args[j], args[j + 1], x, y, x, y);
+          current.updateCurvePathMinMax(ctx.mozCurrentTransform, startX, startY, args[j], args[j + 1], x, y, x, y);
           j += 4;
           break;
 
@@ -6051,7 +6301,7 @@ class CanvasGraphics {
     }
 
     if (consumePath) {
-      this.consumePath();
+      this.consumePath(this.current.getClippedPathBoundingBox());
     }
 
     ctx.globalAlpha = this.current.fillAlpha;
@@ -6075,7 +6325,9 @@ class CanvasGraphics {
       needRestore = true;
     }
 
-    if (this.contentVisible) {
+    const intersect = this.current.getClippedPathBoundingBox();
+
+    if (this.contentVisible && intersect !== null) {
       if (this.pendingEOFill) {
         ctx.fill("evenodd");
         this.pendingEOFill = false;
@@ -6089,7 +6341,7 @@ class CanvasGraphics {
     }
 
     if (consumePath) {
-      this.consumePath();
+      this.consumePath(intersect);
     }
   }
 
@@ -6497,6 +6749,7 @@ class CanvasGraphics {
     }
 
     ctx.restore();
+    this.compose();
     return undefined;
   }
 
@@ -6666,6 +6919,7 @@ class CanvasGraphics {
       this.ctx.fillRect(-1e10, -1e10, 2e10, 2e10);
     }
 
+    this.compose(this.current.getClippedPathBoundingBox());
     this.restore();
   }
 
@@ -6695,6 +6949,8 @@ class CanvasGraphics {
       const width = bbox[2] - bbox[0];
       const height = bbox[3] - bbox[1];
       this.ctx.rect(bbox[0], bbox[1], width, height);
+      this.current.updatePathMinMax(this.ctx.mozCurrentTransform, bbox[0], bbox[1]);
+      this.current.updatePathMinMax(this.ctx.mozCurrentTransform, bbox[2], bbox[3]);
       this.clip();
       this.endPath();
     }
@@ -6715,6 +6971,13 @@ class CanvasGraphics {
     }
 
     this.save();
+    const suspendedCtx = this.suspendedCtx;
+
+    if (this.current.activeSMask) {
+      this.suspendedCtx = null;
+      this.current.activeSMask = null;
+    }
+
     const currentCtx = this.ctx;
 
     if (!group.isolated) {
@@ -6756,6 +7019,7 @@ class CanvasGraphics {
       drawnHeight = MAX_GROUP_SIZE;
     }
 
+    this.current.startNewPathAndClipBox([0, 0, drawnWidth, drawnHeight]);
     let cacheId = "groupAt" + this.groupLevel;
 
     if (group.smask) {
@@ -6785,14 +7049,17 @@ class CanvasGraphics {
       currentCtx.setTransform(1, 0, 0, 1, 0, 0);
       currentCtx.translate(offsetX, offsetY);
       currentCtx.scale(scaleX, scaleY);
+      currentCtx.save();
     }
 
     copyCtxState(currentCtx, groupCtx);
     this.ctx = groupCtx;
     this.setGState([["BM", "source-over"], ["ca", 1], ["CA", 1]]);
-    this.groupStack.push(currentCtx);
+    this.groupStack.push({
+      ctx: currentCtx,
+      suspendedCtx
+    });
     this.groupLevel++;
-    this.current.activeSMask = null;
   }
 
   endGroup(group) {
@@ -6802,16 +7069,33 @@ class CanvasGraphics {
 
     this.groupLevel--;
     const groupCtx = this.ctx;
-    this.ctx = this.groupStack.pop();
+    const {
+      ctx,
+      suspendedCtx
+    } = this.groupStack.pop();
+    this.ctx = ctx;
     this.ctx.imageSmoothingEnabled = false;
+
+    if (suspendedCtx) {
+      this.suspendedCtx = suspendedCtx;
+    }
 
     if (group.smask) {
       this.tempSMask = this.smaskStack.pop();
+      this.restore();
     } else {
-      this.ctx.drawImage(groupCtx.canvas, 0, 0);
-    }
+      this.ctx.restore();
+      const currentMtx = this.ctx.mozCurrentTransform;
+      this.restore();
+      this.ctx.save();
+      this.ctx.setTransform.apply(this.ctx, currentMtx);
 
-    this.restore();
+      const dirtyBox = _util.Util.getAxialAlignedBoundingBox([0, 0, groupCtx.canvas.width, groupCtx.canvas.height], currentMtx);
+
+      this.ctx.drawImage(groupCtx.canvas, 0, 0);
+      this.ctx.restore();
+      this.compose(dirtyBox);
+    }
   }
 
   beginAnnotations() {
@@ -6829,7 +7113,7 @@ class CanvasGraphics {
   beginAnnotation(id, rect, transform, matrix) {
     this.save();
     resetCtxToDefault(this.ctx);
-    this.current = new CanvasExtraState();
+    this.current = new CanvasExtraState(this.ctx.canvas.width, this.ctx.canvas.height);
 
     if (Array.isArray(rect) && rect.length === 4) {
       const width = rect[2] - rect[0];
@@ -6881,6 +7165,7 @@ class CanvasGraphics {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(maskCanvas, mask.offsetX, mask.offsetY);
     ctx.restore();
+    this.compose();
   }
 
   paintImageMaskXObjectRepeat(imgData, scaleX, skewX = 0, skewY = 0, scaleY, positions) {
@@ -6906,6 +7191,7 @@ class CanvasGraphics {
     }
 
     ctx.restore();
+    this.compose();
   }
 
   paintImageMaskXObjectGroup(images) {
@@ -6935,6 +7221,8 @@ class CanvasGraphics {
       ctx.drawImage(maskCanvas.canvas, 0, 0, width, height, 0, -1, 1, 1);
       ctx.restore();
     }
+
+    this.compose();
   }
 
   paintImageXObject(objId) {
@@ -7018,6 +7306,7 @@ class CanvasGraphics {
       });
     }
 
+    this.compose();
     this.restore();
   }
 
@@ -7053,6 +7342,8 @@ class CanvasGraphics {
 
       ctx.restore();
     }
+
+    this.compose();
   }
 
   paintSolidColorImageMask() {
@@ -7061,6 +7352,7 @@ class CanvasGraphics {
     }
 
     this.ctx.fillRect(0, 0, 1, 1);
+    this.compose();
   }
 
   markPoint(tag) {}
@@ -7096,7 +7388,15 @@ class CanvasGraphics {
 
   endCompat() {}
 
-  consumePath() {
+  consumePath(clipBox) {
+    if (this.pendingClip) {
+      this.current.updateClipFromPath();
+    }
+
+    if (!this.pendingClip) {
+      this.compose(clipBox);
+    }
+
     const ctx = this.ctx;
 
     if (this.pendingClip) {
@@ -8238,28 +8538,31 @@ exports.Metadata = void 0;
 var _util = __w_pdfjs_require__(2);
 
 class Metadata {
+  #metadataMap;
+  #data;
+
   constructor({
     parsedData,
     rawData
   }) {
-    this._metadataMap = parsedData;
-    this._data = rawData;
+    this.#metadataMap = parsedData;
+    this.#data = rawData;
   }
 
   getRaw() {
-    return this._data;
+    return this.#data;
   }
 
   get(name) {
-    return this._metadataMap.get(name) ?? null;
+    return this.#metadataMap.get(name) ?? null;
   }
 
   getAll() {
-    return (0, _util.objectFromMap)(this._metadataMap);
+    return (0, _util.objectFromMap)(this.#metadataMap);
   }
 
   has(name) {
-    return this._metadataMap.has(name);
+    return this.#metadataMap.has(name);
   }
 
 }
@@ -9247,10 +9550,11 @@ class AnnotationElement {
 }
 
 class LinkAnnotationElement extends AnnotationElement {
-  constructor(parameters) {
+  constructor(parameters, options = null) {
     const isRenderable = !!(parameters.data.url || parameters.data.dest || parameters.data.action || parameters.data.isTooltipOnly || parameters.data.resetForm || parameters.data.actions && (parameters.data.actions.Action || parameters.data.actions["Mouse Up"] || parameters.data.actions["Mouse Down"]));
     super(parameters, {
       isRenderable,
+      ignoreBorder: !!options?.ignoreBorder,
       createQuadrilaterals: true
     });
   }
@@ -10094,6 +10398,12 @@ class RadioButtonWidgetAnnotationElement extends WidgetAnnotationElement {
 }
 
 class PushButtonWidgetAnnotationElement extends LinkAnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      ignoreBorder: parameters.data.hasAppearance
+    });
+  }
+
   render() {
     const container = super.render();
     container.className = "buttonWidgetAnnotation pushButton";
@@ -11199,7 +11509,7 @@ function appendText(task, geom, styles, ctx) {
 
   if (geom.str.length > 1 || task._enhanceTextSelection && AllWhitespaceRegexp.test(geom.str)) {
     shouldScaleText = true;
-  } else if (geom.transform[0] !== geom.transform[3]) {
+  } else if (geom.str !== " " && geom.transform[0] !== geom.transform[3]) {
     const absScaleX = Math.abs(geom.transform[0]),
           absScaleY = Math.abs(geom.transform[3]);
 
@@ -12894,6 +13204,10 @@ exports.SVGGraphics = SVGGraphics;
     }
 
     _makeShadingPattern(args) {
+      if (typeof args === "string") {
+        args = this.objs.get(args);
+      }
+
       switch (args[0]) {
         case "RadialAxial":
           const shadingId = `shading${shadingCount++}`;
@@ -15465,7 +15779,7 @@ var _svg = __w_pdfjs_require__(21);
 var _xfa_layer = __w_pdfjs_require__(22);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = '52fce0d';
+const pdfjsBuild = '0aaa4e3';
 {
   if (_is_node.isNodeJS) {
     const {

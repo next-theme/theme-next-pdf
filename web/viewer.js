@@ -638,20 +638,17 @@ const PDFViewerApplication = {
     try {
       const styleSheet = document.styleSheets[0];
       const cssRules = styleSheet?.cssRules || [];
-      const mediaMatcher = "prefers-color-scheme";
-      const mediaRule = `(${mediaMatcher}: dark)`;
-      const mediaRegex = new RegExp(`^@media \\(${mediaMatcher}: dark\\) {\\n\\s*([\\w\\s-.,:;/\\\\{}()]+)\\n}$`);
 
       for (let i = 0, ii = cssRules.length; i < ii; i++) {
         const rule = cssRules[i];
 
-        if (rule instanceof CSSMediaRule && rule.media?.[0] === mediaRule) {
+        if (rule instanceof CSSMediaRule && rule.media?.[0] === "(prefers-color-scheme: dark)") {
           if (cssTheme === ViewerCssTheme.LIGHT) {
             styleSheet.deleteRule(i);
             return;
           }
 
-          const darkRules = mediaRegex.exec(rule.cssText);
+          const darkRules = /^@media \(prefers-color-scheme: dark\) {\n\s*([\w\s-.,:;/\\{}()]+)\n}$/.exec(rule.cssText);
 
           if (darkRules?.[1]) {
             styleSheet.deleteRule(i);
@@ -935,6 +932,7 @@ const PDFViewerApplication = {
       container
     } = this.appConfig.errorWrapper;
     container.hidden = true;
+    this.appConfig.viewerContainer.removeAttribute("lang");
 
     if (!this.pdfLoadingTask) {
       return;
@@ -1562,6 +1560,11 @@ const PDFViewerApplication = {
     this._contentDispositionFilename ??= contentDispositionFilename;
     this._contentLength ??= contentLength;
     console.log(`PDF ${pdfDocument.fingerprints[0]} [${info.PDFFormatVersion} ` + `${(info.Producer || "-").trim()} / ${(info.Creator || "-").trim()}] ` + `(PDF.js: ${_pdfjsLib.version || "-"})`);
+
+    if (info.Language) {
+      this.appConfig.viewerContainer.lang = info.Language;
+    }
+
     let pdfTitle = info?.Title;
     const metadataTitle = metadata?.get("dc:title");
 
@@ -9373,43 +9376,36 @@ const MAX_NUM_SCALING_STEPS = 3;
 const THUMBNAIL_CANVAS_BORDER_WIDTH = 1;
 const THUMBNAIL_WIDTH = 98;
 
-const TempImageFactory = function TempImageFactoryClosure() {
-  let tempCanvasCache = null;
-  return {
-    getCanvas(width, height) {
-      let tempCanvas = tempCanvasCache;
+class TempImageFactory {
+  static #tempCanvas = null;
 
-      if (!tempCanvas) {
-        tempCanvas = document.createElement("canvas");
-        tempCanvasCache = tempCanvas;
-      }
+  static getCanvas(width, height) {
+    const tempCanvas = this.#tempCanvas ||= document.createElement("canvas");
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    tempCanvas.mozOpaque = true;
+    const ctx = tempCanvas.getContext("2d", {
+      alpha: false
+    });
+    ctx.save();
+    ctx.fillStyle = "rgb(255, 255, 255)";
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+    return [tempCanvas, tempCanvas.getContext("2d")];
+  }
 
-      tempCanvas.width = width;
-      tempCanvas.height = height;
-      tempCanvas.mozOpaque = true;
-      const ctx = tempCanvas.getContext("2d", {
-        alpha: false
-      });
-      ctx.save();
-      ctx.fillStyle = "rgb(255, 255, 255)";
-      ctx.fillRect(0, 0, width, height);
-      ctx.restore();
-      return [tempCanvas, tempCanvas.getContext("2d")];
-    },
+  static destroyCanvas() {
+    const tempCanvas = this.#tempCanvas;
 
-    destroyCanvas() {
-      const tempCanvas = tempCanvasCache;
-
-      if (tempCanvas) {
-        tempCanvas.width = 0;
-        tempCanvas.height = 0;
-      }
-
-      tempCanvasCache = null;
+    if (tempCanvas) {
+      tempCanvas.width = 0;
+      tempCanvas.height = 0;
     }
 
-  };
-}();
+    this.#tempCanvas = null;
+  }
+
+}
 
 exports.TempImageFactory = TempImageFactory;
 
@@ -15461,7 +15457,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = '52fce0d';
+const pdfjsBuild = '0aaa4e3';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
