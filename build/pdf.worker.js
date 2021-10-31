@@ -4611,6 +4611,7 @@ class PDFDocument {
     const docInfo = {
       PDFFormatVersion: version,
       Language: this.catalog.lang,
+      EncryptFilterName: this.xref.encrypt ? this.xref.encrypt.filterName : null,
       IsLinearized: !!this.linearization,
       IsAcroFormPresent: this.formInfo.hasAcroForm,
       IsXFAPresent: this.formInfo.hasXfa,
@@ -18418,7 +18419,7 @@ class Annotation {
         this.borderStyle.setWidth(array[2], this.rectangle);
 
         if (array.length === 4) {
-          this.borderStyle.setDashArray(array[3]);
+          this.borderStyle.setDashArray(array[3], true);
         }
       }
     } else {
@@ -18630,7 +18631,7 @@ class AnnotationBorderStyle {
     }
   }
 
-  setDashArray(dashArray) {
+  setDashArray(dashArray, forceStyle = false) {
     if (Array.isArray(dashArray) && dashArray.length > 0) {
       let isValid = true;
       let allZeros = true;
@@ -18648,6 +18649,10 @@ class AnnotationBorderStyle {
 
       if (isValid && !allZeros) {
         this.dashArray = dashArray;
+
+        if (forceStyle) {
+          this.setStyle(_primitives.Name.get("D"));
+        }
       } else {
         this.width = 0;
       }
@@ -26055,7 +26060,14 @@ class CMap {
 
     while (low <= high) {
       this._map[low++] = dstLow;
-      dstLow = dstLow.substring(0, lastByte) + String.fromCharCode(dstLow.charCodeAt(lastByte) + 1);
+      const nextCharCode = dstLow.charCodeAt(lastByte) + 1;
+
+      if (nextCharCode > 0xff) {
+        dstLow = dstLow.substring(0, lastByte - 1) + String.fromCharCode(dstLow.charCodeAt(lastByte - 1) + 1) + "\x00";
+        continue;
+      }
+
+      dstLow = dstLow.substring(0, lastByte) + String.fromCharCode(nextCharCode);
     }
   }
 
@@ -57552,6 +57564,7 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
         throw new _util.FormatError("unknown encryption method");
       }
 
+      this.filterName = filter.name;
       this.dict = dict;
       const algorithm = dict.get("V");
 
@@ -73034,7 +73047,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = '0aaa4e3';
+const pdfjsBuild = '2d8b6fd';
 })();
 
 /******/ 	return __webpack_exports__;
