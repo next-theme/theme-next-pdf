@@ -32,7 +32,7 @@
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.OptionKind = exports.compatibilityParams = exports.AppOptions = void 0;
+exports.compatibilityParams = exports.OptionKind = exports.AppOptions = void 0;
 const compatibilityParams = Object.create(null);
 exports.compatibilityParams = compatibilityParams;
 {
@@ -2444,25 +2444,23 @@ function webViewerPresentationModeChanged(evt) {
 
 function webViewerSidebarViewChanged(evt) {
   PDFViewerApplication.pdfRenderingQueue.isThumbnailViewEnabled = PDFViewerApplication.pdfSidebar.isThumbnailViewVisible;
-  const store = PDFViewerApplication.store;
 
-  if (store && PDFViewerApplication.isInitialViewSet) {
-    store.set("sidebarView", evt.view).catch(function () {});
+  if (PDFViewerApplication.isInitialViewSet) {
+    PDFViewerApplication.store?.set("sidebarView", evt.view).catch(() => {});
   }
 }
 
 function webViewerUpdateViewarea(evt) {
-  const location = evt.location,
-        store = PDFViewerApplication.store;
+  const location = evt.location;
 
-  if (store && PDFViewerApplication.isInitialViewSet) {
-    store.setMultiple({
+  if (PDFViewerApplication.isInitialViewSet) {
+    PDFViewerApplication.store?.setMultiple({
       page: location.pageNumber,
       zoom: location.scale,
       scrollLeft: location.left,
       scrollTop: location.top,
       rotation: location.rotation
-    }).catch(function () {});
+    }).catch(() => {});
   }
 
   const href = PDFViewerApplication.pdfLinkService.getAnchorUrl(location.pdfOpenParams);
@@ -2474,18 +2472,14 @@ function webViewerUpdateViewarea(evt) {
 }
 
 function webViewerScrollModeChanged(evt) {
-  const store = PDFViewerApplication.store;
-
-  if (store && PDFViewerApplication.isInitialViewSet) {
-    store.set("scrollMode", evt.mode).catch(function () {});
+  if (PDFViewerApplication.isInitialViewSet) {
+    PDFViewerApplication.store?.set("scrollMode", evt.mode).catch(() => {});
   }
 }
 
 function webViewerSpreadModeChanged(evt) {
-  const store = PDFViewerApplication.store;
-
-  if (store && PDFViewerApplication.isInitialViewSet) {
-    store.set("spreadMode", evt.mode).catch(function () {});
+  if (PDFViewerApplication.isInitialViewSet) {
+    PDFViewerApplication.store?.set("spreadMode", evt.mode).catch(() => {});
   }
 }
 
@@ -3081,10 +3075,7 @@ function webViewerKeyDown(evt) {
           break;
         }
 
-        if (PDFViewerApplication.page > 1) {
-          PDFViewerApplication.page--;
-        }
-
+        pdfViewer.previousPage();
         handled = true;
         break;
 
@@ -3136,6 +3127,7 @@ exports.PDFPrintServiceFactory = PDFPrintServiceFactory;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
+exports.animationStarted = exports.WaitOnType = exports.VERTICAL_PADDING = exports.UNKNOWN_SCALE = exports.TextLayerMode = exports.SpreadMode = exports.SidebarView = exports.ScrollMode = exports.SCROLLBAR_PADDING = exports.RendererType = exports.ProgressBar = exports.PresentationModeState = exports.MIN_SCALE = exports.MAX_SCALE = exports.MAX_AUTO_SCALE = exports.EventBus = exports.DEFAULT_SCALE_VALUE = exports.DEFAULT_SCALE_DELTA = exports.DEFAULT_SCALE = exports.AutomationEventBus = exports.AutoPrintRegExp = void 0;
 exports.apiPageLayoutToViewerModes = apiPageLayoutToViewerModes;
 exports.apiPageModeToSidebarView = apiPageModeToSidebarView;
 exports.approximateFraction = approximateFraction;
@@ -3158,7 +3150,6 @@ exports.roundToDivide = roundToDivide;
 exports.scrollIntoView = scrollIntoView;
 exports.waitOnEventOrTimeout = waitOnEventOrTimeout;
 exports.watchScroll = watchScroll;
-exports.WaitOnType = exports.VERTICAL_PADDING = exports.UNKNOWN_SCALE = exports.TextLayerMode = exports.SpreadMode = exports.SidebarView = exports.ScrollMode = exports.SCROLLBAR_PADDING = exports.RendererType = exports.ProgressBar = exports.PresentationModeState = exports.MIN_SCALE = exports.MAX_SCALE = exports.MAX_AUTO_SCALE = exports.EventBus = exports.DEFAULT_SCALE_VALUE = exports.DEFAULT_SCALE_DELTA = exports.DEFAULT_SCALE = exports.AutoPrintRegExp = exports.AutomationEventBus = exports.animationStarted = void 0;
 const DEFAULT_SCALE_VALUE = "auto";
 exports.DEFAULT_SCALE_VALUE = DEFAULT_SCALE_VALUE;
 const DEFAULT_SCALE = 1.0;
@@ -3468,6 +3459,7 @@ function getVisibleElements({
   }
 
   const visible = [],
+        ids = new Set(),
         numViews = views.length;
   let firstVisibleElementInd = binarySearchFirstItem(views, horizontal ? isElementNextAfterViewHorizontally : isElementBottomAfterViewTop);
 
@@ -3512,6 +3504,7 @@ function getVisibleElements({
       percent,
       widthPercent: fractionWidth * 100 | 0
     });
+    ids.add(view.id);
   }
 
   const first = visible[0],
@@ -3532,7 +3525,8 @@ function getVisibleElements({
   return {
     first,
     last,
-    views: visible
+    views: visible,
+    ids
   };
 }
 
@@ -4250,14 +4244,14 @@ class PDFRenderingQueue {
   }
 
   getHighestPriority(visible, views, scrolledDown, preRenderExtra = false) {
-    const visibleViews = visible.views;
-    const numVisible = visibleViews.length;
+    const visibleViews = visible.views,
+          numVisible = visibleViews.length;
 
     if (numVisible === 0) {
       return null;
     }
 
-    for (let i = 0; i < numVisible; ++i) {
+    for (let i = 0; i < numVisible; i++) {
       const view = visibleViews[i].view;
 
       if (!this.isViewFinished(view)) {
@@ -4268,10 +4262,17 @@ class PDFRenderingQueue {
     const firstId = visible.first.id,
           lastId = visible.last.id;
 
-    if (lastId - firstId > 1) {
+    if (lastId - firstId + 1 > numVisible) {
+      const visibleIds = visible.ids;
+
       for (let i = 1, ii = lastId - firstId; i < ii; i++) {
-        const holeId = scrolledDown ? firstId + i : lastId - i,
-              holeView = views[holeId - 1];
+        const holeId = scrolledDown ? firstId + i : lastId - i;
+
+        if (visibleIds.has(holeId)) {
+          continue;
+        }
+
+        const holeView = views[holeId - 1];
 
         if (!this.isViewFinished(holeView)) {
           return holeView;
@@ -6032,8 +6033,8 @@ exports.PDFFindController = PDFFindController;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.getCharacterType = getCharacterType;
 exports.CharacterType = void 0;
+exports.getCharacterType = getCharacterType;
 const CharacterType = {
   SPACE: 0,
   ALPHA_LETTER: 1,
@@ -6127,9 +6128,9 @@ function getCharacterType(charCode) {
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
+exports.PDFHistory = void 0;
 exports.isDestArraysEqual = isDestArraysEqual;
 exports.isDestHashesEqual = isDestHashesEqual;
-exports.PDFHistory = void 0;
 
 var _ui_utils = __webpack_require__(3);
 
@@ -9146,26 +9147,29 @@ class PDFThumbnailViewer {
       thumbnailView.div.classList.add(THUMBNAIL_SELECTED_CLASS);
     }
 
-    const visibleThumbs = this._getVisibleThumbs();
+    const {
+      first,
+      last,
+      views
+    } = this._getVisibleThumbs();
 
-    const numVisibleThumbs = visibleThumbs.views.length;
-
-    if (numVisibleThumbs > 0) {
-      const first = visibleThumbs.first.id;
-      const last = numVisibleThumbs > 1 ? visibleThumbs.last.id : first;
+    if (views.length > 0) {
       let shouldScroll = false;
 
-      if (pageNumber <= first || pageNumber >= last) {
+      if (pageNumber <= first.id || pageNumber >= last.id) {
         shouldScroll = true;
       } else {
-        visibleThumbs.views.some(function (view) {
-          if (view.id !== pageNumber) {
-            return false;
+        for (const {
+          id,
+          percent
+        } of views) {
+          if (id !== pageNumber) {
+            continue;
           }
 
-          shouldScroll = view.percent < 100;
-          return true;
-        });
+          shouldScroll = percent < 100;
+          break;
+        }
       }
 
       if (shouldScroll) {
@@ -9813,6 +9817,7 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.BaseViewer = void 0;
+exports.PDFPageViewBuffer = PDFPageViewBuffer;
 
 var _pdfjsLib = __webpack_require__(4);
 
@@ -9855,18 +9860,12 @@ function PDFPageViewBuffer(size) {
     }
   };
 
-  this.resize = function (newSize, pagesToKeep) {
+  this.resize = function (newSize, idsToKeep = null) {
     size = newSize;
 
-    if (pagesToKeep) {
-      const pageIdsToKeep = new Set();
-
-      for (let i = 0, iMax = pagesToKeep.length; i < iMax; ++i) {
-        pageIdsToKeep.add(pagesToKeep[i].id);
-      }
-
+    if (idsToKeep) {
       (0, _ui_utils.moveToEndOfArray)(data, function (page) {
-        return pageIdsToKeep.has(page.id);
+        return idsToKeep.has(page.id);
       });
     }
 
@@ -10780,7 +10779,7 @@ class BaseViewer {
 
     const newCacheSize = Math.max(DEFAULT_CACHE_SIZE, 2 * numVisiblePages + 1);
 
-    this._buffer.resize(newCacheSize, visiblePages);
+    this._buffer.resize(newCacheSize, visible.ids);
 
     this.renderingQueue.renderHighestPriority(visible);
 
@@ -10858,10 +10857,12 @@ class BaseViewer {
       y: element.offsetTop + element.clientTop,
       view: pageView
     };
+    const ids = new Set([pageView.id]);
     return {
       first: view,
       last: view,
-      views: [view]
+      views: [view],
+      ids
     };
   }
 
@@ -10892,13 +10893,11 @@ class BaseViewer {
       return false;
     }
 
-    return this._getVisiblePages().views.some(function (view) {
-      return view.id === pageNumber;
-    });
+    return this._getVisiblePages().ids.has(pageNumber);
   }
 
   isPageCached(pageNumber) {
-    if (!this.pdfDocument || !this._buffer) {
+    if (!this.pdfDocument) {
       return false;
     }
 
@@ -10908,11 +10907,6 @@ class BaseViewer {
     }
 
     const pageView = this._pages[pageNumber - 1];
-
-    if (!pageView) {
-      return false;
-    }
-
     return this._buffer.has(pageView);
   }
 
@@ -11560,9 +11554,9 @@ exports.DefaultAnnotationLayerFactory = DefaultAnnotationLayerFactory;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
+exports.NullL10n = void 0;
 exports.fixupLangCode = fixupLangCode;
 exports.getL10nFallback = getL10nFallback;
-exports.NullL10n = void 0;
 const DEFAULT_L10N_STRINGS = {
   of_pages: "of {{pagesCount}}",
   page_of_pages: "({{pageNumber}} of {{pagesCount}})",
@@ -15023,8 +15017,8 @@ document.webL10n = function (window, document, undefined) {
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.docPropertiesLookup = docPropertiesLookup;
 exports.GenericScripting = void 0;
+exports.docPropertiesLookup = docPropertiesLookup;
 
 var _pdfjsLib = __webpack_require__(4);
 
@@ -15450,16 +15444,16 @@ var exports = __webpack_exports__;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-Object.defineProperty(exports, "PDFViewerApplicationOptions", ({
-  enumerable: true,
-  get: function () {
-    return _app_options.AppOptions;
-  }
-}));
 Object.defineProperty(exports, "PDFViewerApplication", ({
   enumerable: true,
   get: function () {
     return _app.PDFViewerApplication;
+  }
+}));
+Object.defineProperty(exports, "PDFViewerApplicationOptions", ({
+  enumerable: true,
+  get: function () {
+    return _app_options.AppOptions;
   }
 }));
 
@@ -15468,7 +15462,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = '2d8b6fd';
+const pdfjsBuild = 'efb4455';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
