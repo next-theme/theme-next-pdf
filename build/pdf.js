@@ -1131,12 +1131,17 @@ class AbortException extends BaseException {
 }
 
 exports.AbortException = AbortException;
-const NullCharactersRegExp = /\x00/g;
+const NullCharactersRegExp = /\x00+/g;
+const InvisibleCharactersRegExp = /[\x01-\x1F]/g;
 
-function removeNullCharacters(str) {
+function removeNullCharacters(str, replaceInvisible = false) {
   if (typeof str !== "string") {
     warn("The argument for removeNullCharacters must be a string.");
     return str;
+  }
+
+  if (replaceInvisible) {
+    str = str.replace(InvisibleCharactersRegExp, " ");
   }
 
   return str.replace(NullCharactersRegExp, "");
@@ -4201,7 +4206,7 @@ class InternalRenderTask {
 
 const version = '2.12.0';
 exports.version = version;
-const build = 'efb4455';
+const build = '712621b';
 exports.build = build;
 
 /***/ }),
@@ -15784,7 +15789,7 @@ var _svg = __w_pdfjs_require__(22);
 var _xfa_layer = __w_pdfjs_require__(20);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = 'efb4455';
+const pdfjsBuild = '712621b';
 {
   if (_is_node.isNodeJS) {
     const {

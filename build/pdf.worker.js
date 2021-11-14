@@ -1299,12 +1299,17 @@ class AbortException extends BaseException {
 }
 
 exports.AbortException = AbortException;
-const NullCharactersRegExp = /\x00/g;
+const NullCharactersRegExp = /\x00+/g;
+const InvisibleCharactersRegExp = /[\x01-\x1F]/g;
 
-function removeNullCharacters(str) {
+function removeNullCharacters(str, replaceInvisible = false) {
   if (typeof str !== "string") {
     warn("The argument for removeNullCharacters must be a string.");
     return str;
+  }
+
+  if (replaceInvisible) {
+    str = str.replace(InvisibleCharactersRegExp, " ");
   }
 
   return str.replace(NullCharactersRegExp, "");
@@ -20772,16 +20777,16 @@ class ColorSpace {
 
     if ((0, _primitives.isName)(cs)) {
       switch (cs.name) {
-        case "DeviceGray":
         case "G":
+        case "DeviceGray":
           return this.singletons.gray;
 
-        case "DeviceRGB":
         case "RGB":
+        case "DeviceRGB":
           return this.singletons.rgb;
 
-        case "DeviceCMYK":
         case "CMYK":
+        case "DeviceCMYK":
           return this.singletons.cmyk;
 
         case "Pattern":
@@ -20814,16 +20819,16 @@ class ColorSpace {
       let params, numComps, baseCS, whitePoint, blackPoint, gamma;
 
       switch (mode) {
-        case "DeviceGray":
         case "G":
+        case "DeviceGray":
           return this.singletons.gray;
 
-        case "DeviceRGB":
         case "RGB":
+        case "DeviceRGB":
           return this.singletons.rgb;
 
-        case "DeviceCMYK":
         case "CMYK":
+        case "DeviceCMYK":
           return this.singletons.cmyk;
 
         case "CalGray":
@@ -20876,8 +20881,8 @@ class ColorSpace {
 
           return new PatternCS(baseCS);
 
-        case "Indexed":
         case "I":
+        case "Indexed":
           baseCS = this._parse(cs[1], xref, resources, pdfFunctionFactory);
           const hiVal = xref.fetchIfRef(cs[2]) + 1;
           const lookup = xref.fetchIfRef(cs[3]);
@@ -22121,8 +22126,8 @@ class PartialEvaluator {
   }) {
     const dict = image.dict;
     const imageRef = dict.objId;
-    const w = dict.get("Width", "W");
-    const h = dict.get("Height", "H");
+    const w = dict.get("W", "Width");
+    const h = dict.get("H", "Height");
 
     if (!(w && (0, _util.isNum)(w)) || !(h && (0, _util.isNum)(h))) {
       (0, _util.warn)("Image dimensions are missing, or not numbers.");
@@ -22146,20 +22151,18 @@ class PartialEvaluator {
       operatorList.addOp(_util.OPS.beginMarkedContentProps, ["OC", optionalContent]);
     }
 
-    const imageMask = dict.get("ImageMask", "IM") || false;
-    const interpolate = dict.get("Interpolate", "I");
+    const imageMask = dict.get("IM", "ImageMask") || false;
+    const interpolate = dict.get("I", "Interpolate");
     let imgData, args;
 
     if (imageMask) {
-      const width = dict.get("Width", "W");
-      const height = dict.get("Height", "H");
-      const bitStrideLength = width + 7 >> 3;
-      const imgArray = image.getBytes(bitStrideLength * height, true);
-      const decode = dict.getArray("Decode", "D");
+      const bitStrideLength = w + 7 >> 3;
+      const imgArray = image.getBytes(bitStrideLength * h, true);
+      const decode = dict.getArray("D", "Decode");
       imgData = _image.PDFImage.createMask({
         imgArray,
-        width,
-        height,
+        width: w,
+        height: h,
         imageIsFromDecodeStream: image instanceof _decode_stream.DecodeStream,
         inverseDecode: !!decode && decode[0] > 0,
         interpolate
@@ -22182,7 +22185,7 @@ class PartialEvaluator {
       return;
     }
 
-    const softMask = dict.get("SMask", "SM") || false;
+    const softMask = dict.get("SM", "SMask") || false;
     const mask = dict.get("Mask") || false;
     const SMALL_IMAGE_DIMENSIONS = 200;
 
@@ -23817,7 +23820,7 @@ class PartialEvaluator {
         let scaledDim = glyphWidth * scale;
         let glyphUnicode = glyph.unicode;
 
-        if (glyphUnicode === " " && (i === 0 || i + 1 === ii || glyphs[i - 1].unicode === " " || glyphs[i + 1].unicode === " ")) {
+        if (glyphUnicode === " " && (i === 0 || i + 1 === ii || glyphs[i - 1].unicode === " " || glyphs[i + 1].unicode === " " || extraSpacing)) {
           if (!font.vertical) {
             charSpacing += scaledDim + textState.wordSpacing;
             textState.translateTextMatrix(charSpacing * textState.textHScale, 0);
@@ -27403,7 +27406,7 @@ class Parser {
       dictLength = stream.pos - lexer.beginInlineImagePos;
     }
 
-    const filter = dict.get("Filter", "F");
+    const filter = dict.get("F", "Filter");
     let filterName;
 
     if ((0, _primitives.isName)(filter)) {
@@ -27419,14 +27422,24 @@ class Parser {
     const startPos = stream.pos;
     let length;
 
-    if (filterName === "DCTDecode" || filterName === "DCT") {
-      length = this.findDCTDecodeInlineStreamEnd(stream);
-    } else if (filterName === "ASCII85Decode" || filterName === "A85") {
-      length = this.findASCII85DecodeInlineStreamEnd(stream);
-    } else if (filterName === "ASCIIHexDecode" || filterName === "AHx") {
-      length = this.findASCIIHexDecodeInlineStreamEnd(stream);
-    } else {
-      length = this.findDefaultInlineStreamEnd(stream);
+    switch (filterName) {
+      case "DCT":
+      case "DCTDecode":
+        length = this.findDCTDecodeInlineStreamEnd(stream);
+        break;
+
+      case "A85":
+      case "ASCII85Decode":
+        length = this.findASCII85DecodeInlineStreamEnd(stream);
+        break;
+
+      case "AHx":
+      case "ASCIIHexDecode":
+        length = this.findASCIIHexDecodeInlineStreamEnd(stream);
+        break;
+
+      default:
+        length = this.findDefaultInlineStreamEnd(stream);
     }
 
     let imageStream = stream.makeSubStream(startPos, length, dict);
@@ -27574,12 +27587,12 @@ class Parser {
   }
 
   filter(stream, dict, length) {
-    let filter = dict.get("Filter", "F");
-    let params = dict.get("DecodeParms", "DP");
+    let filter = dict.get("F", "Filter");
+    let params = dict.get("DP", "DecodeParms");
 
     if ((0, _primitives.isName)(filter)) {
       if (Array.isArray(params)) {
-        (0, _util.warn)("/DecodeParms should not contain an Array, " + "when /Filter contains a Name.");
+        (0, _util.warn)("/DecodeParms should not be an Array, when /Filter is a Name.");
       }
 
       return this.makeFilter(stream, filter.name, length, params);
@@ -27621,64 +27634,65 @@ class Parser {
     try {
       const xrefStreamStats = this.xref.stats.streamTypes;
 
-      if (name === "FlateDecode" || name === "Fl") {
-        xrefStreamStats[_util.StreamType.FLATE] = true;
+      switch (name) {
+        case "Fl":
+        case "FlateDecode":
+          xrefStreamStats[_util.StreamType.FLATE] = true;
 
-        if (params) {
-          return new _predictor_stream.PredictorStream(new _flate_stream.FlateStream(stream, maybeLength), maybeLength, params);
-        }
-
-        return new _flate_stream.FlateStream(stream, maybeLength);
-      }
-
-      if (name === "LZWDecode" || name === "LZW") {
-        xrefStreamStats[_util.StreamType.LZW] = true;
-        let earlyChange = 1;
-
-        if (params) {
-          if (params.has("EarlyChange")) {
-            earlyChange = params.get("EarlyChange");
+          if (params) {
+            return new _predictor_stream.PredictorStream(new _flate_stream.FlateStream(stream, maybeLength), maybeLength, params);
           }
 
-          return new _predictor_stream.PredictorStream(new _lzw_stream.LZWStream(stream, maybeLength, earlyChange), maybeLength, params);
-        }
+          return new _flate_stream.FlateStream(stream, maybeLength);
 
-        return new _lzw_stream.LZWStream(stream, maybeLength, earlyChange);
-      }
+        case "LZW":
+        case "LZWDecode":
+          xrefStreamStats[_util.StreamType.LZW] = true;
+          let earlyChange = 1;
 
-      if (name === "DCTDecode" || name === "DCT") {
-        xrefStreamStats[_util.StreamType.DCT] = true;
-        return new _jpeg_stream.JpegStream(stream, maybeLength, params);
-      }
+          if (params) {
+            if (params.has("EarlyChange")) {
+              earlyChange = params.get("EarlyChange");
+            }
 
-      if (name === "JPXDecode" || name === "JPX") {
-        xrefStreamStats[_util.StreamType.JPX] = true;
-        return new _jpx_stream.JpxStream(stream, maybeLength, params);
-      }
+            return new _predictor_stream.PredictorStream(new _lzw_stream.LZWStream(stream, maybeLength, earlyChange), maybeLength, params);
+          }
 
-      if (name === "ASCII85Decode" || name === "A85") {
-        xrefStreamStats[_util.StreamType.A85] = true;
-        return new _ascii_85_stream.Ascii85Stream(stream, maybeLength);
-      }
+          return new _lzw_stream.LZWStream(stream, maybeLength, earlyChange);
 
-      if (name === "ASCIIHexDecode" || name === "AHx") {
-        xrefStreamStats[_util.StreamType.AHX] = true;
-        return new _ascii_hex_stream.AsciiHexStream(stream, maybeLength);
-      }
+        case "DCT":
+        case "DCTDecode":
+          xrefStreamStats[_util.StreamType.DCT] = true;
+          return new _jpeg_stream.JpegStream(stream, maybeLength, params);
 
-      if (name === "CCITTFaxDecode" || name === "CCF") {
-        xrefStreamStats[_util.StreamType.CCF] = true;
-        return new _ccitt_stream.CCITTFaxStream(stream, maybeLength, params);
-      }
+        case "JPX":
+        case "JPXDecode":
+          xrefStreamStats[_util.StreamType.JPX] = true;
+          return new _jpx_stream.JpxStream(stream, maybeLength, params);
 
-      if (name === "RunLengthDecode" || name === "RL") {
-        xrefStreamStats[_util.StreamType.RLX] = true;
-        return new _run_length_stream.RunLengthStream(stream, maybeLength);
-      }
+        case "A85":
+        case "ASCII85Decode":
+          xrefStreamStats[_util.StreamType.A85] = true;
+          return new _ascii_85_stream.Ascii85Stream(stream, maybeLength);
 
-      if (name === "JBIG2Decode") {
-        xrefStreamStats[_util.StreamType.JBIG] = true;
-        return new _jbig2_stream.Jbig2Stream(stream, maybeLength, params);
+        case "AHx":
+        case "ASCIIHexDecode":
+          xrefStreamStats[_util.StreamType.AHX] = true;
+          return new _ascii_hex_stream.AsciiHexStream(stream, maybeLength);
+
+        case "CCF":
+        case "CCITTFaxDecode":
+          xrefStreamStats[_util.StreamType.CCF] = true;
+          return new _ccitt_stream.CCITTFaxStream(stream, maybeLength, params);
+
+        case "RL":
+        case "RunLengthDecode":
+          xrefStreamStats[_util.StreamType.RLX] = true;
+          return new _run_length_stream.RunLengthStream(stream, maybeLength);
+
+        case "JBIG2Decode":
+          xrefStreamStats[_util.StreamType.JBIG] = true;
+          return new _jbig2_stream.Jbig2Stream(stream, maybeLength, params);
       }
 
       (0, _util.warn)(`Filter "${name}" is not supported.`);
@@ -32425,10 +32439,10 @@ class JpegStream extends _decode_stream.DecodeStream {
       decodeTransform: undefined,
       colorTransform: undefined
     };
-    const decodeArr = this.dict.getArray("Decode", "D");
+    const decodeArr = this.dict.getArray("D", "Decode");
 
     if (this.forceRGB && Array.isArray(decodeArr)) {
-      const bitsPerComponent = this.dict.get("BitsPerComponent") || 8;
+      const bitsPerComponent = this.dict.get("BPC", "BitsPerComponent") || 8;
       const decodeArrLength = decodeArr.length;
       const transform = new Int32Array(decodeArrLength);
       let transformNeeded = false;
@@ -36335,7 +36349,7 @@ class PredictorStream extends _decode_stream.DecodeStream {
     this.str = str;
     this.dict = str.dict;
     const colors = this.colors = params.get("Colors") || 1;
-    const bits = this.bits = params.get("BitsPerComponent") || 8;
+    const bits = this.bits = params.get("BPC", "BitsPerComponent") || 8;
     const columns = this.columns = params.get("Columns") || 1;
     this.pixBytes = colors * bits + 7 >> 3;
     this.rowBytes = columns * colors * bits + 7 >> 3;
@@ -45298,7 +45312,7 @@ class RadialAxialShading extends BaseShading {
     this.shadingType = dict.get("ShadingType");
 
     const cs = _colorspace.ColorSpace.parse({
-      cs: dict.getRaw("ColorSpace") || dict.getRaw("CS"),
+      cs: dict.getRaw("CS") || dict.getRaw("ColorSpace"),
       xref,
       resources,
       pdfFunctionFactory,
@@ -45570,7 +45584,7 @@ class MeshShading extends BaseShading {
     }
 
     const cs = _colorspace.ColorSpace.parse({
-      cs: dict.getRaw("ColorSpace") || dict.getRaw("CS"),
+      cs: dict.getRaw("CS") || dict.getRaw("ColorSpace"),
       xref,
       resources,
       pdfFunctionFactory,
@@ -52185,7 +52199,7 @@ class PDFImage {
   }) {
     this.image = image;
     const dict = image.dict;
-    const filter = dict.get("Filter");
+    const filter = dict.get("F", "Filter");
 
     if ((0, _primitives.isName)(filter)) {
       switch (filter.name) {
@@ -52206,8 +52220,8 @@ class PDFImage {
       }
     }
 
-    let width = dict.get("Width", "W");
-    let height = dict.get("Height", "H");
+    let width = dict.get("W", "Width");
+    let height = dict.get("H", "Height");
 
     if (Number.isInteger(image.width) && image.width > 0 && Number.isInteger(image.height) && image.height > 0 && (image.width !== width || image.height !== height)) {
       (0, _util.warn)("PDFImage - using the Width/Height of the image data, " + "rather than the image dictionary.");
@@ -52221,13 +52235,13 @@ class PDFImage {
 
     this.width = width;
     this.height = height;
-    this.interpolate = dict.get("Interpolate", "I");
-    this.imageMask = dict.get("ImageMask", "IM") || false;
+    this.interpolate = dict.get("I", "Interpolate");
+    this.imageMask = dict.get("IM", "ImageMask") || false;
     this.matte = dict.get("Matte") || false;
     let bitsPerComponent = image.bitsPerComponent;
 
     if (!bitsPerComponent) {
-      bitsPerComponent = dict.get("BitsPerComponent", "BPC");
+      bitsPerComponent = dict.get("BPC", "BitsPerComponent");
 
       if (!bitsPerComponent) {
         if (this.imageMask) {
@@ -52241,7 +52255,7 @@ class PDFImage {
     this.bpc = bitsPerComponent;
 
     if (!this.imageMask) {
-      let colorSpace = dict.getRaw("ColorSpace") || dict.getRaw("CS");
+      let colorSpace = dict.getRaw("CS") || dict.getRaw("ColorSpace");
 
       if (!colorSpace) {
         (0, _util.info)("JPX images (which do not require color spaces)");
@@ -52260,7 +52274,7 @@ class PDFImage {
             break;
 
           default:
-            throw new Error(`JPX images with ${image.numComps} ` + "color components not supported.");
+            throw new Error(`JPX images with ${image.numComps} color components not supported.`);
         }
       }
 
@@ -52274,7 +52288,7 @@ class PDFImage {
       this.numComps = this.colorSpace.numComps;
     }
 
-    this.decode = dict.getArray("Decode", "D");
+    this.decode = dict.getArray("D", "Decode");
     this.needsDecode = false;
 
     if (this.decode && (this.colorSpace && !this.colorSpace.isDefaultDecode(this.decode, bitsPerComponent) || isMask && !_colorspace.ColorSpace.isDefaultDecode(this.decode, 1))) {
@@ -52304,7 +52318,7 @@ class PDFImage {
     } else if (mask) {
       if ((0, _primitives.isStream)(mask)) {
         const maskDict = mask.dict,
-              imageMask = maskDict.get("ImageMask", "IM");
+              imageMask = maskDict.get("IM", "ImageMask");
 
         if (!imageMask) {
           (0, _util.warn)("Ignoring /Mask in image without /ImageMask.");
@@ -58859,11 +58873,13 @@ class XmlObject extends XFAObject {
       return;
     }
 
+    const utf8TagName = (0, _util.utf8StringToString)(tagName);
     const prefix = this[$namespaceId] === NS_DATASETS ? "xfa:" : "";
-    buf.push(`<${prefix}${tagName}`);
+    buf.push(`<${prefix}${utf8TagName}`);
 
     for (const [name, value] of this[_attributes].entries()) {
-      buf.push(` ${name}="${(0, _core_utils.encodeToXmlString)(value[$content])}"`);
+      const utf8Name = (0, _util.utf8StringToString)(name);
+      buf.push(` ${utf8Name}="${(0, _core_utils.encodeToXmlString)(value[$content])}"`);
     }
 
     if (this[_dataValue] !== null) {
@@ -58893,7 +58909,7 @@ class XmlObject extends XFAObject {
       }
     }
 
-    buf.push(`</${prefix}${tagName}>`);
+    buf.push(`</${prefix}${utf8TagName}>`);
   }
 
   [$onChild](child) {
@@ -60711,22 +60727,31 @@ function handleBreak(node) {
   const pageArea = target && target[_xfa_object.$getParent]();
 
   let index;
+  let nextPageArea = pageArea;
 
   if (node.startNew) {
     if (target) {
       const contentAreas = pageArea.contentArea.children;
-      index = contentAreas.findIndex(e => e === target) - 1;
+      const indexForCurrent = contentAreas.indexOf(currentContentArea);
+      const indexForTarget = contentAreas.indexOf(target);
+
+      if (indexForCurrent !== -1 && indexForCurrent < indexForTarget) {
+        nextPageArea = null;
+      }
+
+      index = indexForTarget - 1;
     } else {
-      index = currentPageArea.contentArea.children.findIndex(e => e === currentContentArea);
+      index = currentPageArea.contentArea.children.indexOf(currentContentArea);
     }
   } else if (target && target !== currentContentArea) {
     const contentAreas = pageArea.contentArea.children;
-    index = contentAreas.findIndex(e => e === target) - 1;
+    index = contentAreas.indexOf(target) - 1;
+    nextPageArea = pageArea === currentPageArea ? null : pageArea;
   } else {
     return false;
   }
 
-  node[_xfa_object.$extra].target = pageArea === currentPageArea ? null : pageArea;
+  node[_xfa_object.$extra].target = nextPageArea;
   node[_xfa_object.$extra].index = index;
   return true;
 }
@@ -65027,6 +65052,10 @@ class Subform extends _xfa_object.XFAObject {
       style.height = (0, _html_utils.measureToString)(height);
     }
 
+    if ((style.width === "0px" || style.height === "0px") && children.length === 0) {
+      return _utils.HTMLResult.EMPTY;
+    }
+
     const html = {
       name: "div",
       attributes,
@@ -65330,7 +65359,7 @@ class Template extends _xfa_object.XFAObject {
           if (html.html) {
             hasSomething = hasSomething || html.html.children && html.html.children.length !== 0;
             htmlContentAreas[i].children.push(html.html);
-          } else if (!hasSomething) {
+          } else if (!hasSomething && mainHtml.children.length > 1) {
             mainHtml.children.pop();
           }
 
@@ -66472,7 +66501,7 @@ function addHTML(node, html, bbox) {
 
     case "tb":
       {
-        extra.width = availableSpace.width;
+        extra.width = Math.min(availableSpace.width, Math.max(extra.width, w));
         extra.height += h;
         extra.children.push(html);
         break;
@@ -66970,7 +66999,7 @@ function layoutNode(node, availableSpace) {
 
       let parent = node[_xfa_object.$getParent]();
 
-      while (parent !== root) {
+      while (parent && parent !== root) {
         if (parent.font) {
           font = parent.font;
           break;
@@ -72141,6 +72170,10 @@ class XRef {
       return trailerDict;
     }
 
+    if (this.topDict) {
+      return this.topDict;
+    }
+
     throw new _util.InvalidPDFException("Invalid PDF structure.");
   }
 
@@ -72221,6 +72254,7 @@ class XRef {
       }
 
       (0, _util.info)("(while reading XRef): " + e);
+      this.startXRefQueue.shift();
     }
 
     if (recoveryMode) {
@@ -73167,7 +73201,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = 'efb4455';
+const pdfjsBuild = '712621b';
 })();
 
 /******/ 	return __webpack_exports__;

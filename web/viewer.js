@@ -1405,7 +1405,11 @@ const PDFViewerApplication = {
 
       this._initializeAutoPrint(pdfDocument, openActionPromise);
     });
-    onePageRendered.then(() => {
+    onePageRendered.then(data => {
+      this.externalServices.reportTelemetry({
+        type: "pageInfo",
+        timestamp: data.timestamp
+      });
       pdfDocument.getOutline().then(outline => {
         if (pdfDocument !== this.pdfDocument) {
           return;
@@ -2346,7 +2350,6 @@ function webViewerResetPermissions() {
 
 function webViewerPageRendered({
   pageNumber,
-  timestamp,
   error
 }) {
   if (pageNumber === PDFViewerApplication.page) {
@@ -2368,10 +2371,6 @@ function webViewerPageRendered({
     });
   }
 
-  PDFViewerApplication.externalServices.reportTelemetry({
-    type: "pageInfo",
-    timestamp
-  });
   PDFViewerApplication.pdfDocument.getStats().then(function (stats) {
     PDFViewerApplication.externalServices.reportTelemetry({
       type: "documentStats",
@@ -3141,7 +3140,6 @@ exports.isPortraitOrientation = isPortraitOrientation;
 exports.isValidRotation = isValidRotation;
 exports.isValidScrollMode = isValidScrollMode;
 exports.isValidSpreadMode = isValidSpreadMode;
-exports.moveToEndOfArray = moveToEndOfArray;
 exports.noContextMenuHandler = noContextMenuHandler;
 exports.normalizeWheelEventDelta = normalizeWheelEventDelta;
 exports.normalizeWheelEventDirection = normalizeWheelEventDirection;
@@ -3303,11 +3301,8 @@ function watchScroll(viewAreaElement, callback) {
 function parseQueryString(query) {
   const params = new Map();
 
-  for (const part of query.split("&")) {
-    const param = part.split("="),
-          key = param[0].toLowerCase(),
-          value = param.length > 1 ? param[1] : "";
-    params.set(decodeURIComponent(key), decodeURIComponent(value));
+  for (const [key, value] of new URLSearchParams(query)) {
+    params.set(key.toLowerCase(), value);
   }
 
   return params;
@@ -3795,25 +3790,6 @@ class ProgressBar {
 
 exports.ProgressBar = ProgressBar;
 
-function moveToEndOfArray(arr, condition) {
-  const moved = [],
-        len = arr.length;
-  let write = 0;
-
-  for (let read = 0; read < len; ++read) {
-    if (condition(arr[read])) {
-      moved.push(arr[read]);
-    } else {
-      arr[write] = arr[read];
-      ++write;
-    }
-  }
-
-  for (let read = 0; write < len; ++read, ++write) {
-    arr[write] = moved[read];
-  }
-}
-
 function getActiveOrFocusedElement() {
   let curRoot = document;
   let curActiveOrFocused = curRoot.activeElement || curRoot.querySelector(":focus");
@@ -4032,65 +4008,63 @@ exports.PDFCursorTools = PDFCursorTools;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.GrabToPan = GrabToPan;
+exports.GrabToPan = void 0;
+const CSS_CLASS_GRAB = "grab-to-pan-grab";
 
-function GrabToPan(options) {
-  this.element = options.element;
-  this.document = options.element.ownerDocument;
+class GrabToPan {
+  constructor(options) {
+    this.element = options.element;
+    this.document = options.element.ownerDocument;
 
-  if (typeof options.ignoreTarget === "function") {
-    this.ignoreTarget = options.ignoreTarget;
+    if (typeof options.ignoreTarget === "function") {
+      this.ignoreTarget = options.ignoreTarget;
+    }
+
+    this.onActiveChanged = options.onActiveChanged;
+    this.activate = this.activate.bind(this);
+    this.deactivate = this.deactivate.bind(this);
+    this.toggle = this.toggle.bind(this);
+    this._onMouseDown = this.#onMouseDown.bind(this);
+    this._onMouseMove = this.#onMouseMove.bind(this);
+    this._endPan = this.#endPan.bind(this);
+    const overlay = this.overlay = document.createElement("div");
+    overlay.className = "grab-to-pan-grabbing";
   }
 
-  this.onActiveChanged = options.onActiveChanged;
-  this.activate = this.activate.bind(this);
-  this.deactivate = this.deactivate.bind(this);
-  this.toggle = this.toggle.bind(this);
-  this._onmousedown = this._onmousedown.bind(this);
-  this._onmousemove = this._onmousemove.bind(this);
-  this._endPan = this._endPan.bind(this);
-  const overlay = this.overlay = document.createElement("div");
-  overlay.className = "grab-to-pan-grabbing";
-}
-
-GrabToPan.prototype = {
-  CSS_CLASS_GRAB: "grab-to-pan-grab",
-  activate: function GrabToPan_activate() {
+  activate() {
     if (!this.active) {
       this.active = true;
-      this.element.addEventListener("mousedown", this._onmousedown, true);
-      this.element.classList.add(this.CSS_CLASS_GRAB);
-
-      if (this.onActiveChanged) {
-        this.onActiveChanged(true);
-      }
+      this.element.addEventListener("mousedown", this._onMouseDown, true);
+      this.element.classList.add(CSS_CLASS_GRAB);
+      this.onActiveChanged?.(true);
     }
-  },
-  deactivate: function GrabToPan_deactivate() {
+  }
+
+  deactivate() {
     if (this.active) {
       this.active = false;
-      this.element.removeEventListener("mousedown", this._onmousedown, true);
+      this.element.removeEventListener("mousedown", this._onMouseDown, true);
 
       this._endPan();
 
-      this.element.classList.remove(this.CSS_CLASS_GRAB);
-
-      if (this.onActiveChanged) {
-        this.onActiveChanged(false);
-      }
+      this.element.classList.remove(CSS_CLASS_GRAB);
+      this.onActiveChanged?.(false);
     }
-  },
-  toggle: function GrabToPan_toggle() {
+  }
+
+  toggle() {
     if (this.active) {
       this.deactivate();
     } else {
       this.activate();
     }
-  },
-  ignoreTarget: function GrabToPan_ignoreTarget(node) {
+  }
+
+  ignoreTarget(node) {
     return node.matches("a[href], a[href] *, input, textarea, button, button *, select, option");
-  },
-  _onmousedown: function GrabToPan__onmousedown(event) {
+  }
+
+  #onMouseDown(event) {
     if (event.button !== 0 || this.ignoreTarget(event.target)) {
       return;
     }
@@ -4107,7 +4081,7 @@ GrabToPan.prototype = {
     this.scrollTopStart = this.element.scrollTop;
     this.clientXStart = event.clientX;
     this.clientYStart = event.clientY;
-    this.document.addEventListener("mousemove", this._onmousemove, true);
+    this.document.addEventListener("mousemove", this._onMouseMove, true);
     this.document.addEventListener("mouseup", this._endPan, true);
     this.element.addEventListener("scroll", this._endPan, true);
     event.preventDefault();
@@ -4117,11 +4091,12 @@ GrabToPan.prototype = {
     if (focusedElement && !focusedElement.contains(event.target)) {
       focusedElement.blur();
     }
-  },
-  _onmousemove: function GrabToPan__onmousemove(event) {
+  }
+
+  #onMouseMove(event) {
     this.element.removeEventListener("scroll", this._endPan, true);
 
-    if (isLeftMouseReleased(event)) {
+    if (!(event.buttons & 1)) {
       this._endPan();
 
       return;
@@ -4146,30 +4121,18 @@ GrabToPan.prototype = {
     if (!this.overlay.parentNode) {
       document.body.appendChild(this.overlay);
     }
-  },
-  _endPan: function GrabToPan__endPan() {
+  }
+
+  #endPan() {
     this.element.removeEventListener("scroll", this._endPan, true);
-    this.document.removeEventListener("mousemove", this._onmousemove, true);
+    this.document.removeEventListener("mousemove", this._onMouseMove, true);
     this.document.removeEventListener("mouseup", this._endPan, true);
     this.overlay.remove();
   }
-};
 
-function isLeftMouseReleased(event) {
-  if ("buttons" in event) {
-    return !(event.buttons & 1);
-  }
-
-  const chrome = window.chrome;
-  const isChrome15OrOpera15plus = chrome && (chrome.webstore || chrome.app);
-  const isSafari6plus = /Apple/.test(navigator.vendor) && /Version\/([6-9]\d*|[1-5]\d+)/.test(navigator.userAgent);
-
-  if (isChrome15OrOpera15plus || isSafari6plus) {
-    return event.which === 0;
-  }
-
-  return false;
 }
+
+exports.GrabToPan = GrabToPan;
 
 /***/ }),
 /* 7 */
@@ -4718,7 +4681,7 @@ class BaseTreeViewer {
   }
 
   _normalizeTextContent(str) {
-    return (0, _pdfjsLib.removeNullCharacters)(str) || "\u2013";
+    return (0, _pdfjsLib.removeNullCharacters)(str, true) || "\u2013";
   }
 
   _addToggleButton(div, hidden = false) {
@@ -9816,8 +9779,7 @@ exports.PDFSinglePageViewer = PDFSinglePageViewer;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.BaseViewer = void 0;
-exports.PDFPageViewBuffer = PDFPageViewBuffer;
+exports.PDFPageViewBuffer = exports.BaseViewer = void 0;
 
 var _pdfjsLib = __webpack_require__(4);
 
@@ -9843,41 +9805,66 @@ var _xfa_layer_builder = __webpack_require__(34);
 
 const DEFAULT_CACHE_SIZE = 10;
 
-function PDFPageViewBuffer(size) {
-  const data = [];
+class PDFPageViewBuffer {
+  #buf = new Set();
+  #size = 0;
 
-  this.push = function (view) {
-    const i = data.indexOf(view);
+  constructor(size) {
+    this.#size = size;
+  }
 
-    if (i >= 0) {
-      data.splice(i, 1);
+  push(view) {
+    const buf = this.#buf;
+
+    if (buf.has(view)) {
+      buf.delete(view);
     }
 
-    data.push(view);
+    buf.add(view);
 
-    if (data.length > size) {
-      data.shift().destroy();
+    if (buf.size > this.#size) {
+      this.#destroyFirstView();
     }
-  };
+  }
 
-  this.resize = function (newSize, idsToKeep = null) {
-    size = newSize;
+  resize(newSize, idsToKeep = null) {
+    this.#size = newSize;
+    const buf = this.#buf;
 
     if (idsToKeep) {
-      (0, _ui_utils.moveToEndOfArray)(data, function (page) {
-        return idsToKeep.has(page.id);
-      });
+      const ii = buf.size;
+      let i = 1;
+
+      for (const view of buf) {
+        if (idsToKeep.has(view.id)) {
+          buf.delete(view);
+          buf.add(view);
+        }
+
+        if (++i > ii) {
+          break;
+        }
+      }
     }
 
-    while (data.length > size) {
-      data.shift().destroy();
+    while (buf.size > this.#size) {
+      this.#destroyFirstView();
     }
-  };
+  }
 
-  this.has = function (view) {
-    return data.includes(view);
-  };
+  has(view) {
+    return this.#buf.has(view);
+  }
+
+  #destroyFirstView() {
+    const firstView = this.#buf.keys().next().value;
+    firstView?.destroy();
+    this.#buf.delete(firstView);
+  }
+
 }
+
+exports.PDFPageViewBuffer = PDFPageViewBuffer;
 
 function isSameScale(oldScale, newScale) {
   if (newScale === oldScale) {
@@ -9892,6 +9879,7 @@ function isSameScale(oldScale, newScale) {
 }
 
 class BaseViewer {
+  #buffer = null;
   #scrollModePageState = null;
 
   constructor(options) {
@@ -10194,7 +10182,7 @@ class BaseViewer {
         return;
       }
 
-      this._buffer.push(pageView);
+      this.#buffer.push(pageView);
     };
 
     this.eventBus._on("pagerender", this._onBeforeDraw);
@@ -10204,7 +10192,9 @@ class BaseViewer {
         return;
       }
 
-      this._onePageRenderedCapability.resolve();
+      this._onePageRenderedCapability.resolve({
+        timestamp: evt.timestamp
+      });
 
       this.eventBus._off("pagerendered", this._onAfterDraw);
 
@@ -10348,7 +10338,7 @@ class BaseViewer {
     this._currentScale = _ui_utils.UNKNOWN_SCALE;
     this._currentScaleValue = null;
     this._pageLabels = null;
-    this._buffer = new PDFPageViewBuffer(DEFAULT_CACHE_SIZE);
+    this.#buffer = new PDFPageViewBuffer(DEFAULT_CACHE_SIZE);
     this._location = null;
     this._pagesRotation = 0;
     this._optionalContentConfigPromise = null;
@@ -10778,9 +10768,7 @@ class BaseViewer {
     }
 
     const newCacheSize = Math.max(DEFAULT_CACHE_SIZE, 2 * numVisiblePages + 1);
-
-    this._buffer.resize(newCacheSize, visible.ids);
-
+    this.#buffer.resize(newCacheSize, visible.ids);
     this.renderingQueue.renderHighestPriority(visible);
 
     if (!this.isInPresentationMode) {
@@ -10907,7 +10895,7 @@ class BaseViewer {
     }
 
     const pageView = this._pages[pageNumber - 1];
-    return this._buffer.has(pageView);
+    return this.#buffer.has(pageView);
   }
 
   cleanup() {
@@ -15462,7 +15450,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = 'efb4455';
+const pdfjsBuild = '712621b';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
