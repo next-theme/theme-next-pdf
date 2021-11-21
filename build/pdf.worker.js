@@ -98,17 +98,7 @@ class WorkerMessageHandler {
       }
 
       testMessageProcessed = true;
-
-      if (!(data instanceof Uint8Array)) {
-        handler.send("test", null);
-        return;
-      }
-
-      const supportTransfers = data[0] === 255;
-      handler.postMessageTransfers = supportTransfers;
-      handler.send("test", {
-        supportTransfers
-      });
+      handler.send("test", data instanceof Uint8Array && data[0] === 255);
     });
     handler.on("configure", function wphConfigure(data) {
       (0, _util.setVerbosityLevel)(data.verbosity);
@@ -149,7 +139,6 @@ class WorkerMessageHandler {
     const docBaseUrl = docParams.docBaseUrl;
     const workerHandlerName = docParams.docId + "_worker";
     let handler = new _message_handler.MessageHandler(workerHandlerName, docId, port);
-    handler.postMessageTransfers = docParams.postMessageTransfers;
 
     function ensureNotTerminated() {
       if (terminated) {
@@ -200,7 +189,7 @@ class WorkerMessageHandler {
 
       if (source.data) {
         try {
-          newPdfManager = new _pdf_manager.LocalPdfManager(docId, source.data, source.password, evaluatorOptions, enableXfa, docBaseUrl);
+          newPdfManager = new _pdf_manager.LocalPdfManager(docId, source.data, source.password, handler, evaluatorOptions, enableXfa, docBaseUrl);
           pdfManagerCapability.resolve(newPdfManager);
         } catch (ex) {
           pdfManagerCapability.reject(ex);
@@ -255,7 +244,7 @@ class WorkerMessageHandler {
         }
 
         try {
-          newPdfManager = new _pdf_manager.LocalPdfManager(docId, pdfFile, source.password, evaluatorOptions, enableXfa, docBaseUrl);
+          newPdfManager = new _pdf_manager.LocalPdfManager(docId, pdfFile, source.password, handler, evaluatorOptions, enableXfa, docBaseUrl);
           pdfManagerCapability.resolve(newPdfManager);
         } catch (ex) {
           pdfManagerCapability.reject(ex);
@@ -467,9 +456,6 @@ class WorkerMessageHandler {
       return pdfManager.onLoadedStream().then(function (stream) {
         return stream.bytes;
       });
-    });
-    handler.on("GetStats", function wphSetupGetStats(data) {
-      return pdfManager.ensureXRef("stats");
     });
     handler.on("GetAnnotations", function ({
       pageIndex,
@@ -2388,11 +2374,12 @@ class BasePdfManager {
 }
 
 class LocalPdfManager extends BasePdfManager {
-  constructor(docId, data, password, evaluatorOptions, enableXfa, docBaseUrl) {
+  constructor(docId, data, password, msgHandler, evaluatorOptions, enableXfa, docBaseUrl) {
     super();
     this._docId = docId;
     this._password = password;
     this._docBaseUrl = parseDocBaseUrl(docBaseUrl);
+    this.msgHandler = msgHandler;
     this.evaluatorOptions = evaluatorOptions;
     this.enableXfa = enableXfa;
     const stream = new _stream.Stream(data);
@@ -3066,7 +3053,7 @@ exports.ChunkedStreamManager = ChunkedStreamManager;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.XRefParseException = exports.XRefEntryException = exports.ParserEOFException = exports.MissingDataException = void 0;
+exports.XRefParseException = exports.XRefEntryException = exports.ParserEOFException = exports.MissingDataException = exports.DocStats = void 0;
 exports.collectActions = collectActions;
 exports.encodeToXmlString = encodeToXmlString;
 exports.escapePDFName = escapePDFName;
@@ -3156,6 +3143,55 @@ class XRefParseException extends _util.BaseException {
 }
 
 exports.XRefParseException = XRefParseException;
+
+class DocStats {
+  constructor(handler) {
+    this._handler = handler;
+    this._streamTypes = new Set();
+    this._fontTypes = new Set();
+  }
+
+  _send() {
+    const streamTypes = Object.create(null),
+          fontTypes = Object.create(null);
+
+    for (const type of this._streamTypes) {
+      streamTypes[type] = true;
+    }
+
+    for (const type of this._fontTypes) {
+      fontTypes[type] = true;
+    }
+
+    this._handler.send("DocStats", {
+      streamTypes,
+      fontTypes
+    });
+  }
+
+  addStreamType(type) {
+    if (this._streamTypes.has(type)) {
+      return;
+    }
+
+    this._streamTypes.add(type);
+
+    this._send();
+  }
+
+  addFontType(type) {
+    if (this._fontTypes.has(type)) {
+      return;
+    }
+
+    this._fontTypes.add(type);
+
+    this._send();
+  }
+
+}
+
+exports.DocStats = DocStats;
 
 function getInheritableProperty({
   dict,
@@ -3921,7 +3957,7 @@ class Page {
 
       for (const annotation of annotations) {
         if (intentAny || intentDisplay && annotation.mustBeViewed(annotationStorage) || intentPrint && annotation.mustBePrinted(annotationStorage)) {
-          opListPromises.push(annotation.getOperatorList(partialEvaluator, task, renderForms, annotationStorage).catch(function (reason) {
+          opListPromises.push(annotation.getOperatorList(partialEvaluator, task, intent, renderForms, annotationStorage).catch(function (reason) {
             (0, _util.warn)("getOperatorList - ignoring annotation data during " + `"${task.name}" task: "${reason}".`);
             return null;
           }));
@@ -18267,7 +18303,8 @@ class Annotation {
       id: params.id,
       modificationDate: this.modificationDate,
       rect: this.rectangle,
-      subtype: params.subtype
+      subtype: params.subtype,
+      hasOwnCanvas: false
     };
 
     if (params.collectFields) {
@@ -18462,8 +18499,8 @@ class Annotation {
     this.appearance = normalAppearanceState.get(as.name);
   }
 
-  loadResources(keys) {
-    return this.appearance.dict.getAsync("Resources").then(resources => {
+  loadResources(keys, appearance) {
+    return appearance.dict.getAsync("Resources").then(resources => {
       if (!resources) {
         return undefined;
       }
@@ -18475,21 +18512,28 @@ class Annotation {
     });
   }
 
-  getOperatorList(evaluator, task, renderForms, annotationStorage) {
-    if (!this.appearance) {
-      return Promise.resolve(new _operator_list.OperatorList());
+  getOperatorList(evaluator, task, intent, renderForms, annotationStorage) {
+    const data = this.data;
+    let appearance = this.appearance;
+    const isUsingOwnCanvas = data.hasOwnCanvas && intent & _util.RenderingIntentFlag.DISPLAY;
+
+    if (!appearance) {
+      if (!isUsingOwnCanvas) {
+        return Promise.resolve(new _operator_list.OperatorList());
+      }
+
+      appearance = new _stream.StringStream("");
+      appearance.dict = new _primitives.Dict();
     }
 
-    const appearance = this.appearance;
-    const data = this.data;
     const appearanceDict = appearance.dict;
-    const resourcesPromise = this.loadResources(["ExtGState", "ColorSpace", "Pattern", "Shading", "XObject", "Font"]);
+    const resourcesPromise = this.loadResources(["ExtGState", "ColorSpace", "Pattern", "Shading", "XObject", "Font"], appearance);
     const bbox = appearanceDict.getArray("BBox") || [0, 0, 1, 1];
     const matrix = appearanceDict.getArray("Matrix") || [1, 0, 0, 1, 0, 0];
     const transform = getTransformMatrix(data.rect, bbox, matrix);
     return resourcesPromise.then(resources => {
       const opList = new _operator_list.OperatorList();
-      opList.addOp(_util.OPS.beginAnnotation, [data.id, data.rect, transform, matrix]);
+      opList.addOp(_util.OPS.beginAnnotation, [data.id, data.rect, transform, matrix, isUsingOwnCanvas]);
       return evaluator.getOperatorList({
         stream: appearance,
         task,
@@ -18929,18 +18973,18 @@ class WidgetAnnotation extends Annotation {
     return !!(this.data.fieldFlags & flag);
   }
 
-  getOperatorList(evaluator, task, renderForms, annotationStorage) {
+  getOperatorList(evaluator, task, intent, renderForms, annotationStorage) {
     if (renderForms && !(this instanceof SignatureWidgetAnnotation)) {
       return Promise.resolve(new _operator_list.OperatorList());
     }
 
     if (!this._hasText) {
-      return super.getOperatorList(evaluator, task, renderForms, annotationStorage);
+      return super.getOperatorList(evaluator, task, intent, renderForms, annotationStorage);
     }
 
     return this._getAppearance(evaluator, task, annotationStorage).then(content => {
       if (this.appearance && content === null) {
-        return super.getOperatorList(evaluator, task, renderForms, annotationStorage);
+        return super.getOperatorList(evaluator, task, intent, renderForms, annotationStorage);
       }
 
       const operatorList = new _operator_list.OperatorList();
@@ -19390,15 +19434,17 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
     } else if (this.data.radioButton) {
       this._processRadioButton(params);
     } else if (this.data.pushButton) {
+      this.data.hasOwnCanvas = true;
+
       this._processPushButton(params);
     } else {
       (0, _util.warn)("Invalid field flags for button widget annotation");
     }
   }
 
-  async getOperatorList(evaluator, task, renderForms, annotationStorage) {
+  async getOperatorList(evaluator, task, intent, renderForms, annotationStorage) {
     if (this.data.pushButton) {
-      return super.getOperatorList(evaluator, task, false, annotationStorage);
+      return super.getOperatorList(evaluator, task, intent, false, annotationStorage);
     }
 
     let value = null;
@@ -19410,7 +19456,7 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
 
     if (value === null) {
       if (this.appearance) {
-        return super.getOperatorList(evaluator, task, renderForms, annotationStorage);
+        return super.getOperatorList(evaluator, task, intent, renderForms, annotationStorage);
       }
 
       if (this.data.checkBox) {
@@ -19425,7 +19471,7 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
     if (appearance) {
       const savedAppearance = this.appearance;
       this.appearance = appearance;
-      const operatorList = super.getOperatorList(evaluator, task, renderForms, annotationStorage);
+      const operatorList = super.getOperatorList(evaluator, task, intent, renderForms, annotationStorage);
       this.appearance = savedAppearance;
       return operatorList;
     }
@@ -21195,7 +21241,7 @@ const CalGrayCS = function CalGrayCSClosure() {
     const A = src[srcOffset] * scale;
     const AG = A ** cs.G;
     const L = cs.YW * AG;
-    const val = Math.max(295.8 * L ** 0.333333333333333333 - 40.8, 0);
+    const val = Math.max(295.8 * L ** 0.3333333333333333 - 40.8, 0);
     dest[destOffset] = val;
     dest[destOffset + 1] = val;
     dest[destOffset + 2] = val;
@@ -22684,8 +22730,7 @@ class PartialEvaluator {
     font.loadedName = `${this.idFactory.getDocId()}_${fontID}`;
     this.translateFont(preEvaluatedFont).then(translatedFont => {
       if (translatedFont.fontType !== undefined) {
-        const xrefFontStats = xref.stats.fontTypes;
-        xrefFontStats[translatedFont.fontType] = true;
+        xref.stats.addFontType(translatedFont.fontType);
       }
 
       fontCapability.resolve(new TranslatedFont({
@@ -22704,8 +22749,10 @@ class PartialEvaluator {
         const fontFile3 = descriptor && descriptor.get("FontFile3");
         const subtype = fontFile3 && fontFile3.get("Subtype");
         const fontType = (0, _fonts_utils.getFontType)(preEvaluatedFont.type, subtype && subtype.name);
-        const xrefFontStats = xref.stats.fontTypes;
-        xrefFontStats[fontType] = true;
+
+        if (fontType !== undefined) {
+          xref.stats.addFontType(fontType);
+        }
       } catch (ex) {}
 
       fontCapability.resolve(new TranslatedFont({
@@ -27631,13 +27678,13 @@ class Parser {
       return new _stream.NullStream();
     }
 
-    try {
-      const xrefStreamStats = this.xref.stats.streamTypes;
+    const xrefStats = this.xref.stats;
 
+    try {
       switch (name) {
         case "Fl":
         case "FlateDecode":
-          xrefStreamStats[_util.StreamType.FLATE] = true;
+          xrefStats.addStreamType(_util.StreamType.FLATE);
 
           if (params) {
             return new _predictor_stream.PredictorStream(new _flate_stream.FlateStream(stream, maybeLength), maybeLength, params);
@@ -27647,7 +27694,7 @@ class Parser {
 
         case "LZW":
         case "LZWDecode":
-          xrefStreamStats[_util.StreamType.LZW] = true;
+          xrefStats.addStreamType(_util.StreamType.LZW);
           let earlyChange = 1;
 
           if (params) {
@@ -27662,36 +27709,36 @@ class Parser {
 
         case "DCT":
         case "DCTDecode":
-          xrefStreamStats[_util.StreamType.DCT] = true;
+          xrefStats.addStreamType(_util.StreamType.DCT);
           return new _jpeg_stream.JpegStream(stream, maybeLength, params);
 
         case "JPX":
         case "JPXDecode":
-          xrefStreamStats[_util.StreamType.JPX] = true;
+          xrefStats.addStreamType(_util.StreamType.JPX);
           return new _jpx_stream.JpxStream(stream, maybeLength, params);
 
         case "A85":
         case "ASCII85Decode":
-          xrefStreamStats[_util.StreamType.A85] = true;
+          xrefStats.addStreamType(_util.StreamType.A85);
           return new _ascii_85_stream.Ascii85Stream(stream, maybeLength);
 
         case "AHx":
         case "ASCIIHexDecode":
-          xrefStreamStats[_util.StreamType.AHX] = true;
+          xrefStats.addStreamType(_util.StreamType.AHX);
           return new _ascii_hex_stream.AsciiHexStream(stream, maybeLength);
 
         case "CCF":
         case "CCITTFaxDecode":
-          xrefStreamStats[_util.StreamType.CCF] = true;
+          xrefStats.addStreamType(_util.StreamType.CCF);
           return new _ccitt_stream.CCITTFaxStream(stream, maybeLength, params);
 
         case "RL":
         case "RunLengthDecode":
-          xrefStreamStats[_util.StreamType.RLX] = true;
+          xrefStats.addStreamType(_util.StreamType.RLX);
           return new _run_length_stream.RunLengthStream(stream, maybeLength);
 
         case "JBIG2Decode":
-          xrefStreamStats[_util.StreamType.JBIG] = true;
+          xrefStats.addStreamType(_util.StreamType.JBIG);
           return new _jbig2_stream.Jbig2Stream(stream, maybeLength, params);
       }
 
@@ -33681,7 +33728,7 @@ class JpegImage {
       y = data[i + 2];
       k = data[i + 3];
       data[offset++] = 255 + c * (-0.00006747147073602441 * c + 0.0008379262121013727 * m + 0.0002894718188643294 * y + 0.003264231057537806 * k - 1.1185611867203937) + m * (0.000026374107616089405 * m - 0.00008626949158638572 * y - 0.0002748769067499491 * k - 0.02155688794978967) + y * (-0.00003878099212869363 * y - 0.0003267808279485286 * k + 0.0686742238595345) - k * (0.0003361971776183937 * k + 0.7430659151342254);
-      data[offset++] = 255 + c * (0.00013596372813588848 * c + 0.000924537132573585 * m + 0.00010567359618683593 * y + 0.0004791864687436512 * k - 0.3109689587515875) + m * (-0.00023545346108370344 * m + 0.0002702845253534714 * y + 0.0020200308977307156 * k - 0.7488052167015494) + y * (0.00006834815998235662 * y + 0.00015168452363460973 * k - 0.09751927774728933) - k * (0.00031891311758832814 * k + 0.7364883807733168);
+      data[offset++] = 255 + c * (0.00013596372813588848 * c + 0.000924537132573585 * m + 0.00010567359618683593 * y + 0.0004791864687436512 * k - 0.3109689587515875) + m * (-0.00023545346108370344 * m + 0.0002702845253534714 * y + 0.0020200308977307156 * k - 0.7488052167015494) + y * (0.00006834815998235662 * y + 0.00015168452363460973 * k - 0.09751927774728933) - k * (0.0003189131175883281 * k + 0.7364883807733168);
       data[offset++] = 255 + c * (0.000013598650411385307 * c + 0.00012423956175490851 * m + 0.0004751985097583589 * y - 0.0000036729317476630422 * k - 0.05562186980264034) + m * (0.00016141380598724676 * m + 0.0009692239130725186 * y + 0.0007782692450036253 * k - 0.44015232367526463) + y * (5.068882914068769e-7 * y + 0.0017778369011375071 * k - 0.7591454649749609) - k * (0.0003435319965105553 * k + 0.7063770186160144);
     }
 
@@ -55578,6 +55625,12 @@ class StructTreePage {
         obj.alt = (0, _util.stringToPDFString)(alt);
       }
 
+      const lang = node.dict.get("Lang");
+
+      if ((0, _util.isString)(lang)) {
+        obj.lang = (0, _util.stringToPDFString)(lang);
+      }
+
       for (const kid of node.kids) {
         const kidElement = kid.type === StructElementType.ELEMENT ? kid.parentNode : null;
 
@@ -71652,9 +71705,9 @@ var _util = __w_pdfjs_require__(2);
 
 var _primitives = __w_pdfjs_require__(5);
 
-var _parser = __w_pdfjs_require__(27);
-
 var _core_utils = __w_pdfjs_require__(9);
+
+var _parser = __w_pdfjs_require__(27);
 
 var _crypto = __w_pdfjs_require__(72);
 
@@ -71665,10 +71718,7 @@ class XRef {
     this.entries = [];
     this.xrefstms = Object.create(null);
     this._cacheMap = new Map();
-    this.stats = {
-      streamTypes: Object.create(null),
-      fontTypes: Object.create(null)
-    };
+    this.stats = new _core_utils.DocStats(pdfManager.msgHandler);
     this._newRefNum = null;
   }
 
@@ -72541,7 +72591,6 @@ class MessageHandler {
     this.comObj = comObj;
     this.callbackId = 1;
     this.streamId = 1;
-    this.postMessageTransfers = true;
     this.streamSinks = Object.create(null);
     this.streamControllers = Object.create(null);
     this.callbackCapabilities = Object.create(null);
@@ -72635,7 +72684,7 @@ class MessageHandler {
   }
 
   send(actionName, data, transfers) {
-    this._postMessage({
+    this.comObj.postMessage({
       sourceName: this.sourceName,
       targetName: this.targetName,
       action: actionName,
@@ -72649,7 +72698,7 @@ class MessageHandler {
     this.callbackCapabilities[callbackId] = capability;
 
     try {
-      this._postMessage({
+      this.comObj.postMessage({
         sourceName: this.sourceName,
         targetName: this.targetName,
         action: actionName,
@@ -72678,8 +72727,7 @@ class MessageHandler {
           cancelCall: null,
           isClosed: false
         };
-
-        this._postMessage({
+        comObj.postMessage({
           sourceName,
           targetName,
           action: actionName,
@@ -72687,7 +72735,6 @@ class MessageHandler {
           data,
           desiredSize: controller.desiredSize
         }, transfers);
-
         return startCapability.promise;
       },
       pull: controller => {
@@ -72740,7 +72787,7 @@ class MessageHandler {
           this.ready = this.sinkCapability.promise;
         }
 
-        self._postMessage({
+        comObj.postMessage({
           sourceName,
           targetName,
           stream: StreamKind.ENQUEUE,
@@ -72957,14 +73004,6 @@ class MessageHandler {
   async _deleteStreamController(streamController, streamId) {
     await Promise.allSettled([streamController.startCall && streamController.startCall.promise, streamController.pullCall && streamController.pullCall.promise, streamController.cancelCall && streamController.cancelCall.promise]);
     delete this.streamControllers[streamId];
-  }
-
-  _postMessage(message, transfers) {
-    if (transfers && this.postMessageTransfers) {
-      this.comObj.postMessage(message, transfers);
-    } else {
-      this.comObj.postMessage(message);
-    }
   }
 
   destroy() {
@@ -73201,7 +73240,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = '712621b';
+const pdfjsBuild = 'aabd4e5';
 })();
 
 /******/ 	return __webpack_exports__;
