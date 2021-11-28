@@ -160,11 +160,8 @@ class WorkerMessageHandler {
       await pdfManager.ensureDoc("checkHeader");
       await pdfManager.ensureDoc("parseStartXRef");
       await pdfManager.ensureDoc("parse", [recoveryMode]);
-
-      if (!recoveryMode) {
-        await pdfManager.ensureDoc("checkFirstPage");
-      }
-
+      await pdfManager.ensureDoc("checkFirstPage", [recoveryMode]);
+      await pdfManager.ensureDoc("checkLastPage", [recoveryMode]);
       const isPureXfa = await pdfManager.ensureDoc("isPureXfa");
 
       if (isPureXfa) {
@@ -2566,6 +2563,10 @@ class ChunkedStream extends _stream.Stream {
 
     const chunk = Math.floor(pos / this.chunkSize);
 
+    if (chunk > this.numChunks) {
+      return;
+    }
+
     if (chunk === this.lastSuccessfulEnsureByteChunk) {
       return;
     }
@@ -2586,9 +2587,13 @@ class ChunkedStream extends _stream.Stream {
       return;
     }
 
-    const chunkSize = this.chunkSize;
-    const beginChunk = Math.floor(begin / chunkSize);
-    const endChunk = Math.floor((end - 1) / chunkSize) + 1;
+    const beginChunk = Math.floor(begin / this.chunkSize);
+
+    if (beginChunk > this.numChunks) {
+      return;
+    }
+
+    const endChunk = Math.min(Math.floor((end - 1) / this.chunkSize) + 1, this.numChunks);
 
     for (let chunk = beginChunk; chunk < endChunk; ++chunk) {
       if (!this._loadedChunks.has(chunk)) {
@@ -3053,7 +3058,7 @@ exports.ChunkedStreamManager = ChunkedStreamManager;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.XRefParseException = exports.XRefEntryException = exports.ParserEOFException = exports.MissingDataException = exports.DocStats = void 0;
+exports.XRefParseException = exports.XRefEntryException = exports.ParserEOFException = exports.PageDictMissingException = exports.MissingDataException = exports.DocStats = void 0;
 exports.collectActions = collectActions;
 exports.encodeToXmlString = encodeToXmlString;
 exports.escapePDFName = escapePDFName;
@@ -3116,6 +3121,15 @@ class MissingDataException extends _util.BaseException {
 }
 
 exports.MissingDataException = MissingDataException;
+
+class PageDictMissingException extends _util.BaseException {
+  constructor(msg) {
+    super(msg, "PageDictMissingException");
+  }
+
+}
+
+exports.PageDictMissingException = PageDictMissingException;
 
 class ParserEOFException extends _util.BaseException {
   constructor(msg) {
@@ -4161,7 +4175,7 @@ class PDFDocument {
     this.pdfManager = pdfManager;
     this.stream = stream;
     this.xref = new _xref.XRef(stream, pdfManager);
-    this._pagePromises = [];
+    this._pagePromises = new Map();
     this._version = null;
     const idCounters = {
       font: 0
@@ -4297,7 +4311,9 @@ class PDFDocument {
   get numPages() {
     let num = 0;
 
-    if (this.xfaFactory) {
+    if (this.catalog.hasActualNumPages) {
+      num = this.catalog.numPages;
+    } else if (this.xfaFactory) {
       num = this.xfaFactory.getNumPages();
     } else if (this.linearization) {
       num = this.linearization.numPages;
@@ -4737,7 +4753,7 @@ class PDFDocument {
     return (0, _util.shadow)(this, "fingerprints", [hexString(hashOriginal), hashModified ? hexString(hashModified) : null]);
   }
 
-  _getLinearizationPage(pageIndex) {
+  async _getLinearizationPage(pageIndex) {
     const {
       catalog,
       linearization
@@ -4745,7 +4761,9 @@ class PDFDocument {
 
     const ref = _primitives.Ref.get(linearization.objectNumberFirst, 0);
 
-    return this.xref.fetchAsync(ref).then(obj => {
+    try {
+      const obj = await this.xref.fetchAsync(ref);
+
       if ((0, _primitives.isDict)(obj, "Page") || (0, _primitives.isDict)(obj) && !obj.has("Type") && obj.has("Contents")) {
         if (ref && !catalog.pageKidsCountCache.has(ref)) {
           catalog.pageKidsCountCache.put(ref, 1);
@@ -4754,42 +4772,36 @@ class PDFDocument {
         return [obj, ref];
       }
 
-      throw new _util.FormatError("The Linearization dictionary doesn't point " + "to a valid Page dictionary.");
-    }).catch(reason => {
+      throw new _util.FormatError("The Linearization dictionary doesn't point to a valid Page dictionary.");
+    } catch (reason) {
       (0, _util.info)(reason);
       return catalog.getPageDict(pageIndex);
-    });
+    }
   }
 
   getPage(pageIndex) {
-    if (this._pagePromises[pageIndex] !== undefined) {
-      return this._pagePromises[pageIndex];
+    const cachedPromise = this._pagePromises.get(pageIndex);
+
+    if (cachedPromise) {
+      return cachedPromise;
     }
 
     const {
       catalog,
-      linearization
+      linearization,
+      xfaFactory
     } = this;
+    let promise;
 
-    if (this.xfaFactory) {
-      return Promise.resolve(new Page({
-        pdfManager: this.pdfManager,
-        xref: this.xref,
-        pageIndex,
-        pageDict: _primitives.Dict.empty,
-        ref: null,
-        globalIdFactory: this._globalIdFactory,
-        fontCache: catalog.fontCache,
-        builtInCMapCache: catalog.builtInCMapCache,
-        standardFontDataCache: catalog.standardFontDataCache,
-        globalImageCache: catalog.globalImageCache,
-        nonBlendModesSet: catalog.nonBlendModesSet,
-        xfaFactory: this.xfaFactory
-      }));
+    if (xfaFactory) {
+      promise = Promise.resolve([_primitives.Dict.empty, null]);
+    } else if (linearization && linearization.pageFirst === pageIndex) {
+      promise = this._getLinearizationPage(pageIndex);
+    } else {
+      promise = catalog.getPageDict(pageIndex);
     }
 
-    const promise = linearization && linearization.pageFirst === pageIndex ? this._getLinearizationPage(pageIndex) : catalog.getPageDict(pageIndex);
-    return this._pagePromises[pageIndex] = promise.then(([pageDict, ref]) => {
+    promise = promise.then(([pageDict, ref]) => {
       return new Page({
         pdfManager: this.pdfManager,
         xref: this.xref,
@@ -4802,19 +4814,81 @@ class PDFDocument {
         standardFontDataCache: catalog.standardFontDataCache,
         globalImageCache: catalog.globalImageCache,
         nonBlendModesSet: catalog.nonBlendModesSet,
-        xfaFactory: null
+        xfaFactory
       });
     });
+
+    this._pagePromises.set(pageIndex, promise);
+
+    return promise;
   }
 
-  checkFirstPage() {
-    return this.getPage(0).catch(async reason => {
+  async checkFirstPage(recoveryMode = false) {
+    if (recoveryMode) {
+      return;
+    }
+
+    try {
+      await this.getPage(0);
+    } catch (reason) {
       if (reason instanceof _core_utils.XRefEntryException) {
-        this._pagePromises.length = 0;
+        this._pagePromises.clear();
+
         await this.cleanup();
         throw new _core_utils.XRefParseException();
       }
-    });
+    }
+  }
+
+  async checkLastPage(recoveryMode = false) {
+    this.catalog.setActualNumPages();
+    let numPages;
+
+    try {
+      await Promise.all([this.pdfManager.ensureDoc("xfaFactory"), this.pdfManager.ensureDoc("linearization"), this.pdfManager.ensureCatalog("numPages")]);
+
+      if (this.xfaFactory) {
+        return;
+      } else if (this.linearization) {
+        numPages = this.linearization.numPages;
+      } else {
+        numPages = this.catalog.numPages;
+      }
+
+      if (numPages === 1) {
+        return;
+      } else if (!Number.isInteger(numPages)) {
+        throw new _util.FormatError("Page count is not an integer.");
+      }
+
+      await this.getPage(numPages - 1);
+    } catch (reason) {
+      (0, _util.warn)(`checkLastPage - invalid /Pages tree /Count: ${numPages}.`);
+      await this.cleanup();
+      let pageIndex = 1;
+
+      while (true) {
+        try {
+          await this.getPage(pageIndex, true);
+        } catch (reasonLoop) {
+          if (reasonLoop instanceof _core_utils.PageDictMissingException) {
+            break;
+          }
+
+          if (reasonLoop instanceof _core_utils.XRefEntryException) {
+            if (!recoveryMode) {
+              throw new _core_utils.XRefParseException();
+            }
+
+            break;
+          }
+        }
+
+        pageIndex++;
+      }
+
+      this.catalog.setActualNumPages(pageIndex);
+    }
   }
 
   fontFallback(id, handler) {
@@ -52882,6 +52956,7 @@ class Catalog {
       throw new _util.FormatError("Catalog object is not a dictionary.");
     }
 
+    this._actualNumPages = null;
     this.fontCache = new _primitives.RefSetCache();
     this.builtInCMapCache = new Map();
     this.standardFontDataCache = new Map();
@@ -53386,14 +53461,26 @@ class Catalog {
     };
   }
 
-  get numPages() {
+  setActualNumPages(num = null) {
+    this._actualNumPages = num;
+  }
+
+  get hasActualNumPages() {
+    return this._actualNumPages !== null;
+  }
+
+  get _pagesCount() {
     const obj = this.toplevelPagesDict.get("Count");
 
     if (!Number.isInteger(obj)) {
       throw new _util.FormatError("Page count in top-level pages dictionary is not an integer.");
     }
 
-    return (0, _util.shadow)(this, "numPages", obj);
+    return (0, _util.shadow)(this, "_pagesCount", obj);
+  }
+
+  get numPages() {
+    return this.hasActualNumPages ? this._actualNumPages : this._pagesCount;
   }
 
   get destinations() {
@@ -53968,7 +54055,7 @@ class Catalog {
     });
   }
 
-  getPageDict(pageIndex) {
+  getPageDict(pageIndex, skipCount = false) {
     const capability = (0, _util.createPromiseCapability)();
     const nodesToVisit = [this._catDict.getRaw("Pages")];
     const visitedNodes = new _primitives.RefSet();
@@ -54024,7 +54111,7 @@ class Catalog {
 
         count = currentNode.get("Count");
 
-        if (Number.isInteger(count) && count >= 0) {
+        if (Number.isInteger(count) && count >= 0 && !skipCount) {
           const objId = currentNode.objId;
 
           if (objId && !pageKidsCountCache.has(objId)) {
@@ -54059,7 +54146,7 @@ class Catalog {
         }
       }
 
-      capability.reject(new Error(`Page index ${pageIndex} not found.`));
+      capability.reject(new _core_utils.PageDictMissingException(`Page index ${pageIndex} not found.`));
     }
 
     next();
@@ -60889,7 +60976,7 @@ class Arc extends _xfa_object.XFAObject {
       }
     };
 
-    if (this.startAngle === 0 && this.sweepAngle === 360) {
+    if (this.sweepAngle === 360) {
       arc = {
         name: "ellipse",
         attributes: {
@@ -60904,8 +60991,8 @@ class Arc extends _xfa_object.XFAObject {
     } else {
       const startAngle = this.startAngle * Math.PI / 180;
       const sweepAngle = this.sweepAngle * Math.PI / 180;
-      const largeArc = this.sweepAngle - this.startAngle > 180 ? 1 : 0;
-      const [x1, y1, x2, y2] = [50 * (1 + Math.cos(startAngle)), 50 * (1 - Math.sin(startAngle)), 50 * (1 + Math.cos(sweepAngle)), 50 * (1 - Math.sin(sweepAngle))];
+      const largeArc = this.sweepAngle > 180 ? 1 : 0;
+      const [x1, y1, x2, y2] = [50 * (1 + Math.cos(startAngle)), 50 * (1 - Math.sin(startAngle)), 50 * (1 + Math.cos(startAngle + sweepAngle)), 50 * (1 - Math.sin(startAngle + sweepAngle))];
       arc = {
         name: "path",
         attributes: {
@@ -71160,12 +71247,12 @@ const VALID_STYLES = new Set(["color", "font", "font-family", "font-size", "font
 const StyleMapping = new Map([["page-break-after", "breakAfter"], ["page-break-before", "breakBefore"], ["page-break-inside", "breakInside"], ["kerning-mode", value => value === "none" ? "none" : "normal"], ["xfa-font-horizontal-scale", value => `scaleX(${Math.max(0, Math.min(parseInt(value) / 100)).toFixed(2)})`], ["xfa-font-vertical-scale", value => `scaleY(${Math.max(0, Math.min(parseInt(value) / 100)).toFixed(2)})`], ["xfa-spacerun", ""], ["xfa-tab-stops", ""], ["font-size", (value, original) => {
   value = original.fontSize = (0, _utils.getMeasurement)(value);
   return (0, _html_utils.measureToString)(0.99 * value);
-}], ["letter-spacing", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["line-height", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-bottom", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-left", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-right", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-top", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["text-indent", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["font-family", value => value]]);
+}], ["letter-spacing", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["line-height", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-bottom", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-left", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-right", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["margin-top", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["text-indent", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))], ["font-family", value => value], ["vertical-align", value => (0, _html_utils.measureToString)((0, _utils.getMeasurement)(value))]]);
 const spacesRegExp = /\s+/g;
 const crlfRegExp = /[\r\n]+/g;
 const crlfForRichTextRegExp = /\r\n?/g;
 
-function mapStyle(styleStr, node) {
+function mapStyle(styleStr, node, richText) {
   const style = Object.create(null);
 
   if (!styleStr) {
@@ -71209,6 +71296,14 @@ function mapStyle(styleStr, node) {
       posture: style.fontStyle || "normal",
       size: original.fontSize || 0
     }, node, node[_xfa_object.$globalData].fontFinder, style);
+  }
+
+  if (richText && style.verticalAlign && style.verticalAlign !== "0px" && style.fontSize) {
+    const SUB_SUPER_SCRIPT_FACTOR = 0.583;
+    const VERTICAL_FACTOR = 0.333;
+    const fontSize = (0, _utils.getMeasurement)(style.fontSize);
+    style.fontSize = (0, _html_utils.measureToString)(fontSize * SUB_SUPER_SCRIPT_FACTOR);
+    style.verticalAlign = (0, _html_utils.measureToString)(Math.sign((0, _utils.getMeasurement)(style.verticalAlign)) * fontSize * VERTICAL_FACTOR);
   }
 
   (0, _html_utils.fixTextIndent)(style);
@@ -71391,7 +71486,7 @@ class XhtmlObject extends _xfa_object.XmlObject {
       name: this[_xfa_object.$nodeName],
       attributes: {
         href: this.href,
-        style: mapStyle(this.style, this)
+        style: mapStyle(this.style, this, this[$richText])
       },
       children,
       value
@@ -71950,7 +72045,13 @@ class XRef {
             generation = 0;
 
         for (j = 0; j < typeFieldWidth; ++j) {
-          type = type << 8 | stream.getByte();
+          const typeByte = stream.getByte();
+
+          if (typeByte === -1) {
+            throw new _util.FormatError("Invalid XRef byteWidths 'type'.");
+          }
+
+          type = type << 8 | typeByte;
         }
 
         if (typeFieldWidth === 0) {
@@ -71958,11 +72059,23 @@ class XRef {
         }
 
         for (j = 0; j < offsetFieldWidth; ++j) {
-          offset = offset << 8 | stream.getByte();
+          const offsetByte = stream.getByte();
+
+          if (offsetByte === -1) {
+            throw new _util.FormatError("Invalid XRef byteWidths 'offset'.");
+          }
+
+          offset = offset << 8 | offsetByte;
         }
 
         for (j = 0; j < generationFieldWidth; ++j) {
-          generation = generation << 8 | stream.getByte();
+          const generationByte = stream.getByte();
+
+          if (generationByte === -1) {
+            throw new _util.FormatError("Invalid XRef byteWidths 'generation'.");
+          }
+
+          generation = generation << 8 | generationByte;
         }
 
         const entry = {};
@@ -73240,7 +73353,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = 'aabd4e5';
+const pdfjsBuild = 'a2a5376';
 })();
 
 /******/ 	return __webpack_exports__;

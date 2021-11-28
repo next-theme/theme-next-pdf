@@ -6964,7 +6964,7 @@ class PDFLinkService {
     if (typeof destRef === "object" && destRef !== null) {
       pageNumber = this._cachedPageNumber(destRef);
 
-      if (pageNumber === null) {
+      if (!pageNumber) {
         this.pdfDocument.getPageIndex(destRef).then(pageIndex => {
           this.cachePageRef(pageIndex + 1, destRef);
 
@@ -7216,6 +7216,10 @@ class PDFLinkService {
   }
 
   _cachedPageNumber(pageRef) {
+    if (!pageRef) {
+      return null;
+    }
+
     const refStr = pageRef.gen === 0 ? `${pageRef.num}R` : `${pageRef.num}R${pageRef.gen}`;
     return this._pagesRefCache?.[refStr] || null;
   }
@@ -9199,7 +9203,6 @@ class PDFThumbnailViewer {
     this._pageLabels = null;
     this._pagesRotation = 0;
     this._optionalContentConfigPromise = null;
-    this._pagesRequests = new WeakMap();
     this._setImageDisabled = false;
     this.container.textContent = "";
   }
@@ -9285,32 +9288,23 @@ class PDFThumbnailViewer {
     }
   }
 
-  _ensurePdfPageLoaded(thumbView) {
+  async #ensurePdfPageLoaded(thumbView) {
     if (thumbView.pdfPage) {
-      return Promise.resolve(thumbView.pdfPage);
+      return thumbView.pdfPage;
     }
 
-    if (this._pagesRequests.has(thumbView)) {
-      return this._pagesRequests.get(thumbView);
-    }
+    try {
+      const pdfPage = await this.pdfDocument.getPage(thumbView.id);
 
-    const promise = this.pdfDocument.getPage(thumbView.id).then(pdfPage => {
       if (!thumbView.pdfPage) {
         thumbView.setPdfPage(pdfPage);
       }
 
-      this._pagesRequests.delete(thumbView);
-
       return pdfPage;
-    }).catch(reason => {
+    } catch (reason) {
       console.error("Unable to get page for thumb view", reason);
-
-      this._pagesRequests.delete(thumbView);
-    });
-
-    this._pagesRequests.set(thumbView, promise);
-
-    return promise;
+      return null;
+    }
   }
 
   #getScrollAhead(visible) {
@@ -9330,10 +9324,9 @@ class PDFThumbnailViewer {
     const thumbView = this.renderingQueue.getHighestPriority(visibleThumbs, this._thumbnails, scrollAhead);
 
     if (thumbView) {
-      this._ensurePdfPageLoaded(thumbView).then(() => {
+      this.#ensurePdfPageLoaded(thumbView).then(() => {
         this.renderingQueue.renderView(thumbView);
       });
-
       return true;
     }
 
@@ -9881,20 +9874,9 @@ class PDFPageViewBuffer {
 
 exports.PDFPageViewBuffer = PDFPageViewBuffer;
 
-function isSameScale(oldScale, newScale) {
-  if (newScale === oldScale) {
-    return true;
-  }
-
-  if (Math.abs(newScale - oldScale) < 1e-15) {
-    return true;
-  }
-
-  return false;
-}
-
 class BaseViewer {
   #buffer = null;
+  #previousContainerHeight = 0;
   #scrollModePageState = null;
 
   constructor(options) {
@@ -10357,7 +10339,6 @@ class BaseViewer {
     this._location = null;
     this._pagesRotation = 0;
     this._optionalContentConfigPromise = null;
-    this._pagesRequests = new WeakMap();
     this._firstPageCapability = (0, _pdfjsLib.createPromiseCapability)();
     this._onePageRenderedCapability = (0, _pdfjsLib.createPromiseCapability)();
     this._pagesCapability = (0, _pdfjsLib.createPromiseCapability)();
@@ -10400,7 +10381,20 @@ class BaseViewer {
 
     if (this._spreadMode === _ui_utils.SpreadMode.NONE) {
       const pageView = this._pages[pageNumber - 1];
-      viewer.appendChild(pageView.div);
+
+      if (this.isInPresentationMode) {
+        const spread = document.createElement("div");
+        spread.className = "spread";
+        const dummyPage = document.createElement("div");
+        dummyPage.className = "dummyPage";
+        dummyPage.style.height = `${this.container.clientHeight}px`;
+        spread.appendChild(dummyPage);
+        spread.appendChild(pageView.div);
+        viewer.appendChild(spread);
+      } else {
+        viewer.appendChild(pageView.div);
+      }
+
       state.pages.push(pageView);
     } else {
       const pageIndexSet = new Set(),
@@ -10482,10 +10476,18 @@ class BaseViewer {
     (0, _ui_utils.scrollIntoView)(pageDiv, pageSpot);
   }
 
+  #isSameScale(newScale) {
+    if (this.isInPresentationMode && this.container.clientHeight !== this.#previousContainerHeight) {
+      return false;
+    }
+
+    return newScale === this._currentScale || Math.abs(newScale - this._currentScale) < 1e-15;
+  }
+
   _setScaleUpdatePages(newScale, newValue, noScroll = false, preset = false) {
     this._currentScaleValue = newValue.toString();
 
-    if (isSameScale(this._currentScale, newScale)) {
+    if (this.#isSameScale(newScale)) {
       if (preset) {
         this.eventBus.dispatch("scalechanging", {
           source: this,
@@ -10538,6 +10540,8 @@ class BaseViewer {
     if (this.defaultRenderingQueue) {
       this.update();
     }
+
+    this.#previousContainerHeight = this.container.clientHeight;
   }
 
   get _pageWidthScaleFactor() {
@@ -10560,11 +10564,16 @@ class BaseViewer {
         return;
       }
 
-      const noPadding = this.isInPresentationMode || this.removePageBorders;
-      let hPadding = noPadding ? 0 : _ui_utils.SCROLLBAR_PADDING;
-      let vPadding = noPadding ? 0 : _ui_utils.VERTICAL_PADDING;
+      let hPadding = _ui_utils.SCROLLBAR_PADDING,
+          vPadding = _ui_utils.VERTICAL_PADDING;
 
-      if (!noPadding && this._scrollMode === _ui_utils.ScrollMode.HORIZONTAL) {
+      if (this.isInPresentationMode) {
+        hPadding = vPadding = 4;
+      } else if (this.removePageBorders) {
+        hPadding = vPadding = 0;
+      }
+
+      if (this._scrollMode === _ui_utils.ScrollMode.HORIZONTAL) {
         [hPadding, vPadding] = [vPadding, hPadding];
       }
 
@@ -10931,32 +10940,27 @@ class BaseViewer {
     }
   }
 
-  _ensurePdfPageLoaded(pageView) {
+  async #ensurePdfPageLoaded(pageView) {
     if (pageView.pdfPage) {
-      return Promise.resolve(pageView.pdfPage);
+      return pageView.pdfPage;
     }
 
-    if (this._pagesRequests.has(pageView)) {
-      return this._pagesRequests.get(pageView);
-    }
+    try {
+      const pdfPage = await this.pdfDocument.getPage(pageView.id);
 
-    const promise = this.pdfDocument.getPage(pageView.id).then(pdfPage => {
       if (!pageView.pdfPage) {
         pageView.setPdfPage(pdfPage);
       }
 
-      this._pagesRequests.delete(pageView);
+      if (!this.linkService._cachedPageNumber(pdfPage.ref)) {
+        this.linkService.cachePageRef(pageView.id, pdfPage.ref);
+      }
 
       return pdfPage;
-    }).catch(reason => {
+    } catch (reason) {
       console.error("Unable to get page for page view", reason);
-
-      this._pagesRequests.delete(pageView);
-    });
-
-    this._pagesRequests.set(pageView, promise);
-
-    return promise;
+      return null;
+    }
   }
 
   #getScrollAhead(visible) {
@@ -11001,10 +11005,9 @@ class BaseViewer {
     this.#toggleLoadingIconSpinner(visiblePages.ids);
 
     if (pageView) {
-      this._ensurePdfPageLoaded(pageView).then(() => {
+      this.#ensurePdfPageLoaded(pageView).then(() => {
         this.renderingQueue.renderView(pageView);
       });
-
       return true;
     }
 
@@ -15509,7 +15512,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = 'aabd4e5';
+const pdfjsBuild = 'a2a5376';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
