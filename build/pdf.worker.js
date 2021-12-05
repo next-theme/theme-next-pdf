@@ -1766,7 +1766,7 @@ exports.isNodeJS = isNodeJS;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.RefSetCache = exports.RefSet = exports.Ref = exports.Name = exports.EOF = exports.Dict = exports.Cmd = void 0;
+exports.RefSetCache = exports.RefSet = exports.Ref = exports.Name = exports.EOF = exports.Dict = exports.Cmd = exports.CIRCULAR_REF = void 0;
 exports.clearPrimitiveCaches = clearPrimitiveCaches;
 exports.isCmd = isCmd;
 exports.isDict = isDict;
@@ -1779,6 +1779,8 @@ var _util = __w_pdfjs_require__(2);
 
 var _base_stream = __w_pdfjs_require__(6);
 
+const CIRCULAR_REF = Symbol("CIRCULAR_REF");
+exports.CIRCULAR_REF = CIRCULAR_REF;
 const EOF = Symbol("EOF");
 exports.EOF = EOF;
 
@@ -3058,7 +3060,7 @@ exports.ChunkedStreamManager = ChunkedStreamManager;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.XRefParseException = exports.XRefEntryException = exports.ParserEOFException = exports.PageDictMissingException = exports.MissingDataException = exports.DocStats = void 0;
+exports.XRefParseException = exports.XRefEntryException = exports.ParserEOFException = exports.MissingDataException = exports.DocStats = void 0;
 exports.collectActions = collectActions;
 exports.encodeToXmlString = encodeToXmlString;
 exports.escapePDFName = escapePDFName;
@@ -3121,15 +3123,6 @@ class MissingDataException extends _util.BaseException {
 }
 
 exports.MissingDataException = MissingDataException;
-
-class PageDictMissingException extends _util.BaseException {
-  constructor(msg) {
-    super(msg, "PageDictMissingException");
-  }
-
-}
-
-exports.PageDictMissingException = PageDictMissingException;
 
 class ParserEOFException extends _util.BaseException {
   constructor(msg) {
@@ -4841,53 +4834,76 @@ class PDFDocument {
   }
 
   async checkLastPage(recoveryMode = false) {
-    this.catalog.setActualNumPages();
+    const {
+      catalog,
+      pdfManager
+    } = this;
+    catalog.setActualNumPages();
     let numPages;
 
     try {
-      await Promise.all([this.pdfManager.ensureDoc("xfaFactory"), this.pdfManager.ensureDoc("linearization"), this.pdfManager.ensureCatalog("numPages")]);
+      await Promise.all([pdfManager.ensureDoc("xfaFactory"), pdfManager.ensureDoc("linearization"), pdfManager.ensureCatalog("numPages")]);
 
       if (this.xfaFactory) {
         return;
       } else if (this.linearization) {
         numPages = this.linearization.numPages;
       } else {
-        numPages = this.catalog.numPages;
+        numPages = catalog.numPages;
       }
 
-      if (numPages === 1) {
-        return;
-      } else if (!Number.isInteger(numPages)) {
+      if (!Number.isInteger(numPages)) {
         throw new _util.FormatError("Page count is not an integer.");
+      } else if (numPages <= 1) {
+        return;
       }
 
       await this.getPage(numPages - 1);
     } catch (reason) {
       (0, _util.warn)(`checkLastPage - invalid /Pages tree /Count: ${numPages}.`);
       await this.cleanup();
-      let pageIndex = 1;
+      let pagesTree;
 
-      while (true) {
-        try {
-          await this.getPage(pageIndex, true);
-        } catch (reasonLoop) {
-          if (reasonLoop instanceof _core_utils.PageDictMissingException) {
-            break;
-          }
-
-          if (reasonLoop instanceof _core_utils.XRefEntryException) {
-            if (!recoveryMode) {
-              throw new _core_utils.XRefParseException();
-            }
-
-            break;
+      try {
+        pagesTree = await pdfManager.ensureCatalog("getAllPageDicts");
+      } catch (reasonAll) {
+        if (reasonAll instanceof _core_utils.XRefEntryException) {
+          if (!recoveryMode) {
+            throw new _core_utils.XRefParseException();
           }
         }
 
-        pageIndex++;
+        catalog.setActualNumPages(1);
+        return;
       }
 
-      this.catalog.setActualNumPages(pageIndex);
+      for (const [pageIndex, [pageDict, ref]] of pagesTree) {
+        let promise;
+
+        if (pageDict instanceof Error) {
+          promise = Promise.reject(pageDict);
+          promise.catch(() => {});
+        } else {
+          promise = Promise.resolve(new Page({
+            pdfManager,
+            xref: this.xref,
+            pageIndex,
+            pageDict,
+            ref,
+            globalIdFactory: this._globalIdFactory,
+            fontCache: catalog.fontCache,
+            builtInCMapCache: catalog.builtInCMapCache,
+            standardFontDataCache: catalog.standardFontDataCache,
+            globalImageCache: catalog.globalImageCache,
+            nonBlendModesSet: catalog.nonBlendModesSet,
+            xfaFactory: null
+          }));
+        }
+
+        this._pagePromises.set(pageIndex, promise);
+      }
+
+      catalog.setActualNumPages(pagesTree.size);
     }
   }
 
@@ -27648,7 +27664,7 @@ class Parser {
     let length = dict.get("Length");
 
     if (!Number.isInteger(length)) {
-      (0, _util.info)(`Bad length "${length}" in stream`);
+      (0, _util.info)(`Bad length "${length && length.toString()}" in stream.`);
       length = 0;
     }
 
@@ -52928,6 +52944,8 @@ var _util = __w_pdfjs_require__(2);
 
 var _name_number_tree = __w_pdfjs_require__(65);
 
+var _base_stream = __w_pdfjs_require__(6);
+
 var _colorspace = __w_pdfjs_require__(24);
 
 var _file_spec = __w_pdfjs_require__(66);
@@ -53033,33 +53051,34 @@ class Catalog {
   get metadata() {
     const streamRef = this._catDict.getRaw("Metadata");
 
-    if (!(0, _primitives.isRef)(streamRef)) {
+    if (!(streamRef instanceof _primitives.Ref)) {
       return (0, _util.shadow)(this, "metadata", null);
     }
 
-    const suppressEncryption = !(this.xref.encrypt && this.xref.encrypt.encryptMetadata);
-    const stream = this.xref.fetch(streamRef, suppressEncryption);
     let metadata = null;
 
-    if ((0, _primitives.isStream)(stream) && (0, _primitives.isDict)(stream.dict)) {
-      const type = stream.dict.get("Type");
-      const subtype = stream.dict.get("Subtype");
+    try {
+      const suppressEncryption = !(this.xref.encrypt && this.xref.encrypt.encryptMetadata);
+      const stream = this.xref.fetch(streamRef, suppressEncryption);
 
-      if ((0, _primitives.isName)(type, "Metadata") && (0, _primitives.isName)(subtype, "XML")) {
-        try {
+      if (stream instanceof _base_stream.BaseStream && stream.dict instanceof _primitives.Dict) {
+        const type = stream.dict.get("Type");
+        const subtype = stream.dict.get("Subtype");
+
+        if ((0, _primitives.isName)(type, "Metadata") && (0, _primitives.isName)(subtype, "XML")) {
           const data = (0, _util.stringToUTF8String)(stream.getString());
 
           if (data) {
             metadata = new _metadata_parser.MetadataParser(data).serializable;
           }
-        } catch (e) {
-          if (e instanceof _core_utils.MissingDataException) {
-            throw e;
-          }
-
-          (0, _util.info)("Skipping invalid metadata.");
         }
       }
+    } catch (ex) {
+      if (ex instanceof _core_utils.MissingDataException) {
+        throw ex;
+      }
+
+      (0, _util.info)(`Skipping invalid Metadata: "${ex}".`);
     }
 
     return (0, _util.shadow)(this, "metadata", metadata);
@@ -54055,21 +54074,20 @@ class Catalog {
     });
   }
 
-  getPageDict(pageIndex, skipCount = false) {
+  getPageDict(pageIndex) {
     const capability = (0, _util.createPromiseCapability)();
     const nodesToVisit = [this._catDict.getRaw("Pages")];
     const visitedNodes = new _primitives.RefSet();
     const xref = this.xref,
           pageKidsCountCache = this.pageKidsCountCache;
-    let count,
-        currentPageIndex = 0;
+    let currentPageIndex = 0;
 
     function next() {
       while (nodesToVisit.length) {
         const currentNode = nodesToVisit.pop();
 
         if ((0, _primitives.isRef)(currentNode)) {
-          count = pageKidsCountCache.get(currentNode);
+          const count = pageKidsCountCache.get(currentNode);
 
           if (count > 0 && currentPageIndex + count < pageIndex) {
             currentPageIndex += count;
@@ -54109,9 +54127,17 @@ class Catalog {
           return;
         }
 
-        count = currentNode.get("Count");
+        let count;
 
-        if (Number.isInteger(count) && count >= 0 && !skipCount) {
+        try {
+          count = currentNode.get("Count");
+        } catch (ex) {
+          if (ex instanceof _core_utils.MissingDataException) {
+            throw ex;
+          }
+        }
+
+        if (Number.isInteger(count) && count >= 0) {
           const objId = currentNode.objId;
 
           if (objId && !pageKidsCountCache.has(objId)) {
@@ -54124,10 +54150,28 @@ class Catalog {
           }
         }
 
-        const kids = currentNode.get("Kids");
+        let kids;
+
+        try {
+          kids = currentNode.get("Kids");
+        } catch (ex) {
+          if (ex instanceof _core_utils.MissingDataException) {
+            throw ex;
+          }
+        }
 
         if (!Array.isArray(kids)) {
-          if ((0, _primitives.isName)(currentNode.get("Type"), "Page") || !currentNode.has("Type") && currentNode.has("Contents")) {
+          let type;
+
+          try {
+            type = currentNode.get("Type");
+          } catch (ex) {
+            if (ex instanceof _core_utils.MissingDataException) {
+              throw ex;
+            }
+          }
+
+          if ((0, _primitives.isName)(type, "Page") || !currentNode.has("Type") && currentNode.has("Contents")) {
             if (currentPageIndex === pageIndex) {
               capability.resolve([currentNode, null]);
               return;
@@ -54146,11 +54190,104 @@ class Catalog {
         }
       }
 
-      capability.reject(new _core_utils.PageDictMissingException(`Page index ${pageIndex} not found.`));
+      capability.reject(new Error(`Page index ${pageIndex} not found.`));
     }
 
     next();
     return capability.promise;
+  }
+
+  getAllPageDicts() {
+    const queue = [{
+      currentNode: this.toplevelPagesDict,
+      posInKids: 0
+    }];
+    const visitedNodes = new _primitives.RefSet();
+    const map = new Map();
+    let pageIndex = 0;
+
+    function addPageDict(pageDict, pageRef) {
+      map.set(pageIndex++, [pageDict, pageRef]);
+    }
+
+    function addPageError(msg) {
+      map.set(pageIndex++, [new _util.FormatError(msg), null]);
+    }
+
+    while (queue.length > 0) {
+      const queueItem = queue[queue.length - 1];
+      const {
+        currentNode,
+        posInKids
+      } = queueItem;
+      let kids;
+
+      try {
+        kids = currentNode.get("Kids");
+      } catch (ex) {
+        if (ex instanceof _core_utils.MissingDataException) {
+          throw ex;
+        }
+
+        if (ex instanceof _core_utils.XRefEntryException) {
+          throw ex;
+        }
+      }
+
+      if (!Array.isArray(kids)) {
+        addPageError("Page dictionary kids object is not an array.");
+        break;
+      }
+
+      if (posInKids >= kids.length) {
+        queue.pop();
+        continue;
+      }
+
+      const kidObj = kids[posInKids];
+      let obj;
+
+      if (kidObj instanceof _primitives.Ref) {
+        try {
+          obj = this.xref.fetch(kidObj);
+        } catch (ex) {
+          if (ex instanceof _core_utils.MissingDataException) {
+            throw ex;
+          }
+
+          if (ex instanceof _core_utils.XRefEntryException) {
+            throw ex;
+          }
+        }
+
+        if (visitedNodes.has(kidObj)) {
+          addPageError("Pages tree contains circular reference.");
+          break;
+        }
+
+        visitedNodes.put(kidObj);
+      } else {
+        obj = kidObj;
+      }
+
+      if (!(obj instanceof _primitives.Dict)) {
+        addPageError("Page dictionary kid reference points to wrong type of object.");
+        break;
+      }
+
+      if ((0, _primitives.isDict)(obj, "Page") || !obj.has("Kids")) {
+        addPageDict(obj, kidObj instanceof _primitives.Ref ? kidObj : null);
+      } else {
+        queue.push({
+          currentNode: obj,
+          posInKids: 0
+        });
+      }
+
+      queueItem.posInKids++;
+    }
+
+    return map;
   }
 
   getPageIndex(pageRef) {
@@ -71804,6 +71941,8 @@ var _core_utils = __w_pdfjs_require__(9);
 
 var _parser = __w_pdfjs_require__(27);
 
+var _base_stream = __w_pdfjs_require__(6);
+
 var _crypto = __w_pdfjs_require__(72);
 
 class XRef {
@@ -71813,6 +71952,7 @@ class XRef {
     this.entries = [];
     this.xrefstms = Object.create(null);
     this._cacheMap = new Map();
+    this._pendingRefs = new _primitives.RefSet();
     this.stats = new _core_utils.DocStats(pdfManager.msgHandler);
     this._newRefNum = null;
   }
@@ -71857,7 +71997,7 @@ class XRef {
       (0, _util.warn)(`XRef.parse - Invalid "Encrypt" reference: "${ex}".`);
     }
 
-    if ((0, _primitives.isDict)(encrypt)) {
+    if (encrypt instanceof _primitives.Dict) {
       const ids = trailerDict.get("ID");
       const fileId = ids && ids.length ? ids[0] : "";
       encrypt.suppressEncryption = true;
@@ -71876,15 +72016,28 @@ class XRef {
       (0, _util.warn)(`XRef.parse - Invalid "Root" reference: "${ex}".`);
     }
 
-    if ((0, _primitives.isDict)(root) && root.has("Pages")) {
-      this.root = root;
-    } else {
-      if (!recoveryMode) {
-        throw new _core_utils.XRefParseException();
-      }
+    if (root instanceof _primitives.Dict) {
+      try {
+        const pages = root.get("Pages");
 
-      throw new _util.FormatError("Invalid root reference");
+        if (pages instanceof _primitives.Dict) {
+          this.root = root;
+          return;
+        }
+      } catch (ex) {
+        if (ex instanceof _core_utils.MissingDataException) {
+          throw ex;
+        }
+
+        (0, _util.warn)(`XRef.parse - Invalid "Pages" reference: "${ex}".`);
+      }
     }
+
+    if (!recoveryMode) {
+      throw new _core_utils.XRefParseException();
+    }
+
+    throw new _util.InvalidPDFException("Invalid Root reference.");
   }
 
   processXRefTable(parser) {
@@ -71905,11 +72058,11 @@ class XRef {
 
     let dict = parser.getObj();
 
-    if (!(0, _primitives.isDict)(dict) && dict.dict) {
+    if (!(dict instanceof _primitives.Dict) && dict.dict) {
       dict = dict.dict;
     }
 
-    if (!(0, _primitives.isDict)(dict)) {
+    if (!(dict instanceof _primitives.Dict)) {
       throw new _util.FormatError("Invalid XRef table: could not parse trailer dictionary");
     }
 
@@ -72016,18 +72169,13 @@ class XRef {
   }
 
   readXRefStream(stream) {
-    let i, j;
     const streamState = this.streamState;
     stream.pos = streamState.streamPos;
-    const byteWidths = streamState.byteWidths;
-    const typeFieldWidth = byteWidths[0];
-    const offsetFieldWidth = byteWidths[1];
-    const generationFieldWidth = byteWidths[2];
+    const [typeFieldWidth, offsetFieldWidth, generationFieldWidth] = streamState.byteWidths;
     const entryRanges = streamState.entryRanges;
 
     while (entryRanges.length > 0) {
-      const first = entryRanges[0];
-      const n = entryRanges[1];
+      const [first, n] = entryRanges;
 
       if (!Number.isInteger(first) || !Number.isInteger(n)) {
         throw new _util.FormatError(`Invalid XRef range fields: ${first}, ${n}`);
@@ -72037,14 +72185,14 @@ class XRef {
         throw new _util.FormatError(`Invalid XRef entry fields length: ${first}, ${n}`);
       }
 
-      for (i = streamState.entryNum; i < n; ++i) {
+      for (let i = streamState.entryNum; i < n; ++i) {
         streamState.entryNum = i;
         streamState.streamPos = stream.pos;
         let type = 0,
             offset = 0,
             generation = 0;
 
-        for (j = 0; j < typeFieldWidth; ++j) {
+        for (let j = 0; j < typeFieldWidth; ++j) {
           const typeByte = stream.getByte();
 
           if (typeByte === -1) {
@@ -72058,7 +72206,7 @@ class XRef {
           type = 1;
         }
 
-        for (j = 0; j < offsetFieldWidth; ++j) {
+        for (let j = 0; j < offsetFieldWidth; ++j) {
           const offsetByte = stream.getByte();
 
           if (offsetByte === -1) {
@@ -72068,7 +72216,7 @@ class XRef {
           offset = offset << 8 | offsetByte;
         }
 
-        for (j = 0; j < generationFieldWidth; ++j) {
+        for (let j = 0; j < generationFieldWidth; ++j) {
           const generationByte = stream.getByte();
 
           if (generationByte === -1) {
@@ -72165,6 +72313,9 @@ class XRef {
     const objBytes = new Uint8Array([111, 98, 106]);
     const xrefBytes = new Uint8Array([47, 88, 82, 101, 102]);
     this.entries.length = 0;
+
+    this._cacheMap.clear();
+
     const stream = this.stream;
     stream.pos = 0;
     const buffer = stream.getBytes(),
@@ -72296,7 +72447,7 @@ class XRef {
 
       const dict = parser.getObj();
 
-      if (!(0, _primitives.isDict)(dict)) {
+      if (!(dict instanceof _primitives.Dict)) {
         continue;
       }
 
@@ -72382,7 +72533,7 @@ class XRef {
             }
           }
         } else if (Number.isInteger(obj)) {
-          if (!Number.isInteger(parser.getObj()) || !(0, _primitives.isCmd)(parser.getObj(), "obj") || !(0, _primitives.isStream)(obj = parser.getObj())) {
+          if (!Number.isInteger(parser.getObj()) || !(0, _primitives.isCmd)(parser.getObj(), "obj") || !((obj = parser.getObj()) instanceof _base_stream.BaseStream)) {
             throw new _util.FormatError("Invalid XRef stream");
           }
 
@@ -72403,7 +72554,7 @@ class XRef {
 
         if (Number.isInteger(obj)) {
           this.startXRefQueue.push(obj);
-        } else if ((0, _primitives.isRef)(obj)) {
+        } else if (obj instanceof _primitives.Ref) {
           this.startXRefQueue.push(obj.num);
         }
 
@@ -72470,15 +72621,32 @@ class XRef {
       return xrefEntry;
     }
 
-    if (xrefEntry.uncompressed) {
-      xrefEntry = this.fetchUncompressed(ref, xrefEntry, suppressEncryption);
-    } else {
-      xrefEntry = this.fetchCompressed(ref, xrefEntry, suppressEncryption);
+    if (this._pendingRefs.has(ref)) {
+      this._pendingRefs.remove(ref);
+
+      (0, _util.warn)(`Ignoring circular reference: ${ref}.`);
+      return _primitives.CIRCULAR_REF;
     }
 
-    if ((0, _primitives.isDict)(xrefEntry)) {
+    this._pendingRefs.put(ref);
+
+    try {
+      if (xrefEntry.uncompressed) {
+        xrefEntry = this.fetchUncompressed(ref, xrefEntry, suppressEncryption);
+      } else {
+        xrefEntry = this.fetchCompressed(ref, xrefEntry, suppressEncryption);
+      }
+
+      this._pendingRefs.remove(ref);
+    } catch (ex) {
+      this._pendingRefs.remove(ref);
+
+      throw ex;
+    }
+
+    if (xrefEntry instanceof _primitives.Dict) {
       xrefEntry.objId = ref.toString();
-    } else if ((0, _primitives.isStream)(xrefEntry)) {
+    } else if (xrefEntry instanceof _base_stream.BaseStream) {
       xrefEntry.dict.objId = ref.toString();
     }
 
@@ -72525,7 +72693,7 @@ class XRef {
       xrefEntry = parser.getObj();
     }
 
-    if (!(0, _primitives.isStream)(xrefEntry)) {
+    if (!(xrefEntry instanceof _base_stream.BaseStream)) {
       this._cacheMap.set(num, xrefEntry);
     }
 
@@ -72536,7 +72704,7 @@ class XRef {
     const tableOffset = xrefEntry.offset;
     const stream = this.fetch(_primitives.Ref.get(tableOffset, 0));
 
-    if (!(0, _primitives.isStream)(stream)) {
+    if (!(stream instanceof _base_stream.BaseStream)) {
       throw new _util.FormatError("bad ObjStm stream");
     }
 
@@ -72590,7 +72758,7 @@ class XRef {
       const obj = parser.getObj();
       entries[i] = obj;
 
-      if ((0, _primitives.isStream)(obj)) {
+      if (obj instanceof _base_stream.BaseStream) {
         continue;
       }
 
@@ -73353,7 +73521,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = 'a2a5376';
+const pdfjsBuild = 'dc455c8';
 })();
 
 /******/ 	return __webpack_exports__;

@@ -9783,7 +9783,7 @@ exports.PDFSinglePageViewer = PDFSinglePageViewer;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.PDFPageViewBuffer = exports.BaseViewer = void 0;
+exports.PagesCountLimit = exports.PDFPageViewBuffer = exports.BaseViewer = void 0;
 
 var _pdfjsLib = __webpack_require__(4);
 
@@ -9808,6 +9808,11 @@ var _text_layer_builder = __webpack_require__(33);
 var _xfa_layer_builder = __webpack_require__(34);
 
 const DEFAULT_CACHE_SIZE = 10;
+const PagesCountLimit = {
+  FORCE_SCROLL_MODE_PAGE: 15000,
+  FORCE_LAZY_PAGE_INIT: 7500
+};
+exports.PagesCountLimit = PagesCountLimit;
 
 class PDFPageViewBuffer {
   #buf = new Set();
@@ -10165,6 +10170,15 @@ class BaseViewer {
     const firstPagePromise = pdfDocument.getPage(1);
     const optionalContentConfigPromise = pdfDocument.getOptionalContentConfig();
 
+    if (pagesCount > PagesCountLimit.FORCE_SCROLL_MODE_PAGE) {
+      console.warn("Forcing PAGE-scrolling for performance reasons, given the length of the document.");
+      const mode = this._scrollMode = _ui_utils.ScrollMode.PAGE;
+      this.eventBus.dispatch("scrollmodechanged", {
+        source: this,
+        mode
+      });
+    }
+
     this._pagesCapability.promise.then(() => {
       this.eventBus.dispatch("pagesloaded", {
         source: this,
@@ -10261,7 +10275,7 @@ class BaseViewer {
           this._scriptingManager.setDocument(pdfDocument);
         }
 
-        if (pdfDocument.loadingParams.disableAutoFetch || pagesCount > 7500) {
+        if (pdfDocument.loadingParams.disableAutoFetch || pagesCount > PagesCountLimit.FORCE_LAZY_PAGE_INIT) {
           this._pagesCapability.resolve();
 
           return;
@@ -11154,6 +11168,10 @@ class BaseViewer {
 
     if (!(0, _ui_utils.isValidScrollMode)(mode)) {
       throw new Error(`Invalid scroll mode: ${mode}`);
+    }
+
+    if (this.pagesCount > PagesCountLimit.FORCE_SCROLL_MODE_PAGE) {
+      return;
     }
 
     this._previousScrollMode = this._scrollMode;
@@ -13212,7 +13230,7 @@ var _ui_utils = __webpack_require__(3);
 
 var _pdf_cursor_tools = __webpack_require__(5);
 
-var _pdf_viewer = __webpack_require__(26);
+var _base_viewer = __webpack_require__(27);
 
 class SecondaryToolbar {
   constructor(options, mainContainer, eventBus) {
@@ -13345,14 +13363,6 @@ class SecondaryToolbar {
     this._bindSpreadModeListener(options);
 
     this.eventBus._on("resize", this._setMaxHeight.bind(this));
-
-    this.eventBus._on("baseviewerinit", evt => {
-      if (evt.source instanceof _pdf_viewer.PDFSinglePageViewer) {
-        this.toolbarButtonContainer.classList.add("hiddenScrollModeButtons", "hiddenSpreadModeButtons");
-      } else {
-        this.toolbarButtonContainer.classList.remove("hiddenScrollModeButtons", "hiddenSpreadModeButtons");
-      }
-    });
   }
 
   get isOpen() {
@@ -13428,18 +13438,23 @@ class SecondaryToolbar {
   }
 
   _bindScrollModeListener(buttons) {
-    function scrollModeChanged({
+    const scrollModeChanged = ({
       mode
-    }) {
+    }) => {
       buttons.scrollPageButton.classList.toggle("toggled", mode === _ui_utils.ScrollMode.PAGE);
       buttons.scrollVerticalButton.classList.toggle("toggled", mode === _ui_utils.ScrollMode.VERTICAL);
       buttons.scrollHorizontalButton.classList.toggle("toggled", mode === _ui_utils.ScrollMode.HORIZONTAL);
       buttons.scrollWrappedButton.classList.toggle("toggled", mode === _ui_utils.ScrollMode.WRAPPED);
+      const forceScrollModePage = this.pagesCount > _base_viewer.PagesCountLimit.FORCE_SCROLL_MODE_PAGE;
+      buttons.scrollPageButton.disabled = forceScrollModePage;
+      buttons.scrollVerticalButton.disabled = forceScrollModePage;
+      buttons.scrollHorizontalButton.disabled = forceScrollModePage;
+      buttons.scrollWrappedButton.disabled = forceScrollModePage;
       const isScrollModeHorizontal = mode === _ui_utils.ScrollMode.HORIZONTAL;
       buttons.spreadNoneButton.disabled = isScrollModeHorizontal;
       buttons.spreadOddButton.disabled = isScrollModeHorizontal;
       buttons.spreadEvenButton.disabled = isScrollModeHorizontal;
-    }
+    };
 
     this.eventBus._on("scrollmodechanged", scrollModeChanged);
 
@@ -15512,7 +15527,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = 'a2a5376';
+const pdfjsBuild = 'dc455c8';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
