@@ -4825,7 +4825,7 @@ class PDFDocument {
       await this.getPage(0);
     } catch (reason) {
       if (reason instanceof _core_utils.XRefEntryException) {
-        this._pagePromises.clear();
+        this._pagePromises.delete(0);
 
         await this.cleanup();
         throw new _core_utils.XRefParseException();
@@ -4860,17 +4860,22 @@ class PDFDocument {
 
       await this.getPage(numPages - 1);
     } catch (reason) {
-      (0, _util.warn)(`checkLastPage - invalid /Pages tree /Count: ${numPages}.`);
+      this._pagePromises.delete(numPages - 1);
+
       await this.cleanup();
+
+      if (reason instanceof _core_utils.XRefEntryException && !recoveryMode) {
+        throw new _core_utils.XRefParseException();
+      }
+
+      (0, _util.warn)(`checkLastPage - invalid /Pages tree /Count: ${numPages}.`);
       let pagesTree;
 
       try {
-        pagesTree = await pdfManager.ensureCatalog("getAllPageDicts");
+        pagesTree = await pdfManager.ensureCatalog("getAllPageDicts", [recoveryMode]);
       } catch (reasonAll) {
-        if (reasonAll instanceof _core_utils.XRefEntryException) {
-          if (!recoveryMode) {
-            throw new _core_utils.XRefParseException();
-          }
+        if (reasonAll instanceof _core_utils.XRefEntryException && !recoveryMode) {
+          throw new _core_utils.XRefParseException();
         }
 
         catalog.setActualNumPages(1);
@@ -29315,6 +29320,10 @@ class CCITTFaxDecoder {
       c = 0;
 
       do {
+        if (typeof this.outputBits !== "number") {
+          throw new _util.FormatError('Invalid /CCITTFaxDecode data, "outputBits" must be a number.');
+        }
+
         if (this.outputBits > bits) {
           c <<= bits;
 
@@ -54089,7 +54098,7 @@ class Catalog {
         if ((0, _primitives.isRef)(currentNode)) {
           const count = pageKidsCountCache.get(currentNode);
 
-          if (count > 0 && currentPageIndex + count < pageIndex) {
+          if (count >= 0 && currentPageIndex + count <= pageIndex) {
             currentPageIndex += count;
             continue;
           }
@@ -54102,11 +54111,11 @@ class Catalog {
           visitedNodes.put(currentNode);
           xref.fetchAsync(currentNode).then(function (obj) {
             if ((0, _primitives.isDict)(obj, "Page") || (0, _primitives.isDict)(obj) && !obj.has("Kids")) {
-              if (pageIndex === currentPageIndex) {
-                if (currentNode && !pageKidsCountCache.has(currentNode)) {
-                  pageKidsCountCache.put(currentNode, 1);
-                }
+              if (currentNode && !pageKidsCountCache.has(currentNode)) {
+                pageKidsCountCache.put(currentNode, 1);
+              }
 
+              if (pageIndex === currentPageIndex) {
                 capability.resolve([obj, currentNode]);
               } else {
                 currentPageIndex++;
@@ -54197,7 +54206,7 @@ class Catalog {
     return capability.promise;
   }
 
-  getAllPageDicts() {
+  getAllPageDicts(recoveryMode = false) {
     const queue = [{
       currentNode: this.toplevelPagesDict,
       posInKids: 0
@@ -54210,8 +54219,8 @@ class Catalog {
       map.set(pageIndex++, [pageDict, pageRef]);
     }
 
-    function addPageError(msg) {
-      map.set(pageIndex++, [new _util.FormatError(msg), null]);
+    function addPageError(error) {
+      map.set(pageIndex++, [error, null]);
     }
 
     while (queue.length > 0) {
@@ -54229,13 +54238,16 @@ class Catalog {
           throw ex;
         }
 
-        if (ex instanceof _core_utils.XRefEntryException) {
+        if (ex instanceof _core_utils.XRefEntryException && !recoveryMode) {
           throw ex;
         }
+
+        addPageError(ex);
+        break;
       }
 
       if (!Array.isArray(kids)) {
-        addPageError("Page dictionary kids object is not an array.");
+        addPageError(new _util.FormatError("Page dictionary kids object is not an array."));
         break;
       }
 
@@ -54255,13 +54267,16 @@ class Catalog {
             throw ex;
           }
 
-          if (ex instanceof _core_utils.XRefEntryException) {
+          if (ex instanceof _core_utils.XRefEntryException && !recoveryMode) {
             throw ex;
           }
+
+          addPageError(ex);
+          break;
         }
 
         if (visitedNodes.has(kidObj)) {
-          addPageError("Pages tree contains circular reference.");
+          addPageError(new _util.FormatError("Pages tree contains circular reference."));
           break;
         }
 
@@ -54271,7 +54286,7 @@ class Catalog {
       }
 
       if (!(obj instanceof _primitives.Dict)) {
-        addPageError("Page dictionary kid reference points to wrong type of object.");
+        addPageError(new _util.FormatError("Page dictionary kid reference points to wrong type of object."));
         break;
       }
 
@@ -73521,7 +73536,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = 'dc455c8';
+const pdfjsBuild = '6d8d37e';
 })();
 
 /******/ 	return __webpack_exports__;
