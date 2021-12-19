@@ -3312,6 +3312,7 @@ class WorkerTransport {
   #docStats = null;
   #pageCache = new Map();
   #pagePromises = new Map();
+  #metadataPromise = null;
 
   constructor(messageHandler, loadingTask, networkStream, params) {
     this.messageHandler = messageHandler;
@@ -3434,6 +3435,7 @@ class WorkerTransport {
     Promise.all(waitOn).then(() => {
       this.commonObjs.clear();
       this.fontLoader.clear();
+      this.#metadataPromise = null;
       this._getFieldObjectsPromise = null;
       this._hasJSActionsPromise = null;
 
@@ -3920,7 +3922,7 @@ class WorkerTransport {
   }
 
   getMetadata() {
-    return this.messageHandler.sendWithPromise("GetMetadata", null).then(results => {
+    return this.#metadataPromise ||= this.messageHandler.sendWithPromise("GetMetadata", null).then(results => {
       return {
         info: results[0],
         metadata: results[1] ? new _metadata.Metadata(results[1]) : null,
@@ -3955,6 +3957,7 @@ class WorkerTransport {
       this.fontLoader.clear();
     }
 
+    this.#metadataPromise = null;
     this._getFieldObjectsPromise = null;
     this._hasJSActionsPromise = null;
   }
@@ -4213,7 +4216,7 @@ class InternalRenderTask {
 
 const version = '2.12.0';
 exports.version = version;
-const build = '6d8d37e';
+const build = 'a2ae56f';
 exports.build = build;
 
 /***/ }),
@@ -10804,7 +10807,7 @@ class PopupElement {
 
     if (this.richText?.str && (!this.contentsObj?.str || this.contentsObj.str === this.richText.str)) {
       _xfa_layer.XfaLayer.render({
-        xfa: this.richText.html,
+        xfaHtml: this.richText.html,
         intent: "richText",
         div: popup
       });
@@ -11646,7 +11649,7 @@ class XfaLayer {
   static render(parameters) {
     const storage = parameters.annotationStorage;
     const linkService = parameters.linkService;
-    const root = parameters.xfa;
+    const root = parameters.xfaHtml;
     const intent = parameters.intent || "display";
     const rootHtml = document.createElement(root.name);
 
@@ -15915,7 +15918,7 @@ var _svg = __w_pdfjs_require__(22);
 var _xfa_layer = __w_pdfjs_require__(20);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = '6d8d37e';
+const pdfjsBuild = 'a2ae56f';
 {
   if (_is_node.isNodeJS) {
     const {

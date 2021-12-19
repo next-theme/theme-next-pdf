@@ -52979,10 +52979,11 @@ class Catalog {
     this.xref = xref;
     this._catDict = xref.getCatalogObj();
 
-    if (!(0, _primitives.isDict)(this._catDict)) {
+    if (!(this._catDict instanceof _primitives.Dict)) {
       throw new _util.FormatError("Catalog object is not a dictionary.");
     }
 
+    this.toplevelPagesDict;
     this._actualNumPages = null;
     this.fontCache = new _primitives.RefSetCache();
     this.builtInCMapCache = new Map();
@@ -54085,8 +54086,15 @@ class Catalog {
 
   getPageDict(pageIndex) {
     const capability = (0, _util.createPromiseCapability)();
-    const nodesToVisit = [this._catDict.getRaw("Pages")];
+    const nodesToVisit = [this.toplevelPagesDict];
     const visitedNodes = new _primitives.RefSet();
+
+    const pagesRef = this._catDict.getRaw("Pages");
+
+    if (pagesRef instanceof _primitives.Ref) {
+      visitedNodes.put(pagesRef);
+    }
+
     const xref = this.xref,
           pageKidsCountCache = this.pageKidsCountCache;
     let currentPageIndex = 0;
@@ -54095,7 +54103,7 @@ class Catalog {
       while (nodesToVisit.length) {
         const currentNode = nodesToVisit.pop();
 
-        if ((0, _primitives.isRef)(currentNode)) {
+        if (currentNode instanceof _primitives.Ref) {
           const count = pageKidsCountCache.get(currentNode);
 
           if (count >= 0 && currentPageIndex + count <= pageIndex) {
@@ -54131,7 +54139,7 @@ class Catalog {
           return;
         }
 
-        if (!(0, _primitives.isDict)(currentNode)) {
+        if (!(currentNode instanceof _primitives.Dict)) {
           capability.reject(new _util.FormatError("Page dictionary kid reference points to wrong type of object."));
           return;
         }
@@ -54212,6 +54220,13 @@ class Catalog {
       posInKids: 0
     }];
     const visitedNodes = new _primitives.RefSet();
+
+    const pagesRef = this._catDict.getRaw("Pages");
+
+    if (pagesRef instanceof _primitives.Ref) {
+      visitedNodes.put(pagesRef);
+    }
+
     const map = new Map();
     let pageIndex = 0;
 
@@ -73536,7 +73551,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.12.0';
-const pdfjsBuild = '6d8d37e';
+const pdfjsBuild = 'a2ae56f';
 })();
 
 /******/ 	return __webpack_exports__;
