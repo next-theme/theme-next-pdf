@@ -9789,7 +9789,7 @@ const ENABLE_PERMISSIONS_CLASS = "enablePermissions";
 const PagesCountLimit = {
   FORCE_SCROLL_MODE_PAGE: 15000,
   FORCE_LAZY_PAGE_INIT: 7500,
-  PAUSE_EAGER_PAGE_INIT: 500
+  PAUSE_EAGER_PAGE_INIT: 250
 };
 exports.PagesCountLimit = PagesCountLimit;
 
@@ -15519,7 +15519,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.13.0';
-const pdfjsBuild = '41dab8e';
+const pdfjsBuild = 'f287c5f';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;

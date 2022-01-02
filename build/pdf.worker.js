@@ -4749,25 +4749,38 @@ class PDFDocument {
   async _getLinearizationPage(pageIndex) {
     const {
       catalog,
-      linearization
+      linearization,
+      xref
     } = this;
 
     const ref = _primitives.Ref.get(linearization.objectNumberFirst, 0);
 
     try {
-      const obj = await this.xref.fetchAsync(ref);
+      const obj = await xref.fetchAsync(ref);
 
-      if ((0, _primitives.isDict)(obj, "Page") || (0, _primitives.isDict)(obj) && !obj.has("Type") && obj.has("Contents")) {
-        if (ref && !catalog.pageKidsCountCache.has(ref)) {
-          catalog.pageKidsCountCache.put(ref, 1);
+      if (obj instanceof _primitives.Dict) {
+        let type = obj.getRaw("Type");
+
+        if (type instanceof _primitives.Ref) {
+          type = await xref.fetchAsync(type);
         }
 
-        return [obj, ref];
+        if ((0, _primitives.isName)(type, "Page") || !obj.has("Type") && !obj.has("Kids")) {
+          if (!catalog.pageKidsCountCache.has(ref)) {
+            catalog.pageKidsCountCache.put(ref, 1);
+          }
+
+          if (!catalog.pageIndexCache.has(ref)) {
+            catalog.pageIndexCache.put(ref, 0);
+          }
+
+          return [obj, ref];
+        }
       }
 
       throw new _util.FormatError("The Linearization dictionary doesn't point to a valid Page dictionary.");
     } catch (reason) {
-      (0, _util.info)(reason);
+      (0, _util.warn)(`_getLinearizationPage: "${reason.message}".`);
       return catalog.getPageDict(pageIndex);
     }
   }
@@ -4872,7 +4885,7 @@ class PDFDocument {
       let pagesTree;
 
       try {
-        pagesTree = await pdfManager.ensureCatalog("getAllPageDicts", [recoveryMode]);
+        pagesTree = await catalog.getAllPageDicts(recoveryMode);
       } catch (reasonAll) {
         if (reasonAll instanceof _core_utils.XRefEntryException && !recoveryMode) {
           throw new _core_utils.XRefParseException();
@@ -18731,7 +18744,7 @@ class AnnotationBorderStyle {
       return;
     }
 
-    if (Number.isInteger(width)) {
+    if (typeof width === "number") {
       if (width > 0) {
         const maxWidth = (rect[2] - rect[0]) / 2;
         const maxHeight = (rect[3] - rect[1]) / 2;
@@ -54084,8 +54097,7 @@ class Catalog {
     });
   }
 
-  getPageDict(pageIndex) {
-    const capability = (0, _util.createPromiseCapability)();
+  async getPageDict(pageIndex) {
     const nodesToVisit = [this.toplevelPagesDict];
     const visitedNodes = new _primitives.RefSet();
 
@@ -54096,125 +54108,115 @@ class Catalog {
     }
 
     const xref = this.xref,
-          pageKidsCountCache = this.pageKidsCountCache;
+          pageKidsCountCache = this.pageKidsCountCache,
+          pageIndexCache = this.pageIndexCache;
     let currentPageIndex = 0;
 
-    function next() {
-      while (nodesToVisit.length) {
-        const currentNode = nodesToVisit.pop();
+    while (nodesToVisit.length) {
+      const currentNode = nodesToVisit.pop();
 
-        if (currentNode instanceof _primitives.Ref) {
-          const count = pageKidsCountCache.get(currentNode);
+      if (currentNode instanceof _primitives.Ref) {
+        const count = pageKidsCountCache.get(currentNode);
 
-          if (count >= 0 && currentPageIndex + count <= pageIndex) {
-            currentPageIndex += count;
-            continue;
+        if (count >= 0 && currentPageIndex + count <= pageIndex) {
+          currentPageIndex += count;
+          continue;
+        }
+
+        if (visitedNodes.has(currentNode)) {
+          throw new _util.FormatError("Pages tree contains circular reference.");
+        }
+
+        visitedNodes.put(currentNode);
+        const obj = await xref.fetchAsync(currentNode);
+
+        if (obj instanceof _primitives.Dict) {
+          let type = obj.getRaw("Type");
+
+          if (type instanceof _primitives.Ref) {
+            type = await xref.fetchAsync(type);
           }
 
-          if (visitedNodes.has(currentNode)) {
-            capability.reject(new _util.FormatError("Pages tree contains circular reference."));
-            return;
-          }
-
-          visitedNodes.put(currentNode);
-          xref.fetchAsync(currentNode).then(function (obj) {
-            if ((0, _primitives.isDict)(obj, "Page") || (0, _primitives.isDict)(obj) && !obj.has("Kids")) {
-              if (currentNode && !pageKidsCountCache.has(currentNode)) {
-                pageKidsCountCache.put(currentNode, 1);
-              }
-
-              if (pageIndex === currentPageIndex) {
-                capability.resolve([obj, currentNode]);
-              } else {
-                currentPageIndex++;
-                next();
-              }
-
-              return;
+          if ((0, _primitives.isName)(type, "Page") || !obj.has("Kids")) {
+            if (!pageKidsCountCache.has(currentNode)) {
+              pageKidsCountCache.put(currentNode, 1);
             }
 
-            nodesToVisit.push(obj);
-            next();
-          }, capability.reject);
-          return;
-        }
-
-        if (!(currentNode instanceof _primitives.Dict)) {
-          capability.reject(new _util.FormatError("Page dictionary kid reference points to wrong type of object."));
-          return;
-        }
-
-        let count;
-
-        try {
-          count = currentNode.get("Count");
-        } catch (ex) {
-          if (ex instanceof _core_utils.MissingDataException) {
-            throw ex;
-          }
-        }
-
-        if (Number.isInteger(count) && count >= 0) {
-          const objId = currentNode.objId;
-
-          if (objId && !pageKidsCountCache.has(objId)) {
-            pageKidsCountCache.put(objId, count);
-          }
-
-          if (currentPageIndex + count <= pageIndex) {
-            currentPageIndex += count;
-            continue;
-          }
-        }
-
-        let kids;
-
-        try {
-          kids = currentNode.get("Kids");
-        } catch (ex) {
-          if (ex instanceof _core_utils.MissingDataException) {
-            throw ex;
-          }
-        }
-
-        if (!Array.isArray(kids)) {
-          let type;
-
-          try {
-            type = currentNode.get("Type");
-          } catch (ex) {
-            if (ex instanceof _core_utils.MissingDataException) {
-              throw ex;
+            if (!pageIndexCache.has(currentNode)) {
+              pageIndexCache.put(currentNode, currentPageIndex);
             }
-          }
 
-          if ((0, _primitives.isName)(type, "Page") || !currentNode.has("Type") && currentNode.has("Contents")) {
             if (currentPageIndex === pageIndex) {
-              capability.resolve([currentNode, null]);
-              return;
+              return [obj, currentNode];
             }
 
             currentPageIndex++;
             continue;
           }
-
-          capability.reject(new _util.FormatError("Page dictionary kids object is not an array."));
-          return;
         }
 
-        for (let last = kids.length - 1; last >= 0; last--) {
-          nodesToVisit.push(kids[last]);
+        nodesToVisit.push(obj);
+        continue;
+      }
+
+      if (!(currentNode instanceof _primitives.Dict)) {
+        throw new _util.FormatError("Page dictionary kid reference points to wrong type of object.");
+      }
+
+      const {
+        objId
+      } = currentNode;
+      let count = currentNode.getRaw("Count");
+
+      if (count instanceof _primitives.Ref) {
+        count = await xref.fetchAsync(count);
+      }
+
+      if (Number.isInteger(count) && count >= 0) {
+        if (objId && !pageKidsCountCache.has(objId)) {
+          pageKidsCountCache.put(objId, count);
+        }
+
+        if (currentPageIndex + count <= pageIndex) {
+          currentPageIndex += count;
+          continue;
         }
       }
 
-      capability.reject(new Error(`Page index ${pageIndex} not found.`));
+      let kids = currentNode.getRaw("Kids");
+
+      if (kids instanceof _primitives.Ref) {
+        kids = await xref.fetchAsync(kids);
+      }
+
+      if (!Array.isArray(kids)) {
+        let type = currentNode.getRaw("Type");
+
+        if (type instanceof _primitives.Ref) {
+          type = await xref.fetchAsync(type);
+        }
+
+        if ((0, _primitives.isName)(type, "Page") || !currentNode.has("Kids")) {
+          if (currentPageIndex === pageIndex) {
+            return [currentNode, null];
+          }
+
+          currentPageIndex++;
+          continue;
+        }
+
+        throw new _util.FormatError("Page dictionary kids object is not an array.");
+      }
+
+      for (let last = kids.length - 1; last >= 0; last--) {
+        nodesToVisit.push(kids[last]);
+      }
     }
 
-    next();
-    return capability.promise;
+    throw new Error(`Page index ${pageIndex} not found.`);
   }
 
-  getAllPageDicts(recoveryMode = false) {
+  async getAllPageDicts(recoveryMode = false) {
     const queue = [{
       currentNode: this.toplevelPagesDict,
       posInKids: 0
@@ -54227,14 +54229,24 @@ class Catalog {
       visitedNodes.put(pagesRef);
     }
 
-    const map = new Map();
+    const map = new Map(),
+          xref = this.xref,
+          pageIndexCache = this.pageIndexCache;
     let pageIndex = 0;
 
     function addPageDict(pageDict, pageRef) {
+      if (pageRef && !pageIndexCache.has(pageRef)) {
+        pageIndexCache.put(pageRef, pageIndex);
+      }
+
       map.set(pageIndex++, [pageDict, pageRef]);
     }
 
     function addPageError(error) {
+      if (error instanceof _core_utils.XRefEntryException && !recoveryMode) {
+        throw error;
+      }
+
       map.set(pageIndex++, [error, null]);
     }
 
@@ -54244,21 +54256,15 @@ class Catalog {
         currentNode,
         posInKids
       } = queueItem;
-      let kids;
+      let kids = currentNode.getRaw("Kids");
 
-      try {
-        kids = currentNode.get("Kids");
-      } catch (ex) {
-        if (ex instanceof _core_utils.MissingDataException) {
-          throw ex;
+      if (kids instanceof _primitives.Ref) {
+        try {
+          kids = await xref.fetchAsync(kids);
+        } catch (ex) {
+          addPageError(ex);
+          break;
         }
-
-        if (ex instanceof _core_utils.XRefEntryException && !recoveryMode) {
-          throw ex;
-        }
-
-        addPageError(ex);
-        break;
       }
 
       if (!Array.isArray(kids)) {
@@ -54275,27 +54281,19 @@ class Catalog {
       let obj;
 
       if (kidObj instanceof _primitives.Ref) {
-        try {
-          obj = this.xref.fetch(kidObj);
-        } catch (ex) {
-          if (ex instanceof _core_utils.MissingDataException) {
-            throw ex;
-          }
-
-          if (ex instanceof _core_utils.XRefEntryException && !recoveryMode) {
-            throw ex;
-          }
-
-          addPageError(ex);
-          break;
-        }
-
         if (visitedNodes.has(kidObj)) {
           addPageError(new _util.FormatError("Pages tree contains circular reference."));
           break;
         }
 
         visitedNodes.put(kidObj);
+
+        try {
+          obj = await xref.fetchAsync(kidObj);
+        } catch (ex) {
+          addPageError(ex);
+          break;
+        }
       } else {
         obj = kidObj;
       }
@@ -54305,7 +54303,18 @@ class Catalog {
         break;
       }
 
-      if ((0, _primitives.isDict)(obj, "Page") || !obj.has("Kids")) {
+      let type = obj.getRaw("Type");
+
+      if (type instanceof _primitives.Ref) {
+        try {
+          type = await xref.fetchAsync(type);
+        } catch (ex) {
+          addPageError(ex);
+          break;
+        }
+      }
+
+      if ((0, _primitives.isName)(type, "Page") || !obj.has("Kids")) {
         addPageDict(obj, kidObj instanceof _primitives.Ref ? kidObj : null);
       } else {
         queue.push({
@@ -73551,7 +73560,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.13.0';
-const pdfjsBuild = '41dab8e';
+const pdfjsBuild = 'f287c5f';
 })();
 
 /******/ 	return __webpack_exports__;

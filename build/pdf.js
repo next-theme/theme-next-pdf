@@ -4216,7 +4216,7 @@ class InternalRenderTask {
 
 const version = '2.13.0';
 exports.version = version;
-const build = '41dab8e';
+const build = 'f287c5f';
 exports.build = build;
 
 /***/ }),
@@ -15918,7 +15918,7 @@ var _svg = __w_pdfjs_require__(22);
 var _xfa_layer = __w_pdfjs_require__(20);
 
 const pdfjsVersion = '2.13.0';
-const pdfjsBuild = '41dab8e';
+const pdfjsBuild = 'f287c5f';
 {
   if (_is_node.isNodeJS) {
     const {
