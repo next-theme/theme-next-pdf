@@ -735,7 +735,6 @@ exports.isSameOrigin = isSameOrigin;
 exports.isString = isString;
 exports.objectFromMap = objectFromMap;
 exports.objectSize = objectSize;
-exports.removeNullCharacters = removeNullCharacters;
 exports.setVerbosityLevel = setVerbosityLevel;
 exports.shadow = shadow;
 exports.string32 = string32;
@@ -1282,21 +1281,6 @@ class AbortException extends BaseException {
 }
 
 exports.AbortException = AbortException;
-const NullCharactersRegExp = /\x00+/g;
-const InvisibleCharactersRegExp = /[\x01-\x1F]/g;
-
-function removeNullCharacters(str, replaceInvisible = false) {
-  if (typeof str !== "string") {
-    warn("The argument for removeNullCharacters must be a string.");
-    return str;
-  }
-
-  if (replaceInvisible) {
-    str = str.replace(InvisibleCharactersRegExp, " ");
-  }
-
-  return str.replace(NullCharactersRegExp, "");
-}
 
 function bytesToString(bytes) {
   assert(bytes !== null && typeof bytes === "object" && bytes.length !== undefined, "Invalid argument for bytesToString");
@@ -23799,8 +23783,8 @@ class PartialEvaluator {
       return {
         str,
         dir: bidiResult.dir,
-        width: textChunk.totalWidth,
-        height: textChunk.totalHeight,
+        width: Math.abs(textChunk.totalWidth),
+        height: Math.abs(textChunk.totalHeight),
         transform: textChunk.transform,
         fontName: textChunk.fontName,
         hasEOL: textChunk.hasEOL
@@ -23866,8 +23850,9 @@ class PartialEvaluator {
       if (textState.font.vertical) {
         const advanceY = (lastPosY - posY) / textContentItem.textAdvanceScale;
         const advanceX = posX - lastPosX;
+        const textOrientation = Math.sign(textContentItem.height);
 
-        if (advanceY < textContentItem.negativeSpaceMax) {
+        if (advanceY < textOrientation * textContentItem.negativeSpaceMax) {
           if (Math.abs(advanceX) > 0.5 * textContentItem.width) {
             appendEOL();
             return;
@@ -23882,15 +23867,15 @@ class PartialEvaluator {
           return;
         }
 
-        if (advanceY <= textContentItem.trackingSpaceMin) {
+        if (advanceY <= textOrientation * textContentItem.trackingSpaceMin) {
           textContentItem.height += advanceY;
-        } else if (!addFakeSpaces(advanceY, textContentItem.prevTransform)) {
+        } else if (!addFakeSpaces(advanceY, textContentItem.prevTransform, textOrientation)) {
           if (textContentItem.str.length === 0) {
             textContent.items.push({
               str: " ",
               dir: "ltr",
               width: 0,
-              height: advanceY,
+              height: Math.abs(advanceY),
               transform: textContentItem.prevTransform,
               fontName: textContentItem.fontName,
               hasEOL: false
@@ -23905,8 +23890,9 @@ class PartialEvaluator {
 
       const advanceX = (posX - lastPosX) / textContentItem.textAdvanceScale;
       const advanceY = posY - lastPosY;
+      const textOrientation = Math.sign(textContentItem.width);
 
-      if (advanceX < textContentItem.negativeSpaceMax) {
+      if (advanceX < textOrientation * textContentItem.negativeSpaceMax) {
         if (Math.abs(advanceY) > 0.5 * textContentItem.height) {
           appendEOL();
           return;
@@ -23921,14 +23907,14 @@ class PartialEvaluator {
         return;
       }
 
-      if (advanceX <= textContentItem.trackingSpaceMin) {
+      if (advanceX <= textOrientation * textContentItem.trackingSpaceMin) {
         textContentItem.width += advanceX;
-      } else if (!addFakeSpaces(advanceX, textContentItem.prevTransform)) {
+      } else if (!addFakeSpaces(advanceX, textContentItem.prevTransform, textOrientation)) {
         if (textContentItem.str.length === 0) {
           textContent.items.push({
             str: " ",
             dir: "ltr",
-            width: advanceX,
+            width: Math.abs(advanceX),
             height: 0,
             transform: textContentItem.prevTransform,
             fontName: textContentItem.fontName,
@@ -24039,8 +24025,8 @@ class PartialEvaluator {
       }
     }
 
-    function addFakeSpaces(width, transf) {
-      if (textContentItem.spaceInFlowMin <= width && width <= textContentItem.spaceInFlowMax) {
+    function addFakeSpaces(width, transf, textOrientation) {
+      if (textOrientation * textContentItem.spaceInFlowMin <= width && width <= textOrientation * textContentItem.spaceInFlowMax) {
         if (textContentItem.initialized) {
           textContentItem.str.push(" ");
         }
@@ -24060,8 +24046,8 @@ class PartialEvaluator {
       textContent.items.push({
         str: " ",
         dir: "ltr",
-        width,
-        height,
+        width: Math.abs(width),
+        height: Math.abs(height),
         transform: transf || getCurrentTextTransform(),
         fontName,
         hasEOL: false
@@ -73560,7 +73546,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.13.0';
-const pdfjsBuild = 'f287c5f';
+const pdfjsBuild = '8ac0ccc';
 })();
 
 /******/ 	return __webpack_exports__;
