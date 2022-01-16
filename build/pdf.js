@@ -611,7 +611,10 @@ class AbortException extends BaseException {
 exports.AbortException = AbortException;
 
 function bytesToString(bytes) {
-  assert(bytes !== null && typeof bytes === "object" && bytes.length !== undefined, "Invalid argument for bytesToString");
+  if (typeof bytes !== "object" || bytes === null || bytes.length === undefined) {
+    unreachable("Invalid argument for bytesToString");
+  }
+
   const length = bytes.length;
   const MAX_ARGUMENT_COUNT = 8192;
 
@@ -631,7 +634,10 @@ function bytesToString(bytes) {
 }
 
 function stringToBytes(str) {
-  assert(typeof str === "string", "Invalid argument for stringToBytes");
+  if (typeof str !== "string") {
+    unreachable("Invalid argument for stringToBytes");
+  }
+
   const length = str.length;
   const bytes = new Uint8Array(length);
 
@@ -647,8 +653,11 @@ function arrayByteLength(arr) {
     return arr.length;
   }
 
-  assert(arr.byteLength !== undefined, "arrayByteLength - invalid argument.");
-  return arr.byteLength;
+  if (arr.byteLength !== undefined) {
+    return arr.byteLength;
+  }
+
+  unreachable("Invalid argument for arrayByteLength");
 }
 
 function arraysToBytes(arr) {
@@ -908,22 +917,35 @@ exports.Util = Util;
 const PDFStringTranslateTable = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2d8, 0x2c7, 0x2c6, 0x2d9, 0x2dd, 0x2db, 0x2da, 0x2dc, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2022, 0x2020, 0x2021, 0x2026, 0x2014, 0x2013, 0x192, 0x2044, 0x2039, 0x203a, 0x2212, 0x2030, 0x201e, 0x201c, 0x201d, 0x2018, 0x2019, 0x201a, 0x2122, 0xfb01, 0xfb02, 0x141, 0x152, 0x160, 0x178, 0x17d, 0x131, 0x142, 0x153, 0x161, 0x17e, 0, 0x20ac];
 
 function stringToPDFString(str) {
-  const length = str.length,
-        strBuf = [];
+  if (str[0] >= "\xEF") {
+    let encoding;
 
-  if (str[0] === "\xFE" && str[1] === "\xFF") {
-    for (let i = 2; i < length; i += 2) {
-      strBuf.push(String.fromCharCode(str.charCodeAt(i) << 8 | str.charCodeAt(i + 1)));
+    if (str[0] === "\xFE" && str[1] === "\xFF") {
+      encoding = "utf-16be";
+    } else if (str[0] === "\xFF" && str[1] === "\xFE") {
+      encoding = "utf-16le";
+    } else if (str[0] === "\xEF" && str[1] === "\xBB" && str[2] === "\xBF") {
+      encoding = "utf-8";
     }
-  } else if (str[0] === "\xFF" && str[1] === "\xFE") {
-    for (let i = 2; i < length; i += 2) {
-      strBuf.push(String.fromCharCode(str.charCodeAt(i + 1) << 8 | str.charCodeAt(i)));
+
+    if (encoding) {
+      try {
+        const decoder = new TextDecoder(encoding, {
+          fatal: true
+        });
+        const buffer = stringToBytes(str);
+        return decoder.decode(buffer);
+      } catch (ex) {
+        warn(`stringToPDFString: "${ex}".`);
+      }
     }
-  } else {
-    for (let i = 0; i < length; ++i) {
-      const code = PDFStringTranslateTable[str.charCodeAt(i)];
-      strBuf.push(code ? String.fromCharCode(code) : str.charAt(i));
-    }
+  }
+
+  const strBuf = [];
+
+  for (let i = 0, ii = str.length; i < ii; i++) {
+    const code = PDFStringTranslateTable[str.charCodeAt(i)];
+    strBuf.push(code ? String.fromCharCode(code) : str.charAt(i));
   }
 
   return strBuf.join("");
@@ -3501,7 +3523,7 @@ class InternalRenderTask {
 
 const version = '2.13.0';
 exports.version = version;
-const build = '8ac0ccc';
+const build = 'da953f4';
 exports.build = build;
 
 /***/ }),
@@ -9187,6 +9209,13 @@ var _xfa_layer = __w_pdfjs_require__(20);
 const DEFAULT_TAB_INDEX = 1000;
 const GetElementsByNameSet = new WeakSet();
 
+function getRectDims(rect) {
+  return {
+    width: rect[2] - rect[0],
+    height: rect[3] - rect[1]
+  };
+}
+
 class AnnotationElementFactory {
   static create(parameters) {
     const subtype = parameters.data.annotationType;
@@ -9308,8 +9337,10 @@ class AnnotationElement {
           page = this.page,
           viewport = this.viewport;
     const container = document.createElement("section");
-    let width = data.rect[2] - data.rect[0];
-    let height = data.rect[3] - data.rect[1];
+    let {
+      width,
+      height
+    } = getRectDims(data.rect);
     container.setAttribute("data-annotation-id", data.id);
 
     const rect = _util.Util.normalizeRect([data.rect[0], page.view[3] - data.rect[1] + page.view[1], data.rect[2], page.view[3] - data.rect[3] + page.view[1]]);
@@ -10847,8 +10878,10 @@ class LineAnnotationElement extends AnnotationElement {
   render() {
     this.container.className = "lineAnnotation";
     const data = this.data;
-    const width = data.rect[2] - data.rect[0];
-    const height = data.rect[3] - data.rect[1];
+    const {
+      width,
+      height
+    } = getRectDims(data.rect);
     const svg = this.svgFactory.create(width, height);
     const line = this.svgFactory.createElement("svg:line");
     line.setAttribute("x1", data.rect[2] - data.lineCoordinates[0]);
@@ -10880,8 +10913,10 @@ class SquareAnnotationElement extends AnnotationElement {
   render() {
     this.container.className = "squareAnnotation";
     const data = this.data;
-    const width = data.rect[2] - data.rect[0];
-    const height = data.rect[3] - data.rect[1];
+    const {
+      width,
+      height
+    } = getRectDims(data.rect);
     const svg = this.svgFactory.create(width, height);
     const borderWidth = data.borderStyle.width;
     const square = this.svgFactory.createElement("svg:rect");
@@ -10914,8 +10949,10 @@ class CircleAnnotationElement extends AnnotationElement {
   render() {
     this.container.className = "circleAnnotation";
     const data = this.data;
-    const width = data.rect[2] - data.rect[0];
-    const height = data.rect[3] - data.rect[1];
+    const {
+      width,
+      height
+    } = getRectDims(data.rect);
     const svg = this.svgFactory.create(width, height);
     const borderWidth = data.borderStyle.width;
     const circle = this.svgFactory.createElement("svg:ellipse");
@@ -10950,8 +10987,10 @@ class PolylineAnnotationElement extends AnnotationElement {
   render() {
     this.container.className = this.containerClassName;
     const data = this.data;
-    const width = data.rect[2] - data.rect[0];
-    const height = data.rect[3] - data.rect[1];
+    const {
+      width,
+      height
+    } = getRectDims(data.rect);
     const svg = this.svgFactory.create(width, height);
     let points = [];
 
@@ -11021,8 +11060,10 @@ class InkAnnotationElement extends AnnotationElement {
   render() {
     this.container.className = this.containerClassName;
     const data = this.data;
-    const width = data.rect[2] - data.rect[0];
-    const height = data.rect[3] - data.rect[1];
+    const {
+      width,
+      height
+    } = getRectDims(data.rect);
     const svg = this.svgFactory.create(width, height);
 
     for (const inkList of data.inkLists) {
@@ -11220,6 +11261,15 @@ class AnnotationLayer {
 
     for (const data of parameters.annotations) {
       if (!data) {
+        continue;
+      }
+
+      const {
+        width,
+        height
+      } = getRectDims(data.rect);
+
+      if (width <= 0 || height <= 0) {
         continue;
       }
 
@@ -15827,7 +15877,7 @@ var _svg = __w_pdfjs_require__(22);
 var _xfa_layer = __w_pdfjs_require__(20);
 
 const pdfjsVersion = '2.13.0';
-const pdfjsBuild = '8ac0ccc';
+const pdfjsBuild = 'da953f4';
 {
   if (_is_node.isNodeJS) {
     const {

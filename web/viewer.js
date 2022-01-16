@@ -1163,6 +1163,12 @@ const PDFViewerApplication = {
     this._unblockDocumentLoadEvent();
 
     this._otherError(message, moreInfo);
+
+    this.eventBus.dispatch("documenterror", {
+      source: this,
+      message,
+      reason: moreInfo?.message ?? null
+    });
   },
 
   _otherError(message, moreInfo = null) {
@@ -11086,7 +11092,7 @@ class BaseViewer {
         pageView.setPdfPage(pdfPage);
       }
 
-      if (!this.linkService._cachedPageNumber(pdfPage.ref)) {
+      if (!this.linkService._cachedPageNumber?.(pdfPage.ref)) {
         this.linkService.cachePageRef(pageView.id, pdfPage.ref);
       }
 
@@ -15585,7 +15591,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.13.0';
-const pdfjsBuild = '8ac0ccc';
+const pdfjsBuild = 'da953f4';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;

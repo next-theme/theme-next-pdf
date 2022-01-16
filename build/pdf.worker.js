@@ -1283,7 +1283,10 @@ class AbortException extends BaseException {
 exports.AbortException = AbortException;
 
 function bytesToString(bytes) {
-  assert(bytes !== null && typeof bytes === "object" && bytes.length !== undefined, "Invalid argument for bytesToString");
+  if (typeof bytes !== "object" || bytes === null || bytes.length === undefined) {
+    unreachable("Invalid argument for bytesToString");
+  }
+
   const length = bytes.length;
   const MAX_ARGUMENT_COUNT = 8192;
 
@@ -1303,7 +1306,10 @@ function bytesToString(bytes) {
 }
 
 function stringToBytes(str) {
-  assert(typeof str === "string", "Invalid argument for stringToBytes");
+  if (typeof str !== "string") {
+    unreachable("Invalid argument for stringToBytes");
+  }
+
   const length = str.length;
   const bytes = new Uint8Array(length);
 
@@ -1319,8 +1325,11 @@ function arrayByteLength(arr) {
     return arr.length;
   }
 
-  assert(arr.byteLength !== undefined, "arrayByteLength - invalid argument.");
-  return arr.byteLength;
+  if (arr.byteLength !== undefined) {
+    return arr.byteLength;
+  }
+
+  unreachable("Invalid argument for arrayByteLength");
 }
 
 function arraysToBytes(arr) {
@@ -1580,22 +1589,35 @@ exports.Util = Util;
 const PDFStringTranslateTable = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2d8, 0x2c7, 0x2c6, 0x2d9, 0x2dd, 0x2db, 0x2da, 0x2dc, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2022, 0x2020, 0x2021, 0x2026, 0x2014, 0x2013, 0x192, 0x2044, 0x2039, 0x203a, 0x2212, 0x2030, 0x201e, 0x201c, 0x201d, 0x2018, 0x2019, 0x201a, 0x2122, 0xfb01, 0xfb02, 0x141, 0x152, 0x160, 0x178, 0x17d, 0x131, 0x142, 0x153, 0x161, 0x17e, 0, 0x20ac];
 
 function stringToPDFString(str) {
-  const length = str.length,
-        strBuf = [];
+  if (str[0] >= "\xEF") {
+    let encoding;
 
-  if (str[0] === "\xFE" && str[1] === "\xFF") {
-    for (let i = 2; i < length; i += 2) {
-      strBuf.push(String.fromCharCode(str.charCodeAt(i) << 8 | str.charCodeAt(i + 1)));
+    if (str[0] === "\xFE" && str[1] === "\xFF") {
+      encoding = "utf-16be";
+    } else if (str[0] === "\xFF" && str[1] === "\xFE") {
+      encoding = "utf-16le";
+    } else if (str[0] === "\xEF" && str[1] === "\xBB" && str[2] === "\xBF") {
+      encoding = "utf-8";
     }
-  } else if (str[0] === "\xFF" && str[1] === "\xFE") {
-    for (let i = 2; i < length; i += 2) {
-      strBuf.push(String.fromCharCode(str.charCodeAt(i + 1) << 8 | str.charCodeAt(i)));
+
+    if (encoding) {
+      try {
+        const decoder = new TextDecoder(encoding, {
+          fatal: true
+        });
+        const buffer = stringToBytes(str);
+        return decoder.decode(buffer);
+      } catch (ex) {
+        warn(`stringToPDFString: "${ex}".`);
+      }
     }
-  } else {
-    for (let i = 0; i < length; ++i) {
-      const code = PDFStringTranslateTable[str.charCodeAt(i)];
-      strBuf.push(code ? String.fromCharCode(code) : str.charAt(i));
-    }
+  }
+
+  const strBuf = [];
+
+  for (let i = 0, ii = str.length; i < ii; i++) {
+    const code = PDFStringTranslateTable[str.charCodeAt(i)];
+    strBuf.push(code ? String.fromCharCode(code) : str.charAt(i));
   }
 
   return strBuf.join("");
@@ -14738,6 +14760,7 @@ const getDingbatsGlyphsUnicode = (0,_core_utils_js__WEBPACK_IMPORTED_MODULE_0__.
 
 __w_pdfjs_require__.r(__webpack_exports__);
 /* harmony export */ __w_pdfjs_require__.d(__webpack_exports__, {
+/* harmony export */   "getCharUnicodeCategory": () => (/* binding */ getCharUnicodeCategory),
 /* harmony export */   "getNormalizedUnicodes": () => (/* binding */ getNormalizedUnicodes),
 /* harmony export */   "getUnicodeForGlyph": () => (/* binding */ getUnicodeForGlyph),
 /* harmony export */   "getUnicodeRangeFor": () => (/* binding */ getUnicodeRangeFor),
@@ -18091,6 +18114,14 @@ function reverseIfRtl(chars) {
   buf.push(chars[ii]);
  }
  return buf.join("");
+}
+const SpecialCharRegExp = new RegExp("^(\\s)|(\\p{Mn})$", "u");
+function getCharUnicodeCategory(char) {
+ const groups = char.match(SpecialCharRegExp);
+ return {
+  isWhitespace: !!(groups && groups[1]),
+  isDiacritic: !!(groups && groups[2])
+ };
 }
 
 
@@ -22744,6 +22775,10 @@ class PartialEvaluator {
       }
     }
 
+    if (this.parsingType3Font && this.type3FontRefs.has(fontRef)) {
+      return errorFont();
+    }
+
     if (this.fontCache.has(fontRef)) {
       return this.fontCache.get(fontRef);
     }
@@ -23645,7 +23680,6 @@ class PartialEvaluator {
     resources = resources || _primitives.Dict.empty;
     stateManager = stateManager || new StateManager(new TextState());
     const WhitespaceRegexp = /\s/g;
-    const DiacriticRegExp = new RegExp("^\\p{Mn}$", "u");
     const NormalizedUnicodes = (0, _unicode.getNormalizedUnicodes)();
     const textContent = {
       items: [],
@@ -23862,7 +23896,7 @@ class PartialEvaluator {
           return;
         }
 
-        if (Math.abs(advanceX) > textContentItem.height) {
+        if (Math.abs(advanceX) > textContentItem.width) {
           appendEOL();
           return;
         }
@@ -23959,9 +23993,8 @@ class PartialEvaluator {
         }
 
         let scaledDim = glyphWidth * scale;
-        let glyphUnicode = glyph.unicode;
 
-        if (glyphUnicode === " " && (i === 0 || i + 1 === ii || glyphs[i - 1].unicode === " " || glyphs[i + 1].unicode === " " || extraSpacing)) {
+        if (glyph.isWhitespace && (i === 0 || i + 1 === ii || glyphs[i - 1].isWhitespace || glyphs[i + 1].isWhitespace || extraSpacing)) {
           if (!font.vertical) {
             charSpacing += scaledDim + textState.wordSpacing;
             textState.translateTextMatrix(charSpacing * textState.textHScale, 0);
@@ -23974,9 +24007,10 @@ class PartialEvaluator {
         }
 
         compareWithLastPosition();
+        let glyphUnicode = glyph.unicode;
         const textChunk = ensureTextContentItem();
 
-        if (DiacriticRegExp.test(glyph.unicode)) {
+        if (glyph.isDiacritic) {
           scaledDim = 0;
         }
 
@@ -25434,6 +25468,13 @@ class TranslatedFont {
       ignoreErrors: false
     });
     type3Evaluator.parsingType3Font = true;
+    const type3FontRefs = new _primitives.RefSet(evaluator.type3FontRefs);
+
+    if (this.dict.objId && !type3FontRefs.has(this.dict.objId)) {
+      type3FontRefs.put(this.dict.objId);
+    }
+
+    type3Evaluator.type3FontRefs = type3FontRefs;
     const translatedFont = this.font,
           type3Dependencies = this.type3Dependencies;
     let loadCharProcsPromise = Promise.resolve();
@@ -36777,13 +36818,13 @@ var _cff_parser = __w_pdfjs_require__(45);
 
 var _fonts_utils = __w_pdfjs_require__(18);
 
+var _unicode = __w_pdfjs_require__(21);
+
 var _glyphlist = __w_pdfjs_require__(20);
 
 var _encodings = __w_pdfjs_require__(19);
 
 var _standard_fonts = __w_pdfjs_require__(47);
-
-var _unicode = __w_pdfjs_require__(21);
 
 var _to_unicode_map = __w_pdfjs_require__(48);
 
@@ -36902,6 +36943,9 @@ class Glyph {
     this.operatorListId = operatorListId;
     this.isSpace = isSpace;
     this.isInFont = isInFont;
+    const category = (0, _unicode.getCharUnicodeCategory)(unicode);
+    this.isWhitespace = category.isWhitespace;
+    this.isDiacritic = category.isDiacritic;
   }
 
   matchesForCache(originalCharCode, fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont) {
@@ -73546,7 +73590,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.13.0';
-const pdfjsBuild = '8ac0ccc';
+const pdfjsBuild = 'da953f4';
 })();
 
 /******/ 	return __webpack_exports__;
