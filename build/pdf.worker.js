@@ -23679,7 +23679,6 @@ class PartialEvaluator {
   }) {
     resources = resources || _primitives.Dict.empty;
     stateManager = stateManager || new StateManager(new TextState());
-    const WhitespaceRegexp = /\s/g;
     const NormalizedUnicodes = (0, _unicode.getNormalizedUnicodes)();
     const textContent = {
       items: [],
@@ -23798,24 +23797,11 @@ class PartialEvaluator {
       textContentItem.textAdvanceScale = scaleFactor;
     }
 
-    function replaceWhitespace(str) {
-      const ii = str.length;
-      let i = 0,
-          code;
-
-      while (i < ii && (code = str.charCodeAt(i)) >= 0x20 && code <= 0x7f) {
-        i++;
-      }
-
-      return i < ii ? str.replace(WhitespaceRegexp, " ") : str;
-    }
-
     function runBidiTransform(textChunk) {
       const text = textChunk.str.join("");
       const bidiResult = (0, _bidi.bidi)(text, -1, textChunk.vertical);
-      const str = normalizeWhitespace ? replaceWhitespace(bidiResult.str) : bidiResult.str;
       return {
-        str,
+        str: bidiResult.str,
         dir: bidiResult.dir,
         width: Math.abs(textChunk.totalWidth),
         height: Math.abs(textChunk.totalHeight),
@@ -24007,7 +23993,6 @@ class PartialEvaluator {
         }
 
         compareWithLastPosition();
-        let glyphUnicode = glyph.unicode;
         const textChunk = ensureTextContentItem();
 
         if (glyph.isDiacritic) {
@@ -24028,9 +24013,14 @@ class PartialEvaluator {
           textChunk.prevTransform = getCurrentTextTransform();
         }
 
-        glyphUnicode = NormalizedUnicodes[glyphUnicode] || glyphUnicode;
-        glyphUnicode = (0, _unicode.reverseIfRtl)(glyphUnicode);
-        textChunk.str.push(glyphUnicode);
+        if (glyph.isWhitespace && normalizeWhitespace) {
+          textChunk.str.push(" ");
+        } else {
+          let glyphUnicode = glyph.unicode;
+          glyphUnicode = NormalizedUnicodes[glyphUnicode] || glyphUnicode;
+          glyphUnicode = (0, _unicode.reverseIfRtl)(glyphUnicode);
+          textChunk.str.push(glyphUnicode);
+        }
 
         if (charSpacing) {
           if (!font.vertical) {
@@ -42568,12 +42558,24 @@ var _encodings = __w_pdfjs_require__(19);
 
 var _stream = __w_pdfjs_require__(10);
 
-function getLong(data, offset) {
-  return data[offset] << 24 | data[offset + 1] << 16 | data[offset + 2] << 8 | data[offset + 3];
+function getUint32(data, offset) {
+  return (data[offset] << 24 | data[offset + 1] << 16 | data[offset + 2] << 8 | data[offset + 3]) >>> 0;
 }
 
-function getUshort(data, offset) {
+function getUint16(data, offset) {
   return data[offset] << 8 | data[offset + 1];
+}
+
+function getInt16(data, offset) {
+  return (data[offset] << 24 | data[offset + 1] << 16) >> 16;
+}
+
+function getInt8(data, offset) {
+  return data[offset] << 24 >> 24;
+}
+
+function getFloat214(data, offset) {
+  return getInt16(data, offset) / 16384;
 }
 
 function getSubroutineBias(subrs) {
@@ -42590,34 +42592,34 @@ function getSubroutineBias(subrs) {
 }
 
 function parseCmap(data, start, end) {
-  const offset = getUshort(data, start + 2) === 1 ? getLong(data, start + 8) : getLong(data, start + 16);
-  const format = getUshort(data, start + offset);
+  const offset = getUint16(data, start + 2) === 1 ? getUint32(data, start + 8) : getUint32(data, start + 16);
+  const format = getUint16(data, start + offset);
   let ranges, p, i;
 
   if (format === 4) {
-    getUshort(data, start + offset + 2);
-    const segCount = getUshort(data, start + offset + 6) >> 1;
+    getUint16(data, start + offset + 2);
+    const segCount = getUint16(data, start + offset + 6) >> 1;
     p = start + offset + 14;
     ranges = [];
 
     for (i = 0; i < segCount; i++, p += 2) {
       ranges[i] = {
-        end: getUshort(data, p)
+        end: getUint16(data, p)
       };
     }
 
     p += 2;
 
     for (i = 0; i < segCount; i++, p += 2) {
-      ranges[i].start = getUshort(data, p);
+      ranges[i].start = getUint16(data, p);
     }
 
     for (i = 0; i < segCount; i++, p += 2) {
-      ranges[i].idDelta = getUshort(data, p);
+      ranges[i].idDelta = getUint16(data, p);
     }
 
     for (i = 0; i < segCount; i++, p += 2) {
-      let idOffset = getUshort(data, p);
+      let idOffset = getUint16(data, p);
 
       if (idOffset === 0) {
         continue;
@@ -42626,23 +42628,23 @@ function parseCmap(data, start, end) {
       ranges[i].ids = [];
 
       for (let j = 0, jj = ranges[i].end - ranges[i].start + 1; j < jj; j++) {
-        ranges[i].ids[j] = getUshort(data, p + idOffset);
+        ranges[i].ids[j] = getUint16(data, p + idOffset);
         idOffset += 2;
       }
     }
 
     return ranges;
   } else if (format === 12) {
-    getLong(data, start + offset + 4);
-    const groups = getLong(data, start + offset + 12);
+    const groups = getUint32(data, start + offset + 12);
     p = start + offset + 16;
     ranges = [];
 
     for (i = 0; i < groups; i++) {
+      start = getUint32(data, p);
       ranges.push({
-        start: getLong(data, p),
-        end: getLong(data, p + 4),
-        idDelta: getLong(data, p + 8) - getLong(data, p)
+        start,
+        end: getUint32(data, p + 4),
+        idDelta: getUint32(data, p + 8) - start
       });
       p += 12;
     }
@@ -42672,16 +42674,11 @@ function parseGlyfTable(glyf, loca, isGlyphLocationsLong) {
 
   if (isGlyphLocationsLong) {
     itemSize = 4;
-
-    itemDecode = function fontItemDecodeLong(data, offset) {
-      return data[offset] << 24 | data[offset + 1] << 16 | data[offset + 2] << 8 | data[offset + 3];
-    };
+    itemDecode = getUint32;
   } else {
     itemSize = 2;
 
-    itemDecode = function fontItemDecode(data, offset) {
-      return data[offset] << 9 | data[offset + 1] << 1;
-    };
+    itemDecode = (data, offset) => 2 * getUint16(data, offset);
   }
 
   const glyphs = [];
@@ -42745,7 +42742,7 @@ function compileGlyf(code, cmds, font) {
   }
 
   let i = 0;
-  const numberOfContours = (code[i] << 24 | code[i + 1] << 16) >> 16;
+  const numberOfContours = getInt16(code, i);
   let flags;
   let x = 0,
       y = 0;
@@ -42753,18 +42750,29 @@ function compileGlyf(code, cmds, font) {
 
   if (numberOfContours < 0) {
     do {
-      flags = code[i] << 8 | code[i + 1];
-      const glyphIndex = code[i + 2] << 8 | code[i + 3];
+      flags = getUint16(code, i);
+      const glyphIndex = getUint16(code, i + 2);
       i += 4;
       let arg1, arg2;
 
       if (flags & 0x01) {
-        arg1 = (code[i] << 24 | code[i + 1] << 16) >> 16;
-        arg2 = (code[i + 2] << 24 | code[i + 3] << 16) >> 16;
+        if (flags & 0x02) {
+          arg1 = getInt16(code, i);
+          arg2 = getInt16(code, i + 2);
+        } else {
+          arg1 = getUint16(code, i);
+          arg2 = getUint16(code, i + 2);
+        }
+
         i += 4;
       } else {
-        arg1 = code[i++];
-        arg2 = code[i++];
+        if (flags & 0x02) {
+          arg1 = getInt8(code, i++);
+          arg2 = getInt8(code, i++);
+        } else {
+          arg1 = code[i++];
+          arg2 = code[i++];
+        }
       }
 
       if (flags & 0x02) {
@@ -42781,17 +42789,17 @@ function compileGlyf(code, cmds, font) {
           scale10 = 0;
 
       if (flags & 0x08) {
-        scaleX = scaleY = (code[i] << 24 | code[i + 1] << 16) / 1073741824;
+        scaleX = scaleY = getFloat214(code, i);
         i += 2;
       } else if (flags & 0x40) {
-        scaleX = (code[i] << 24 | code[i + 1] << 16) / 1073741824;
-        scaleY = (code[i + 2] << 24 | code[i + 3] << 16) / 1073741824;
+        scaleX = getFloat214(code, i);
+        scaleY = getFloat214(code, i + 2);
         i += 4;
       } else if (flags & 0x80) {
-        scaleX = (code[i] << 24 | code[i + 1] << 16) / 1073741824;
-        scale01 = (code[i + 2] << 24 | code[i + 3] << 16) / 1073741824;
-        scale10 = (code[i + 4] << 24 | code[i + 5] << 16) / 1073741824;
-        scaleY = (code[i + 6] << 24 | code[i + 7] << 16) / 1073741824;
+        scaleX = getFloat214(code, i);
+        scale01 = getFloat214(code, i + 2);
+        scale10 = getFloat214(code, i + 4);
+        scaleY = getFloat214(code, i + 6);
         i += 8;
       }
 
@@ -42804,6 +42812,9 @@ function compileGlyf(code, cmds, font) {
           cmd: "transform",
           args: [scaleX, scale01, scale10, scaleY, x, y]
         });
+
+        if (!(flags & 0x02)) {}
+
         compileGlyf(subglyph, cmds, font);
         cmds.push({
           cmd: "restore"
@@ -42815,11 +42826,11 @@ function compileGlyf(code, cmds, font) {
     let j, jj;
 
     for (j = 0; j < numberOfContours; j++) {
-      endPtsOfContours.push(code[i] << 8 | code[i + 1]);
+      endPtsOfContours.push(getUint16(code, i));
       i += 2;
     }
 
-    const instructionLength = code[i] << 8 | code[i + 1];
+    const instructionLength = getUint16(code, i);
     i += 2 + instructionLength;
     const numberOfPoints = endPtsOfContours[endPtsOfContours.length - 1] + 1;
     const points = [];
@@ -42842,7 +42853,7 @@ function compileGlyf(code, cmds, font) {
     for (j = 0; j < numberOfPoints; j++) {
       switch (points[j].flags & 0x12) {
         case 0x00:
-          x += (code[i] << 24 | code[i + 1] << 16) >> 16;
+          x += getInt16(code, i);
           i += 2;
           break;
 
@@ -42861,7 +42872,7 @@ function compileGlyf(code, cmds, font) {
     for (j = 0; j < numberOfPoints; j++) {
       switch (points[j].flags & 0x24) {
         case 0x00:
-          y += (code[i] << 24 | code[i + 1] << 16) >> 16;
+          y += getInt16(code, i);
           i += 2;
           break;
 
@@ -43479,12 +43490,12 @@ class FontRendererFactory {
   static create(font, seacAnalysisEnabled) {
     const data = new Uint8Array(font.data);
     let cmap, glyf, loca, cff, indexToLocFormat, unitsPerEm;
-    const numTables = getUshort(data, 4);
+    const numTables = getUint16(data, 4);
 
     for (let i = 0, p = 12; i < numTables; i++, p += 16) {
       const tag = (0, _util.bytesToString)(data.subarray(p, p + 4));
-      const offset = getLong(data, p + 8);
-      const length = getLong(data, p + 12);
+      const offset = getUint32(data, p + 8);
+      const length = getUint32(data, p + 12);
 
       switch (tag) {
         case "cmap":
@@ -43500,8 +43511,8 @@ class FontRendererFactory {
           break;
 
         case "head":
-          unitsPerEm = getUshort(data, offset + 18);
-          indexToLocFormat = getUshort(data, offset + 50);
+          unitsPerEm = getUint16(data, offset + 18);
+          indexToLocFormat = getUint16(data, offset + 50);
           break;
 
         case "CFF ":
@@ -44063,14 +44074,12 @@ class CompositeGlyph {
       pos += 4;
       flags ^= ARG_1_AND_2_ARE_WORDS;
     } else {
-      argument1 = glyf.getUint8(pos);
-      argument2 = glyf.getUint8(pos + 1);
-
       if (flags & ARGS_ARE_XY_VALUES) {
-        const abs1 = argument1 & 0x7f;
-        argument1 = argument1 & 0x80 ? -abs1 : abs1;
-        const abs2 = argument2 & 0x7f;
-        argument2 = argument2 & 0x80 ? -abs2 : abs2;
+        argument1 = glyf.getInt8(pos);
+        argument2 = glyf.getInt8(pos + 1);
+      } else {
+        argument1 = glyf.getUint8(pos);
+        argument2 = glyf.getUint8(pos + 1);
       }
 
       pos += 2;
@@ -45133,6 +45142,11 @@ const Type1Parser = function Type1ParserClosure() {
       return this.currentChar = this.stream.getByte();
     }
 
+    prevChar() {
+      this.stream.skip(-2);
+      return this.currentChar = this.stream.getByte();
+    }
+
     getToken() {
       let comment = false;
       let ch = this.currentChar;
@@ -45229,6 +45243,8 @@ const Type1Parser = function Type1ParserClosure() {
 
               if (token === "noaccess") {
                 this.getToken();
+              } else if (token === "/") {
+                this.prevChar();
               }
 
               charstrings.push({
@@ -73590,7 +73606,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.13.0';
-const pdfjsBuild = 'da953f4';
+const pdfjsBuild = '23b6fde';
 })();
 
 /******/ 	return __webpack_exports__;
