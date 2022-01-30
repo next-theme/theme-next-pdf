@@ -2,7 +2,7 @@
  * @licstart The following is the entire license notice for the
  * Javascript code in this page
  *
- * Copyright 2021 Mozilla Foundation
+ * Copyright 2022 Mozilla Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -2218,90 +2218,8 @@ class LoopbackPort {
   }
 
   postMessage(obj, transfers) {
-    function cloneValue(object) {
-      if (globalThis.structuredClone) {
-        return globalThis.structuredClone(object, transfers);
-      }
-
-      function fallbackCloneValue(value) {
-        if (typeof value === "function" || typeof value === "symbol" || value instanceof URL) {
-          throw new Error(`LoopbackPort.postMessage - cannot clone: ${value?.toString()}`);
-        }
-
-        if (typeof value !== "object" || value === null) {
-          return value;
-        }
-
-        if (cloned.has(value)) {
-          return cloned.get(value);
-        }
-
-        let buffer, result;
-
-        if ((buffer = value.buffer) && (0, _util.isArrayBuffer)(buffer)) {
-          if (transfers?.includes(buffer)) {
-            result = new value.constructor(buffer, value.byteOffset, value.byteLength);
-          } else {
-            result = new value.constructor(value);
-          }
-
-          cloned.set(value, result);
-          return result;
-        }
-
-        if (value instanceof Map) {
-          result = new Map();
-          cloned.set(value, result);
-
-          for (const [key, val] of value) {
-            result.set(key, fallbackCloneValue(val));
-          }
-
-          return result;
-        }
-
-        if (value instanceof Set) {
-          result = new Set();
-          cloned.set(value, result);
-
-          for (const val of value) {
-            result.add(fallbackCloneValue(val));
-          }
-
-          return result;
-        }
-
-        result = Array.isArray(value) ? [] : Object.create(null);
-        cloned.set(value, result);
-
-        for (const i in value) {
-          let desc,
-              p = value;
-
-          while (!(desc = Object.getOwnPropertyDescriptor(p, i))) {
-            p = Object.getPrototypeOf(p);
-          }
-
-          if (typeof desc.value === "undefined") {
-            continue;
-          }
-
-          if (typeof desc.value === "function" && !value.hasOwnProperty?.(i)) {
-            continue;
-          }
-
-          result[i] = fallbackCloneValue(desc.value);
-        }
-
-        return result;
-      }
-
-      const cloned = new WeakMap();
-      return fallbackCloneValue(object);
-    }
-
     const event = {
-      data: cloneValue(obj)
+      data: structuredClone(obj, transfers)
     };
 
     this._deferred.then(() => {
@@ -3523,7 +3441,7 @@ class InternalRenderTask {
 
 const version = '2.13.0';
 exports.version = version;
-const build = '23b6fde';
+const build = '6b9cc24';
 exports.build = build;
 
 /***/ }),
@@ -6235,7 +6153,7 @@ class CanvasGraphics {
         if (lineWidth < 0 && -lineWidth >= this.current.lineWidth) {
           ctx.save();
           ctx.resetTransform();
-          ctx.lineWidth = Math.round(this._combinedScaleFactor);
+          ctx.lineWidth = Math.floor(this._combinedScaleFactor);
           ctx.stroke();
           ctx.restore();
         } else {
@@ -6489,7 +6407,7 @@ class CanvasGraphics {
       if (fillStrokeMode === _util.TextRenderingMode.STROKE || fillStrokeMode === _util.TextRenderingMode.FILL_STROKE) {
         if (resetLineWidthToOne) {
           ctx.resetTransform();
-          ctx.lineWidth = Math.round(this._combinedScaleFactor);
+          ctx.lineWidth = Math.floor(this._combinedScaleFactor);
         }
 
         ctx.stroke();
@@ -6506,7 +6424,7 @@ class CanvasGraphics {
           ctx.save();
           ctx.moveTo(x, y);
           ctx.resetTransform();
-          ctx.lineWidth = Math.round(this._combinedScaleFactor);
+          ctx.lineWidth = Math.floor(this._combinedScaleFactor);
           ctx.strokeText(character, 0, 0);
           ctx.restore();
         } else {
@@ -9869,7 +9787,7 @@ class WidgetAnnotationElement extends AnnotationElement {
           detail: {
             id: this.data.id,
             name: eventName,
-            value: event.target.checked
+            value: valueGetter(event)
           }
         });
       });
@@ -10004,9 +9922,7 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
       const textContent = storedData.valueAsString || storedData.value || "";
       const elementData = {
         userValue: null,
-        formattedValue: null,
-        beforeInputSelectionRange: null,
-        beforeInputValue: null
+        formattedValue: null
       };
 
       if (this.data.multiLine) {
@@ -10042,7 +9958,6 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
         }
 
         event.target.scrollLeft = 0;
-        elementData.beforeInputSelectionRange = null;
       };
 
       if (this.enableScripting && this.hasJSActions) {
@@ -10089,7 +10004,6 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
           this._dispatchEventFromSandbox(actions, jsEvent);
         });
         element.addEventListener("keydown", event => {
-          elementData.beforeInputValue = event.target.value;
           let commitKey = -1;
 
           if (event.key === "Escape") {
@@ -10121,8 +10035,9 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
         const _blurListener = blurListener;
         blurListener = null;
         element.addEventListener("blur", event => {
+          elementData.userValue = event.target.value;
+
           if (this._mouseState.isDown) {
-            elementData.userValue = event.target.value;
             this.linkService.eventBus?.dispatch("dispatcheventinsandbox", {
               source: this,
               detail: {
@@ -10139,38 +10054,29 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
 
           _blurListener(event);
         });
-        element.addEventListener("mousedown", event => {
-          elementData.beforeInputValue = event.target.value;
-          elementData.beforeInputSelectionRange = null;
-        });
-        element.addEventListener("keyup", event => {
-          if (event.target.selectionStart === event.target.selectionEnd) {
-            elementData.beforeInputSelectionRange = null;
-          }
-        });
-        element.addEventListener("select", event => {
-          elementData.beforeInputSelectionRange = [event.target.selectionStart, event.target.selectionEnd];
-        });
 
         if (this.data.actions?.Keystroke) {
-          element.addEventListener("input", event => {
-            let selStart = -1;
-            let selEnd = -1;
-
-            if (elementData.beforeInputSelectionRange) {
-              [selStart, selEnd] = elementData.beforeInputSelectionRange;
-            }
-
+          element.addEventListener("beforeinput", event => {
+            elementData.formattedValue = "";
+            const {
+              data,
+              target
+            } = event;
+            const {
+              value,
+              selectionStart,
+              selectionEnd
+            } = target;
             this.linkService.eventBus?.dispatch("dispatcheventinsandbox", {
               source: this,
               detail: {
                 id,
                 name: "Keystroke",
-                value: elementData.beforeInputValue,
-                change: event.data,
+                value,
+                change: data,
                 willCommit: false,
-                selStart,
-                selEnd
+                selStart: selectionStart,
+                selEnd: selectionEnd
               }
             });
           });
@@ -15877,7 +15783,7 @@ var _svg = __w_pdfjs_require__(22);
 var _xfa_layer = __w_pdfjs_require__(20);
 
 const pdfjsVersion = '2.13.0';
-const pdfjsBuild = '23b6fde';
+const pdfjsBuild = '6b9cc24';
 {
   if (_is_node.isNodeJS) {
     const {
