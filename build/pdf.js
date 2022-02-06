@@ -1935,14 +1935,12 @@ class PDFPageProxy {
   }
 
   streamTextContent({
-    normalizeWhitespace = false,
     disableCombineTextItems = false,
     includeMarkedContent = false
   } = {}) {
     const TEXT_CONTENT_CHUNK_SIZE = 100;
     return this._transport.messageHandler.sendWithStream("GetTextContent", {
       pageIndex: this._pageIndex,
-      normalizeWhitespace: normalizeWhitespace === true,
       combineTextItems: disableCombineTextItems !== true,
       includeMarkedContent: includeMarkedContent === true
     }, {
@@ -3441,7 +3439,7 @@ class InternalRenderTask {
 
 const version = '2.13.0';
 exports.version = version;
-const build = '6b9cc24';
+const build = '48139a0';
 exports.build = build;
 
 /***/ }),
@@ -15783,7 +15781,7 @@ var _svg = __w_pdfjs_require__(22);
 var _xfa_layer = __w_pdfjs_require__(20);
 
 const pdfjsVersion = '2.13.0';
-const pdfjsBuild = '6b9cc24';
+const pdfjsBuild = '48139a0';
 {
   if (_is_node.isNodeJS) {
     const {
