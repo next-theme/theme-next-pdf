@@ -47,7 +47,6 @@ exports.arrayByteLength = arrayByteLength;
 exports.arraysToBytes = arraysToBytes;
 exports.assert = assert;
 exports.bytesToString = bytesToString;
-exports.createObjectURL = createObjectURL;
 exports.createPromiseCapability = createPromiseCapability;
 exports.createValidAbsoluteUrl = createValidAbsoluteUrl;
 exports.escapeString = escapeString;
@@ -1042,30 +1041,6 @@ function createPromiseCapability() {
     };
   });
   return capability;
-}
-
-function createObjectURL(data, contentType = "", forceDataSchema = false) {
-  if (URL.createObjectURL && typeof Blob !== "undefined" && !forceDataSchema) {
-    return URL.createObjectURL(new Blob([data], {
-      type: contentType
-    }));
-  }
-
-  const digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-  let buffer = `data:${contentType};base64,`;
-
-  for (let i = 0, ii = data.length; i < ii; i += 3) {
-    const b1 = data[i] & 0xff;
-    const b2 = data[i + 1] & 0xff;
-    const b3 = data[i + 2] & 0xff;
-    const d1 = b1 >> 2,
-          d2 = (b1 & 3) << 4 | b2 >> 4;
-    const d3 = i + 1 < ii ? (b2 & 0xf) << 2 | b3 >> 6 : 64;
-    const d4 = i + 2 < ii ? b3 & 0x3f : 64;
-    buffer += digits[d1] + digits[d2] + digits[d3] + digits[d4];
-  }
-
-  return buffer;
 }
 
 /***/ }),
@@ -2828,9 +2803,13 @@ class WorkerTransport {
 
       if (loadingTask.onPassword) {
         const updatePassword = password => {
-          this._passwordCapability.resolve({
-            password
-          });
+          if (password instanceof Error) {
+            this._passwordCapability.reject(password);
+          } else {
+            this._passwordCapability.resolve({
+              password
+            });
+          }
         };
 
         try {
@@ -3439,7 +3418,7 @@ class InternalRenderTask {
 
 const version = '2.13.0';
 exports.version = version;
-const build = '48139a0';
+const build = 'e9fd67a';
 exports.build = build;
 
 /***/ }),
@@ -12452,6 +12431,30 @@ exports.SVGGraphics = SVGGraphics;
   const LINE_CAP_STYLES = ["butt", "round", "square"];
   const LINE_JOIN_STYLES = ["miter", "round", "bevel"];
 
+  const createObjectURL = function (data, contentType = "", forceDataSchema = false) {
+    if (URL.createObjectURL && typeof Blob !== "undefined" && !forceDataSchema) {
+      return URL.createObjectURL(new Blob([data], {
+        type: contentType
+      }));
+    }
+
+    const digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+    let buffer = `data:${contentType};base64,`;
+
+    for (let i = 0, ii = data.length; i < ii; i += 3) {
+      const b1 = data[i] & 0xff;
+      const b2 = data[i + 1] & 0xff;
+      const b3 = data[i + 2] & 0xff;
+      const d1 = b1 >> 2,
+            d2 = (b1 & 3) << 4 | b2 >> 4;
+      const d3 = i + 1 < ii ? (b2 & 0xf) << 2 | b3 >> 6 : 64;
+      const d4 = i + 2 < ii ? b3 & 0x3f : 64;
+      buffer += digits[d1] + digits[d2] + digits[d3] + digits[d4];
+    }
+
+    return buffer;
+  };
+
   const convertImgDataToPng = function () {
     const PNG_HEADER = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     const CHUNK_WRAPPER_SIZE = 12;
@@ -12644,7 +12647,7 @@ exports.SVGGraphics = SVGGraphics;
       writePngChunk("IDATA", idat, data, offset);
       offset += CHUNK_WRAPPER_SIZE + idat.length;
       writePngChunk("IEND", new Uint8Array(0), data, offset);
-      return (0, _util.createObjectURL)(data, "image/png", forceDataSchema);
+      return createObjectURL(data, "image/png", forceDataSchema);
     }
 
     return function convertImgDataToPng(imgData, forceDataSchema, isMask) {
@@ -13282,7 +13285,7 @@ exports.SVGGraphics = SVGGraphics;
         this.defs.appendChild(this.cssStyle);
       }
 
-      const url = (0, _util.createObjectURL)(fontObj.data, fontObj.mimetype, this.forceDataSchema);
+      const url = createObjectURL(fontObj.data, fontObj.mimetype, this.forceDataSchema);
       this.cssStyle.textContent += `@font-face { font-family: "${fontObj.loadedName}";` + ` src: url(${url}); }\n`;
     }
 
@@ -15689,12 +15692,6 @@ Object.defineProperty(exports, "build", ({
     return _api.build;
   }
 }));
-Object.defineProperty(exports, "createObjectURL", ({
-  enumerable: true,
-  get: function () {
-    return _util.createObjectURL;
-  }
-}));
 Object.defineProperty(exports, "createPromiseCapability", ({
   enumerable: true,
   get: function () {
@@ -15781,7 +15778,7 @@ var _svg = __w_pdfjs_require__(22);
 var _xfa_layer = __w_pdfjs_require__(20);
 
 const pdfjsVersion = '2.13.0';
-const pdfjsBuild = '48139a0';
+const pdfjsBuild = 'e9fd67a';
 {
   if (_is_node.isNodeJS) {
     const {

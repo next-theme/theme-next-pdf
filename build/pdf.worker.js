@@ -720,7 +720,6 @@ exports.arrayByteLength = arrayByteLength;
 exports.arraysToBytes = arraysToBytes;
 exports.assert = assert;
 exports.bytesToString = bytesToString;
-exports.createObjectURL = createObjectURL;
 exports.createPromiseCapability = createPromiseCapability;
 exports.createValidAbsoluteUrl = createValidAbsoluteUrl;
 exports.escapeString = escapeString;
@@ -1715,30 +1714,6 @@ function createPromiseCapability() {
     };
   });
   return capability;
-}
-
-function createObjectURL(data, contentType = "", forceDataSchema = false) {
-  if (URL.createObjectURL && typeof Blob !== "undefined" && !forceDataSchema) {
-    return URL.createObjectURL(new Blob([data], {
-      type: contentType
-    }));
-  }
-
-  const digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-  let buffer = `data:${contentType};base64,`;
-
-  for (let i = 0, ii = data.length; i < ii; i += 3) {
-    const b1 = data[i] & 0xff;
-    const b2 = data[i + 1] & 0xff;
-    const b3 = data[i + 2] & 0xff;
-    const d1 = b1 >> 2,
-          d2 = (b1 & 3) << 4 | b2 >> 4;
-    const d3 = i + 1 < ii ? (b2 & 0xf) << 2 | b3 >> 6 : 64;
-    const d4 = i + 2 < ii ? b3 & 0x3f : 64;
-    buffer += digits[d1] + digits[d2] + digits[d3] + digits[d4];
-  }
-
-  return buffer;
 }
 
 /***/ }),
@@ -26135,7 +26110,7 @@ class EvaluatorPreprocessor {
   }
 
   static get MAX_INVALID_PATH_OPS() {
-    return (0, _util.shadow)(this, "MAX_INVALID_PATH_OPS", 20);
+    return (0, _util.shadow)(this, "MAX_INVALID_PATH_OPS", 10);
   }
 
   constructor(stream, xref, stateManager = new StateManager()) {
@@ -28010,9 +27985,16 @@ class Lexer {
     }
 
     if (ch < 0x30 || ch > 0x39) {
-      if (divideBy === 10 && sign === 0 && ((0, _core_utils.isWhiteSpace)(ch) || ch === -1)) {
-        (0, _util.warn)("Lexer.getNumber - treating a single decimal point as zero.");
-        return 0;
+      if ((0, _core_utils.isWhiteSpace)(ch) || ch === -1) {
+        if (divideBy === 10 && sign === 0) {
+          (0, _util.warn)("Lexer.getNumber - treating a single decimal point as zero.");
+          return 0;
+        }
+
+        if (divideBy === 0 && sign === -1) {
+          (0, _util.warn)("Lexer.getNumber - treating a single minus sign as zero.");
+          return 0;
+        }
       }
 
       throw new _util.FormatError(`Invalid number: ${String.fromCharCode(ch)} (charCode ${ch})`);
@@ -73801,7 +73783,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.13.0';
-const pdfjsBuild = '48139a0';
+const pdfjsBuild = 'e9fd67a';
 })();
 
 /******/ 	return __webpack_exports__;

@@ -4798,14 +4798,14 @@ class PasswordPrompt {
     this._isViewerEmbedded = isViewerEmbedded;
     this.updateCallback = null;
     this.reason = null;
-    this.submitButton.addEventListener("click", this.verify.bind(this));
-    this.cancelButton.addEventListener("click", this.close.bind(this));
+    this.submitButton.addEventListener("click", this.#verify.bind(this));
+    this.cancelButton.addEventListener("click", this.#cancel.bind(this));
     this.input.addEventListener("keydown", e => {
       if (e.keyCode === 13) {
-        this.verify();
+        this.#verify();
       }
     });
-    this.overlayManager.register(this.overlayName, this.container, this.close.bind(this), true);
+    this.overlayManager.register(this.overlayName, this.container, this.#cancel.bind(this), true);
   }
 
   async open() {
@@ -4825,13 +4825,18 @@ class PasswordPrompt {
     });
   }
 
-  verify() {
+  #verify() {
     const password = this.input.value;
 
     if (password?.length > 0) {
       this.close();
       this.updateCallback(password);
     }
+  }
+
+  #cancel() {
+    this.close();
+    this.updateCallback(new Error("PasswordPrompt cancelled."));
   }
 
   setUpdateCallback(updateCallback, reason) {
@@ -15599,7 +15604,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.13.0';
-const pdfjsBuild = '48139a0';
+const pdfjsBuild = 'e9fd67a';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
