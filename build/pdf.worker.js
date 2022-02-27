@@ -397,10 +397,8 @@ class WorkerMessageHandler {
         });
       });
     });
-    handler.on("GetPageIndex", function wphSetupGetPageIndex({
-      ref
-    }) {
-      const pageRef = _primitives.Ref.get(ref.num, ref.gen);
+    handler.on("GetPageIndex", function wphSetupGetPageIndex(data) {
+      const pageRef = _primitives.Ref.get(data.num, data.gen);
 
       return pdfManager.ensureCatalog("getPageIndex", [pageRef]);
     });
@@ -550,7 +548,7 @@ class WorkerMessageHandler {
 
           if (xrefInfo instanceof _primitives.Dict) {
             xrefInfo.forEach((key, value) => {
-              if ((0, _util.isString)(key) && (0, _util.isString)(value)) {
+              if (typeof value === "string") {
                 infoObj[key] = (0, _util.stringToPDFString)(value);
               }
             });
@@ -735,10 +733,7 @@ exports.info = info;
 exports.isArrayBuffer = isArrayBuffer;
 exports.isArrayEqual = isArrayEqual;
 exports.isAscii = isAscii;
-exports.isBool = isBool;
-exports.isNum = isNum;
 exports.isSameOrigin = isSameOrigin;
-exports.isString = isString;
 exports.objectFromMap = objectFromMap;
 exports.objectSize = objectSize;
 exports.setVerbosityLevel = setVerbosityLevel;
@@ -1662,18 +1657,6 @@ function stringToUTF8String(str) {
 
 function utf8StringToString(str) {
   return unescape(encodeURIComponent(str));
-}
-
-function isBool(v) {
-  return typeof v === "boolean";
-}
-
-function isNum(v) {
-  return typeof v === "number";
-}
-
-function isString(v) {
-  return typeof v === "string";
 }
 
 function isArrayBuffer(v) {
@@ -3727,7 +3710,7 @@ class Page {
       return value;
     }
 
-    if (value.length === 1 || !(0, _primitives.isDict)(value[0])) {
+    if (value.length === 1 || !(value[0] instanceof _primitives.Dict)) {
       return value[0];
     }
 
@@ -3774,7 +3757,7 @@ class Page {
   get userUnit() {
     let obj = this.pageDict.get("UserUnit");
 
-    if (!(0, _util.isNum)(obj) || obj <= 0) {
+    if (typeof obj !== "number" || obj <= 0) {
       obj = DEFAULT_USER_UNIT;
     }
 
@@ -4617,17 +4600,6 @@ class PDFDocument {
   }
 
   get documentInfo() {
-    const DocumentInfoValidators = {
-      Title: _util.isString,
-      Author: _util.isString,
-      Subject: _util.isString,
-      Keywords: _util.isString,
-      Creator: _util.isString,
-      Producer: _util.isString,
-      CreationDate: _util.isString,
-      ModDate: _util.isString,
-      Trapped: _primitives.isName
-    };
     let version = this._version;
 
     if (typeof version !== "string" || !PDF_HEADER_VERSION_REGEXP.test(version)) {
@@ -4657,25 +4629,60 @@ class PDFDocument {
       (0, _util.info)("The document information dictionary is invalid.");
     }
 
-    if ((0, _primitives.isDict)(infoDict)) {
-      for (const key of infoDict.getKeys()) {
-        const value = infoDict.get(key);
+    if (!(infoDict instanceof _primitives.Dict)) {
+      return (0, _util.shadow)(this, "documentInfo", docInfo);
+    }
 
-        if (DocumentInfoValidators[key]) {
-          if (DocumentInfoValidators[key](value)) {
-            docInfo[key] = typeof value !== "string" ? value : (0, _util.stringToPDFString)(value);
-          } else {
-            (0, _util.info)(`Bad value in document info for "${key}".`);
+    for (const key of infoDict.getKeys()) {
+      const value = infoDict.get(key);
+
+      switch (key) {
+        case "Title":
+        case "Author":
+        case "Subject":
+        case "Keywords":
+        case "Creator":
+        case "Producer":
+        case "CreationDate":
+        case "ModDate":
+          if (typeof value === "string") {
+            docInfo[key] = (0, _util.stringToPDFString)(value);
+            continue;
           }
-        } else if (typeof key === "string") {
+
+          break;
+
+        case "Trapped":
+          if (value instanceof _primitives.Name) {
+            docInfo[key] = value;
+            continue;
+          }
+
+          break;
+
+        default:
           let customValue;
 
-          if ((0, _util.isString)(value)) {
-            customValue = (0, _util.stringToPDFString)(value);
-          } else if ((0, _primitives.isName)(value) || (0, _util.isNum)(value) || (0, _util.isBool)(value)) {
-            customValue = value;
-          } else {
-            (0, _util.info)(`Unsupported value in document info for (custom) "${key}".`);
+          switch (typeof value) {
+            case "string":
+              customValue = (0, _util.stringToPDFString)(value);
+              break;
+
+            case "number":
+            case "boolean":
+              customValue = value;
+              break;
+
+            default:
+              if (value instanceof _primitives.Name) {
+                customValue = value;
+              }
+
+              break;
+          }
+
+          if (customValue === undefined) {
+            (0, _util.warn)(`Bad value, for custom key "${key}", in Info: ${value}.`);
             continue;
           }
 
@@ -4684,8 +4691,10 @@ class PDFDocument {
           }
 
           docInfo.Custom[key] = customValue;
-        }
+          continue;
       }
+
+      (0, _util.warn)(`Bad value, for key "${key}", in Info: ${value}.`);
     }
 
     return (0, _util.shadow)(this, "documentInfo", docInfo);
@@ -18162,13 +18171,13 @@ class AnnotationFactory {
   static _create(xref, ref, pdfManager, idFactory, acroForm, collectFields, pageIndex = -1) {
     const dict = xref.fetchIfRef(ref);
 
-    if (!(0, _primitives.isDict)(dict)) {
+    if (!(dict instanceof _primitives.Dict)) {
       return undefined;
     }
 
     const id = ref instanceof _primitives.Ref ? ref.toString() : `annot_${idFactory.createObjId()}`;
     let subtype = dict.get("Subtype");
-    subtype = (0, _primitives.isName)(subtype) ? subtype.name : null;
+    subtype = subtype instanceof _primitives.Name ? subtype.name : null;
     const parameters = {
       xref,
       ref,
@@ -18193,7 +18202,7 @@ class AnnotationFactory {
           dict,
           key: "FT"
         });
-        fieldType = (0, _primitives.isName)(fieldType) ? fieldType.name : null;
+        fieldType = fieldType instanceof _primitives.Name ? fieldType.name : null;
 
         switch (fieldType) {
           case "Tx":
@@ -18274,7 +18283,7 @@ class AnnotationFactory {
     try {
       const annotDict = await xref.fetchIfRefAsync(ref);
 
-      if (!(0, _primitives.isDict)(annotDict)) {
+      if (!(annotDict instanceof _primitives.Dict)) {
         return -1;
       }
 
@@ -18520,7 +18529,7 @@ class Annotation {
   }
 
   setModificationDate(modificationDate) {
-    this.modificationDate = (0, _util.isString)(modificationDate) ? modificationDate : null;
+    this.modificationDate = typeof modificationDate === "string" ? modificationDate : null;
   }
 
   setFlags(flags) {
@@ -18555,7 +18564,7 @@ class Annotation {
   setBorderStyle(borderStyle) {
     this.borderStyle = new AnnotationBorderStyle();
 
-    if (!(0, _primitives.isDict)(borderStyle)) {
+    if (!(borderStyle instanceof _primitives.Dict)) {
       return;
     }
 
@@ -18589,7 +18598,7 @@ class Annotation {
     this.appearance = null;
     const appearanceStates = dict.get("AP");
 
-    if (!(0, _primitives.isDict)(appearanceStates)) {
+    if (!(appearanceStates instanceof _primitives.Dict)) {
       return;
     }
 
@@ -18600,13 +18609,13 @@ class Annotation {
       return;
     }
 
-    if (!(0, _primitives.isDict)(normalAppearanceState)) {
+    if (!(normalAppearanceState instanceof _primitives.Dict)) {
       return;
     }
 
     const as = dict.get("AS");
 
-    if (!(0, _primitives.isName)(as) || !normalAppearanceState.has(as.name)) {
+    if (!(as instanceof _primitives.Name) || !normalAppearanceState.has(as.name)) {
       return;
     }
 
@@ -18745,7 +18754,7 @@ class AnnotationBorderStyle {
   }
 
   setWidth(width, rect = [0, 0, 0, 0]) {
-    if ((0, _primitives.isName)(width)) {
+    if (width instanceof _primitives.Name) {
       this.width = 0;
       return;
     }
@@ -18766,7 +18775,7 @@ class AnnotationBorderStyle {
   }
 
   setStyle(style) {
-    if (!(0, _primitives.isName)(style)) {
+    if (!(style instanceof _primitives.Name)) {
       return;
     }
 
@@ -18851,7 +18860,7 @@ class MarkupAnnotation extends Annotation {
       const rawIRT = dict.getRaw("IRT");
       this.data.inReplyTo = rawIRT instanceof _primitives.Ref ? rawIRT.toString() : null;
       const rt = dict.get("RT");
-      this.data.replyType = (0, _primitives.isName)(rt) ? rt.name : _util.AnnotationReplyType.REPLY;
+      this.data.replyType = rt instanceof _primitives.Name ? rt.name : _util.AnnotationReplyType.REPLY;
     }
 
     if (this.data.replyType === _util.AnnotationReplyType.GROUP) {
@@ -18900,7 +18909,7 @@ class MarkupAnnotation extends Annotation {
   }
 
   setCreationDate(creationDate) {
-    this.creationDate = (0, _util.isString)(creationDate) ? creationDate : null;
+    this.creationDate = typeof creationDate === "string" ? creationDate : null;
   }
 
   _setDefaultAppearance({
@@ -19035,13 +19044,13 @@ class WidgetAnnotation extends Annotation {
       dict,
       key: "DA"
     }) || params.acroForm.get("DA");
-    this._defaultAppearance = (0, _util.isString)(defaultAppearance) ? defaultAppearance : "";
+    this._defaultAppearance = typeof defaultAppearance === "string" ? defaultAppearance : "";
     data.defaultAppearanceData = (0, _default_appearance.parseDefaultAppearance)(this._defaultAppearance);
     const fieldType = (0, _core_utils.getInheritableProperty)({
       dict,
       key: "FT"
     });
-    data.fieldType = (0, _primitives.isName)(fieldType) ? fieldType.name : null;
+    data.fieldType = fieldType instanceof _primitives.Name ? fieldType.name : null;
     const localResources = (0, _core_utils.getInheritableProperty)({
       dict,
       key: "DR"
@@ -19073,10 +19082,10 @@ class WidgetAnnotation extends Annotation {
 
   _decodeFormValue(formValue) {
     if (Array.isArray(formValue)) {
-      return formValue.filter(item => (0, _util.isString)(item)).map(item => (0, _util.stringToPDFString)(item));
-    } else if ((0, _primitives.isName)(formValue)) {
+      return formValue.filter(item => typeof item === "string").map(item => (0, _util.stringToPDFString)(item));
+    } else if (formValue instanceof _primitives.Name) {
       return (0, _util.stringToPDFString)(formValue.name);
-    } else if ((0, _util.isString)(formValue)) {
+    } else if (typeof formValue === "string") {
       return (0, _util.stringToPDFString)(formValue);
     }
 
@@ -19147,7 +19156,7 @@ class WidgetAnnotation extends Annotation {
     } = evaluator;
     const dict = xref.fetchIfRef(this.ref);
 
-    if (!(0, _primitives.isDict)(dict)) {
+    if (!(dict instanceof _primitives.Dict)) {
       return null;
     }
 
@@ -19430,7 +19439,7 @@ class TextWidgetAnnotation extends WidgetAnnotation {
     this._hasText = true;
     const dict = params.dict;
 
-    if (!(0, _util.isString)(this.data.fieldValue)) {
+    if (typeof this.data.fieldValue !== "string") {
       this.data.fieldValue = "";
     }
 
@@ -19665,7 +19674,7 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
 
     const dict = evaluator.xref.fetchIfRef(this.ref);
 
-    if (!(0, _primitives.isDict)(dict)) {
+    if (!(dict instanceof _primitives.Dict)) {
       return null;
     }
 
@@ -19716,7 +19725,7 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
 
     const dict = evaluator.xref.fetchIfRef(this.ref);
 
-    if (!(0, _primitives.isDict)(dict)) {
+    if (!(dict instanceof _primitives.Dict)) {
       return null;
     }
 
@@ -19743,7 +19752,7 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
         parentBuffer = [`${this.parent.num} ${this.parent.gen} obj\n`];
         (0, _writer.writeDict)(parent, parentBuffer, parentTransform);
         parentBuffer.push("\nendobj\n");
-      } else if ((0, _primitives.isDict)(this.parent)) {
+      } else if (this.parent instanceof _primitives.Dict) {
         this.parent.set("V", name);
       }
     }
@@ -19824,13 +19833,13 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
   _processCheckBox(params) {
     const customAppearance = params.dict.get("AP");
 
-    if (!(0, _primitives.isDict)(customAppearance)) {
+    if (!(customAppearance instanceof _primitives.Dict)) {
       return;
     }
 
     const normalAppearance = customAppearance.get("N");
 
-    if (!(0, _primitives.isDict)(normalAppearance)) {
+    if (!(normalAppearance instanceof _primitives.Dict)) {
       return;
     }
 
@@ -19885,24 +19894,24 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
     this.data.fieldValue = this.data.buttonValue = null;
     const fieldParent = params.dict.get("Parent");
 
-    if ((0, _primitives.isDict)(fieldParent)) {
+    if (fieldParent instanceof _primitives.Dict) {
       this.parent = params.dict.getRaw("Parent");
       const fieldParentValue = fieldParent.get("V");
 
-      if ((0, _primitives.isName)(fieldParentValue)) {
+      if (fieldParentValue instanceof _primitives.Name) {
         this.data.fieldValue = this._decodeFormValue(fieldParentValue);
       }
     }
 
     const appearanceStates = params.dict.get("AP");
 
-    if (!(0, _primitives.isDict)(appearanceStates)) {
+    if (!(appearanceStates instanceof _primitives.Dict)) {
       return;
     }
 
     const normalAppearance = appearanceStates.get("N");
 
-    if (!(0, _primitives.isDict)(normalAppearance)) {
+    if (!(normalAppearance instanceof _primitives.Dict)) {
       return;
     }
 
@@ -20006,7 +20015,7 @@ class ChoiceWidgetAnnotation extends WidgetAnnotation {
       }
     }
 
-    if ((0, _util.isString)(this.data.fieldValue)) {
+    if (typeof this.data.fieldValue === "string") {
       this.data.fieldValue = [this.data.fieldValue];
     } else if (!this.data.fieldValue) {
       this.data.fieldValue = [];
@@ -20115,7 +20124,7 @@ class PopupAnnotation extends Annotation {
     }
 
     const parentSubtype = parentItem.get("Subtype");
-    this.data.parentType = (0, _primitives.isName)(parentSubtype) ? parentSubtype.name : null;
+    this.data.parentType = parentSubtype instanceof _primitives.Name ? parentSubtype.name : null;
     const rawParent = parameters.dict.getRaw("Parent");
     this.data.parentId = rawParent instanceof _primitives.Ref ? rawParent.toString() : null;
     const parentRect = parentItem.getArray("Rect");
@@ -20977,7 +20986,7 @@ class ColorSpace {
   static _parse(cs, xref, resources = null, pdfFunctionFactory) {
     cs = xref.fetchIfRef(cs);
 
-    if ((0, _primitives.isName)(cs)) {
+    if (cs instanceof _primitives.Name) {
       switch (cs.name) {
         case "G":
         case "DeviceGray":
@@ -20995,14 +21004,14 @@ class ColorSpace {
           return new PatternCS(null);
 
         default:
-          if ((0, _primitives.isDict)(resources)) {
+          if (resources instanceof _primitives.Dict) {
             const colorSpaces = resources.get("ColorSpace");
 
-            if ((0, _primitives.isDict)(colorSpaces)) {
+            if (colorSpaces instanceof _primitives.Dict) {
               const resourcesCS = colorSpaces.get(cs.name);
 
               if (resourcesCS) {
-                if ((0, _primitives.isName)(resourcesCS)) {
+                if (resourcesCS instanceof _primitives.Name) {
                   return this._parse(resourcesCS, xref, resources, pdfFunctionFactory);
                 }
 
@@ -21893,7 +21902,7 @@ function normalizeBlendMode(value, parsingArray = false) {
     return "source-over";
   }
 
-  if (!(0, _primitives.isName)(value)) {
+  if (!(value instanceof _primitives.Name)) {
     if (parsingArray) {
       return null;
     }
@@ -22331,7 +22340,7 @@ class PartialEvaluator {
     const w = dict.get("W", "Width");
     const h = dict.get("H", "Height");
 
-    if (!(w && (0, _util.isNum)(w)) || !(h && (0, _util.isNum)(h))) {
+    if (!(w && typeof w === "number") || !(h && typeof h === "number")) {
       (0, _util.warn)("Image dimensions are missing, or not numbers.");
       return;
     }
@@ -22711,7 +22720,7 @@ class PartialEvaluator {
             break;
           }
 
-          if ((0, _primitives.isDict)(value)) {
+          if (value instanceof _primitives.Dict) {
             isSimpleGState = false;
             promise = promise.then(() => {
               return this.handleSMask(value, resources, operatorList, task, stateManager, localColorSpaceCache);
@@ -22818,7 +22827,7 @@ class PartialEvaluator {
 
     font = xref.fetchIfRef(fontRef);
 
-    if (!(0, _primitives.isDict)(font)) {
+    if (!(font instanceof _primitives.Dict)) {
       return errorFont();
     }
 
@@ -22848,7 +22857,7 @@ class PartialEvaluator {
       fontID = `f${fontRef.toString()}`;
     }
 
-    if (hash && (0, _primitives.isDict)(descriptor)) {
+    if (hash && descriptor instanceof _primitives.Dict) {
       if (!descriptor.fontAliases) {
         descriptor.fontAliases = Object.create(null);
       }
@@ -23054,7 +23063,7 @@ class PartialEvaluator {
     const length = array.length;
     const operator = this.xref.fetchIfRef(array[0]);
 
-    if (length < 2 || !(0, _primitives.isName)(operator)) {
+    if (length < 2 || !(operator instanceof _primitives.Name)) {
       (0, _util.warn)("Invalid visibility expression");
       return;
     }
@@ -23089,10 +23098,10 @@ class PartialEvaluator {
   async parseMarkedContentProps(contentProperties, resources) {
     let optionalContent;
 
-    if ((0, _primitives.isName)(contentProperties)) {
+    if (contentProperties instanceof _primitives.Name) {
       const properties = resources.get("Properties");
       optionalContent = properties.get(contentProperties.name);
-    } else if ((0, _primitives.isDict)(contentProperties)) {
+    } else if (contentProperties instanceof _primitives.Dict) {
       optionalContent = contentProperties;
     } else {
       throw new _util.FormatError("Optional content properties malformed.");
@@ -23123,7 +23132,7 @@ class PartialEvaluator {
 
       const optionalContentGroups = optionalContent.get("OCGs");
 
-      if (Array.isArray(optionalContentGroups) || (0, _primitives.isDict)(optionalContentGroups)) {
+      if (Array.isArray(optionalContentGroups) || optionalContentGroups instanceof _primitives.Dict) {
         const groupIds = [];
 
         if (Array.isArray(optionalContentGroups)) {
@@ -23137,7 +23146,7 @@ class PartialEvaluator {
         return {
           type: optionalContentType,
           ids: groupIds,
-          policy: (0, _primitives.isName)(optionalContent.get("P")) ? optionalContent.get("P").name : null,
+          policy: optionalContent.get("P") instanceof _primitives.Name ? optionalContent.get("P").name : null,
           expression: null
         };
       } else if (optionalContentGroups instanceof _primitives.Ref) {
@@ -23264,7 +23273,7 @@ class PartialEvaluator {
 
               const type = xobj.dict.get("Subtype");
 
-              if (!(0, _primitives.isName)(type)) {
+              if (!(type instanceof _primitives.Name)) {
                 throw new _util.FormatError("XObject should have a Name subtype");
               }
 
@@ -23372,9 +23381,9 @@ class PartialEvaluator {
             for (i = 0; i < arrLength; ++i) {
               const arrItem = arr[i];
 
-              if ((0, _util.isString)(arrItem)) {
+              if (typeof arrItem === "string") {
                 Array.prototype.push.apply(combinedGlyphs, self.handleText(arrItem, state));
-              } else if ((0, _util.isNum)(arrItem)) {
+              } else if (typeof arrItem === "number") {
                 combinedGlyphs.push(arrItem);
               }
             }
@@ -23624,7 +23633,7 @@ class PartialEvaluator {
             continue;
 
           case _util.OPS.beginMarkedContentProps:
-            if (!(0, _primitives.isName)(args[0])) {
+            if (!(args[0] instanceof _primitives.Name)) {
               (0, _util.warn)(`Expected name for beginMarkedContentProps arg0=${args[0]}`);
               continue;
             }
@@ -24387,7 +24396,7 @@ class PartialEvaluator {
 
               const type = xobj.dict.get("Subtype");
 
-              if (!(0, _primitives.isName)(type)) {
+              if (!(type instanceof _primitives.Name)) {
                 throw new _util.FormatError("XObject should have a Name subtype");
               }
 
@@ -24509,7 +24518,7 @@ class PartialEvaluator {
             if (includeMarkedContent) {
               textContent.items.push({
                 type: "beginMarkedContent",
-                tag: (0, _primitives.isName)(args[0]) ? args[0].name : null
+                tag: args[0] instanceof _primitives.Name ? args[0].name : null
               });
             }
 
@@ -24520,14 +24529,14 @@ class PartialEvaluator {
               flushTextContentItem();
               let mcid = null;
 
-              if ((0, _primitives.isDict)(args[1])) {
+              if (args[1] instanceof _primitives.Dict) {
                 mcid = args[1].get("MCID");
               }
 
               textContent.items.push({
                 type: "beginMarkedContentProps",
                 id: Number.isInteger(mcid) ? `${self.idFactory.getPageObjId()}_mcid${mcid}` : null,
-                tag: (0, _primitives.isName)(args[0]) ? args[0].name : null
+                tag: args[0] instanceof _primitives.Name ? args[0].name : null
               });
             }
 
@@ -24582,7 +24591,7 @@ class PartialEvaluator {
     if (properties.composite) {
       const cidSystemInfo = dict.get("CIDSystemInfo");
 
-      if ((0, _primitives.isDict)(cidSystemInfo)) {
+      if (cidSystemInfo instanceof _primitives.Dict) {
         properties.cidSystemInfo = {
           registry: (0, _util.stringToPDFString)(cidSystemInfo.get("Registry")),
           ordering: (0, _util.stringToPDFString)(cidSystemInfo.get("Ordering")),
@@ -24604,9 +24613,9 @@ class PartialEvaluator {
     if (dict.has("Encoding")) {
       encoding = dict.get("Encoding");
 
-      if ((0, _primitives.isDict)(encoding)) {
+      if (encoding instanceof _primitives.Dict) {
         baseEncodingName = encoding.get("BaseEncoding");
-        baseEncodingName = (0, _primitives.isName)(baseEncodingName) ? baseEncodingName.name : null;
+        baseEncodingName = baseEncodingName instanceof _primitives.Name ? baseEncodingName.name : null;
 
         if (encoding.has("Differences")) {
           const diffEncoding = encoding.get("Differences");
@@ -24615,16 +24624,16 @@ class PartialEvaluator {
           for (let j = 0, jj = diffEncoding.length; j < jj; j++) {
             const data = xref.fetchIfRef(diffEncoding[j]);
 
-            if ((0, _util.isNum)(data)) {
+            if (typeof data === "number") {
               index = data;
-            } else if ((0, _primitives.isName)(data)) {
+            } else if (data instanceof _primitives.Name) {
               differences[index++] = data.name;
             } else {
               throw new _util.FormatError(`Invalid entry in 'Differences' array: ${data}`);
             }
           }
         }
-      } else if ((0, _primitives.isName)(encoding)) {
+      } else if (encoding instanceof _primitives.Name) {
         baseEncodingName = encoding.name;
       } else {
         throw new _util.FormatError("Encoding is not a Name nor a Dict");
@@ -24822,7 +24831,7 @@ class PartialEvaluator {
       return Promise.resolve(null);
     }
 
-    if ((0, _primitives.isName)(cmapObj)) {
+    if (cmapObj instanceof _primitives.Name) {
       return _cmap.CMapFactory.create({
         encoding: cmapObj,
         fetchBuiltInCMap: this._fetchBuiltInCMapBound,
@@ -24976,7 +24985,7 @@ class PartialEvaluator {
       } else {
         const baseFontName = dict.get("BaseFont");
 
-        if ((0, _primitives.isName)(baseFontName)) {
+        if (baseFontName instanceof _primitives.Name) {
           const metrics = this.getBaseFontMetrics(baseFontName.name);
           glyphsWidths = this.buildCharCodeToWidth(metrics.widths, properties);
           defaultWidth = metrics.defaultWidth;
@@ -25038,7 +25047,7 @@ class PartialEvaluator {
 
     const glyphWidths = Metrics[lookupName];
 
-    if ((0, _util.isNum)(glyphWidths)) {
+    if (typeof glyphWidths === "number") {
       defaultWidth = glyphWidths;
       monospace = true;
     } else {
@@ -25076,7 +25085,7 @@ class PartialEvaluator {
     const baseDict = dict;
     let type = dict.get("Subtype");
 
-    if (!(0, _primitives.isName)(type)) {
+    if (!(type instanceof _primitives.Name)) {
       throw new _util.FormatError("invalid font Subtype");
     }
 
@@ -25098,7 +25107,7 @@ class PartialEvaluator {
 
       type = dict.get("Subtype");
 
-      if (!(0, _primitives.isName)(type)) {
+      if (!(type instanceof _primitives.Name)) {
         throw new _util.FormatError("invalid font Subtype");
       }
 
@@ -25113,13 +25122,13 @@ class PartialEvaluator {
       hash = new _murmurhash.MurmurHash3_64();
       const encoding = baseDict.getRaw("Encoding");
 
-      if ((0, _primitives.isName)(encoding)) {
+      if (encoding instanceof _primitives.Name) {
         hash.update(encoding.name);
       } else if (encoding instanceof _primitives.Ref) {
         hash.update(encoding.toString());
-      } else if ((0, _primitives.isDict)(encoding)) {
+      } else if (encoding instanceof _primitives.Dict) {
         for (const entry of encoding.getRawValues()) {
-          if ((0, _primitives.isName)(entry)) {
+          if (entry instanceof _primitives.Name) {
             hash.update(entry.name);
           } else if (entry instanceof _primitives.Ref) {
             hash.update(entry.toString());
@@ -25130,9 +25139,9 @@ class PartialEvaluator {
             for (let j = 0; j < diffLength; j++) {
               const diffEntry = entry[j];
 
-              if ((0, _primitives.isName)(diffEntry)) {
+              if (diffEntry instanceof _primitives.Name) {
                 diffBuf[j] = diffEntry.name;
-              } else if ((0, _util.isNum)(diffEntry) || diffEntry instanceof _primitives.Ref) {
+              } else if (typeof diffEntry === "number" || diffEntry instanceof _primitives.Ref) {
                 diffBuf[j] = diffEntry.toString();
               }
             }
@@ -25149,7 +25158,7 @@ class PartialEvaluator {
         const stream = toUnicode.str || toUnicode;
         const uint8array = stream.buffer ? new Uint8Array(stream.buffer.buffer, 0, stream.bufferLength) : new Uint8Array(stream.bytes.buffer, stream.start, stream.end - stream.start);
         hash.update(uint8array);
-      } else if ((0, _primitives.isName)(toUnicode)) {
+      } else if (toUnicode instanceof _primitives.Name) {
         hash.update(toUnicode.name);
       }
 
@@ -25159,7 +25168,7 @@ class PartialEvaluator {
         const widthsBuf = [];
 
         for (const entry of widths) {
-          if ((0, _util.isNum)(entry) || entry instanceof _primitives.Ref) {
+          if (typeof entry === "number" || entry instanceof _primitives.Ref) {
             widthsBuf.push(entry.toString());
           }
         }
@@ -25175,13 +25184,13 @@ class PartialEvaluator {
           const widthsBuf = [];
 
           for (const entry of compositeWidths) {
-            if ((0, _util.isNum)(entry) || entry instanceof _primitives.Ref) {
+            if (typeof entry === "number" || entry instanceof _primitives.Ref) {
               widthsBuf.push(entry.toString());
             } else if (Array.isArray(entry)) {
               const subWidthsBuf = [];
 
               for (const element of entry) {
-                if ((0, _util.isNum)(element) || element instanceof _primitives.Ref) {
+                if (typeof element === "number" || element instanceof _primitives.Ref) {
                   subWidthsBuf.push(element.toString());
                 }
               }
@@ -25240,7 +25249,7 @@ class PartialEvaluator {
       } else {
         let baseFontName = dict.get("BaseFont");
 
-        if (!(0, _primitives.isName)(baseFontName)) {
+        if (!(baseFontName instanceof _primitives.Name)) {
           throw new _util.FormatError("Base font is not specified");
         }
 
@@ -25296,11 +25305,11 @@ class PartialEvaluator {
     let fontName = descriptor.get("FontName");
     let baseFont = dict.get("BaseFont");
 
-    if ((0, _util.isString)(fontName)) {
+    if (typeof fontName === "string") {
       fontName = _primitives.Name.get(fontName);
     }
 
-    if ((0, _util.isString)(baseFont)) {
+    if (typeof baseFont === "string") {
       baseFont = _primitives.Name.get(baseFont);
     }
 
@@ -25319,7 +25328,7 @@ class PartialEvaluator {
 
     fontName = fontName || baseFont;
 
-    if (!(0, _primitives.isName)(fontName)) {
+    if (!(fontName instanceof _primitives.Name)) {
       throw new _util.FormatError("invalid font name");
     }
 
@@ -25406,7 +25415,7 @@ class PartialEvaluator {
     if (composite) {
       const cidEncoding = baseDict.get("Encoding");
 
-      if ((0, _primitives.isName)(cidEncoding)) {
+      if (cidEncoding instanceof _primitives.Name) {
         properties.cidEncoding = cidEncoding.name;
       }
 
@@ -26856,7 +26865,7 @@ const CMapFactory = function CMapFactoryClosure() {
   }
 
   function expectString(obj) {
-    if (!(0, _util.isString)(obj)) {
+    if (typeof obj !== "string") {
       throw new _util.FormatError("Malformed CMap: expected string.");
     }
   }
@@ -26907,7 +26916,7 @@ const CMapFactory = function CMapFactoryClosure() {
       const high = strToInt(obj);
       obj = lexer.getObj();
 
-      if (Number.isInteger(obj) || (0, _util.isString)(obj)) {
+      if (Number.isInteger(obj) || typeof obj === "string") {
         const dstLow = Number.isInteger(obj) ? String.fromCharCode(obj) : obj;
         cMap.mapBfRange(low, high, dstLow);
       } else if ((0, _primitives.isCmd)(obj, "[")) {
@@ -26985,14 +26994,14 @@ const CMapFactory = function CMapFactoryClosure() {
         return;
       }
 
-      if (!(0, _util.isString)(obj)) {
+      if (typeof obj !== "string") {
         break;
       }
 
       const low = strToInt(obj);
       obj = lexer.getObj();
 
-      if (!(0, _util.isString)(obj)) {
+      if (typeof obj !== "string") {
         break;
       }
 
@@ -27014,7 +27023,7 @@ const CMapFactory = function CMapFactoryClosure() {
   function parseCMapName(cMap, lexer) {
     const obj = lexer.getObj();
 
-    if ((0, _primitives.isName)(obj) && (0, _util.isString)(obj.name)) {
+    if (obj instanceof _primitives.Name) {
       cMap.name = obj.name;
     }
   }
@@ -27028,7 +27037,7 @@ const CMapFactory = function CMapFactoryClosure() {
 
         if (obj === _primitives.EOF) {
           break;
-        } else if ((0, _primitives.isName)(obj)) {
+        } else if (obj instanceof _primitives.Name) {
           if (obj.name === "WMode") {
             parseWMode(cMap, lexer);
           } else if (obj.name === "CMapName") {
@@ -27036,13 +27045,13 @@ const CMapFactory = function CMapFactoryClosure() {
           }
 
           previous = obj;
-        } else if ((0, _primitives.isCmd)(obj)) {
+        } else if (obj instanceof _primitives.Cmd) {
           switch (obj.cmd) {
             case "endcmap":
               break objLoop;
 
             case "usecmap":
-              if ((0, _primitives.isName)(previous)) {
+              if (previous instanceof _primitives.Name) {
                 embeddedUseCMap = previous.name;
               }
 
@@ -27152,7 +27161,7 @@ const CMapFactory = function CMapFactoryClosure() {
       const fetchBuiltInCMap = params.fetchBuiltInCMap;
       const useCMap = params.useCMap;
 
-      if ((0, _primitives.isName)(encoding)) {
+      if (encoding instanceof _primitives.Name) {
         return createBuiltInCMap(encoding.name, fetchBuiltInCMap);
       } else if (encoding instanceof _base_stream.BaseStream) {
         const parsedCMap = await parseCMap(new CMap(), new _parser.Lexer(encoding), fetchBuiltInCMap, useCMap);
@@ -27301,7 +27310,7 @@ class Parser {
           const dict = new _primitives.Dict(this.xref);
 
           while (!(0, _primitives.isCmd)(this.buf1, ">>") && this.buf1 !== _primitives.EOF) {
-            if (!(0, _primitives.isName)(this.buf1)) {
+            if (!(this.buf1 instanceof _primitives.Name)) {
               (0, _util.info)("Malformed dictionary: key must be a name object");
               this.shift();
               continue;
@@ -27622,7 +27631,7 @@ class Parser {
     let dictLength;
 
     while (!(0, _primitives.isCmd)(this.buf1, "ID") && this.buf1 !== _primitives.EOF) {
-      if (!(0, _primitives.isName)(this.buf1)) {
+      if (!(this.buf1 instanceof _primitives.Name)) {
         throw new _util.FormatError("Dictionary key must be a name object");
       }
 
@@ -27643,12 +27652,12 @@ class Parser {
     const filter = dict.get("F", "Filter");
     let filterName;
 
-    if ((0, _primitives.isName)(filter)) {
+    if (filter instanceof _primitives.Name) {
       filterName = filter.name;
     } else if (Array.isArray(filter)) {
       const filterZero = this.xref.fetchIfRef(filter[0]);
 
-      if ((0, _primitives.isName)(filterZero)) {
+      if (filterZero instanceof _primitives.Name) {
         filterName = filterZero.name;
       }
     }
@@ -27824,7 +27833,7 @@ class Parser {
     let filter = dict.get("F", "Filter");
     let params = dict.get("DP", "DecodeParms");
 
-    if ((0, _primitives.isName)(filter)) {
+    if (filter instanceof _primitives.Name) {
       if (Array.isArray(params)) {
         (0, _util.warn)("/DecodeParms should not be an Array, when /Filter is a Name.");
       }
@@ -27841,7 +27850,7 @@ class Parser {
       for (let i = 0, ii = filterArray.length; i < ii; ++i) {
         filter = this.xref.fetchIfRef(filterArray[i]);
 
-        if (!(0, _primitives.isName)(filter)) {
+        if (!(filter instanceof _primitives.Name)) {
           throw new _util.FormatError(`Bad filter name "${filter}"`);
         }
 
@@ -28534,7 +28543,7 @@ class Linearization {
     const linDict = parser.getObj();
     let obj, length;
 
-    if (!(Number.isInteger(obj1) && Number.isInteger(obj2) && (0, _primitives.isCmd)(obj3, "obj") && (0, _primitives.isDict)(linDict) && (0, _util.isNum)(obj = linDict.get("Linearized")) && obj > 0)) {
+    if (!(Number.isInteger(obj1) && Number.isInteger(obj2) && (0, _primitives.isCmd)(obj3, "obj") && linDict instanceof _primitives.Dict && typeof (obj = linDict.get("Linearized")) === "number" && obj > 0)) {
       return null;
     } else if ((length = getInt(linDict, "L")) !== stream.length) {
       throw new Error('The "L" parameter in the linearization dictionary ' + "does not equal the stream length.");
@@ -28933,11 +28942,11 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.CCITTFaxStream = void 0;
 
-var _primitives = __w_pdfjs_require__(5);
-
 var _ccitt = __w_pdfjs_require__(32);
 
 var _decode_stream = __w_pdfjs_require__(29);
+
+var _primitives = __w_pdfjs_require__(5);
 
 class CCITTFaxStream extends _decode_stream.DecodeStream {
   constructor(str, maybeLength, params) {
@@ -28945,7 +28954,7 @@ class CCITTFaxStream extends _decode_stream.DecodeStream {
     this.str = str;
     this.dict = str.dict;
 
-    if (!(0, _primitives.isDict)(params)) {
+    if (!(params instanceof _primitives.Dict)) {
       params = _primitives.Dict.empty;
     }
 
@@ -30048,7 +30057,7 @@ class Jbig2Stream extends _decode_stream.DecodeStream {
     const jbig2Image = new _jbig.Jbig2Image();
     const chunks = [];
 
-    if ((0, _primitives.isDict)(this.params)) {
+    if (this.params instanceof _primitives.Dict) {
       const globalsStream = this.params.get("JBIG2Globals");
 
       if (globalsStream instanceof _base_stream.BaseStream) {
@@ -32709,7 +32718,7 @@ class JpegStream extends _decode_stream.DecodeStream {
       }
     }
 
-    if ((0, _primitives.isDict)(this.params)) {
+    if (this.params instanceof _primitives.Dict) {
       const colorTransform = this.params.get("ColorTransform");
 
       if (Number.isInteger(colorTransform)) {
@@ -34442,10 +34451,6 @@ class JpxImage {
               unsupported.push("selectiveArithmeticCodingBypass");
             }
 
-            if (cod.resetContextProbabilities) {
-              unsupported.push("resetContextProbabilities");
-            }
-
             if (cod.terminationOnEachCodingPass) {
               unsupported.push("terminationOnEachCodingPass");
             }
@@ -35390,7 +35395,7 @@ function parseTilePackets(context, data, offset, dataLength) {
   return position;
 }
 
-function copyCoefficients(coefficients, levelWidth, levelHeight, subband, delta, mb, reversible, segmentationSymbolUsed) {
+function copyCoefficients(coefficients, levelWidth, levelHeight, subband, delta, mb, reversible, segmentationSymbolUsed, resetContextProbabilities) {
   const x0 = subband.tbx0;
   const y0 = subband.tby0;
   const width = subband.tbx1 - subband.tbx0;
@@ -35457,6 +35462,10 @@ function copyCoefficients(coefficients, levelWidth, levelHeight, subband, delta,
           break;
       }
 
+      if (resetContextProbabilities) {
+        bitModel.reset();
+      }
+
       currentCodingpassType = (currentCodingpassType + 1) % 3;
     }
 
@@ -35511,6 +35520,7 @@ function transformTile(context, tile, c) {
   const scalarExpounded = quantizationParameters.scalarExpounded;
   const guardBits = quantizationParameters.guardBits;
   const segmentationSymbolUsed = codingStyleParameters.segmentationSymbolUsed;
+  const resetContextProbabilities = codingStyleParameters.resetContextProbabilities;
   const precision = context.components[c].precision;
   const reversible = codingStyleParameters.reversibleTransformation;
   const transform = reversible ? new ReversibleTransform() : new IrreversibleTransform();
@@ -35539,7 +35549,7 @@ function transformTile(context, tile, c) {
       const gainLog2 = SubbandsGainLog2[subband.type];
       const delta = reversible ? 1 : 2 ** (precision + gainLog2 - epsilon) * (1 + mu / 2048);
       const mb = guardBits + epsilon - 1;
-      copyCoefficients(coefficients, width, height, subband, delta, mb, reversible, segmentationSymbolUsed);
+      copyCoefficients(coefficients, width, height, subband, delta, mb, reversible, segmentationSymbolUsed, resetContextProbabilities);
     }
 
     subbandCoefficients.push({
@@ -36565,15 +36575,15 @@ exports.PredictorStream = void 0;
 
 var _decode_stream = __w_pdfjs_require__(29);
 
-var _util = __w_pdfjs_require__(2);
-
 var _primitives = __w_pdfjs_require__(5);
+
+var _util = __w_pdfjs_require__(2);
 
 class PredictorStream extends _decode_stream.DecodeStream {
   constructor(str, maybeLength, params) {
     super(maybeLength);
 
-    if (!(0, _primitives.isDict)(params)) {
+    if (!(params instanceof _primitives.Dict)) {
       return str;
     }
 
@@ -39532,7 +39542,11 @@ class Font {
     }
 
     width = this.widths[widthCode];
-    width = (0, _util.isNum)(width) ? width : this.defaultWidth;
+
+    if (typeof width !== "number") {
+      width = this.defaultWidth;
+    }
+
     const vmetric = this.vmetrics && this.vmetrics[widthCode];
     let unicode = this.toUnicode.get(charcode) || charcode;
 
@@ -50045,7 +50059,7 @@ function isPDFFunction(v) {
 
   if (typeof v !== "object") {
     return false;
-  } else if ((0, _primitives.isDict)(v)) {
+  } else if (v instanceof _primitives.Dict) {
     fnDict = v;
   } else if (v instanceof _base_stream.BaseStream) {
     fnDict = v.dict;
@@ -50175,7 +50189,7 @@ class PostScriptEvaluator {
           b = stack.pop();
           a = stack.pop();
 
-          if ((0, _util.isBool)(a) && (0, _util.isBool)(b)) {
+          if (typeof a === "boolean" && typeof b === "boolean") {
             stack.push(a && b);
           } else {
             stack.push(a & b);
@@ -50329,7 +50343,7 @@ class PostScriptEvaluator {
         case "not":
           a = stack.pop();
 
-          if ((0, _util.isBool)(a)) {
+          if (typeof a === "boolean") {
             stack.push(!a);
           } else {
             stack.push(~a);
@@ -50341,7 +50355,7 @@ class PostScriptEvaluator {
           b = stack.pop();
           a = stack.pop();
 
-          if ((0, _util.isBool)(a) && (0, _util.isBool)(b)) {
+          if (typeof a === "boolean" && typeof b === "boolean") {
             stack.push(a || b);
           } else {
             stack.push(a | b);
@@ -50394,7 +50408,7 @@ class PostScriptEvaluator {
           b = stack.pop();
           a = stack.pop();
 
-          if ((0, _util.isBool)(a) && (0, _util.isBool)(b)) {
+          if (typeof a === "boolean" && typeof b === "boolean") {
             stack.push(a !== b);
           } else {
             stack.push(a ^ b);
@@ -51743,7 +51757,7 @@ class MurmurHash3_64 {
   update(input) {
     let data, length;
 
-    if ((0, _util.isString)(input)) {
+    if (typeof input === "string") {
       data = new Uint8Array(input.length * 2);
       length = 0;
 
@@ -52510,8 +52524,6 @@ exports.PDFImage = void 0;
 
 var _util = __w_pdfjs_require__(2);
 
-var _primitives = __w_pdfjs_require__(5);
-
 var _base_stream = __w_pdfjs_require__(9);
 
 var _colorspace = __w_pdfjs_require__(24);
@@ -52521,6 +52533,8 @@ var _decode_stream = __w_pdfjs_require__(29);
 var _jpeg_stream = __w_pdfjs_require__(37);
 
 var _jpx = __w_pdfjs_require__(40);
+
+var _primitives = __w_pdfjs_require__(5);
 
 function decodeAndClamp(value, addend, coefficient, max) {
   value = addend + value * coefficient;
@@ -52588,7 +52602,7 @@ class PDFImage {
     const dict = image.dict;
     const filter = dict.get("F", "Filter");
 
-    if ((0, _primitives.isName)(filter)) {
+    if (filter instanceof _primitives.Name) {
       switch (filter.name) {
         case "JPXDecode":
           const jpxImage = new _jpx.JpxImage();
@@ -53261,7 +53275,7 @@ class Catalog {
     try {
       const obj = this._catDict.get("Collection");
 
-      if ((0, _primitives.isDict)(obj) && obj.size > 0) {
+      if (obj instanceof _primitives.Dict && obj.size > 0) {
         collection = obj;
       }
     } catch (ex) {
@@ -53281,7 +53295,7 @@ class Catalog {
     try {
       const obj = this._catDict.get("AcroForm");
 
-      if ((0, _primitives.isDict)(obj) && obj.size > 0) {
+      if (obj instanceof _primitives.Dict && obj.size > 0) {
         acroForm = obj;
       }
     } catch (ex) {
@@ -53356,7 +53370,7 @@ class Catalog {
   _readMarkInfo() {
     const obj = this._catDict.get("MarkInfo");
 
-    if (!(0, _primitives.isDict)(obj)) {
+    if (!(obj instanceof _primitives.Dict)) {
       return null;
     }
 
@@ -53373,7 +53387,7 @@ class Catalog {
 
       const value = obj.get(key);
 
-      if (!(0, _util.isBool)(value)) {
+      if (typeof value !== "boolean") {
         continue;
       }
 
@@ -53402,7 +53416,7 @@ class Catalog {
   _readStructTreeRoot() {
     const obj = this._catDict.get("StructTreeRoot");
 
-    if (!(0, _primitives.isDict)(obj)) {
+    if (!(obj instanceof _primitives.Dict)) {
       return null;
     }
 
@@ -53414,7 +53428,7 @@ class Catalog {
   get toplevelPagesDict() {
     const pagesObj = this._catDict.get("Pages");
 
-    if (!(0, _primitives.isDict)(pagesObj)) {
+    if (!(pagesObj instanceof _primitives.Dict)) {
       throw new _util.FormatError("Invalid top-level pages dictionary.");
     }
 
@@ -53440,7 +53454,7 @@ class Catalog {
   _readDocumentOutline() {
     let obj = this._catDict.get("Outlines");
 
-    if (!(0, _primitives.isDict)(obj)) {
+    if (!(obj instanceof _primitives.Dict)) {
       return null;
     }
 
@@ -53549,13 +53563,13 @@ class Catalog {
   _readPermissions() {
     const encrypt = this.xref.trailer.get("Encrypt");
 
-    if (!(0, _primitives.isDict)(encrypt)) {
+    if (!(encrypt instanceof _primitives.Dict)) {
       return null;
     }
 
     let flags = encrypt.get("P");
 
-    if (!(0, _util.isNum)(flags)) {
+    if (typeof flags !== "number") {
       return null;
     }
 
@@ -53607,8 +53621,8 @@ class Catalog {
         const group = this.xref.fetchIfRef(groupRef);
         groups.push({
           id: groupRef.toString(),
-          name: (0, _util.isString)(group.get("Name")) ? (0, _util.stringToPDFString)(group.get("Name")) : null,
-          intent: (0, _util.isString)(group.get("Intent")) ? (0, _util.stringToPDFString)(group.get("Intent")) : null
+          name: typeof group.get("Name") === "string" ? (0, _util.stringToPDFString)(group.get("Name")) : null,
+          intent: typeof group.get("Intent") === "string" ? (0, _util.stringToPDFString)(group.get("Intent")) : null
         });
       }
 
@@ -53723,9 +53737,9 @@ class Catalog {
           parsedOrderRefs = new _primitives.RefSet(),
           MAX_NESTED_LEVELS = 10;
     return {
-      name: (0, _util.isString)(config.get("Name")) ? (0, _util.stringToPDFString)(config.get("Name")) : null,
-      creator: (0, _util.isString)(config.get("Creator")) ? (0, _util.stringToPDFString)(config.get("Creator")) : null,
-      baseState: (0, _primitives.isName)(config.get("BaseState")) ? config.get("BaseState").name : null,
+      name: typeof config.get("Name") === "string" ? (0, _util.stringToPDFString)(config.get("Name")) : null,
+      creator: typeof config.get("Creator") === "string" ? (0, _util.stringToPDFString)(config.get("Creator")) : null,
+      baseState: config.get("BaseState") instanceof _primitives.Name ? config.get("BaseState").name : null,
       on: parseOnOff(config.get("ON")),
       off: parseOnOff(config.get("OFF")),
       order: parseOrder(config.get("Order")),
@@ -53854,7 +53868,7 @@ class Catalog {
       const labelDict = nums.get(i);
 
       if (labelDict !== undefined) {
-        if (!(0, _primitives.isDict)(labelDict)) {
+        if (!(labelDict instanceof _primitives.Dict)) {
           throw new _util.FormatError("PageLabel is not a dictionary.");
         }
 
@@ -53865,7 +53879,7 @@ class Catalog {
         if (labelDict.has("S")) {
           const s = labelDict.get("S");
 
-          if (!(0, _primitives.isName)(s)) {
+          if (!(s instanceof _primitives.Name)) {
             throw new _util.FormatError("Invalid style in PageLabel dictionary.");
           }
 
@@ -53877,7 +53891,7 @@ class Catalog {
         if (labelDict.has("P")) {
           const p = labelDict.get("P");
 
-          if (!(0, _util.isString)(p)) {
+          if (typeof p !== "string") {
             throw new _util.FormatError("Invalid prefix in PageLabel dictionary.");
           }
 
@@ -53946,7 +53960,7 @@ class Catalog {
 
     let pageLayout = "";
 
-    if ((0, _primitives.isName)(obj)) {
+    if (obj instanceof _primitives.Name) {
       switch (obj.name) {
         case "SinglePage":
         case "OneColumn":
@@ -53966,7 +53980,7 @@ class Catalog {
 
     let pageMode = "UseNone";
 
-    if ((0, _primitives.isName)(obj)) {
+    if (obj instanceof _primitives.Name) {
       switch (obj.name) {
         case "UseNone":
         case "UseOutlines":
@@ -53982,47 +53996,34 @@ class Catalog {
   }
 
   get viewerPreferences() {
-    const ViewerPreferencesValidators = {
-      HideToolbar: _util.isBool,
-      HideMenubar: _util.isBool,
-      HideWindowUI: _util.isBool,
-      FitWindow: _util.isBool,
-      CenterWindow: _util.isBool,
-      DisplayDocTitle: _util.isBool,
-      NonFullScreenPageMode: _primitives.isName,
-      Direction: _primitives.isName,
-      ViewArea: _primitives.isName,
-      ViewClip: _primitives.isName,
-      PrintArea: _primitives.isName,
-      PrintClip: _primitives.isName,
-      PrintScaling: _primitives.isName,
-      Duplex: _primitives.isName,
-      PickTrayByPDFSize: _util.isBool,
-      PrintPageRange: Array.isArray,
-      NumCopies: Number.isInteger
-    };
-
     const obj = this._catDict.get("ViewerPreferences");
+
+    if (!(obj instanceof _primitives.Dict)) {
+      return (0, _util.shadow)(this, "viewerPreferences", null);
+    }
 
     let prefs = null;
 
-    if ((0, _primitives.isDict)(obj)) {
-      for (const key in ViewerPreferencesValidators) {
-        if (!obj.has(key)) {
-          continue;
-        }
+    for (const key of obj.getKeys()) {
+      const value = obj.get(key);
+      let prefValue;
 
-        const value = obj.get(key);
+      switch (key) {
+        case "HideToolbar":
+        case "HideMenubar":
+        case "HideWindowUI":
+        case "FitWindow":
+        case "CenterWindow":
+        case "DisplayDocTitle":
+        case "PickTrayByPDFSize":
+          if (typeof value === "boolean") {
+            prefValue = value;
+          }
 
-        if (!ViewerPreferencesValidators[key](value)) {
-          (0, _util.info)(`Bad value in ViewerPreferences for "${key}".`);
-          continue;
-        }
+          break;
 
-        let prefValue;
-
-        switch (key) {
-          case "NonFullScreenPageMode":
+        case "NonFullScreenPageMode":
+          if (value instanceof _primitives.Name) {
             switch (value.name) {
               case "UseNone":
               case "UseOutlines":
@@ -54034,10 +54035,12 @@ class Catalog {
               default:
                 prefValue = "UseNone";
             }
+          }
 
-            break;
+          break;
 
-          case "Direction":
+        case "Direction":
+          if (value instanceof _primitives.Name) {
             switch (value.name) {
               case "L2R":
               case "R2L":
@@ -54047,13 +54050,15 @@ class Catalog {
               default:
                 prefValue = "L2R";
             }
+          }
 
-            break;
+          break;
 
-          case "ViewArea":
-          case "ViewClip":
-          case "PrintArea":
-          case "PrintClip":
+        case "ViewArea":
+        case "ViewClip":
+        case "PrintArea":
+        case "PrintClip":
+          if (value instanceof _primitives.Name) {
             switch (value.name) {
               case "MediaBox":
               case "CropBox":
@@ -54066,10 +54071,12 @@ class Catalog {
               default:
                 prefValue = "CropBox";
             }
+          }
 
-            break;
+          break;
 
-          case "PrintScaling":
+        case "PrintScaling":
+          if (value instanceof _primitives.Name) {
             switch (value.name) {
               case "None":
               case "AppDefault":
@@ -54079,10 +54086,12 @@ class Catalog {
               default:
                 prefValue = "AppDefault";
             }
+          }
 
-            break;
+          break;
 
-          case "Duplex":
+        case "Duplex":
+          if (value instanceof _primitives.Name) {
             switch (value.name) {
               case "Simplex":
               case "DuplexFlipShortEdge":
@@ -54093,16 +54102,12 @@ class Catalog {
               default:
                 prefValue = "None";
             }
+          }
 
-            break;
+          break;
 
-          case "PrintPageRange":
-            const length = value.length;
-
-            if (length % 2 !== 0) {
-              break;
-            }
-
+        case "PrintPageRange":
+          if (Array.isArray(value) && value.length % 2 === 0) {
             const isValid = value.every((page, i, arr) => {
               return Number.isInteger(page) && page > 0 && (i === 0 || page >= arr[i - 1]) && page <= this.numPages;
             });
@@ -54110,34 +54115,32 @@ class Catalog {
             if (isValid) {
               prefValue = value;
             }
-
-            break;
-
-          case "NumCopies":
-            if (value > 0) {
-              prefValue = value;
-            }
-
-            break;
-
-          default:
-            if (typeof value !== "boolean") {
-              throw new _util.FormatError(`viewerPreferences - expected a boolean value for: ${key}`);
-            }
-
-            prefValue = value;
-        }
-
-        if (prefValue !== undefined) {
-          if (!prefs) {
-            prefs = Object.create(null);
           }
 
-          prefs[key] = prefValue;
-        } else {
-          (0, _util.info)(`Bad value in ViewerPreferences for "${key}".`);
-        }
+          break;
+
+        case "NumCopies":
+          if (Number.isInteger(value) && value > 0) {
+            prefValue = value;
+          }
+
+          break;
+
+        default:
+          (0, _util.warn)(`Ignoring non-standard key in ViewerPreferences: ${key}.`);
+          continue;
       }
+
+      if (prefValue === undefined) {
+        (0, _util.warn)(`Bad value, for key "${key}", in ViewerPreferences: ${value}.`);
+        continue;
+      }
+
+      if (!prefs) {
+        prefs = Object.create(null);
+      }
+
+      prefs[key] = prefValue;
     }
 
     return (0, _util.shadow)(this, "viewerPreferences", prefs);
@@ -54148,7 +54151,7 @@ class Catalog {
 
     const openAction = Object.create(null);
 
-    if ((0, _primitives.isDict)(obj)) {
+    if (obj instanceof _primitives.Dict) {
       const destDict = new _primitives.Dict(this.xref);
       destDict.set("A", obj);
       const resultObj = {
@@ -54572,7 +54575,7 @@ class Catalog {
       let total = 0,
           parentRef;
       return xref.fetchAsync(kidRef).then(function (node) {
-        if ((0, _primitives.isRefsEqual)(kidRef, pageRef) && !(0, _primitives.isDict)(node, "Page") && !((0, _primitives.isDict)(node) && !node.has("Type") && node.has("Contents"))) {
+        if ((0, _primitives.isRefsEqual)(kidRef, pageRef) && !(0, _primitives.isDict)(node, "Page") && !(node instanceof _primitives.Dict && !node.has("Type") && node.has("Contents"))) {
           throw new _util.FormatError("The reference does not point to a /Page dictionary.");
         }
 
@@ -54580,7 +54583,7 @@ class Catalog {
           return null;
         }
 
-        if (!(0, _primitives.isDict)(node)) {
+        if (!(node instanceof _primitives.Dict)) {
           throw new _util.FormatError("Node must be a dictionary.");
         }
 
@@ -54591,7 +54594,7 @@ class Catalog {
           return null;
         }
 
-        if (!(0, _primitives.isDict)(parent)) {
+        if (!(parent instanceof _primitives.Dict)) {
           throw new _util.FormatError("Parent must be a dictionary.");
         }
 
@@ -54617,7 +54620,7 @@ class Catalog {
           }
 
           kidPromises.push(xref.fetchAsync(kid).then(function (obj) {
-            if (!(0, _primitives.isDict)(obj)) {
+            if (!(obj instanceof _primitives.Dict)) {
               throw new _util.FormatError("Kid node must be a dictionary.");
             }
 
@@ -54658,7 +54661,7 @@ class Catalog {
   static parseDestDictionary(params) {
     const destDict = params.destDict;
 
-    if (!(0, _primitives.isDict)(destDict)) {
+    if (!(destDict instanceof _primitives.Dict)) {
       (0, _util.warn)("parseDestDictionary: `destDict` must be a dictionary.");
       return;
     }
@@ -54675,13 +54678,13 @@ class Catalog {
         url,
         dest;
 
-    if (!(0, _primitives.isDict)(action)) {
+    if (!(action instanceof _primitives.Dict)) {
       if (destDict.has("Dest")) {
         action = destDict.get("Dest");
       } else {
         action = destDict.get("AA");
 
-        if ((0, _primitives.isDict)(action)) {
+        if (action instanceof _primitives.Dict) {
           if (action.has("D")) {
             action = action.get("D");
           } else if (action.has("U")) {
@@ -54691,10 +54694,10 @@ class Catalog {
       }
     }
 
-    if ((0, _primitives.isDict)(action)) {
+    if (action instanceof _primitives.Dict) {
       const actionType = action.get("S");
 
-      if (!(0, _primitives.isName)(actionType)) {
+      if (!(actionType instanceof _primitives.Name)) {
         (0, _util.warn)("parseDestDictionary: Invalid type in Action dictionary.");
         return;
       }
@@ -54704,14 +54707,14 @@ class Catalog {
       switch (actionName) {
         case "ResetForm":
           const flags = action.get("Flags");
-          const include = (((0, _util.isNum)(flags) ? flags : 0) & 1) === 0;
+          const include = ((typeof flags === "number" ? flags : 0) & 1) === 0;
           const fields = [];
           const refs = [];
 
           for (const obj of action.get("Fields") || []) {
             if (obj instanceof _primitives.Ref) {
               refs.push(obj.toString());
-            } else if ((0, _util.isString)(obj)) {
+            } else if (typeof obj === "string") {
               fields.push((0, _util.stringToPDFString)(obj));
             }
           }
@@ -54740,23 +54743,23 @@ class Catalog {
         case "GoToR":
           const urlDict = action.get("F");
 
-          if ((0, _primitives.isDict)(urlDict)) {
+          if (urlDict instanceof _primitives.Dict) {
             url = urlDict.get("F") || null;
-          } else if ((0, _util.isString)(urlDict)) {
+          } else if (typeof urlDict === "string") {
             url = urlDict;
           }
 
           let remoteDest = action.get("D");
 
           if (remoteDest) {
-            if ((0, _primitives.isName)(remoteDest)) {
+            if (remoteDest instanceof _primitives.Name) {
               remoteDest = remoteDest.name;
             }
 
-            if ((0, _util.isString)(url)) {
+            if (typeof url === "string") {
               const baseUrl = url.split("#")[0];
 
-              if ((0, _util.isString)(remoteDest)) {
+              if (typeof remoteDest === "string") {
                 url = baseUrl + "#" + remoteDest;
               } else if (Array.isArray(remoteDest)) {
                 url = baseUrl + "#" + JSON.stringify(remoteDest);
@@ -54766,7 +54769,7 @@ class Catalog {
 
           const newWindow = action.get("NewWindow");
 
-          if ((0, _util.isBool)(newWindow)) {
+          if (typeof newWindow === "boolean") {
             resultObj.newWindow = newWindow;
           }
 
@@ -54775,7 +54778,7 @@ class Catalog {
         case "Named":
           const namedAction = action.get("N");
 
-          if ((0, _primitives.isName)(namedAction)) {
+          if (namedAction instanceof _primitives.Name) {
             resultObj.action = namedAction.name;
           }
 
@@ -54787,7 +54790,7 @@ class Catalog {
 
           if (jsAction instanceof _base_stream.BaseStream) {
             js = jsAction.getString();
-          } else if ((0, _util.isString)(jsAction)) {
+          } else if (typeof jsAction === "string") {
             js = jsAction;
           }
 
@@ -54811,7 +54814,7 @@ class Catalog {
       dest = destDict.get("Dest");
     }
 
-    if ((0, _util.isString)(url)) {
+    if (typeof url === "string") {
       const absoluteUrl = (0, _util.createValidAbsoluteUrl)(url, docBaseUrl, {
         addDefaultProtocol: true,
         tryConvertEncoding: true
@@ -54825,11 +54828,11 @@ class Catalog {
     }
 
     if (dest) {
-      if ((0, _primitives.isName)(dest)) {
+      if (dest instanceof _primitives.Name) {
         dest = dest.name;
       }
 
-      if ((0, _util.isString)(dest) || Array.isArray(dest)) {
+      if (typeof dest === "string" || Array.isArray(dest)) {
         resultObj.dest = dest;
       }
     }
@@ -54850,9 +54853,9 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.NumberTree = exports.NameTree = void 0;
 
-var _util = __w_pdfjs_require__(2);
-
 var _primitives = __w_pdfjs_require__(5);
+
+var _util = __w_pdfjs_require__(2);
 
 class NameOrNumberTree {
   constructor(root, xref, type) {
@@ -54880,7 +54883,7 @@ class NameOrNumberTree {
     while (queue.length > 0) {
       const obj = xref.fetchIfRef(queue.shift());
 
-      if (!(0, _primitives.isDict)(obj)) {
+      if (!(obj instanceof _primitives.Dict)) {
         continue;
       }
 
@@ -55059,7 +55062,7 @@ function pickPlatformItem(dict) {
 
 class FileSpec {
   constructor(root, xref) {
-    if (!root || !(0, _primitives.isDict)(root)) {
+    if (!(root instanceof _primitives.Dict)) {
       return;
     }
 
@@ -55854,12 +55857,12 @@ class StructTreeRoot {
   readRoleMap() {
     const roleMapDict = this.dict.get("RoleMap");
 
-    if (!(0, _primitives.isDict)(roleMapDict)) {
+    if (!(roleMapDict instanceof _primitives.Dict)) {
       return;
     }
 
     roleMapDict.forEach((key, value) => {
-      if (!(0, _primitives.isName)(value)) {
+      if (!(value instanceof _primitives.Name)) {
         return;
       }
 
@@ -55881,7 +55884,7 @@ class StructElementNode {
 
   get role() {
     const nameObj = this.dict.get("S");
-    const name = (0, _primitives.isName)(nameObj) ? nameObj.name : "";
+    const name = nameObj instanceof _primitives.Name ? nameObj.name : "";
     const {
       root
     } = this.tree;
@@ -55937,7 +55940,7 @@ class StructElementNode {
 
     if (kid instanceof _primitives.Ref) {
       kidDict = this.dict.xref.fetch(kid);
-    } else if ((0, _primitives.isDict)(kid)) {
+    } else if (kid instanceof _primitives.Dict) {
       kidDict = kid;
     }
 
@@ -55951,7 +55954,7 @@ class StructElementNode {
       pageObjId = pageRef.toString();
     }
 
-    const type = (0, _primitives.isName)(kidDict.get("Type")) ? kidDict.get("Type").name : null;
+    const type = kidDict.get("Type") instanceof _primitives.Name ? kidDict.get("Type").name : null;
 
     if (type === "MCR") {
       if (this.tree.pageDict.objId !== pageObjId) {
@@ -56096,7 +56099,7 @@ class StructTreePage {
       return false;
     }
 
-    if ((0, _primitives.isDict)(obj)) {
+    if (obj instanceof _primitives.Dict) {
       if (obj.objId !== dict.objId) {
         return false;
       }
@@ -56136,13 +56139,13 @@ class StructTreePage {
       parent.children.push(obj);
       const alt = node.dict.get("Alt");
 
-      if ((0, _util.isString)(alt)) {
+      if (typeof alt === "string") {
         obj.alt = (0, _util.stringToPDFString)(alt);
       }
 
       const lang = node.dict.get("Lang");
 
-      if ((0, _util.isString)(lang)) {
+      if (typeof lang === "string") {
         obj.lang = (0, _util.stringToPDFString)(lang);
       }
 
@@ -56418,7 +56421,7 @@ function numberToString(value) {
 }
 
 function writeValue(value, buffer, transform) {
-  if ((0, _primitives.isName)(value)) {
+  if (value instanceof _primitives.Name) {
     buffer.push(`/${(0, _core_utils.escapePDFName)(value.name)}`);
   } else if (value instanceof _primitives.Ref) {
     buffer.push(`${value.num} ${value.gen} R`);
@@ -56434,7 +56437,7 @@ function writeValue(value, buffer, transform) {
     buffer.push(numberToString(value));
   } else if (typeof value === "boolean") {
     buffer.push(value.toString());
-  } else if ((0, _primitives.isDict)(value)) {
+  } else if (value instanceof _primitives.Dict) {
     writeDict(value, buffer, transform);
   } else if (value instanceof _base_stream.BaseStream) {
     writeStream(value, buffer, transform);
@@ -58117,7 +58120,7 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
   }
 
   function buildCipherConstructor(cf, name, num, gen, key) {
-    if (!(0, _primitives.isName)(name)) {
+    if (!(name instanceof _primitives.Name)) {
       throw new _util.FormatError("Invalid crypt filter name.");
     }
 
@@ -58181,7 +58184,7 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
           const cfDict = dict.get("CF");
           const streamCryptoName = dict.get("StmF");
 
-          if ((0, _primitives.isDict)(cfDict) && (0, _primitives.isName)(streamCryptoName)) {
+          if (cfDict instanceof _primitives.Dict && streamCryptoName instanceof _primitives.Name) {
             cfDict.suppressEncryption = true;
             const handlerDict = cfDict.get(streamCryptoName.name);
             keyLength = handlerDict && handlerDict.get("Length") || 128;
@@ -58250,7 +58253,7 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
       if (algorithm >= 4) {
         const cf = dict.get("CF");
 
-        if ((0, _primitives.isDict)(cf)) {
+        if (cf instanceof _primitives.Dict) {
           cf.suppressEncryption = true;
         }
 
@@ -73135,8 +73138,7 @@ const StreamKind = {
 
 function wrapReason(reason) {
   if (!(reason instanceof Error || typeof reason === "object" && reason !== null)) {
-    (0, _util.warn)('wrapReason: Expected "reason" to be a (possibly cloned) Error.');
-    return reason;
+    (0, _util.unreachable)('wrapReason: Expected "reason" to be a (possibly cloned) Error.');
   }
 
   switch (reason.name) {
@@ -73816,7 +73818,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.13.0';
-const pdfjsBuild = 'fbed707';
+const pdfjsBuild = '046ff07';
 })();
 
 /******/ 	return __webpack_exports__;
