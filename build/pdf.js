@@ -1306,7 +1306,7 @@ async function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
 
   const workerId = await worker.messageHandler.sendWithPromise("GetDocRequest", {
     docId,
-    apiVersion: '2.13.0',
+    apiVersion: '2.14.0',
     source: {
       data: source.data,
       url: source.url,
@@ -3403,9 +3403,9 @@ class InternalRenderTask {
 
 }
 
-const version = '2.13.0';
+const version = '2.14.0';
 exports.version = version;
-const build = '046ff07';
+const build = '5242c38';
 exports.build = build;
 
 /***/ }),
@@ -5620,6 +5620,7 @@ class CanvasGraphics {
       addContextCurrentTransform(canvasCtx);
     }
 
+    this._cachedScaleForStroking = null;
     this._cachedGetSinglePixelWidth = null;
   }
 
@@ -5657,7 +5658,6 @@ class CanvasGraphics {
     this.ctx.transform.apply(this.ctx, viewport.transform);
     this.viewportScale = viewport.scale;
     this.baseTransform = this.ctx.mozCurrentTransform.slice();
-    this._combinedScaleFactor = Math.hypot(this.baseTransform[0], this.baseTransform[2]);
 
     if (this.imageLayer) {
       this.imageLayer.beginLayout();
@@ -5832,6 +5832,10 @@ class CanvasGraphics {
   }
 
   setLineWidth(width) {
+    if (width !== this.current.lineWidth) {
+      this._cachedScaleForStroking = null;
+    }
+
     this.current.lineWidth = width;
     this.ctx.lineWidth = width;
   }
@@ -6022,12 +6026,14 @@ class CanvasGraphics {
 
       this.checkSMaskState();
       this.pendingClip = null;
+      this._cachedScaleForStroking = null;
       this._cachedGetSinglePixelWidth = null;
     }
   }
 
   transform(a, b, c, d, e, f) {
     this.ctx.transform(a, b, c, d, e, f);
+    this._cachedScaleForStroking = null;
     this._cachedGetSinglePixelWidth = null;
   }
 
@@ -6127,25 +6133,12 @@ class CanvasGraphics {
 
     if (this.contentVisible) {
       if (typeof strokeColor === "object" && strokeColor?.getPattern) {
-        const lineWidth = this.getSinglePixelWidth();
         ctx.save();
         ctx.strokeStyle = strokeColor.getPattern(ctx, this, ctx.mozCurrentTransformInverse, _pattern_helper.PathType.STROKE);
-        ctx.lineWidth = Math.max(lineWidth, this.current.lineWidth);
-        ctx.stroke();
+        this.rescaleAndStroke(false);
         ctx.restore();
       } else {
-        const lineWidth = this.getSinglePixelWidth();
-
-        if (lineWidth < 0 && -lineWidth >= this.current.lineWidth) {
-          ctx.save();
-          ctx.resetTransform();
-          ctx.lineWidth = Math.floor(this._combinedScaleFactor);
-          ctx.stroke();
-          ctx.restore();
-        } else {
-          ctx.lineWidth = Math.max(lineWidth, this.current.lineWidth);
-          ctx.stroke();
-        }
+        this.rescaleAndStroke(true);
       }
     }
 
@@ -6361,7 +6354,7 @@ class CanvasGraphics {
     this.moveText(0, this.current.leading);
   }
 
-  paintChar(character, x, y, patternTransform, resetLineWidthToOne) {
+  paintChar(character, x, y, patternTransform) {
     const ctx = this.ctx;
     const current = this.current;
     const font = current.font;
@@ -6391,11 +6384,6 @@ class CanvasGraphics {
       }
 
       if (fillStrokeMode === _util.TextRenderingMode.STROKE || fillStrokeMode === _util.TextRenderingMode.FILL_STROKE) {
-        if (resetLineWidthToOne) {
-          ctx.resetTransform();
-          ctx.lineWidth = Math.floor(this._combinedScaleFactor);
-        }
-
         ctx.stroke();
       }
 
@@ -6406,16 +6394,7 @@ class CanvasGraphics {
       }
 
       if (fillStrokeMode === _util.TextRenderingMode.STROKE || fillStrokeMode === _util.TextRenderingMode.FILL_STROKE) {
-        if (resetLineWidthToOne) {
-          ctx.save();
-          ctx.moveTo(x, y);
-          ctx.resetTransform();
-          ctx.lineWidth = Math.floor(this._combinedScaleFactor);
-          ctx.strokeText(character, 0, 0);
-          ctx.restore();
-        } else {
-          ctx.strokeText(character, x, y);
-        }
+        ctx.strokeText(character, x, y);
       }
     }
 
@@ -6497,16 +6476,13 @@ class CanvasGraphics {
     }
 
     let lineWidth = current.lineWidth;
-    let resetLineWidthToOne = false;
     const scale = current.textMatrixScale;
 
     if (scale === 0 || lineWidth === 0) {
       const fillStrokeMode = current.textRenderingMode & _util.TextRenderingMode.FILL_STROKE_MASK;
 
       if (fillStrokeMode === _util.TextRenderingMode.STROKE || fillStrokeMode === _util.TextRenderingMode.FILL_STROKE) {
-        this._cachedGetSinglePixelWidth = null;
         lineWidth = this.getSinglePixelWidth();
-        resetLineWidthToOne = lineWidth < 0;
       }
     } else {
       lineWidth /= scale;
@@ -6566,12 +6542,12 @@ class CanvasGraphics {
         if (simpleFillText && !accent) {
           ctx.fillText(character, scaledX, scaledY);
         } else {
-          this.paintChar(character, scaledX, scaledY, patternTransform, resetLineWidthToOne);
+          this.paintChar(character, scaledX, scaledY, patternTransform);
 
           if (accent) {
             const scaledAccentX = scaledX + fontSize * accent.offset.x / fontSizeScale;
             const scaledAccentY = scaledY - fontSize * accent.offset.y / fontSizeScale;
-            this.paintChar(accent.fontChar, scaledAccentX, scaledAccentY, patternTransform, resetLineWidthToOne);
+            this.paintChar(accent.fontChar, scaledAccentX, scaledAccentY, patternTransform);
           }
         }
       }
@@ -6621,6 +6597,7 @@ class CanvasGraphics {
       return;
     }
 
+    this._cachedScaleForStroking = null;
     this._cachedGetSinglePixelWidth = null;
     ctx.save();
     ctx.transform.apply(ctx, current.textMatrix);
@@ -7290,23 +7267,98 @@ class CanvasGraphics {
   }
 
   getSinglePixelWidth() {
-    if (this._cachedGetSinglePixelWidth === null) {
+    if (!this._cachedGetSinglePixelWidth) {
       const m = this.ctx.mozCurrentTransform;
-      const absDet = Math.abs(m[0] * m[3] - m[2] * m[1]);
-      const sqNorm1 = m[0] ** 2 + m[2] ** 2;
-      const sqNorm2 = m[1] ** 2 + m[3] ** 2;
-      const pixelHeight = Math.sqrt(Math.max(sqNorm1, sqNorm2)) / absDet;
 
-      if (sqNorm1 !== sqNorm2 && this._combinedScaleFactor * pixelHeight > 1) {
-        this._cachedGetSinglePixelWidth = -(this._combinedScaleFactor * pixelHeight);
-      } else if (absDet > Number.EPSILON) {
-        this._cachedGetSinglePixelWidth = pixelHeight;
+      if (m[1] === 0 && m[2] === 0) {
+        this._cachedGetSinglePixelWidth = 1 / Math.min(Math.abs(m[0]), Math.abs(m[3]));
       } else {
-        this._cachedGetSinglePixelWidth = 1;
+        const absDet = Math.abs(m[0] * m[3] - m[2] * m[1]);
+        const normX = Math.hypot(m[0], m[2]);
+        const normY = Math.hypot(m[1], m[3]);
+        this._cachedGetSinglePixelWidth = Math.max(normX, normY) / absDet;
       }
     }
 
     return this._cachedGetSinglePixelWidth;
+  }
+
+  getScaleForStroking() {
+    if (!this._cachedScaleForStroking) {
+      const {
+        lineWidth
+      } = this.current;
+      const m = this.ctx.mozCurrentTransform;
+      let scaleX, scaleY;
+
+      if (m[1] === 0 && m[2] === 0) {
+        const normX = Math.abs(m[0]);
+        const normY = Math.abs(m[3]);
+
+        if (lineWidth === 0) {
+          scaleX = 1 / normX;
+          scaleY = 1 / normY;
+        } else {
+          const scaledXLineWidth = normX * lineWidth;
+          const scaledYLineWidth = normY * lineWidth;
+          scaleX = scaledXLineWidth < 1 ? 1 / scaledXLineWidth : 1;
+          scaleY = scaledYLineWidth < 1 ? 1 / scaledYLineWidth : 1;
+        }
+      } else {
+        const absDet = Math.abs(m[0] * m[3] - m[2] * m[1]);
+        const normX = Math.hypot(m[0], m[1]);
+        const normY = Math.hypot(m[2], m[3]);
+
+        if (lineWidth === 0) {
+          scaleX = normY / absDet;
+          scaleY = normX / absDet;
+        } else {
+          const baseArea = lineWidth * absDet;
+          scaleX = normY > baseArea ? normY / baseArea : 1;
+          scaleY = normX > baseArea ? normX / baseArea : 1;
+        }
+      }
+
+      this._cachedScaleForStroking = [scaleX, scaleY];
+    }
+
+    return this._cachedScaleForStroking;
+  }
+
+  rescaleAndStroke(saveRestore) {
+    const {
+      ctx
+    } = this;
+    const {
+      lineWidth
+    } = this.current;
+    const [scaleX, scaleY] = this.getScaleForStroking();
+    ctx.lineWidth = lineWidth || 1;
+
+    if (scaleX === 1 && scaleY === 1) {
+      ctx.stroke();
+      return;
+    }
+
+    let savedMatrix, savedDashes, savedDashOffset;
+
+    if (saveRestore) {
+      savedMatrix = ctx.mozCurrentTransform.slice();
+      savedDashes = ctx.getLineDash().slice();
+      savedDashOffset = ctx.lineDashOffset;
+    }
+
+    ctx.scale(scaleX, scaleY);
+    const scale = Math.max(scaleX, scaleY);
+    ctx.setLineDash(ctx.getLineDash().map(x => x / scale));
+    ctx.lineDashOffset /= scale;
+    ctx.stroke();
+
+    if (saveRestore) {
+      ctx.setTransform(...savedMatrix);
+      ctx.setLineDash(savedDashes);
+      ctx.lineDashOffset = savedDashOffset;
+    }
   }
 
   getCanvasPosition(x, y) {
@@ -15768,8 +15820,8 @@ var _svg = __w_pdfjs_require__(22);
 
 var _xfa_layer = __w_pdfjs_require__(20);
 
-const pdfjsVersion = '2.13.0';
-const pdfjsBuild = '046ff07';
+const pdfjsVersion = '2.14.0';
+const pdfjsBuild = '5242c38';
 {
   if (_is_node.isNodeJS) {
     const {

@@ -117,7 +117,7 @@ class WorkerMessageHandler {
     const WorkerTasks = [];
     const verbosity = (0, _util.getVerbosityLevel)();
     const apiVersion = docParams.apiVersion;
-    const workerVersion = '2.13.0';
+    const workerVersion = '2.14.0';
 
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
@@ -22348,8 +22348,14 @@ class PartialEvaluator {
     const maxImageSize = this.options.maxImageSize;
 
     if (maxImageSize !== -1 && w * h > maxImageSize) {
-      (0, _util.warn)("Image exceeded maximum allowed size and was removed.");
-      return;
+      const msg = "Image exceeded maximum allowed size and was removed.";
+
+      if (this.options.ignoreErrors) {
+        (0, _util.warn)(msg);
+        return;
+      }
+
+      throw new Error(msg);
     }
 
     let optionalContent;
@@ -38488,6 +38494,27 @@ class Font {
       locaEntries.sort((a, b) => {
         return a.index - b.index;
       });
+
+      for (i = 0; i < numGlyphs; i++) {
+        const {
+          offset,
+          endOffset
+        } = locaEntries[i];
+
+        if (offset !== 0 || endOffset !== 0) {
+          break;
+        }
+
+        const nextOffset = locaEntries[i + 1].offset;
+
+        if (nextOffset === 0) {
+          continue;
+        }
+
+        locaEntries[i].endOffset = nextOffset;
+        break;
+      }
+
       const missingGlyphs = Object.create(null);
       let writeOffset = 0;
       itemEncode(locaData, 0, writeOffset);
@@ -73817,8 +73844,8 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 
 var _worker = __w_pdfjs_require__(1);
 
-const pdfjsVersion = '2.13.0';
-const pdfjsBuild = '046ff07';
+const pdfjsVersion = '2.14.0';
+const pdfjsBuild = '5242c38';
 })();
 
 /******/ 	return __webpack_exports__;

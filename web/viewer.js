@@ -401,8 +401,6 @@ class DefaultExternalServices {
 
   static initPassiveLoading(callbacks) {}
 
-  static async fallback(data) {}
-
   static reportTelemetry(data) {}
 
   static createDownloadManager(options) {
@@ -446,7 +444,6 @@ exports.DefaultExternalServices = DefaultExternalServices;
 const PDFViewerApplication = {
   initialBookmark: document.location.hash.substring(1),
   _initializedCapability: (0, _pdfjsLib.createPromiseCapability)(),
-  _fellback: false,
   appConfig: null,
   pdfDocument: null,
   pdfLoadingTask: null,
@@ -945,7 +942,6 @@ const PDFViewerApplication = {
     }
 
     this.pdfLinkService.externalLinkEnabled = true;
-    this._fellback = false;
     this.store = null;
     this.isInitialViewSet = false;
     this.downloadComplete = false;
@@ -1131,24 +1127,6 @@ const PDFViewerApplication = {
     this.externalServices.reportTelemetry({
       type: "unsupportedFeature",
       featureId
-    });
-
-    if (this._fellback) {
-      return;
-    }
-
-    this._fellback = true;
-    this.externalServices.fallback({
-      featureId,
-      url: this.baseUrl
-    }).then(download => {
-      if (!download) {
-        return;
-      }
-
-      this.download({
-        sourceEventType: "download"
-      });
     });
   },
 
@@ -5777,18 +5755,9 @@ class PDFFindController {
 
     this._reset();
 
-    eventBus._on("find", this._onFind.bind(this));
+    eventBus._on("find", this.#onFind.bind(this));
 
-    eventBus._on("findbarclose", this._onFindBarClose.bind(this));
-
-    this.executeCommand = (cmd, state) => {
-      console.error("Deprecated method `PDFFindController.executeCommand` called, " + 'please dispatch a "find"-event using the EventBus instead.');
-      const eventState = Object.assign(Object.create(null), state, {
-        type: cmd.substring("find".length)
-      });
-
-      this._onFind(eventState);
-    };
+    eventBus._on("findbarclose", this.#onFindBarClose.bind(this));
   }
 
   get highlightMatches() {
@@ -5825,7 +5794,7 @@ class PDFFindController {
     this._firstPageCapability.resolve();
   }
 
-  _onFind(state) {
+  #onFind(state) {
     if (!state) {
       return;
     }
@@ -6329,7 +6298,7 @@ class PDFFindController {
     }
   }
 
-  _onFindBarClose(evt) {
+  #onFindBarClose(evt) {
     const pdfDocument = this._pdfDocument;
 
     this._firstPageCapability.promise.then(() => {
@@ -9943,7 +9912,7 @@ class BaseViewer {
       throw new Error("Cannot initialize BaseViewer.");
     }
 
-    const viewerVersion = '2.13.0';
+    const viewerVersion = '2.14.0';
 
     if (_pdfjsLib.version !== viewerVersion) {
       throw new Error(`The API version "${_pdfjsLib.version}" does not match the Viewer version "${viewerVersion}".`);
@@ -12059,16 +12028,6 @@ class PDFPageView {
     rotation = null,
     optionalContentConfigPromise = null
   }) {
-    if (typeof arguments[0] !== "object") {
-      console.error("PDFPageView.update called with separate parameters, please use an object instead.");
-      this.update({
-        scale: arguments[0],
-        rotation: arguments[1],
-        optionalContentConfigPromise: arguments[2]
-      });
-      return;
-    }
-
     this.scale = scale || this.scale;
 
     if (typeof rotation === "number") {
@@ -15578,8 +15537,8 @@ var _app_options = __webpack_require__(1);
 
 var _app = __webpack_require__(2);
 
-const pdfjsVersion = '2.13.0';
-const pdfjsBuild = '046ff07';
+const pdfjsVersion = '2.14.0';
+const pdfjsBuild = '5242c38';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
