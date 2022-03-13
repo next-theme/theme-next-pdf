@@ -733,7 +733,6 @@ exports.info = info;
 exports.isArrayBuffer = isArrayBuffer;
 exports.isArrayEqual = isArrayEqual;
 exports.isAscii = isAscii;
-exports.isSameOrigin = isSameOrigin;
 exports.objectFromMap = objectFromMap;
 exports.objectSize = objectSize;
 exports.setVerbosityLevel = setVerbosityLevel;
@@ -1121,23 +1120,6 @@ function assert(cond, msg) {
   if (!cond) {
     unreachable(msg);
   }
-}
-
-function isSameOrigin(baseUrl, otherUrl) {
-  let base;
-
-  try {
-    base = new URL(baseUrl);
-
-    if (!base.origin || base.origin === "null") {
-      return false;
-    }
-  } catch (e) {
-    return false;
-  }
-
-  const other = new URL(otherUrl, base);
-  return base.origin === other.origin;
 }
 
 function _isValidProtocol(url) {
@@ -3624,8 +3606,6 @@ var _primitives = __w_pdfjs_require__(5);
 
 var _xfa_fonts = __w_pdfjs_require__(12);
 
-var _stream = __w_pdfjs_require__(10);
-
 var _annotation = __w_pdfjs_require__(22);
 
 var _base_stream = __w_pdfjs_require__(9);
@@ -3637,6 +3617,8 @@ var _catalog = __w_pdfjs_require__(64);
 var _cleanup_helper = __w_pdfjs_require__(66);
 
 var _parser = __w_pdfjs_require__(27);
+
+var _stream = __w_pdfjs_require__(10);
 
 var _object_loader = __w_pdfjs_require__(71);
 
@@ -4112,17 +4094,7 @@ function find(stream, signature, limit = 1024, backwards = false) {
 }
 
 class PDFDocument {
-  constructor(pdfManager, arg) {
-    let stream;
-
-    if (arg instanceof _base_stream.BaseStream) {
-      stream = arg;
-    } else if ((0, _util.isArrayBuffer)(arg)) {
-      stream = new _stream.Stream(arg);
-    } else {
-      throw new Error("PDFDocument: Unknown argument type");
-    }
-
+  constructor(pdfManager, stream) {
     if (stream.length <= 0) {
       throw new _util.InvalidPDFException("The PDF file is empty, i.e. its size is zero bytes.");
     }
@@ -73845,7 +73817,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.14.0';
-const pdfjsBuild = '5242c38';
+const pdfjsBuild = '9e4aaf1';
 })();
 
 /******/ 	return __webpack_exports__;
