@@ -5144,6 +5144,8 @@ function getPageName(size, isPortrait, pageNames) {
 }
 
 class PDFDocumentProperties {
+  #fieldData = null;
+
   constructor({
     overlayName,
     fields,
@@ -5155,9 +5157,7 @@ class PDFDocumentProperties {
     this.container = container;
     this.overlayManager = overlayManager;
     this.l10n = l10n;
-
-    this._reset();
-
+    this.#reset();
     closeButton.addEventListener("click", this.close.bind(this));
     this.overlayManager.register(this.overlayName, this.container, this.close.bind(this));
 
@@ -5176,22 +5176,12 @@ class PDFDocumentProperties {
   }
 
   async open() {
-    const freezeFieldData = data => {
-      Object.defineProperty(this, "fieldData", {
-        value: Object.freeze(data),
-        writable: false,
-        enumerable: true,
-        configurable: true
-      });
-    };
-
     await Promise.all([this.overlayManager.open(this.overlayName), this._dataAvailableCapability.promise]);
     const currentPageNumber = this._currentPageNumber;
     const pagesRotation = this._pagesRotation;
 
-    if (this.fieldData && currentPageNumber === this.fieldData._currentPageNumber && pagesRotation === this.fieldData._pagesRotation) {
-      this._updateUI();
-
+    if (this.#fieldData && currentPageNumber === this.#fieldData._currentPageNumber && pagesRotation === this.#fieldData._pagesRotation) {
+      this.#updateUI();
       return;
     }
 
@@ -5200,10 +5190,10 @@ class PDFDocumentProperties {
       contentDispositionFilename,
       contentLength
     } = await this.pdfDocument.getMetadata();
-    const [fileName, fileSize, creationDate, modificationDate, pageSize, isLinearized] = await Promise.all([contentDispositionFilename || (0, _pdfjsLib.getPdfFilenameFromUrl)(this.url), this._parseFileSize(contentLength), this._parseDate(info.CreationDate), this._parseDate(info.ModDate), this.pdfDocument.getPage(currentPageNumber).then(pdfPage => {
-      return this._parsePageSize((0, _ui_utils.getPageSizeInches)(pdfPage), pagesRotation);
-    }), this._parseLinearization(info.IsLinearized)]);
-    freezeFieldData({
+    const [fileName, fileSize, creationDate, modificationDate, pageSize, isLinearized] = await Promise.all([contentDispositionFilename || (0, _pdfjsLib.getPdfFilenameFromUrl)(this.url), this.#parseFileSize(contentLength), this.#parseDate(info.CreationDate), this.#parseDate(info.ModDate), this.pdfDocument.getPage(currentPageNumber).then(pdfPage => {
+      return this.#parsePageSize((0, _ui_utils.getPageSizeInches)(pdfPage), pagesRotation);
+    }), this.#parseLinearization(info.IsLinearized)]);
+    this.#fieldData = Object.freeze({
       fileName,
       fileSize,
       title: info.Title,
@@ -5221,9 +5211,7 @@ class PDFDocumentProperties {
       _currentPageNumber: currentPageNumber,
       _pagesRotation: pagesRotation
     });
-
-    this._updateUI();
-
+    this.#updateUI();
     const {
       length
     } = await this.pdfDocument.getDownloadInfo();
@@ -5232,11 +5220,10 @@ class PDFDocumentProperties {
       return;
     }
 
-    const data = Object.assign(Object.create(null), this.fieldData);
-    data.fileSize = await this._parseFileSize(length);
-    freezeFieldData(data);
-
-    this._updateUI();
+    const data = Object.assign(Object.create(null), this.#fieldData);
+    data.fileSize = await this.#parseFileSize(length);
+    this.#fieldData = Object.freeze(data);
+    this.#updateUI();
   }
 
   close() {
@@ -5245,9 +5232,8 @@ class PDFDocumentProperties {
 
   setDocument(pdfDocument, url = null) {
     if (this.pdfDocument) {
-      this._reset();
-
-      this._updateUI(true);
+      this.#reset();
+      this.#updateUI(true);
     }
 
     if (!pdfDocument) {
@@ -5260,17 +5246,17 @@ class PDFDocumentProperties {
     this._dataAvailableCapability.resolve();
   }
 
-  _reset() {
+  #reset() {
     this.pdfDocument = null;
     this.url = null;
-    delete this.fieldData;
+    this.#fieldData = null;
     this._dataAvailableCapability = (0, _pdfjsLib.createPromiseCapability)();
     this._currentPageNumber = 1;
     this._pagesRotation = 0;
   }
 
-  _updateUI(reset = false) {
-    if (reset || !this.fieldData) {
+  #updateUI(reset = false) {
+    if (reset || !this.#fieldData) {
       for (const id in this.fields) {
         this.fields[id].textContent = DEFAULT_FIELD_CONTENT;
       }
@@ -5283,12 +5269,12 @@ class PDFDocumentProperties {
     }
 
     for (const id in this.fields) {
-      const content = this.fieldData[id];
+      const content = this.#fieldData[id];
       this.fields[id].textContent = content || content === 0 ? content : DEFAULT_FIELD_CONTENT;
     }
   }
 
-  async _parseFileSize(fileSize = 0) {
+  async #parseFileSize(fileSize = 0) {
     const kb = fileSize / 1024,
           mb = kb / 1024;
 
@@ -5303,7 +5289,7 @@ class PDFDocumentProperties {
     });
   }
 
-  async _parsePageSize(pageSizeInches, pagesRotation) {
+  async #parsePageSize(pageSizeInches, pagesRotation) {
     if (!pageSizeInches) {
       return undefined;
     }
@@ -5362,7 +5348,7 @@ class PDFDocumentProperties {
     });
   }
 
-  async _parseDate(inputDate) {
+  async #parseDate(inputDate) {
     const dateObject = _pdfjsLib.PDFDateString.toDateObject(inputDate);
 
     if (!dateObject) {
@@ -5375,7 +5361,7 @@ class PDFDocumentProperties {
     });
   }
 
-  _parseLinearization(isLinearized) {
+  #parseLinearization(isLinearized) {
     return this.l10n.get(`document_properties_linearized_${isLinearized ? "yes" : "no"}`);
   }
 
@@ -5746,8 +5732,7 @@ class PDFFindController {
   }) {
     this._linkService = linkService;
     this._eventBus = eventBus;
-
-    this._reset();
+    this.#reset();
 
     eventBus._on("find", this.#onFind.bind(this));
 
@@ -5776,7 +5761,7 @@ class PDFFindController {
 
   setDocument(pdfDocument) {
     if (this._pdfDocument) {
-      this._reset();
+      this.#reset();
     }
 
     if (!pdfDocument) {
@@ -5798,14 +5783,14 @@ class PDFFindController {
       type
     } = state;
 
-    if (this._state === null || this._shouldDirtyMatch(state)) {
+    if (this._state === null || this.#shouldDirtyMatch(state)) {
       this._dirtyMatch = true;
     }
 
     this._state = state;
 
     if (type !== "highlightallchange") {
-      this._updateUIState(FindState.PENDING);
+      this.#updateUIState(FindState.PENDING);
     }
 
     this._firstPageCapability.promise.then(() => {
@@ -5813,8 +5798,7 @@ class PDFFindController {
         return;
       }
 
-      this._extractText();
-
+      this.#extractText();
       const findbarClosed = !this._highlightMatches;
       const pendingTimeout = !!this._findTimeout;
 
@@ -5825,28 +5809,27 @@ class PDFFindController {
 
       if (!type) {
         this._findTimeout = setTimeout(() => {
-          this._nextMatch();
-
+          this.#nextMatch();
           this._findTimeout = null;
         }, FIND_TIMEOUT);
       } else if (this._dirtyMatch) {
-        this._nextMatch();
+        this.#nextMatch();
       } else if (type === "again") {
-        this._nextMatch();
+        this.#nextMatch();
 
         if (findbarClosed && this._state.highlightAll) {
-          this._updateAllPages();
+          this.#updateAllPages();
         }
       } else if (type === "highlightallchange") {
         if (pendingTimeout) {
-          this._nextMatch();
+          this.#nextMatch();
         } else {
           this._highlightMatches = true;
         }
 
-        this._updateAllPages();
+        this.#updateAllPages();
       } else {
-        this._nextMatch();
+        this.#nextMatch();
       }
     });
   }
@@ -5873,7 +5856,7 @@ class PDFFindController {
     (0, _ui_utils.scrollIntoView)(element, spot, true);
   }
 
-  _reset() {
+  #reset() {
     this._highlightMatches = false;
     this._scrollMatches = false;
     this._pdfDocument = null;
@@ -5903,7 +5886,7 @@ class PDFFindController {
     this._firstPageCapability = (0, _pdfjsLib.createPromiseCapability)();
   }
 
-  get _query() {
+  get #query() {
     if (this._state.query !== this._rawQuery) {
       this._rawQuery = this._state.query;
       [this._normalizedQuery] = normalize(this._state.query);
@@ -5912,7 +5895,7 @@ class PDFFindController {
     return this._normalizedQuery;
   }
 
-  _shouldDirtyMatch(state) {
+  #shouldDirtyMatch(state) {
     if (state.query !== this._state.query) {
       return true;
     }
@@ -5935,7 +5918,7 @@ class PDFFindController {
     return true;
   }
 
-  _isEntireWord(content, startIdx, length) {
+  #isEntireWord(content, startIdx, length) {
     let match = content.slice(0, startIdx).match(NOT_DIACRITIC_FROM_END_REG_EXP);
 
     if (match) {
@@ -5961,14 +5944,14 @@ class PDFFindController {
     return true;
   }
 
-  _calculateRegExpMatch(query, entireWord, pageIndex, pageContent) {
+  #calculateRegExpMatch(query, entireWord, pageIndex, pageContent) {
     const matches = [],
           matchesLength = [];
     const diffs = this._pageDiffs[pageIndex];
     let match;
 
     while ((match = query.exec(pageContent)) !== null) {
-      if (entireWord && !this._isEntireWord(pageContent, match.index, match[0].length)) {
+      if (entireWord && !this.#isEntireWord(pageContent, match.index, match[0].length)) {
         continue;
       }
 
@@ -5984,7 +5967,7 @@ class PDFFindController {
     this._pageMatchesLength[pageIndex] = matchesLength;
   }
 
-  _convertToRegExpString(query, hasDiacritics) {
+  #convertToRegExpString(query, hasDiacritics) {
     const {
       matchDiacritics
     } = this._state;
@@ -6033,8 +6016,8 @@ class PDFFindController {
     return [isUnicode, query];
   }
 
-  _calculateMatch(pageIndex) {
-    let query = this._query;
+  #calculateMatch(pageIndex) {
+    let query = this.#query;
 
     if (query.length === 0) {
       return;
@@ -6050,14 +6033,13 @@ class PDFFindController {
     let isUnicode = false;
 
     if (phraseSearch) {
-      [isUnicode, query] = this._convertToRegExpString(query, hasDiacritics);
+      [isUnicode, query] = this.#convertToRegExpString(query, hasDiacritics);
     } else {
       const match = query.match(/\S+/g);
 
       if (match) {
         query = match.sort().reverse().map(q => {
-          const [isUnicodePart, queryPart] = this._convertToRegExpString(q, hasDiacritics);
-
+          const [isUnicodePart, queryPart] = this.#convertToRegExpString(q, hasDiacritics);
           isUnicode ||= isUnicodePart;
           return `(${queryPart})`;
         }).join("|");
@@ -6066,29 +6048,26 @@ class PDFFindController {
 
     const flags = `g${isUnicode ? "u" : ""}${caseSensitive ? "" : "i"}`;
     query = new RegExp(query, flags);
-
-    this._calculateRegExpMatch(query, entireWord, pageIndex, pageContent);
+    this.#calculateRegExpMatch(query, entireWord, pageIndex, pageContent);
 
     if (this._state.highlightAll) {
-      this._updatePage(pageIndex);
+      this.#updatePage(pageIndex);
     }
 
     if (this._resumePageIdx === pageIndex) {
       this._resumePageIdx = null;
-
-      this._nextPageMatch();
+      this.#nextPageMatch();
     }
 
     const pageMatchesCount = this._pageMatches[pageIndex].length;
 
     if (pageMatchesCount > 0) {
       this._matchesCountTotal += pageMatchesCount;
-
-      this._updateUIResultsCount();
+      this.#updateUIResultsCount();
     }
   }
 
-  _extractText() {
+  #extractText() {
     if (this._extractTextPromises.length > 0) {
       return;
     }
@@ -6102,31 +6081,30 @@ class PDFFindController {
         return this._pdfDocument.getPage(i + 1).then(pdfPage => {
           return pdfPage.getTextContent();
         }).then(textContent => {
-          const textItems = textContent.items;
           const strBuf = [];
 
-          for (let j = 0, jj = textItems.length; j < jj; j++) {
-            strBuf.push(textItems[j].str);
+          for (const textItem of textContent.items) {
+            strBuf.push(textItem.str);
 
-            if (textItems[j].hasEOL) {
+            if (textItem.hasEOL) {
               strBuf.push("\n");
             }
           }
 
           [this._pageContents[i], this._pageDiffs[i], this._hasDiacritics[i]] = normalize(strBuf.join(""));
-          extractTextCapability.resolve(i);
+          extractTextCapability.resolve();
         }, reason => {
           console.error(`Unable to get text content for page ${i + 1}`, reason);
           this._pageContents[i] = "";
           this._pageDiffs[i] = null;
           this._hasDiacritics[i] = false;
-          extractTextCapability.resolve(i);
+          extractTextCapability.resolve();
         });
       });
     }
   }
 
-  _updatePage(index) {
+  #updatePage(index) {
     if (this._scrollMatches && this._selected.pageIdx === index) {
       this._linkService.page = index + 1;
     }
@@ -6137,14 +6115,14 @@ class PDFFindController {
     });
   }
 
-  _updateAllPages() {
+  #updateAllPages() {
     this._eventBus.dispatch("updatetextlayermatches", {
       source: this,
       pageIndex: -1
     });
   }
 
-  _nextMatch() {
+  #nextMatch() {
     const previous = this._state.findPrevious;
     const currentPageIndex = this._linkService.page - 1;
     const numPages = this._linkService.pagesCount;
@@ -6160,8 +6138,7 @@ class PDFFindController {
       this._pageMatches.length = 0;
       this._pageMatchesLength.length = 0;
       this._matchesCountTotal = 0;
-
-      this._updateAllPages();
+      this.#updateAllPages();
 
       for (let i = 0; i < numPages; i++) {
         if (this._pendingFindMatches.has(i)) {
@@ -6170,17 +6147,16 @@ class PDFFindController {
 
         this._pendingFindMatches.add(i);
 
-        this._extractTextPromises[i].then(pageIdx => {
-          this._pendingFindMatches.delete(pageIdx);
+        this._extractTextPromises[i].then(() => {
+          this._pendingFindMatches.delete(i);
 
-          this._calculateMatch(pageIdx);
+          this.#calculateMatch(i);
         });
       }
     }
 
-    if (this._query === "") {
-      this._updateUIState(FindState.FOUND);
-
+    if (this.#query === "") {
+      this.#updateUIState(FindState.FOUND);
       return;
     }
 
@@ -6196,39 +6172,34 @@ class PDFFindController {
 
       if (!previous && offset.matchIdx + 1 < numPageMatches || previous && offset.matchIdx > 0) {
         offset.matchIdx = previous ? offset.matchIdx - 1 : offset.matchIdx + 1;
-
-        this._updateMatch(true);
-
+        this.#updateMatch(true);
         return;
       }
 
-      this._advanceOffsetPage(previous);
+      this.#advanceOffsetPage(previous);
     }
 
-    this._nextPageMatch();
+    this.#nextPageMatch();
   }
 
-  _matchesReady(matches) {
+  #matchesReady(matches) {
     const offset = this._offset;
     const numMatches = matches.length;
     const previous = this._state.findPrevious;
 
     if (numMatches) {
       offset.matchIdx = previous ? numMatches - 1 : 0;
-
-      this._updateMatch(true);
-
+      this.#updateMatch(true);
       return true;
     }
 
-    this._advanceOffsetPage(previous);
+    this.#advanceOffsetPage(previous);
 
     if (offset.wrapped) {
       offset.matchIdx = null;
 
       if (this._pagesToSearch < 0) {
-        this._updateMatch(false);
-
+        this.#updateMatch(false);
         return true;
       }
     }
@@ -6236,7 +6207,7 @@ class PDFFindController {
     return false;
   }
 
-  _nextPageMatch() {
+  #nextPageMatch() {
     if (this._resumePageIdx !== null) {
       console.error("There can only be one pending page.");
     }
@@ -6251,10 +6222,10 @@ class PDFFindController {
         this._resumePageIdx = pageIdx;
         break;
       }
-    } while (!this._matchesReady(matches));
+    } while (!this.#matchesReady(matches));
   }
 
-  _advanceOffsetPage(previous) {
+  #advanceOffsetPage(previous) {
     const offset = this._offset;
     const numPages = this._linkService.pagesCount;
     offset.pageIdx = previous ? offset.pageIdx - 1 : offset.pageIdx + 1;
@@ -6267,7 +6238,7 @@ class PDFFindController {
     }
   }
 
-  _updateMatch(found = false) {
+  #updateMatch(found = false) {
     let state = FindState.NOT_FOUND;
     const wrapped = this._offset.wrapped;
     this._offset.wrapped = false;
@@ -6279,16 +6250,15 @@ class PDFFindController {
       state = wrapped ? FindState.WRAPPED : FindState.FOUND;
 
       if (previousPage !== -1 && previousPage !== this._selected.pageIdx) {
-        this._updatePage(previousPage);
+        this.#updatePage(previousPage);
       }
     }
 
-    this._updateUIState(state, this._state.findPrevious);
+    this.#updateUIState(state, this._state.findPrevious);
 
     if (this._selected.pageIdx !== -1) {
       this._scrollMatches = true;
-
-      this._updatePage(this._selected.pageIdx);
+      this.#updatePage(this._selected.pageIdx);
     }
   }
 
@@ -6310,15 +6280,13 @@ class PDFFindController {
         this._dirtyMatch = true;
       }
 
-      this._updateUIState(FindState.FOUND);
-
+      this.#updateUIState(FindState.FOUND);
       this._highlightMatches = false;
-
-      this._updateAllPages();
+      this.#updateAllPages();
     });
   }
 
-  _requestMatchesCount() {
+  #requestMatchesCount() {
     const {
       pageIdx,
       matchIdx
@@ -6344,19 +6312,19 @@ class PDFFindController {
     };
   }
 
-  _updateUIResultsCount() {
+  #updateUIResultsCount() {
     this._eventBus.dispatch("updatefindmatchescount", {
       source: this,
-      matchesCount: this._requestMatchesCount()
+      matchesCount: this.#requestMatchesCount()
     });
   }
 
-  _updateUIState(state, previous = false) {
+  #updateUIState(state, previous = false) {
     this._eventBus.dispatch("updatefindcontrolstate", {
       source: this,
       state,
       previous,
-      matchesCount: this._requestMatchesCount(),
+      matchesCount: this.#requestMatchesCount(),
       rawQuery: this._state?.query ?? null
     });
   }
@@ -14013,49 +13981,46 @@ exports.BasePreferences = void 0;
 var _app_options = __webpack_require__(1);
 
 class BasePreferences {
+  #defaults = Object.freeze({
+    "annotationMode": 2,
+    "cursorToolOnLoad": 0,
+    "defaultZoomValue": "",
+    "disablePageLabels": false,
+    "enablePermissions": false,
+    "enablePrintAutoRotate": true,
+    "enableScripting": true,
+    "externalLinkTarget": 0,
+    "historyUpdateUrl": false,
+    "ignoreDestinationZoom": false,
+    "pdfBugEnabled": false,
+    "renderer": "canvas",
+    "sidebarViewOnLoad": -1,
+    "scrollModeOnLoad": -1,
+    "spreadModeOnLoad": -1,
+    "textLayerMode": 1,
+    "useOnlyCssZoom": false,
+    "viewerCssTheme": 0,
+    "viewOnLoad": 0,
+    "disableAutoFetch": false,
+    "disableFontFace": false,
+    "disableRange": false,
+    "disableStream": false,
+    "enableXfa": true
+  });
+  #prefs = Object.create(null);
+  #initializedPromise = null;
+
   constructor() {
     if (this.constructor === BasePreferences) {
       throw new Error("Cannot initialize BasePreferences.");
     }
 
-    Object.defineProperty(this, "defaults", {
-      value: Object.freeze({
-        "annotationMode": 2,
-        "cursorToolOnLoad": 0,
-        "defaultZoomValue": "",
-        "disablePageLabels": false,
-        "enablePermissions": false,
-        "enablePrintAutoRotate": true,
-        "enableScripting": true,
-        "externalLinkTarget": 0,
-        "historyUpdateUrl": false,
-        "ignoreDestinationZoom": false,
-        "pdfBugEnabled": false,
-        "renderer": "canvas",
-        "sidebarViewOnLoad": -1,
-        "scrollModeOnLoad": -1,
-        "spreadModeOnLoad": -1,
-        "textLayerMode": 1,
-        "useOnlyCssZoom": false,
-        "viewerCssTheme": 0,
-        "viewOnLoad": 0,
-        "disableAutoFetch": false,
-        "disableFontFace": false,
-        "disableRange": false,
-        "disableStream": false,
-        "enableXfa": true
-      }),
-      writable: false,
-      enumerable: true,
-      configurable: false
-    });
-    this.prefs = Object.create(null);
-    this._initializedPromise = this._readFromStorage(this.defaults).then(prefs => {
-      for (const name in this.defaults) {
+    this.#initializedPromise = this._readFromStorage(this.#defaults).then(prefs => {
+      for (const name in this.#defaults) {
         const prefValue = prefs?.[name];
 
-        if (typeof prefValue === typeof this.defaults[name]) {
-          this.prefs[name] = prefValue;
+        if (typeof prefValue === typeof this.#defaults[name]) {
+          this.#prefs[name] = prefValue;
         }
       }
     });
@@ -14070,14 +14035,19 @@ class BasePreferences {
   }
 
   async reset() {
-    await this._initializedPromise;
-    this.prefs = Object.create(null);
-    return this._writeToStorage(this.defaults);
+    await this.#initializedPromise;
+    const prefs = this.#prefs;
+    this.#prefs = Object.create(null);
+    return this._writeToStorage(this.#defaults).catch(reason => {
+      this.#prefs = prefs;
+      throw reason;
+    });
   }
 
   async set(name, value) {
-    await this._initializedPromise;
-    const defaultValue = this.defaults[name];
+    await this.#initializedPromise;
+    const defaultValue = this.#defaults[name],
+          prefs = this.#prefs;
 
     if (defaultValue === undefined) {
       throw new Error(`Set preference: "${name}" is undefined.`);
@@ -14085,8 +14055,8 @@ class BasePreferences {
       throw new Error("Set preference: no value is specified.");
     }
 
-    const valueType = typeof value;
-    const defaultType = typeof defaultValue;
+    const valueType = typeof value,
+          defaultType = typeof defaultValue;
 
     if (valueType !== defaultType) {
       if (valueType === "number" && defaultType === "string") {
@@ -14100,29 +14070,30 @@ class BasePreferences {
       }
     }
 
-    this.prefs[name] = value;
-    return this._writeToStorage(this.prefs);
+    this.#prefs[name] = value;
+    return this._writeToStorage(this.#prefs).catch(reason => {
+      this.#prefs = prefs;
+      throw reason;
+    });
   }
 
   async get(name) {
-    await this._initializedPromise;
-    const defaultValue = this.defaults[name],
-          prefValue = this.prefs[name];
+    await this.#initializedPromise;
+    const defaultValue = this.#defaults[name];
 
     if (defaultValue === undefined) {
       throw new Error(`Get preference: "${name}" is undefined.`);
     }
 
-    return prefValue !== undefined ? prefValue : defaultValue;
+    return this.#prefs[name] ?? defaultValue;
   }
 
   async getAll() {
-    await this._initializedPromise;
+    await this.#initializedPromise;
     const obj = Object.create(null);
 
-    for (const name in this.defaults) {
-      const prefValue = this.prefs[name];
-      obj[name] = prefValue !== undefined ? prefValue : this.defaults[name];
+    for (const name in this.#defaults) {
+      obj[name] = this.#prefs[name] ?? this.#defaults[name];
     }
 
     return obj;
@@ -15562,7 +15533,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.14.0';
-const pdfjsBuild = '9e4aaf1';
+const pdfjsBuild = 'f017f29';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;

@@ -1049,12 +1049,12 @@ select {
 }
 html[dir="ltr"] #sidebarContainer {
   transition-property: left;
-  left: calc(0px - var(--sidebar-width));
+  left: calc(-1 * var(--sidebar-width));
   border-right: var(--doorhanger-border-color-whcm);
 }
 html[dir="rtl"] #sidebarContainer {
   transition-property: right;
-  right: calc(0px - var(--sidebar-width));
+  right: calc(-1 * var(--sidebar-width));
   border-left: var(--doorhanger-border-color-whcm);
 }
 
@@ -1162,18 +1162,27 @@ html[dir="rtl"] #toolbarSidebar {
     0 0 1px rgba(0, 0, 0, 0.1);
 }
 
-html[dir="ltr"] #toolbarSidebar .toolbarButton {
+[dir="ltr"] #toolbarSidebar .toolbarButton {
   margin-right: 2px !important;
 }
-html[dir="rtl"] #toolbarSidebar .toolbarButton {
+
+[dir="rtl"] #toolbarSidebar .toolbarButton {
   margin-left: 2px !important;
 }
 
-html[dir="ltr"] #toolbarSidebarRight .toolbarButton {
+#toolbarSidebar .toolbarButton {
+  -webkit-margin-end: 2px !important;
+          margin-inline-end: 2px !important;
+}
+[dir="ltr"] #toolbarSidebarRight .toolbarButton {
   margin-right: 3px !important;
 }
-html[dir="rtl"] #toolbarSidebarRight .toolbarButton {
+[dir="rtl"] #toolbarSidebarRight .toolbarButton {
   margin-left: 3px !important;
+}
+#toolbarSidebarRight .toolbarButton {
+  -webkit-margin-end: 3px !important;
+          margin-inline-end: 3px !important;
 }
 
 #sidebarResizer {
@@ -1325,16 +1334,19 @@ html[dir="rtl"] .findbar {
   right: 64px;
 }
 
-.findbar .splitToolbarButton {
-  margin-top: 3px;
-}
-html[dir="ltr"] .findbar .splitToolbarButton {
+[dir="ltr"] .findbar .splitToolbarButton {
   margin-left: 0;
   margin-right: 5px;
 }
-html[dir="rtl"] .findbar .splitToolbarButton {
-  margin-left: 5px;
+
+[dir="rtl"] .findbar .splitToolbarButton {
   margin-right: 0;
+  margin-left: 5px;
+}
+
+.findbar .splitToolbarButton {
+  margin-top: 3px;
+  margin-inline: 0 5px;
 }
 
 .findbar .splitToolbarButton > .toolbarButton {
@@ -1446,7 +1458,7 @@ html[dir="rtl"] .secondaryToolbar {
 .doorHangerRight:after,
 .doorHangerRight:before {
   bottom: 100%;
-  border: solid rgba(0, 0, 0, 0);
+  border: 8px solid rgba(0, 0, 0, 0);
   content: " ";
   height: 0;
   width: 0;
@@ -1454,14 +1466,40 @@ html[dir="rtl"] .secondaryToolbar {
   pointer-events: none;
   opacity: var(--doorhanger-triangle-opacity-whcm);
 }
-.doorHanger:after,
-.doorHangerRight:after {
-  border-width: 8px;
+[dir="ltr"] .doorHanger:after {
+  left: 10px;
+}
+[dir="rtl"] .doorHanger:after {
+  right: 10px;
+}
+[dir="ltr"] .doorHanger:after {
+  margin-left: -8px;
+}
+[dir="rtl"] .doorHanger:after {
+  margin-right: -8px;
 }
 .doorHanger:after {
+  inset-inline-start: 10px;
+  -webkit-margin-start: -8px;
+          margin-inline-start: -8px;
   border-bottom-color: var(--toolbar-bg-color);
 }
+[dir="ltr"] .doorHangerRight:after {
+  right: 10px;
+}
+[dir="rtl"] .doorHangerRight:after {
+  left: 10px;
+}
+[dir="ltr"] .doorHangerRight:after {
+  margin-right: -8px;
+}
+[dir="rtl"] .doorHangerRight:after {
+  margin-left: -8px;
+}
 .doorHangerRight:after {
+  inset-inline-end: 10px;
+  -webkit-margin-end: -8px;
+          margin-inline-end: -8px;
   border-bottom-color: var(--doorhanger-bg-color);
 }
 .doorHanger:before,
@@ -1469,29 +1507,39 @@ html[dir="rtl"] .secondaryToolbar {
   border-bottom-color: var(--doorhanger-border-color);
   border-width: 9px;
 }
-
-html[dir="ltr"] .doorHanger:after,
-html[dir="rtl"] .doorHangerRight:after {
+[dir="ltr"] .doorHanger:before {
   left: 10px;
-  margin-left: -8px;
 }
-
-html[dir="ltr"] .doorHanger:before,
-html[dir="rtl"] .doorHangerRight:before {
-  left: 10px;
+[dir="rtl"] .doorHanger:before {
+  right: 10px;
+}
+[dir="ltr"] .doorHanger:before {
   margin-left: -9px;
 }
-
-html[dir="rtl"] .doorHanger:after,
-html[dir="ltr"] .doorHangerRight:after {
-  right: 10px;
-  margin-right: -8px;
-}
-
-html[dir="rtl"] .doorHanger:before,
-html[dir="ltr"] .doorHangerRight:before {
-  right: 10px;
+[dir="rtl"] .doorHanger:before {
   margin-right: -9px;
+}
+.doorHanger:before {
+  inset-inline-start: 10px;
+  -webkit-margin-start: -9px;
+          margin-inline-start: -9px;
+}
+[dir="ltr"] .doorHangerRight:before {
+  right: 10px;
+}
+[dir="rtl"] .doorHangerRight:before {
+  left: 10px;
+}
+[dir="ltr"] .doorHangerRight:before {
+  margin-right: -9px;
+}
+[dir="rtl"] .doorHangerRight:before {
+  margin-left: -9px;
+}
+.doorHangerRight:before {
+  inset-inline-end: 10px;
+  -webkit-margin-end: -9px;
+          margin-inline-end: -9px;
 }
 
 #findResultsCount {
@@ -1517,46 +1565,73 @@ html[dir="ltr"] .doorHangerRight:before {
   transform: translateX(-50%);
 }
 
-html[dir="ltr"] #toolbarViewerLeft,
-html[dir="rtl"] #toolbarViewerRight,
-html[dir="ltr"] #toolbarSidebarLeft,
-html[dir="rtl"] #toolbarSidebarRight {
+[dir="ltr"] #toolbarViewerLeft,[dir="ltr"] 
+#toolbarSidebarLeft {
   float: left;
 }
-html[dir="ltr"] #toolbarViewerRight,
-html[dir="rtl"] #toolbarViewerLeft,
-html[dir="ltr"] #toolbarSidebarRight,
-html[dir="rtl"] #toolbarSidebarLeft {
+
+[dir="rtl"] #toolbarViewerLeft,[dir="rtl"] 
+#toolbarSidebarLeft {
   float: right;
 }
-html[dir="ltr"] #toolbarViewerLeft > *,
-html[dir="ltr"] #toolbarViewerMiddle > *,
-html[dir="ltr"] #toolbarViewerRight > *,
-html[dir="ltr"] #toolbarSidebarLeft *,
-html[dir="ltr"] #toolbarSidebarRight *,
-html[dir="ltr"] .findbar * {
-  position: relative;
+
+#toolbarViewerLeft,
+#toolbarSidebarLeft {
+  float: inline-start;
+}
+[dir="ltr"] #toolbarViewerRight,[dir="ltr"] 
+#toolbarSidebarRight {
+  float: right;
+}
+[dir="rtl"] #toolbarViewerRight,[dir="rtl"] 
+#toolbarSidebarRight {
   float: left;
 }
-html[dir="rtl"] #toolbarViewerLeft > *,
-html[dir="rtl"] #toolbarViewerMiddle > *,
-html[dir="rtl"] #toolbarViewerRight > *,
-html[dir="rtl"] #toolbarSidebarLeft *,
-html[dir="rtl"] #toolbarSidebarRight *,
-html[dir="rtl"] .findbar * {
-  position: relative;
+#toolbarViewerRight,
+#toolbarSidebarRight {
+  float: inline-end;
+}
+
+[dir="ltr"] #toolbarViewerLeft > *,[dir="ltr"] 
+#toolbarViewerMiddle > *,[dir="ltr"] 
+#toolbarViewerRight > *,[dir="ltr"] 
+#toolbarSidebarLeft *,[dir="ltr"] 
+#toolbarSidebarRight *,[dir="ltr"] 
+.findbar * {
+  float: left;
+}
+
+[dir="rtl"] #toolbarViewerLeft > *,[dir="rtl"] 
+#toolbarViewerMiddle > *,[dir="rtl"] 
+#toolbarViewerRight > *,[dir="rtl"] 
+#toolbarSidebarLeft *,[dir="rtl"] 
+#toolbarSidebarRight *,[dir="rtl"] 
+.findbar * {
   float: right;
+}
+
+#toolbarViewerLeft > *,
+#toolbarViewerMiddle > *,
+#toolbarViewerRight > *,
+#toolbarSidebarLeft *,
+#toolbarSidebarRight *,
+.findbar * {
+  position: relative;
+  float: inline-start;
 }
 
 .splitToolbarButton {
   margin: 2px 2px 0;
   display: inline-block;
 }
-html[dir="ltr"] .splitToolbarButton > .toolbarButton {
+[dir="ltr"] .splitToolbarButton > .toolbarButton {
   float: left;
 }
-html[dir="rtl"] .splitToolbarButton > .toolbarButton {
+[dir="rtl"] .splitToolbarButton > .toolbarButton {
   float: right;
+}
+.splitToolbarButton > .toolbarButton {
+  float: inline-start;
 }
 
 .toolbarButton,
@@ -1607,14 +1682,19 @@ html[dir="rtl"] .splitToolbarButton > .toolbarButton {
   position: relative;
 }
 html[dir="ltr"] .splitToolbarButton > .toolbarButton:first-child,
-html[dir="rtl"] .splitToolbarButton > .toolbarButton:last-child {
-  margin: 0;
-}
+html[dir="rtl"] .splitToolbarButton > .toolbarButton:last-child,
 html[dir="ltr"] .splitToolbarButton > .toolbarButton:last-child,
 html[dir="rtl"] .splitToolbarButton > .toolbarButton:first-child {
   margin: 0;
 }
+[dir="ltr"] .splitToolbarButtonSeparator {
+  float: left;
+}
+[dir="rtl"] .splitToolbarButtonSeparator {
+  float: right;
+}
 .splitToolbarButtonSeparator {
+  float: inline-start;
   padding: 10px 0;
   width: 1px;
   background-color: var(--separator-color);
@@ -1627,13 +1707,6 @@ html[dir="rtl"] .splitToolbarButton > .toolbarButton:first-child {
   background-color: var(--field-border-color);
   margin: 0;
   padding: 13px 0;
-}
-
-html[dir="ltr"] .splitToolbarButtonSeparator {
-  float: left;
-}
-html[dir="rtl"] .splitToolbarButtonSeparator {
-  float: right;
 }
 
 .toolbarButton,
@@ -1655,15 +1728,29 @@ html[dir="rtl"] .splitToolbarButtonSeparator {
   box-sizing: border-box;
 }
 
-html[dir="ltr"] #toolbarViewerLeft > .toolbarButton:first-child,
-html[dir="rtl"] #toolbarViewerRight > .toolbarButton:last-child {
+[dir="ltr"] #toolbarViewerLeft > .toolbarButton:first-child {
   margin-left: 2px;
 }
 
-html[dir="ltr"] #toolbarViewerRight > .toolbarButton:last-child,
-html[dir="rtl"] #toolbarViewerLeft > .toolbarButton:first-child {
+[dir="rtl"] #toolbarViewerLeft > .toolbarButton:first-child {
   margin-right: 2px;
 }
+
+#toolbarViewerLeft > .toolbarButton:first-child {
+  -webkit-margin-start: 2px;
+          margin-inline-start: 2px;
+}
+[dir="ltr"] #toolbarViewerRight > .toolbarButton:last-child {
+  margin-right: 2px;
+}
+[dir="rtl"] #toolbarViewerRight > .toolbarButton:last-child {
+  margin-left: 2px;
+}
+#toolbarViewerRight > .toolbarButton:last-child {
+  -webkit-margin-end: 2px;
+          margin-inline-end: 2px;
+}
+
 .toolbarButton:hover,
 .toolbarButton:focus-visible {
   background-color: var(--button-hover-color);
@@ -1705,9 +1792,8 @@ html[dir="rtl"] #toolbarViewerLeft > .toolbarButton:first-child {
 .dropdownToolbarButton::after {
   top: 6px;
   pointer-events: none;
-
   -webkit-mask-image: var(--toolbarButton-menuArrow-icon);
-  mask-image: var(--toolbarButton-menuArrow-icon);
+          mask-image: var(--toolbarButton-menuArrow-icon);
 }
 html[dir="ltr"] .dropdownToolbarButton::after {
   right: 7px;
@@ -1716,28 +1802,33 @@ html[dir="rtl"] .dropdownToolbarButton::after {
   left: 7px;
 }
 
+[dir="ltr"] .dropdownToolbarButton > select {
+  padding-left: 4px;
+}
+
+[dir="rtl"] .dropdownToolbarButton > select {
+  padding-right: 4px;
+}
+
 .dropdownToolbarButton > select {
-  width: calc(var(--scale-select-container-width) + var(--scale-select-overflow));
+  width: calc(
+    var(--scale-select-container-width) + var(--scale-select-overflow)
+  );
   height: 28px;
   font-size: 12px;
   color: var(--main-color);
   margin: 0;
   padding: 1px 0 2px;
+  -webkit-padding-start: 4px;
+          padding-inline-start: 4px;
   border: none;
   background-color: var(--dropdown-btn-bg-color);
-}
-html[dir="ltr"] .dropdownToolbarButton > select {
-  padding-left: 4px;
-}
-html[dir="rtl"] .dropdownToolbarButton > select {
-  padding-right: 4px;
 }
 .dropdownToolbarButton > select:hover,
 .dropdownToolbarButton > select:focus-visible {
   background-color: var(--button-hover-color);
   color: var(--toggled-btn-color);
 }
-
 .dropdownToolbarButton > select > option {
   background: var(--doorhanger-bg-color);
   color: var(--main-color);
@@ -1771,7 +1862,7 @@ html[dir="rtl"] .dropdownToolbarButton > select {
   content: "";
   background-color: var(--toolbar-icon-bg-color);
   -webkit-mask-size: cover;
-  mask-size: cover;
+          mask-size: cover;
 }
 
 .dropdownToolbarButton:hover::after,
@@ -1806,7 +1897,7 @@ html[dir="rtl"] .secondaryToolbarButton::before {
 
 .toolbarButton#sidebarToggle::before {
   -webkit-mask-image: var(--toolbarButton-sidebarToggle-icon);
-  mask-image: var(--toolbarButton-sidebarToggle-icon);
+          mask-image: var(--toolbarButton-sidebarToggle-icon);
 }
 html[dir="rtl"] .toolbarButton#sidebarToggle::before {
   transform: scaleX(-1);
@@ -1814,7 +1905,7 @@ html[dir="rtl"] .toolbarButton#sidebarToggle::before {
 
 .toolbarButton#secondaryToolbarToggle::before {
   -webkit-mask-image: var(--toolbarButton-secondaryToolbarToggle-icon);
-  mask-image: var(--toolbarButton-secondaryToolbarToggle-icon);
+          mask-image: var(--toolbarButton-secondaryToolbarToggle-icon);
 }
 html[dir="rtl"] .toolbarButton#secondaryToolbarToggle::before {
   transform: scaleX(-1);
@@ -1822,56 +1913,56 @@ html[dir="rtl"] .toolbarButton#secondaryToolbarToggle::before {
 
 .toolbarButton.findPrevious::before {
   -webkit-mask-image: var(--findbarButton-previous-icon);
-  mask-image: var(--findbarButton-previous-icon);
+          mask-image: var(--findbarButton-previous-icon);
 }
 
 .toolbarButton.findNext::before {
   -webkit-mask-image: var(--findbarButton-next-icon);
-  mask-image: var(--findbarButton-next-icon);
+          mask-image: var(--findbarButton-next-icon);
 }
 
 .toolbarButton.pageUp::before {
   -webkit-mask-image: var(--toolbarButton-pageUp-icon);
-  mask-image: var(--toolbarButton-pageUp-icon);
+          mask-image: var(--toolbarButton-pageUp-icon);
 }
 
 .toolbarButton.pageDown::before {
   -webkit-mask-image: var(--toolbarButton-pageDown-icon);
-  mask-image: var(--toolbarButton-pageDown-icon);
+          mask-image: var(--toolbarButton-pageDown-icon);
 }
 
 .toolbarButton.zoomOut::before {
   -webkit-mask-image: var(--toolbarButton-zoomOut-icon);
-  mask-image: var(--toolbarButton-zoomOut-icon);
+          mask-image: var(--toolbarButton-zoomOut-icon);
 }
 
 .toolbarButton.zoomIn::before {
   -webkit-mask-image: var(--toolbarButton-zoomIn-icon);
-  mask-image: var(--toolbarButton-zoomIn-icon);
+          mask-image: var(--toolbarButton-zoomIn-icon);
 }
 
 .toolbarButton.presentationMode::before,
 .secondaryToolbarButton.presentationMode::before {
   -webkit-mask-image: var(--toolbarButton-presentationMode-icon);
-  mask-image: var(--toolbarButton-presentationMode-icon);
+          mask-image: var(--toolbarButton-presentationMode-icon);
 }
 
 .toolbarButton.print::before,
 .secondaryToolbarButton.print::before {
   -webkit-mask-image: var(--toolbarButton-print-icon);
-  mask-image: var(--toolbarButton-print-icon);
+          mask-image: var(--toolbarButton-print-icon);
 }
 
 .toolbarButton.openFile::before,
 .secondaryToolbarButton.openFile::before {
   -webkit-mask-image: var(--toolbarButton-openFile-icon);
-  mask-image: var(--toolbarButton-openFile-icon);
+          mask-image: var(--toolbarButton-openFile-icon);
 }
 
 .toolbarButton.download::before,
 .secondaryToolbarButton.download::before {
   -webkit-mask-image: var(--toolbarButton-download-icon);
-  mask-image: var(--toolbarButton-download-icon);
+          mask-image: var(--toolbarButton-download-icon);
 }
 
 .secondaryToolbarButton.bookmark {
@@ -1887,17 +1978,17 @@ html[dir="rtl"] .toolbarButton#secondaryToolbarToggle::before {
 .toolbarButton.bookmark::before,
 .secondaryToolbarButton.bookmark::before {
   -webkit-mask-image: var(--toolbarButton-bookmark-icon);
-  mask-image: var(--toolbarButton-bookmark-icon);
+          mask-image: var(--toolbarButton-bookmark-icon);
 }
 
 #viewThumbnail.toolbarButton::before {
   -webkit-mask-image: var(--toolbarButton-viewThumbnail-icon);
-  mask-image: var(--toolbarButton-viewThumbnail-icon);
+          mask-image: var(--toolbarButton-viewThumbnail-icon);
 }
 
 #viewOutline.toolbarButton::before {
   -webkit-mask-image: var(--toolbarButton-viewOutline-icon);
-  mask-image: var(--toolbarButton-viewOutline-icon);
+          mask-image: var(--toolbarButton-viewOutline-icon);
 }
 html[dir="rtl"] #viewOutline.toolbarButton::before {
   transform: scaleX(-1);
@@ -1905,17 +1996,17 @@ html[dir="rtl"] #viewOutline.toolbarButton::before {
 
 #viewAttachments.toolbarButton::before {
   -webkit-mask-image: var(--toolbarButton-viewAttachments-icon);
-  mask-image: var(--toolbarButton-viewAttachments-icon);
+          mask-image: var(--toolbarButton-viewAttachments-icon);
 }
 
 #viewLayers.toolbarButton::before {
   -webkit-mask-image: var(--toolbarButton-viewLayers-icon);
-  mask-image: var(--toolbarButton-viewLayers-icon);
+          mask-image: var(--toolbarButton-viewLayers-icon);
 }
 
 #currentOutlineItem.toolbarButton::before {
   -webkit-mask-image: var(--toolbarButton-currentOutlineItem-icon);
-  mask-image: var(--toolbarButton-currentOutlineItem-icon);
+          mask-image: var(--toolbarButton-currentOutlineItem-icon);
 }
 html[dir="rtl"] #currentOutlineItem.toolbarButton::before {
   transform: scaleX(-1);
@@ -1923,7 +2014,7 @@ html[dir="rtl"] #currentOutlineItem.toolbarButton::before {
 
 #viewFind.toolbarButton::before {
   -webkit-mask-image: var(--toolbarButton-search-icon);
-  mask-image: var(--toolbarButton-search-icon);
+          mask-image: var(--toolbarButton-search-icon);
 }
 
 .toolbarButton.pdfSidebarNotification::after {
@@ -1944,102 +2035,116 @@ html[dir="rtl"] .toolbarButton.pdfSidebarNotification::after {
   right: 17px;
 }
 
+[dir="ltr"] .secondaryToolbarButton {
+  padding-left: 36px;
+}
+
+[dir="rtl"] .secondaryToolbarButton {
+  padding-right: 36px;
+}
+
+[dir="ltr"] .secondaryToolbarButton {
+  text-align: left;
+}
+
+[dir="rtl"] .secondaryToolbarButton {
+  text-align: right;
+}
+
 .secondaryToolbarButton {
   position: relative;
   margin: 0;
   padding: 0 0 1px;
+  -webkit-padding-start: 36px;
+          padding-inline-start: 36px;
   height: auto;
   min-height: 26px;
   width: auto;
   min-width: 100%;
+  text-align: start;
   white-space: normal;
   border-radius: 0;
   box-sizing: border-box;
 }
-html[dir="ltr"] .secondaryToolbarButton {
-  padding-left: 36px;
-  text-align: left;
-}
-html[dir="rtl"] .secondaryToolbarButton {
-  padding-right: 36px;
-  text-align: right;
-}
-
-html[dir="ltr"] .secondaryToolbarButton > span {
+[dir="ltr"] .secondaryToolbarButton > span {
   padding-right: 4px;
 }
-html[dir="rtl"] .secondaryToolbarButton > span {
+[dir="rtl"] .secondaryToolbarButton > span {
   padding-left: 4px;
+}
+.secondaryToolbarButton > span {
+  -webkit-padding-end: 4px;
+          padding-inline-end: 4px;
 }
 
 .secondaryToolbarButton.firstPage::before {
   -webkit-mask-image: var(--secondaryToolbarButton-firstPage-icon);
-  mask-image: var(--secondaryToolbarButton-firstPage-icon);
+          mask-image: var(--secondaryToolbarButton-firstPage-icon);
 }
 
 .secondaryToolbarButton.lastPage::before {
   -webkit-mask-image: var(--secondaryToolbarButton-lastPage-icon);
-  mask-image: var(--secondaryToolbarButton-lastPage-icon);
+          mask-image: var(--secondaryToolbarButton-lastPage-icon);
 }
 
 .secondaryToolbarButton.rotateCcw::before {
   -webkit-mask-image: var(--secondaryToolbarButton-rotateCcw-icon);
-  mask-image: var(--secondaryToolbarButton-rotateCcw-icon);
+          mask-image: var(--secondaryToolbarButton-rotateCcw-icon);
 }
 
 .secondaryToolbarButton.rotateCw::before {
   -webkit-mask-image: var(--secondaryToolbarButton-rotateCw-icon);
-  mask-image: var(--secondaryToolbarButton-rotateCw-icon);
+          mask-image: var(--secondaryToolbarButton-rotateCw-icon);
 }
 
 .secondaryToolbarButton.selectTool::before {
   -webkit-mask-image: var(--secondaryToolbarButton-selectTool-icon);
-  mask-image: var(--secondaryToolbarButton-selectTool-icon);
+          mask-image: var(--secondaryToolbarButton-selectTool-icon);
 }
 
 .secondaryToolbarButton.handTool::before {
   -webkit-mask-image: var(--secondaryToolbarButton-handTool-icon);
-  mask-image: var(--secondaryToolbarButton-handTool-icon);
+          mask-image: var(--secondaryToolbarButton-handTool-icon);
 }
 
 .secondaryToolbarButton.scrollPage::before {
   -webkit-mask-image: var(--secondaryToolbarButton-scrollPage-icon);
-  mask-image: var(--secondaryToolbarButton-scrollPage-icon);
+          mask-image: var(--secondaryToolbarButton-scrollPage-icon);
 }
 
 .secondaryToolbarButton.scrollVertical::before {
   -webkit-mask-image: var(--secondaryToolbarButton-scrollVertical-icon);
-  mask-image: var(--secondaryToolbarButton-scrollVertical-icon);
+          mask-image: var(--secondaryToolbarButton-scrollVertical-icon);
 }
 
 .secondaryToolbarButton.scrollHorizontal::before {
   -webkit-mask-image: var(--secondaryToolbarButton-scrollHorizontal-icon);
-  mask-image: var(--secondaryToolbarButton-scrollHorizontal-icon);
+          mask-image: var(--secondaryToolbarButton-scrollHorizontal-icon);
 }
 
 .secondaryToolbarButton.scrollWrapped::before {
   -webkit-mask-image: var(--secondaryToolbarButton-scrollWrapped-icon);
-  mask-image: var(--secondaryToolbarButton-scrollWrapped-icon);
+          mask-image: var(--secondaryToolbarButton-scrollWrapped-icon);
 }
 
 .secondaryToolbarButton.spreadNone::before {
   -webkit-mask-image: var(--secondaryToolbarButton-spreadNone-icon);
-  mask-image: var(--secondaryToolbarButton-spreadNone-icon);
+          mask-image: var(--secondaryToolbarButton-spreadNone-icon);
 }
 
 .secondaryToolbarButton.spreadOdd::before {
   -webkit-mask-image: var(--secondaryToolbarButton-spreadOdd-icon);
-  mask-image: var(--secondaryToolbarButton-spreadOdd-icon);
+          mask-image: var(--secondaryToolbarButton-spreadOdd-icon);
 }
 
 .secondaryToolbarButton.spreadEven::before {
   -webkit-mask-image: var(--secondaryToolbarButton-spreadEven-icon);
-  mask-image: var(--secondaryToolbarButton-spreadEven-icon);
+          mask-image: var(--secondaryToolbarButton-spreadEven-icon);
 }
 
 .secondaryToolbarButton.documentProperties::before {
   -webkit-mask-image: var(--secondaryToolbarButton-documentProperties-icon);
-  mask-image: var(--secondaryToolbarButton-documentProperties-icon);
+          mask-image: var(--secondaryToolbarButton-documentProperties-icon);
 }
 
 .verticalToolbarSeparator {
@@ -2048,12 +2153,6 @@ html[dir="rtl"] .secondaryToolbarButton > span {
   margin: 5px 2px;
   width: 1px;
   background-color: var(--separator-color);
-}
-html[dir="ltr"] .verticalToolbarSeparator {
-  margin-left: 2px;
-}
-html[dir="rtl"] .verticalToolbarSeparator {
-  margin-right: 2px;
 }
 
 .horizontalToolbarSeparator {
@@ -2080,18 +2179,21 @@ html[dir="rtl"] .verticalToolbarSeparator {
   outline-style: none;
 }
 
+[dir="ltr"] .toolbarField[type="checkbox"] {
+  margin-left: 7px;
+}
+
+[dir="rtl"] .toolbarField[type="checkbox"] {
+  margin-right: 7px;
+}
+
 .toolbarField[type="checkbox"] {
   opacity: 0;
   position: absolute !important;
   left: 0;
-}
-
-html[dir="ltr"] .toolbarField[type="checkbox"] {
-  margin: 10px 0 3px 7px;
-}
-
-html[dir="rtl"] .toolbarField[type="checkbox"] {
-  margin: 10px 7px 3px 0;
+  margin: 10px 0 3px;
+  -webkit-margin-start: 7px;
+          margin-inline-start: 7px;
 }
 
 .toolbarField.pageNumber {
@@ -2130,11 +2232,17 @@ html[dir="rtl"] .toolbarField[type="checkbox"] {
   cursor: default;
 }
 
-html[dir="ltr"] #numPages.toolbarLabel {
+[dir="ltr"] #numPages.toolbarLabel {
   padding-left: 3px;
 }
-html[dir="rtl"] #numPages.toolbarLabel {
+
+[dir="rtl"] #numPages.toolbarLabel {
   padding-right: 3px;
+}
+
+#numPages.toolbarLabel {
+  -webkit-padding-start: 3px;
+          padding-inline-start: 3px;
 }
 
 #thumbnailView {
@@ -2151,20 +2259,22 @@ html[dir="rtl"] #numPages.toolbarLabel {
   outline: 0;
 }
 
-.thumbnail {
-  margin: 0 10px 5px;
-}
-html[dir="ltr"] .thumbnail {
+[dir="ltr"] .thumbnail {
   float: left;
 }
-html[dir="rtl"] .thumbnail {
+
+[dir="rtl"] .thumbnail {
   float: right;
+}
+
+.thumbnail {
+  float: inline-start;
+  margin: 0 10px 5px;
 }
 
 #thumbnailView > a:last-of-type > .thumbnail {
   margin-bottom: 10px;
 }
-
 #thumbnailView > a:last-of-type > .thumbnail:not([data-loaded]) {
   margin-bottom: 9px;
 }
@@ -2224,14 +2334,28 @@ a:focus > .thumbnail > .thumbnailSelectionRing,
           user-select: none;
 }
 
-html[dir="ltr"] .treeWithDeepNesting > .treeItem,
-html[dir="ltr"] .treeItem > .treeItems {
+[dir="ltr"] .treeWithDeepNesting > .treeItem,[dir="ltr"] 
+.treeItem > .treeItems {
   margin-left: 20px;
 }
 
-html[dir="rtl"] .treeWithDeepNesting > .treeItem,
-html[dir="rtl"] .treeItem > .treeItems {
+[dir="rtl"] .treeWithDeepNesting > .treeItem,[dir="rtl"] 
+.treeItem > .treeItems {
   margin-right: 20px;
+}
+
+.treeWithDeepNesting > .treeItem,
+.treeItem > .treeItems {
+  -webkit-margin-start: 20px;
+          margin-inline-start: 20px;
+}
+
+[dir="ltr"] .treeItem > a {
+  padding-left: 4px;
+}
+
+[dir="rtl"] .treeItem > a {
+  padding-right: 4px;
 }
 
 .treeItem > a {
@@ -2242,6 +2366,9 @@ html[dir="rtl"] .treeItem > .treeItems {
   min-width: calc(100% - 4px);
   height: auto;
   margin-bottom: 1px;
+  padding: 2px 0 5px;
+  -webkit-padding-start: 4px;
+          padding-inline-start: 4px;
   border-radius: 2px;
   color: var(--treeitem-color);
   font-size: 13px;
@@ -2252,54 +2379,56 @@ html[dir="rtl"] .treeItem > .treeItems {
   white-space: normal;
   cursor: pointer;
 }
-html[dir="ltr"] .treeItem > a {
-  padding: 2px 0 5px 4px;
-}
-html[dir="rtl"] .treeItem > a {
-  padding: 2px 4px 5px 0;
-}
 
 #layersView .treeItem > a > * {
   cursor: pointer;
 }
-html[dir="ltr"] #layersView .treeItem > a > label {
+[dir="ltr"] #layersView .treeItem > a > label {
   padding-left: 4px;
 }
-html[dir="rtl"] #layersView .treesItem > a > label {
+[dir="rtl"] #layersView .treeItem > a > label {
   padding-right: 4px;
+}
+#layersView .treeItem > a > label {
+  -webkit-padding-start: 4px;
+          padding-inline-start: 4px;
+}
+
+[dir="ltr"] .treeItemToggler {
+  float: left;
+}
+
+[dir="rtl"] .treeItemToggler {
+  float: right;
 }
 
 .treeItemToggler {
   position: relative;
+  float: inline-start;
   height: 0;
   width: 0;
   color: rgba(255, 255, 255, 0.5);
 }
+[dir="ltr"] .treeItemToggler::before {
+  right: 4px;
+}
+[dir="rtl"] .treeItemToggler::before {
+  left: 4px;
+}
 .treeItemToggler::before {
+  inset-inline-end: 4px;
   -webkit-mask-image: var(--treeitem-expanded-icon);
-  mask-image: var(--treeitem-expanded-icon);
+          mask-image: var(--treeitem-expanded-icon);
 }
 .treeItemToggler.treeItemsHidden::before {
   -webkit-mask-image: var(--treeitem-collapsed-icon);
-  mask-image: var(--treeitem-collapsed-icon);
+          mask-image: var(--treeitem-collapsed-icon);
 }
 html[dir="rtl"] .treeItemToggler.treeItemsHidden::before {
   transform: scaleX(-1);
 }
 .treeItemToggler.treeItemsHidden ~ .treeItems {
   display: none;
-}
-html[dir="ltr"] .treeItemToggler {
-  float: left;
-}
-html[dir="rtl"] .treeItemToggler {
-  float: right;
-}
-html[dir="ltr"] .treeItemToggler::before {
-  right: 4px;
-}
-html[dir="rtl"] .treeItemToggler::before {
-  left: 4px;
 }
 
 .treeItem.selected > a {
@@ -2340,7 +2469,6 @@ html[dir="rtl"] .treeItemToggler::before {
 #errorMessageLeft {
   float: left;
 }
-
 #errorMessageRight {
   float: right;
 }
@@ -2430,14 +2558,15 @@ html[dir="rtl"] .treeItemToggler::before {
 #documentPropertiesOverlay > .dialog {
   text-align: left;
 }
-#documentPropertiesOverlay .row > * {
-  min-width: 100px;
-}
-html[dir="ltr"] #documentPropertiesOverlay .row > * {
+[dir="ltr"] #documentPropertiesOverlay .row > * {
   text-align: left;
 }
-html[dir="rtl"] #documentPropertiesOverlay .row > * {
+[dir="rtl"] #documentPropertiesOverlay .row > * {
   text-align: right;
+}
+#documentPropertiesOverlay .row > * {
+  min-width: 100px;
+  text-align: start;
 }
 #documentPropertiesOverlay .row > span {
   width: 125px;
@@ -2558,7 +2687,6 @@ html[dir="rtl"] #documentPropertiesOverlay .row > * {
 }
 
 .grab-to-pan-grab {
-  cursor: url("images/grab.cur"), move !important;
   cursor: -webkit-grab !important;
   cursor: grab !important;
 }
@@ -2568,7 +2696,6 @@ html[dir="rtl"] #documentPropertiesOverlay .row > * {
 }
 .grab-to-pan-grab:active,
 .grab-to-pan-grabbing {
-  cursor: url("images/grabbing.cur"), move !important;
   cursor: -webkit-grabbing !important;
   cursor: grabbing !important;
   position: fixed;

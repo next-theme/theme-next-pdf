@@ -100,7 +100,7 @@ class WorkerMessageHandler {
       }
 
       testMessageProcessed = true;
-      handler.send("test", data instanceof Uint8Array && data[0] === 255);
+      handler.send("test", data instanceof Uint8Array);
     });
     handler.on("configure", function wphConfigure(data) {
       (0, _util.setVerbosityLevel)(data.verbosity);
@@ -2009,10 +2009,8 @@ class RefSet {
     this._set.delete(ref.toString());
   }
 
-  forEach(callback) {
-    for (const ref of this._set.values()) {
-      callback(ref);
-    }
+  [Symbol.iterator]() {
+    return this._set.values();
   }
 
   clear() {
@@ -2048,10 +2046,8 @@ class RefSetCache {
     this._map.set(ref.toString(), this.get(aliasRef));
   }
 
-  forEach(callback) {
-    for (const value of this._map.values()) {
-      callback(value);
-    }
+  [Symbol.iterator]() {
+    return this._map.values();
   }
 
   clear() {
@@ -22122,9 +22118,10 @@ class PartialEvaluator {
       }
     }
 
-    processed.forEach(ref => {
+    for (const ref of processed) {
       nonBlendModesSet.put(ref);
-    });
+    }
+
     return false;
   }
 
@@ -51308,9 +51305,9 @@ class GlobalImageCache {
   get _byteSize() {
     let byteSize = 0;
 
-    this._imageCache.forEach(imageData => {
+    for (const imageData of this._imageCache) {
       byteSize += imageData.byteSize;
-    });
+    }
 
     return byteSize;
   }
@@ -54291,42 +54288,34 @@ class Catalog {
     return (0, _util.shadow)(this, "jsActions", actions);
   }
 
-  fontFallback(id, handler) {
-    const promises = [];
-    this.fontCache.forEach(function (promise) {
-      promises.push(promise);
-    });
-    return Promise.all(promises).then(translatedFonts => {
-      for (const translatedFont of translatedFonts) {
-        if (translatedFont.loadedName === id) {
-          translatedFont.fallback(handler);
-          return;
-        }
+  async fontFallback(id, handler) {
+    const translatedFonts = await Promise.all(this.fontCache);
+
+    for (const translatedFont of translatedFonts) {
+      if (translatedFont.loadedName === id) {
+        translatedFont.fallback(handler);
+        return;
       }
-    });
+    }
   }
 
-  cleanup(manuallyTriggered = false) {
+  async cleanup(manuallyTriggered = false) {
     (0, _cleanup_helper.clearGlobalCaches)();
     this.globalImageCache.clear(manuallyTriggered);
     this.pageKidsCountCache.clear();
     this.pageIndexCache.clear();
     this.nonBlendModesSet.clear();
-    const promises = [];
-    this.fontCache.forEach(function (promise) {
-      promises.push(promise);
-    });
-    return Promise.all(promises).then(translatedFonts => {
-      for (const {
-        dict
-      } of translatedFonts) {
-        delete dict.cacheKey;
-      }
+    const translatedFonts = await Promise.all(this.fontCache);
 
-      this.fontCache.clear();
-      this.builtInCMapCache.clear();
-      this.standardFontDataCache.clear();
-    });
+    for (const {
+      dict
+    } of translatedFonts) {
+      delete dict.cacheKey;
+    }
+
+    this.fontCache.clear();
+    this.builtInCMapCache.clear();
+    this.standardFontDataCache.clear();
   }
 
   async getPageDict(pageIndex) {
@@ -73817,7 +73806,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.14.0';
-const pdfjsBuild = '9e4aaf1';
+const pdfjsBuild = 'f017f29';
 })();
 
 /******/ 	return __webpack_exports__;
