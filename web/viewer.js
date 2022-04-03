@@ -4649,92 +4649,66 @@ Object.defineProperty(exports, "__esModule", ({
 exports.OverlayManager = void 0;
 
 class OverlayManager {
-  #overlays = Object.create(null);
+  #overlays = new WeakMap();
   #active = null;
-  #keyDownBound = null;
 
   get active() {
     return this.#active;
   }
 
-  async register(name, element, callerCloseMethod = null, canForceClose = false) {
-    let container;
-
-    if (!name || !element || !(container = element.parentNode)) {
+  async register(dialog, canForceClose = false) {
+    if (typeof dialog !== "object") {
       throw new Error("Not enough parameters.");
-    } else if (this.#overlays[name]) {
+    } else if (this.#overlays.has(dialog)) {
       throw new Error("The overlay is already registered.");
     }
 
-    this.#overlays[name] = {
-      element,
-      container,
-      callerCloseMethod,
+    this.#overlays.set(dialog, {
       canForceClose
-    };
+    });
+    dialog.addEventListener("cancel", evt => {
+      this.#active = null;
+    });
   }
 
-  async unregister(name) {
-    if (!this.#overlays[name]) {
+  async unregister(dialog) {
+    if (!this.#overlays.has(dialog)) {
       throw new Error("The overlay does not exist.");
-    } else if (this.#active === name) {
+    } else if (this.#active === dialog) {
       throw new Error("The overlay cannot be removed while it is active.");
     }
 
-    delete this.#overlays[name];
+    this.#overlays.delete(dialog);
   }
 
-  async open(name) {
-    if (!this.#overlays[name]) {
+  async open(dialog) {
+    if (!this.#overlays.has(dialog)) {
       throw new Error("The overlay does not exist.");
     } else if (this.#active) {
-      if (this.#active === name) {
+      if (this.#active === dialog) {
         throw new Error("The overlay is already active.");
-      } else if (this.#overlays[name].canForceClose) {
-        this.#closeThroughCaller();
+      } else if (this.#overlays.get(dialog).canForceClose) {
+        await this.close();
       } else {
         throw new Error("Another overlay is currently active.");
       }
     }
 
-    this.#active = name;
-    this.#overlays[this.#active].element.classList.remove("hidden");
-    this.#overlays[this.#active].container.classList.remove("hidden");
-    this.#keyDownBound = this.#keyDown.bind(this);
-    window.addEventListener("keydown", this.#keyDownBound);
+    this.#active = dialog;
+    dialog.showModal();
   }
 
-  async close(name) {
-    if (!this.#overlays[name]) {
+  async close(dialog = this.#active) {
+    if (!this.#overlays.has(dialog)) {
       throw new Error("The overlay does not exist.");
     } else if (!this.#active) {
       throw new Error("The overlay is currently not active.");
-    } else if (this.#active !== name) {
+    } else if (this.#active !== dialog) {
       throw new Error("Another overlay is currently active.");
     }
 
-    this.#overlays[this.#active].container.classList.add("hidden");
-    this.#overlays[this.#active].element.classList.add("hidden");
+    dialog.close();
     this.#active = null;
-    window.removeEventListener("keydown", this.#keyDownBound);
-    this.#keyDownBound = null;
-  }
-
-  #keyDown(evt) {
-    if (this.#active && evt.keyCode === 27) {
-      this.#closeThroughCaller();
-      evt.preventDefault();
-    }
-  }
-
-  #closeThroughCaller() {
-    if (this.#overlays[this.#active].callerCloseMethod) {
-      this.#overlays[this.#active].callerCloseMethod();
-    }
-
-    if (this.#active) {
-      this.close(this.#active);
-    }
   }
 
 }
@@ -4755,9 +4729,11 @@ exports.PasswordPrompt = void 0;
 var _pdfjsLib = __webpack_require__(5);
 
 class PasswordPrompt {
+  #updateCallback = null;
+  #reason = null;
+
   constructor(options, overlayManager, l10n, isViewerEmbedded = false) {
-    this.overlayName = options.overlayName;
-    this.container = options.container;
+    this.dialog = options.dialog;
     this.label = options.label;
     this.input = options.input;
     this.submitButton = options.submitButton;
@@ -4765,8 +4741,6 @@ class PasswordPrompt {
     this.overlayManager = overlayManager;
     this.l10n = l10n;
     this._isViewerEmbedded = isViewerEmbedded;
-    this.updateCallback = null;
-    this.reason = null;
     this.submitButton.addEventListener("click", this.#verify.bind(this));
     this.cancelButton.addEventListener("click", this.#cancel.bind(this));
     this.input.addEventListener("keydown", e => {
@@ -4774,12 +4748,13 @@ class PasswordPrompt {
         this.#verify();
       }
     });
-    this.overlayManager.register(this.overlayName, this.container, this.#cancel.bind(this), true);
+    this.overlayManager.register(this.dialog, true);
+    this.dialog.addEventListener("close", this.#cancel.bind(this));
   }
 
   async open() {
-    await this.overlayManager.open(this.overlayName);
-    const passwordIncorrect = this.reason === _pdfjsLib.PasswordResponses.INCORRECT_PASSWORD;
+    await this.overlayManager.open(this.dialog);
+    const passwordIncorrect = this.#reason === _pdfjsLib.PasswordResponses.INCORRECT_PASSWORD;
 
     if (!this._isViewerEmbedded || passwordIncorrect) {
       this.input.focus();
@@ -4789,27 +4764,37 @@ class PasswordPrompt {
   }
 
   async close() {
-    await this.overlayManager.close(this.overlayName);
-    this.input.value = "";
+    if (this.overlayManager.active === this.dialog) {
+      this.overlayManager.close(this.dialog);
+    }
   }
 
   #verify() {
     const password = this.input.value;
 
     if (password?.length > 0) {
-      this.close();
-      this.updateCallback(password);
+      this.#invokeCallback(password);
     }
   }
 
   #cancel() {
+    this.#invokeCallback(new Error("PasswordPrompt cancelled."));
+  }
+
+  #invokeCallback(password) {
+    if (!this.#updateCallback) {
+      return;
+    }
+
     this.close();
-    this.updateCallback(new Error("PasswordPrompt cancelled."));
+    this.input.value = "";
+    this.#updateCallback(password);
+    this.#updateCallback = null;
   }
 
   setUpdateCallback(updateCallback, reason) {
-    this.updateCallback = updateCallback;
-    this.reason = reason;
+    this.#updateCallback = updateCallback;
+    this.#reason = reason;
   }
 
 }
@@ -5141,19 +5126,17 @@ class PDFDocumentProperties {
   #fieldData = null;
 
   constructor({
-    overlayName,
+    dialog,
     fields,
-    container,
     closeButton
   }, overlayManager, eventBus, l10n) {
-    this.overlayName = overlayName;
+    this.dialog = dialog;
     this.fields = fields;
-    this.container = container;
     this.overlayManager = overlayManager;
     this.l10n = l10n;
     this.#reset();
     closeButton.addEventListener("click", this.close.bind(this));
-    this.overlayManager.register(this.overlayName, this.container, this.close.bind(this));
+    this.overlayManager.register(this.dialog);
 
     eventBus._on("pagechanging", evt => {
       this._currentPageNumber = evt.pageNumber;
@@ -5170,7 +5153,7 @@ class PDFDocumentProperties {
   }
 
   async open() {
-    await Promise.all([this.overlayManager.open(this.overlayName), this._dataAvailableCapability.promise]);
+    await Promise.all([this.overlayManager.open(this.dialog), this._dataAvailableCapability.promise]);
     const currentPageNumber = this._currentPageNumber;
     const pagesRotation = this._pagesRotation;
 
@@ -5220,8 +5203,8 @@ class PDFDocumentProperties {
     this.#updateUI();
   }
 
-  close() {
-    this.overlayManager.close(this.overlayName);
+  async close() {
+    this.overlayManager.close(this.dialog);
   }
 
   setDocument(pdfDocument, url = null) {
@@ -5258,7 +5241,7 @@ class PDFDocumentProperties {
       return;
     }
 
-    if (this.overlayManager.active !== this.overlayName) {
+    if (this.overlayManager.active !== this.dialog) {
       return;
     }
 
@@ -8696,10 +8679,10 @@ class PDFSidebar {
     this.outlineButton.classList.toggle("toggled", isOutline);
     this.attachmentsButton.classList.toggle("toggled", isAttachments);
     this.layersButton.classList.toggle("toggled", isLayers);
-    this.thumbnailButton.setAttribute("aria-checked", `${isThumbs}`);
-    this.outlineButton.setAttribute("aria-checked", `${isOutline}`);
-    this.attachmentsButton.setAttribute("aria-checked", `${isAttachments}`);
-    this.layersButton.setAttribute("aria-checked", `${isLayers}`);
+    this.thumbnailButton.setAttribute("aria-checked", isThumbs);
+    this.outlineButton.setAttribute("aria-checked", isOutline);
+    this.attachmentsButton.setAttribute("aria-checked", isAttachments);
+    this.layersButton.setAttribute("aria-checked", isLayers);
     this.thumbnailView.classList.toggle("hidden", !isThumbs);
     this.outlineView.classList.toggle("hidden", !isOutline);
     this.attachmentsView.classList.toggle("hidden", !isAttachments);
@@ -13405,8 +13388,8 @@ class SecondaryToolbar {
             isHand = tool === _pdf_cursor_tools.CursorTool.HAND;
       cursorSelectToolButton.classList.toggle("toggled", isSelect);
       cursorHandToolButton.classList.toggle("toggled", isHand);
-      cursorSelectToolButton.setAttribute("aria-checked", `${isSelect}`);
-      cursorHandToolButton.setAttribute("aria-checked", `${isHand}`);
+      cursorSelectToolButton.setAttribute("aria-checked", isSelect);
+      cursorHandToolButton.setAttribute("aria-checked", isHand);
     });
   }
 
@@ -13430,10 +13413,10 @@ class SecondaryToolbar {
       scrollVerticalButton.classList.toggle("toggled", isVertical);
       scrollHorizontalButton.classList.toggle("toggled", isHorizontal);
       scrollWrappedButton.classList.toggle("toggled", isWrapped);
-      scrollPageButton.setAttribute("aria-checked", `${isPage}`);
-      scrollVerticalButton.setAttribute("aria-checked", `${isVertical}`);
-      scrollHorizontalButton.setAttribute("aria-checked", `${isHorizontal}`);
-      scrollWrappedButton.setAttribute("aria-checked", `${isWrapped}`);
+      scrollPageButton.setAttribute("aria-checked", isPage);
+      scrollVerticalButton.setAttribute("aria-checked", isVertical);
+      scrollHorizontalButton.setAttribute("aria-checked", isHorizontal);
+      scrollWrappedButton.setAttribute("aria-checked", isWrapped);
       const forceScrollModePage = this.pagesCount > _base_viewer.PagesCountLimit.FORCE_SCROLL_MODE_PAGE;
       scrollPageButton.disabled = forceScrollModePage;
       scrollVerticalButton.disabled = forceScrollModePage;
@@ -13469,9 +13452,9 @@ class SecondaryToolbar {
       spreadNoneButton.classList.toggle("toggled", isNone);
       spreadOddButton.classList.toggle("toggled", isOdd);
       spreadEvenButton.classList.toggle("toggled", isEven);
-      spreadNoneButton.setAttribute("aria-checked", `${isNone}`);
-      spreadOddButton.setAttribute("aria-checked", `${isOdd}`);
-      spreadEvenButton.setAttribute("aria-checked", `${isEven}`);
+      spreadNoneButton.setAttribute("aria-checked", isNone);
+      spreadOddButton.setAttribute("aria-checked", isOdd);
+      spreadEvenButton.setAttribute("aria-checked", isEven);
     }
 
     this.eventBus._on("spreadmodechanged", spreadModeChanged);
@@ -15153,6 +15136,7 @@ var _app = __webpack_require__(2);
 var _print_utils = __webpack_require__(46);
 
 let activeService = null;
+let dialog = null;
 let overlayManager = null;
 
 function renderPage(activeServiceOnEntry, pdfDocument, pageNumber, size, printResolution, optionalContentConfigPromise) {
@@ -15229,11 +15213,9 @@ PDFPrintService.prototype = {
     this.scratchCanvas = null;
     activeService = null;
     ensureOverlay().then(function () {
-      if (overlayManager.active !== "printServiceOverlay") {
-        return;
+      if (overlayManager.active === dialog) {
+        overlayManager.close(dialog);
       }
-
-      overlayManager.close("printServiceOverlay");
     });
   },
 
@@ -15323,7 +15305,7 @@ window.print = function () {
 
   ensureOverlay().then(function () {
     if (activeService) {
-      overlayManager.open("printServiceOverlay");
+      overlayManager.open(dialog);
     }
   });
 
@@ -15333,8 +15315,8 @@ window.print = function () {
     if (!activeService) {
       console.error("Expected print service to be initialized.");
       ensureOverlay().then(function () {
-        if (overlayManager.active === "printServiceOverlay") {
-          overlayManager.close("printServiceOverlay");
+        if (overlayManager.active === dialog) {
+          overlayManager.close(dialog);
         }
       });
       return;
@@ -15365,10 +15347,10 @@ function abort() {
 }
 
 function renderProgress(index, total, l10n) {
-  const progressContainer = document.getElementById("printServiceOverlay");
+  dialog ||= document.getElementById("printServiceDialog");
   const progress = Math.round(100 * index / total);
-  const progressBar = progressContainer.querySelector("progress");
-  const progressPerc = progressContainer.querySelector(".relative-progress");
+  const progressBar = dialog.querySelector("progress");
+  const progressPerc = dialog.querySelector(".relative-progress");
   progressBar.value = progress;
   l10n.get("print_progress_percent", {
     progress
@@ -15411,8 +15393,10 @@ function ensureOverlay() {
       throw new Error("The overlay manager has not yet been initialized.");
     }
 
-    overlayPromise = overlayManager.register("printServiceOverlay", document.getElementById("printServiceOverlay"), abort, true);
+    dialog ||= document.getElementById("printServiceDialog");
+    overlayPromise = overlayManager.register(dialog, true);
     document.getElementById("printCancel").onclick = abort;
+    dialog.addEventListener("close", abort);
   }
 
   return overlayPromise;
@@ -15527,7 +15511,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.14.0';
-const pdfjsBuild = 'db4f3ad';
+const pdfjsBuild = '7c8a92d';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
@@ -15628,16 +15612,14 @@ function getViewerConfiguration() {
       findNextButton: document.getElementById("findNext")
     },
     passwordOverlay: {
-      overlayName: "passwordOverlay",
-      container: document.getElementById("passwordOverlay"),
+      dialog: document.getElementById("passwordDialog"),
       label: document.getElementById("passwordText"),
       input: document.getElementById("password"),
       submitButton: document.getElementById("passwordSubmit"),
       cancelButton: document.getElementById("passwordCancel")
     },
     documentProperties: {
-      overlayName: "documentPropertiesOverlay",
-      container: document.getElementById("documentPropertiesOverlay"),
+      dialog: document.getElementById("documentPropertiesDialog"),
       closeButton: document.getElementById("documentPropertiesClose"),
       fields: {
         fileName: document.getElementById("fileNameField"),

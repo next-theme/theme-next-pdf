@@ -3400,7 +3400,7 @@ class InternalRenderTask {
 
 const version = '2.14.0';
 exports.version = version;
-const build = 'db4f3ad';
+const build = '7c8a92d';
 exports.build = build;
 
 /***/ }),
@@ -10364,8 +10364,8 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
     this.container.className = "choiceWidgetAnnotation";
     const storage = this.annotationStorage;
     const id = this.data.id;
-    storage.getValue(id, {
-      value: this.data.fieldValue.length > 0 ? this.data.fieldValue[0] : undefined
+    const storedData = storage.getValue(id, {
+      value: this.data.fieldValue
     });
     let {
       fontSize
@@ -10409,7 +10409,7 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
         optionElement.style.fontSize = fontSizeStyle;
       }
 
-      if (this.data.fieldValue.includes(option.exportValue)) {
+      if (storedData.value.includes(option.exportValue)) {
         optionElement.setAttribute("selected", true);
       }
 
@@ -10578,7 +10578,7 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
     } else {
       selectElement.addEventListener("input", function (event) {
         storage.setValue(id, {
-          value: getValue(event)
+          value: getValue(event, true)
         });
       });
     }
@@ -15805,7 +15805,7 @@ var _svg = __w_pdfjs_require__(22);
 var _xfa_layer = __w_pdfjs_require__(20);
 
 const pdfjsVersion = '2.14.0';
-const pdfjsBuild = 'db4f3ad';
+const pdfjsBuild = '7c8a92d';
 {
   if (_is_node.isNodeJS) {
     const {
