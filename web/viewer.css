@@ -660,7 +660,6 @@
   --page-border: 9px solid transparent;
   --spreadHorizontalWrapped-margin-LR: -3.5px;
   --zoom-factor: 1;
-  --viewport-scale-factor: 1;
 }
 
 @media screen and (forced-colors: active) {
@@ -1085,10 +1084,6 @@ select {
 #outerContainer.sidebarResizing #sidebarContainer {
   /* Improve responsiveness and avoid visual glitches when the sidebar is resized. */
   transition-duration: 0s;
-  /* Prevent e.g. the thumbnails being selected when the sidebar is resized. */
-  -webkit-user-select: none;
-     -moz-user-select: none;
-          user-select: none;
 }
 
 #outerContainer.sidebarMoving #sidebarContainer,
@@ -1352,7 +1347,6 @@ select {
   position: absolute;
   z-index: 10000;
   height: auto;
-  min-width: 16px;
   padding: 0 4px;
   margin: 4px 2px;
   color: rgba(217, 217, 217, 1);
@@ -1915,14 +1909,6 @@ select {
   color: var(--main-color);
 }
 
-#customScaleOption {
-  display: none;
-}
-
-#pageWidthOption {
-  border-bottom: 1px rgba(255, 255, 255, 0.5) solid;
-}
-
 .toolbarButtonSpacer {
   width: 30px;
   display: inline-block;
@@ -2277,7 +2263,6 @@ select {
 
 .toolbarField.pageNumber {
   -moz-appearance: textfield; /* hides the spinner in moz */
-  min-width: 16px;
   text-align: right;
   width: 40px;
 }
@@ -2324,13 +2309,23 @@ select {
           padding-inline-start: 3px;
 }
 
-#thumbnailView {
+#thumbnailView,
+#outlineView,
+#attachmentsView,
+#layersView {
   position: absolute;
-  width: calc(100% - 60px);
+  width: calc(100% - 8px);
   top: 0;
   bottom: 0;
-  padding: 10px 30px 0;
+  padding: 4px 4px 0;
   overflow: auto;
+  -webkit-user-select: none;
+     -moz-user-select: none;
+          user-select: none;
+}
+#thumbnailView {
+  width: calc(100% - 60px);
+  padding: 10px 30px 0;
 }
 
 #thumbnailView > a:active,
@@ -2399,20 +2394,6 @@ a:focus > .thumbnail > .thumbnailSelectionRing,
   color: rgba(255, 255, 255, 1);
 }
 
-#outlineView,
-#attachmentsView,
-#layersView {
-  position: absolute;
-  width: calc(100% - 8px);
-  top: 0;
-  bottom: 0;
-  padding: 4px 4px 0;
-  overflow: auto;
-  -webkit-user-select: none;
-     -moz-user-select: none;
-          user-select: none;
-}
-
 [dir="ltr"] .treeWithDeepNesting > .treeItem,[dir="ltr"] 
 .treeItem > .treeItems {
   margin-left: 20px;
@@ -2440,7 +2421,6 @@ a:focus > .thumbnail > .thumbnailSelectionRing,
 .treeItem > a {
   text-decoration: none;
   display: inline-block;
-  min-width: 95%;
   /* Subtract the right padding (left, in RTL mode) of the container: */
   min-width: calc(100% - 4px);
   height: auto;
@@ -2534,7 +2514,7 @@ a:focus > .thumbnail > .thumbnailSelectionRing,
 }
 
 #errorWrapper {
-  background: none repeat scroll 0 0 var(--errorWrapper-bg-color);
+  background-color: var(--errorWrapper-bg-color);
   color: var(--main-color);
   left: 0;
   position: absolute;
@@ -2582,14 +2562,9 @@ dialog {
 }
 dialog::-webkit-backdrop {
   background-color: rgba(0, 0, 0, 0.2);
-  -webkit-user-select: none;
-          user-select: none;
 }
 dialog::backdrop {
   background-color: rgba(0, 0, 0, 0.2);
-  -webkit-user-select: none;
-     -moz-user-select: none;
-          user-select: none;
 }
 
 dialog > .row {
@@ -2657,18 +2632,8 @@ dialog :link {
   clear: both;
 }
 
-.fileInput {
-  background: rgba(255, 255, 255, 1);
-  color: rgba(0, 0, 0, 1);
-  margin-top: 5px;
-  visibility: hidden;
-  position: fixed;
-  right: 0;
-  top: 0;
-}
-
 #PDFBug {
-  background: none repeat scroll 0 0 rgba(255, 255, 255, 1);
+  background-color: rgba(255, 255, 255, 1);
   border: 1px solid rgba(102, 102, 102, 1);
   position: fixed;
   top: 32px;
@@ -2697,12 +2662,9 @@ dialog :link {
 #PDFBug button.active {
   font-weight: bold;
 }
-.debuggerShowText {
-  background: none repeat scroll 0 0 rgba(255, 255, 0, 1);
-  color: rgba(0, 0, 255, 1);
-}
+.debuggerShowText,
 .debuggerHideText:hover {
-  background: none repeat scroll 0 0 rgba(255, 255, 0, 1);
+  background-color: rgba(255, 255, 0, 1);
 }
 #PDFBug .stats {
   font-family: courier;
@@ -2832,10 +2794,6 @@ dialog :link {
     display: block;
   }
 
-  .fileInput {
-    display: none;
-  }
-
   /* Rules for browsers that support PDF.js printing */
   body[data-pdfjsprinting] #outerContainer {
     display: none;
@@ -2904,26 +2862,14 @@ dialog :link {
   #sidebarContainer {
     background-color: var(--sidebar-narrow-bg-color);
   }
-
   [dir="ltr"] #outerContainer.sidebarOpen #viewerContainer {
     left: 0 !important;
   }
-
   [dir="rtl"] #outerContainer.sidebarOpen #viewerContainer {
     right: 0 !important;
   }
-
   #outerContainer.sidebarOpen #viewerContainer {
     inset-inline-start: 0 !important;
-  }
-
-  #outerContainer .hiddenLargeView,
-  #outerContainer .hiddenMediumView {
-    display: inherit;
-  }
-  #outerContainer .visibleLargeView,
-  #outerContainer .visibleMediumView {
-    display: none;
   }
 }
 
