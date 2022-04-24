@@ -1,6 +1,6 @@
 /**
  * @licstart The following is the entire license notice for the
- * Javascript code in this page
+ * JavaScript code in this page
  *
  * Copyright 2022 Mozilla Foundation
  *
@@ -17,7 +17,7 @@
  * limitations under the License.
  *
  * @licend The above is the entire license notice for the
- * Javascript code in this page
+ * JavaScript code in this page
  */
 
 (function webpackUniversalModuleDefinition(root, factory) {
@@ -1407,6 +1407,60 @@ class Util {
     return `#${hexNumbers[r]}${hexNumbers[g]}${hexNumbers[b]}`;
   }
 
+  static scaleMinMax(transform, minMax) {
+    let temp;
+
+    if (transform[0]) {
+      if (transform[0] < 0) {
+        temp = minMax[0];
+        minMax[0] = minMax[1];
+        minMax[1] = temp;
+      }
+
+      minMax[0] *= transform[0];
+      minMax[1] *= transform[0];
+
+      if (transform[3] < 0) {
+        temp = minMax[2];
+        minMax[2] = minMax[3];
+        minMax[3] = temp;
+      }
+
+      minMax[2] *= transform[3];
+      minMax[3] *= transform[3];
+    } else {
+      temp = minMax[0];
+      minMax[0] = minMax[2];
+      minMax[2] = temp;
+      temp = minMax[1];
+      minMax[1] = minMax[3];
+      minMax[3] = temp;
+
+      if (transform[1] < 0) {
+        temp = minMax[2];
+        minMax[2] = minMax[3];
+        minMax[3] = temp;
+      }
+
+      minMax[2] *= transform[1];
+      minMax[3] *= transform[1];
+
+      if (transform[2] < 0) {
+        temp = minMax[0];
+        minMax[0] = minMax[1];
+        minMax[1] = temp;
+      }
+
+      minMax[0] *= transform[2];
+      minMax[1] *= transform[2];
+    }
+
+    minMax[0] += transform[4];
+    minMax[1] += transform[4];
+    minMax[2] += transform[5];
+    minMax[3] += transform[5];
+  }
+
   static transform(m1, m2) {
     return [m1[0] * m2[0] + m1[2] * m2[1], m1[1] * m2[0] + m1[3] * m2[1], m1[0] * m2[2] + m1[2] * m2[3], m1[1] * m2[2] + m1[3] * m2[3], m1[0] * m2[4] + m1[2] * m2[5] + m1[4], m1[1] * m2[4] + m1[3] * m2[5] + m1[5]];
   }
@@ -2124,7 +2178,8 @@ class BasePdfManager {
   }
 
   get docBaseUrl() {
-    return this._docBaseUrl;
+    const catalog = this.pdfDocument.catalog;
+    return (0, _util.shadow)(this, "docBaseUrl", catalog.baseUrl || this._docBaseUrl);
   }
 
   onLoadedStream() {
@@ -18172,7 +18227,7 @@ const LINE_FACTOR = 1.35;
 
 class AnnotationFactory {
   static create(xref, ref, pdfManager, idFactory, collectFields) {
-    return Promise.all([pdfManager.ensureCatalog("acroForm"), pdfManager.ensureDoc("xfaDatasets"), collectFields ? this._getPageIndex(xref, ref, pdfManager) : -1]).then(([acroForm, xfaDatasets, pageIndex]) => pdfManager.ensure(this, "_create", [xref, ref, pdfManager, idFactory, acroForm, xfaDatasets, collectFields, pageIndex]));
+    return Promise.all([pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("baseUrl"), pdfManager.ensureDoc("xfaDatasets"), collectFields ? this._getPageIndex(xref, ref, pdfManager) : -1]).then(([acroForm, baseUrl, xfaDatasets, pageIndex]) => pdfManager.ensure(this, "_create", [xref, ref, pdfManager, idFactory, acroForm, xfaDatasets, collectFields, pageIndex]));
   }
 
   static _create(xref, ref, pdfManager, idFactory, acroForm, xfaDatasets, collectFields, pageIndex = -1) {
@@ -22504,15 +22559,11 @@ class PartialEvaluator {
       optionalContent = await this.parseMarkedContentProps(dict.get("OC"), resources);
     }
 
-    if (optionalContent !== undefined) {
-      operatorList.addOp(_util.OPS.beginMarkedContentProps, ["OC", optionalContent]);
-    }
-
     const imageMask = dict.get("IM", "ImageMask") || false;
-    const interpolate = dict.get("I", "Interpolate");
     let imgData, args;
 
     if (imageMask) {
+      const interpolate = dict.get("I", "Interpolate");
       const bitStrideLength = w + 7 >> 3;
       const imgArray = image.getBytes(bitStrideLength * h, true);
       const decode = dict.getArray("D", "Decode");
@@ -22528,17 +22579,14 @@ class PartialEvaluator {
         });
         imgData.cached = !!cacheKey;
         args = [imgData];
-        operatorList.addOp(_util.OPS.paintImageMaskXObject, args);
+        operatorList.addImageOps(_util.OPS.paintImageMaskXObject, args, optionalContent);
 
         if (cacheKey) {
           localImageCache.set(cacheKey, imageRef, {
             fn: _util.OPS.paintImageMaskXObject,
-            args
+            args,
+            optionalContent
           });
-        }
-
-        if (optionalContent !== undefined) {
-          operatorList.addOp(_util.OPS.endMarkedContent, []);
         }
 
         return;
@@ -22554,17 +22602,14 @@ class PartialEvaluator {
       });
 
       if (imgData.isSingleOpaquePixel) {
-        operatorList.addOp(_util.OPS.paintSolidColorImageMask, []);
+        operatorList.addImageOps(_util.OPS.paintSolidColorImageMask, [], optionalContent);
 
         if (cacheKey) {
           localImageCache.set(cacheKey, imageRef, {
             fn: _util.OPS.paintSolidColorImageMask,
-            args: []
+            args: [],
+            optionalContent
           });
-        }
-
-        if (optionalContent !== undefined) {
-          operatorList.addOp(_util.OPS.endMarkedContent, []);
         }
 
         return;
@@ -22579,19 +22624,17 @@ class PartialEvaluator {
         data: objId,
         width: imgData.width,
         height: imgData.height,
-        interpolate: imgData.interpolate
+        interpolate: imgData.interpolate,
+        count: 1
       }];
-      operatorList.addOp(_util.OPS.paintImageMaskXObject, args);
+      operatorList.addImageOps(_util.OPS.paintImageMaskXObject, args, optionalContent);
 
       if (cacheKey) {
         localImageCache.set(cacheKey, imageRef, {
           fn: _util.OPS.paintImageMaskXObject,
-          args
+          args,
+          optionalContent
         });
-      }
-
-      if (optionalContent !== undefined) {
-        operatorList.addOp(_util.OPS.endMarkedContent, []);
       }
 
       return;
@@ -22611,12 +22654,7 @@ class PartialEvaluator {
         localColorSpaceCache
       });
       imgData = imageObj.createImageData(true);
-      operatorList.addOp(_util.OPS.paintInlineImageXObject, [imgData]);
-
-      if (optionalContent !== undefined) {
-        operatorList.addOp(_util.OPS.endMarkedContent, []);
-      }
-
+      operatorList.addImageOps(_util.OPS.paintInlineImageXObject, [imgData], optionalContent);
       return;
     }
 
@@ -22656,12 +22694,13 @@ class PartialEvaluator {
       return this._sendImgData(objId, null, cacheGlobally);
     });
 
-    operatorList.addOp(_util.OPS.paintImageXObject, args);
+    operatorList.addImageOps(_util.OPS.paintImageXObject, args, optionalContent);
 
     if (cacheKey) {
       localImageCache.set(cacheKey, imageRef, {
         fn: _util.OPS.paintImageXObject,
-        args
+        args,
+        optionalContent
       });
 
       if (imageRef) {
@@ -22673,14 +22712,11 @@ class PartialEvaluator {
             objId,
             fn: _util.OPS.paintImageXObject,
             args,
+            optionalContent,
             byteSize: 0
           });
         }
       }
-    }
-
-    if (optionalContent !== undefined) {
-      operatorList.addOp(_util.OPS.endMarkedContent, []);
     }
   }
 
@@ -23142,13 +23178,16 @@ class PartialEvaluator {
       args = [];
     }
 
+    let minMax;
+
     if (lastIndex < 0 || operatorList.fnArray[lastIndex] !== _util.OPS.constructPath) {
       if (parsingText) {
         (0, _util.warn)(`Encountered path operator "${fn}" inside of a text object.`);
         operatorList.addOp(_util.OPS.save, null);
       }
 
-      operatorList.addOp(_util.OPS.constructPath, [[fn], args]);
+      minMax = [Infinity, -Infinity, Infinity, -Infinity];
+      operatorList.addOp(_util.OPS.constructPath, [[fn], args, minMax]);
 
       if (parsingText) {
         operatorList.addOp(_util.OPS.restore, null);
@@ -23157,6 +23196,24 @@ class PartialEvaluator {
       const opArgs = operatorList.argsArray[lastIndex];
       opArgs[0].push(fn);
       Array.prototype.push.apply(opArgs[1], args);
+      minMax = opArgs[2];
+    }
+
+    switch (fn) {
+      case _util.OPS.rectangle:
+        minMax[0] = Math.min(minMax[0], args[0], args[0] + args[2]);
+        minMax[1] = Math.max(minMax[1], args[0], args[0] + args[2]);
+        minMax[2] = Math.min(minMax[2], args[1], args[1] + args[3]);
+        minMax[3] = Math.max(minMax[3], args[1], args[1] + args[3]);
+        break;
+
+      case _util.OPS.moveTo:
+      case _util.OPS.lineTo:
+        minMax[0] = Math.min(minMax[0], args[0]);
+        minMax[1] = Math.max(minMax[1], args[0]);
+        minMax[2] = Math.min(minMax[2], args[1]);
+        minMax[3] = Math.max(minMax[3], args[1]);
+        break;
     }
   }
 
@@ -23434,7 +23491,12 @@ class PartialEvaluator {
               const localImage = localImageCache.getByName(name);
 
               if (localImage) {
-                operatorList.addOp(localImage.fn, localImage.args);
+                operatorList.addImageOps(localImage.fn, localImage.args, localImage.optionalContent);
+
+                if (localImage.fn === _util.OPS.paintImageMaskXObject && localImage.args[0] && localImage.args[0].count > 0) {
+                  localImage.args[0].count++;
+                }
+
                 args = null;
                 continue;
               }
@@ -23451,7 +23513,12 @@ class PartialEvaluator {
                 const localImage = localImageCache.getByRef(xobj);
 
                 if (localImage) {
-                  operatorList.addOp(localImage.fn, localImage.args);
+                  operatorList.addImageOps(localImage.fn, localImage.args, localImage.optionalContent);
+
+                  if (localImage.fn === _util.OPS.paintImageMaskXObject && localImage.args[0] && localImage.args[0].count > 0) {
+                    localImage.args[0].count++;
+                  }
+
                   resolveXObject();
                   return;
                 }
@@ -23460,7 +23527,7 @@ class PartialEvaluator {
 
                 if (globalImage) {
                   operatorList.addDependency(globalImage.objId);
-                  operatorList.addOp(globalImage.fn, globalImage.args);
+                  operatorList.addImageOps(globalImage.fn, globalImage.args, globalImage.optionalContent);
                   resolveXObject();
                   return;
                 }
@@ -23542,7 +23609,12 @@ class PartialEvaluator {
               const localImage = localImageCache.getByName(cacheKey);
 
               if (localImage) {
-                operatorList.addOp(localImage.fn, localImage.args);
+                operatorList.addImageOps(localImage.fn, localImage.args, localImage.optionalContent);
+
+                if (localImage.fn === _util.OPS.paintImageMaskXObject && localImage.args[0] && localImage.args[0].count > 0) {
+                  localImage.args[0].count++;
+                }
+
                 args = null;
                 continue;
               }
@@ -24874,7 +24946,13 @@ class PartialEvaluator {
       } else if (encoding instanceof _primitives.Name) {
         baseEncodingName = encoding.name;
       } else {
-        throw new _util.FormatError("Encoding is not a Name nor a Dict");
+        const msg = "Encoding is not a Name nor a Dict";
+
+        if (!this.options.ignoreErrors) {
+          throw new _util.FormatError(msg);
+        }
+
+        (0, _util.warn)(msg);
       }
 
       if (baseEncodingName !== "MacRomanEncoding" && baseEncodingName !== "MacExpertEncoding" && baseEncodingName !== "WinAnsiEncoding") {
@@ -52339,6 +52417,8 @@ addState(InitialState, [_util.OPS.save, _util.OPS.transform, _util.OPS.paintImag
         data: maskParams.data,
         width: maskParams.width,
         height: maskParams.height,
+        interpolate: maskParams.interpolate,
+        count: maskParams.count,
         transform: transformArgs
       });
     }
@@ -52659,6 +52739,18 @@ class OperatorList {
       } else if (this.weight >= OperatorList.CHUNK_SIZE_ABOUT && (fn === _util.OPS.restore || fn === _util.OPS.endText)) {
         this.flush();
       }
+    }
+  }
+
+  addImageOps(fn, args, optionalContent) {
+    if (optionalContent !== undefined) {
+      this.addOp(_util.OPS.beginMarkedContentProps, ["OC", optionalContent]);
+    }
+
+    this.addOp(fn, args);
+
+    if (optionalContent !== undefined) {
+      this.addOp(_util.OPS.endMarkedContent, []);
     }
   }
 
@@ -52996,12 +53088,16 @@ class PDFImage {
     const mask = image.dict.get("Mask");
 
     if (smask) {
-      smaskData = smask;
+      if (smask instanceof _base_stream.BaseStream) {
+        smaskData = smask;
+      } else {
+        (0, _util.warn)("Unsupported /SMask format.");
+      }
     } else if (mask) {
       if (mask instanceof _base_stream.BaseStream || Array.isArray(mask)) {
         maskData = mask;
       } else {
-        (0, _util.warn)("Unsupported mask format.");
+        (0, _util.warn)("Unsupported /Mask format.");
       }
     }
 
@@ -54984,6 +55080,26 @@ class Catalog {
     });
 
     return next(pageRef);
+  }
+
+  get baseUrl() {
+    const uri = this._catDict.get("URI");
+
+    if (uri instanceof _primitives.Dict) {
+      const base = uri.get("Base");
+
+      if (typeof base === "string") {
+        const absoluteUrl = (0, _util.createValidAbsoluteUrl)(base, null, {
+          tryConvertEncoding: true
+        });
+
+        if (absoluteUrl) {
+          return (0, _util.shadow)(this, "baseUrl", absoluteUrl.href);
+        }
+      }
+    }
+
+    return (0, _util.shadow)(this, "baseUrl", null);
   }
 
   static parseDestDictionary(params) {
@@ -74242,7 +74358,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.14.0';
-const pdfjsBuild = 'b73a6cc';
+const pdfjsBuild = '752dee5';
 })();
 
 /******/ 	return __webpack_exports__;
