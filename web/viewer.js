@@ -2278,19 +2278,15 @@ function webViewerInitialized() {
   }, true);
 
   try {
-    webViewerOpenFileViaURL(file);
+    if (file) {
+      PDFViewerApplication.open(file);
+    } else {
+      PDFViewerApplication._hideViewBookmark();
+    }
   } catch (reason) {
     PDFViewerApplication.l10n.get("loading_error").then(msg => {
       PDFViewerApplication._documentError(msg, reason);
     });
-  }
-}
-
-function webViewerOpenFileViaURL(file) {
-  if (file) {
-    PDFViewerApplication.open(file);
-  } else {
-    PDFViewerApplication._hideViewBookmark();
   }
 }
 
@@ -2456,9 +2452,8 @@ function webViewerHashchange(evt) {
   }
 }
 
-let webViewerFileInputChange, webViewerOpenFile;
 {
-  webViewerFileInputChange = function (evt) {
+  var webViewerFileInputChange = function (evt) {
     if (PDFViewerApplication.pdfViewer?.isInPresentationMode) {
       return;
     }
@@ -2476,7 +2471,7 @@ let webViewerFileInputChange, webViewerOpenFile;
     PDFViewerApplication.open(url);
   };
 
-  webViewerOpenFile = function (evt) {
+  var webViewerOpenFile = function (evt) {
     const fileInput = PDFViewerApplication.appConfig.openFileInput;
     fileInput.click();
   };
@@ -13132,10 +13127,6 @@ class SecondaryToolbar {
       eventName: "presentationmode",
       close: true
     }, {
-      element: options.openFileButton,
-      eventName: "openfile",
-      close: true
-    }, {
       element: options.printButton,
       eventName: "print",
       close: true
@@ -13231,6 +13222,11 @@ class SecondaryToolbar {
       eventName: "documentproperties",
       close: true
     }];
+    this.buttons.push({
+      element: options.openFileButton,
+      eventName: "openfile",
+      close: true
+    });
     this.items = {
       firstPage: options.firstPageButton,
       lastPage: options.lastPageButton,
@@ -13484,9 +13480,6 @@ class Toolbar {
       element: options.zoomOut,
       eventName: "zoomout"
     }, {
-      element: options.openFile,
-      eventName: "openfile"
-    }, {
       element: options.print,
       eventName: "print"
     }, {
@@ -13499,6 +13492,10 @@ class Toolbar {
       element: options.viewBookmark,
       eventName: null
     }];
+    this.buttons.push({
+      element: options.openFile,
+      eventName: "openfile"
+    });
     this.items = {
       numPages: options.numPages,
       pageNumber: options.pageNumber,
@@ -15444,7 +15441,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.14.0';
-const pdfjsBuild = '752dee5';
+const pdfjsBuild = '75ac897';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;

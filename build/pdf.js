@@ -3475,7 +3475,7 @@ class InternalRenderTask {
 
 const version = '2.14.0';
 exports.version = version;
-const build = '752dee5';
+const build = '75ac897';
 exports.build = build;
 
 /***/ }),
@@ -5027,6 +5027,45 @@ class CachedCanvases {
 
 }
 
+function drawImageAtIntegerCoords(ctx, srcImg, srcX, srcY, srcW, srcH, destX, destY, destW, destH) {
+  const [a, b, c, d, tx, ty] = ctx.mozCurrentTransform;
+
+  if (b === 0 && c === 0) {
+    const tlX = destX * a + tx;
+    const rTlX = Math.round(tlX);
+    const tlY = destY * d + ty;
+    const rTlY = Math.round(tlY);
+    const brX = (destX + destW) * a + tx;
+    const rWidth = Math.abs(Math.round(brX) - rTlX) || 1;
+    const brY = (destY + destH) * d + ty;
+    const rHeight = Math.abs(Math.round(brY) - rTlY) || 1;
+    ctx.setTransform(Math.sign(a), 0, 0, Math.sign(d), rTlX, rTlY);
+    ctx.drawImage(srcImg, srcX, srcY, srcW, srcH, 0, 0, rWidth, rHeight);
+    ctx.setTransform(a, b, c, d, tx, ty);
+    return [rWidth, rHeight];
+  }
+
+  if (a === 0 && d === 0) {
+    const tlX = destY * c + tx;
+    const rTlX = Math.round(tlX);
+    const tlY = destX * b + ty;
+    const rTlY = Math.round(tlY);
+    const brX = (destY + destH) * c + tx;
+    const rWidth = Math.abs(Math.round(brX) - rTlX) || 1;
+    const brY = (destX + destW) * b + ty;
+    const rHeight = Math.abs(Math.round(brY) - rTlY) || 1;
+    ctx.setTransform(0, Math.sign(b), Math.sign(c), 0, rTlX, rTlY);
+    ctx.drawImage(srcImg, srcX, srcY, srcW, srcH, 0, 0, rHeight, rWidth);
+    ctx.setTransform(a, b, c, d, tx, ty);
+    return [rHeight, rWidth];
+  }
+
+  ctx.drawImage(srcImg, srcX, srcY, srcW, srcH, destX, destY, destW, destH);
+  const scaleX = Math.hypot(a, b);
+  const scaleY = Math.hypot(c, d);
+  return [scaleX * destW, scaleY * destH];
+}
+
 function compileType3Glyph(imgData) {
   const POINT_TO_PROCESS_LIMIT = 1000;
   const POINT_TYPES = new Uint8Array([0, 2, 4, 0, 1, 0, 5, 4, 8, 10, 0, 8, 0, 2, 1, 0]);
@@ -5961,8 +6000,8 @@ class CanvasGraphics {
 
     const rect = _util.Util.normalizeRect([cord1[0], cord1[1], cord2[0], cord2[1]]);
 
-    const drawnWidth = Math.ceil(rect[2] - rect[0]);
-    const drawnHeight = Math.ceil(rect[3] - rect[1]);
+    const drawnWidth = Math.round(rect[2] - rect[0]) || 1;
+    const drawnHeight = Math.round(rect[3] - rect[1]) || 1;
     const fillCanvas = this.cachedCanvases.getCanvas("fillCanvas", drawnWidth, drawnHeight, true);
     const fillCtx = fillCanvas.context;
     const offsetX = Math.min(cord1[0], cord2[0]);
@@ -5980,7 +6019,7 @@ class CanvasGraphics {
     }
 
     fillCtx.imageSmoothingEnabled = getImageSmoothingEnabled(fillCtx.mozCurrentTransform, img.interpolate);
-    fillCtx.drawImage(scaled, 0, 0, scaled.width, scaled.height, 0, 0, width, height);
+    drawImageAtIntegerCoords(fillCtx, scaled, 0, 0, scaled.width, scaled.height, 0, 0, width, height);
     fillCtx.globalCompositeOperation = "source-in";
 
     const inverse = _util.Util.transform(fillCtx.mozCurrentTransformInverse, [1, 0, 0, 1, -offsetX, -offsetY]);
@@ -7261,7 +7300,7 @@ class CanvasGraphics {
       ctx.save();
       ctx.transform.apply(ctx, image.transform);
       ctx.scale(1, -1);
-      ctx.drawImage(maskCanvas.canvas, 0, 0, width, height, 0, -1, 1, 1);
+      drawImageAtIntegerCoords(ctx, maskCanvas.canvas, 0, 0, width, height, 0, -1, 1, 1);
       ctx.restore();
     }
 
@@ -7336,7 +7375,7 @@ class CanvasGraphics {
     const scaled = this._scaleImage(imgToPaint, ctx.mozCurrentTransformInverse);
 
     ctx.imageSmoothingEnabled = getImageSmoothingEnabled(ctx.mozCurrentTransform, imgData.interpolate);
-    ctx.drawImage(scaled.img, 0, 0, scaled.paintWidth, scaled.paintHeight, 0, -height, width, height);
+    const [rWidth, rHeight] = drawImageAtIntegerCoords(ctx, scaled.img, 0, 0, scaled.paintWidth, scaled.paintHeight, 0, -height, width, height);
 
     if (this.imageLayer) {
       const position = this.getCanvasPosition(0, -height);
@@ -7344,8 +7383,8 @@ class CanvasGraphics {
         imgData,
         left: position[0],
         top: position[1],
-        width: width / ctx.mozCurrentTransformInverse[0],
-        height: height / ctx.mozCurrentTransformInverse[3]
+        width: rWidth,
+        height: rHeight
       });
     }
 
@@ -7370,7 +7409,7 @@ class CanvasGraphics {
       ctx.save();
       ctx.transform.apply(ctx, entry.transform);
       ctx.scale(1, -1);
-      ctx.drawImage(tmpCanvas.canvas, entry.x, entry.y, entry.w, entry.h, 0, -1, 1, 1);
+      drawImageAtIntegerCoords(ctx, tmpCanvas.canvas, entry.x, entry.y, entry.w, entry.h, 0, -1, 1, 1);
 
       if (this.imageLayer) {
         const position = this.getCanvasPosition(entry.x, entry.y);
@@ -16064,7 +16103,7 @@ var _svg = __w_pdfjs_require__(23);
 var _xfa_layer = __w_pdfjs_require__(21);
 
 const pdfjsVersion = '2.14.0';
-const pdfjsBuild = '752dee5';
+const pdfjsBuild = '75ac897';
 {
   if (_is_node.isNodeJS) {
     const {
