@@ -655,6 +655,7 @@
 }
 
 :root {
+  --viewer-container-height: 0;
   --pdfViewer-padding-bottom: 0;
   --page-margin: 1px auto -8px;
   --page-border: 9px solid transparent;
@@ -696,7 +697,7 @@
 .pdfViewer .dummyPage {
   position: relative;
   width: 0;
-  /* The height is set via JS, see `BaseViewer.#ensurePageViewVisible`. */
+  height: var(--viewer-container-height);
 }
 
 .pdfViewer.removePageBorders .page {
@@ -1411,7 +1412,8 @@ select {
 
 #secondaryToolbarButtonContainer {
   max-width: 220px;
-  max-height: 400px;
+  min-height: 26px;
+  max-height: calc(var(--viewer-container-height) - 40px);
   overflow-y: auto;
   margin-bottom: -4px;
 }

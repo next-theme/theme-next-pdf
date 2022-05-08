@@ -1098,9 +1098,7 @@ var _display_utils = __w_pdfjs_require__(5);
 
 var _font_loader = __w_pdfjs_require__(7);
 
-var _node_utils = __w_pdfjs_require__(8);
-
-var _annotation_storage = __w_pdfjs_require__(9);
+var _annotation_storage = __w_pdfjs_require__(8);
 
 var _canvas = __w_pdfjs_require__(10);
 
@@ -1120,12 +1118,25 @@ var _xfa_text = __w_pdfjs_require__(18);
 
 const DEFAULT_RANGE_CHUNK_SIZE = 65536;
 const RENDERING_CANCELLED_TIMEOUT = 100;
-const DefaultCanvasFactory = _is_node.isNodeJS ? _node_utils.NodeCanvasFactory : _display_utils.DOMCanvasFactory;
+let DefaultCanvasFactory = _display_utils.DOMCanvasFactory;
 exports.DefaultCanvasFactory = DefaultCanvasFactory;
-const DefaultCMapReaderFactory = _is_node.isNodeJS ? _node_utils.NodeCMapReaderFactory : _display_utils.DOMCMapReaderFactory;
+let DefaultCMapReaderFactory = _display_utils.DOMCMapReaderFactory;
 exports.DefaultCMapReaderFactory = DefaultCMapReaderFactory;
-const DefaultStandardFontDataFactory = _is_node.isNodeJS ? _node_utils.NodeStandardFontDataFactory : _display_utils.DOMStandardFontDataFactory;
+let DefaultStandardFontDataFactory = _display_utils.DOMStandardFontDataFactory;
 exports.DefaultStandardFontDataFactory = DefaultStandardFontDataFactory;
+
+if (_is_node.isNodeJS) {
+  const {
+    NodeCanvasFactory,
+    NodeCMapReaderFactory,
+    NodeStandardFontDataFactory
+  } = __w_pdfjs_require__(19);
+
+  exports.DefaultCanvasFactory = DefaultCanvasFactory = NodeCanvasFactory;
+  exports.DefaultCMapReaderFactory = DefaultCMapReaderFactory = NodeCMapReaderFactory;
+  exports.DefaultStandardFontDataFactory = DefaultStandardFontDataFactory = NodeStandardFontDataFactory;
+}
+
 let createPDFNetworkStream;
 
 function setPDFNetworkStreamFactory(pdfNetworkStreamFactory) {
@@ -1756,7 +1767,8 @@ class PDFPageProxy {
     canvasFactory = null,
     background = null,
     optionalContentConfigPromise = null,
-    annotationCanvasMap = null
+    annotationCanvasMap = null,
+    pageColors = null
   }) {
     if (arguments[0]?.renderInteractiveForms !== undefined) {
       (0, _display_utils.deprecated)("render no longer accepts the `renderInteractiveForms`-option, " + "please use the `annotationMode`-option instead.");
@@ -1862,7 +1874,8 @@ class PDFPageProxy {
       pageIndex: this._pageIndex,
       canvasFactory: canvasFactoryInstance,
       useRequestAnimationFrame: !intentPrint,
-      pdfBug: this._pdfBug
+      pdfBug: this._pdfBug,
+      pageColors
     });
     (intentState.renderTasks ||= new Set()).add(internalRenderTask);
     const renderTask = internalRenderTask.task;
@@ -2594,7 +2607,7 @@ class WorkerTransport {
 
   getRenderingIntent(intent, annotationMode = _util.AnnotationMode.ENABLE, isOpList = false) {
     let renderingIntent = _util.RenderingIntentFlag.DISPLAY;
-    let lastModified = "";
+    let annotationHash = "";
 
     switch (intent) {
       case "any":
@@ -2626,7 +2639,7 @@ class WorkerTransport {
 
       case _util.AnnotationMode.ENABLE_STORAGE:
         renderingIntent += _util.RenderingIntentFlag.ANNOTATIONS_STORAGE;
-        lastModified = this.annotationStorage.lastModified;
+        annotationHash = this.annotationStorage.hash;
         break;
 
       default:
@@ -2639,7 +2652,7 @@ class WorkerTransport {
 
     return {
       renderingIntent,
-      cacheKey: `${renderingIntent}_${lastModified}`
+      cacheKey: `${renderingIntent}_${annotationHash}`
     };
   }
 
@@ -3316,7 +3329,8 @@ class InternalRenderTask {
     pageIndex,
     canvasFactory,
     useRequestAnimationFrame = false,
-    pdfBug = false
+    pdfBug = false,
+    pageColors = null
   }) {
     this.callback = callback;
     this.params = params;
@@ -3328,6 +3342,7 @@ class InternalRenderTask {
     this._pageIndex = pageIndex;
     this.canvasFactory = canvasFactory;
     this._pdfBug = pdfBug;
+    this.pageColors = pageColors;
     this.running = false;
     this.graphicsReadyCallback = null;
     this.graphicsReady = false;
@@ -3375,7 +3390,7 @@ class InternalRenderTask {
       imageLayer,
       background
     } = this.params;
-    this.gfx = new _canvas.CanvasGraphics(canvasContext, this.commonObjs, this.objs, this.canvasFactory, imageLayer, optionalContentConfig, this.annotationCanvasMap);
+    this.gfx = new _canvas.CanvasGraphics(canvasContext, this.commonObjs, this.objs, this.canvasFactory, imageLayer, optionalContentConfig, this.annotationCanvasMap, this.pageColors);
     this.gfx.beginDrawing({
       transform,
       viewport,
@@ -3475,7 +3490,7 @@ class InternalRenderTask {
 
 const version = '2.14.0';
 exports.version = version;
-const build = '75ac897';
+const build = 'f8838eb';
 exports.build = build;
 
 /***/ }),
@@ -4539,96 +4554,15 @@ exports.FontFaceObject = FontFaceObject;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.NodeStandardFontDataFactory = exports.NodeCanvasFactory = exports.NodeCMapReaderFactory = void 0;
-
-var _base_factory = __w_pdfjs_require__(6);
-
-var _is_node = __w_pdfjs_require__(3);
-
-var _util = __w_pdfjs_require__(1);
-
-let NodeCanvasFactory = class {
-  constructor() {
-    (0, _util.unreachable)("Not implemented: NodeCanvasFactory");
-  }
-
-};
-exports.NodeCanvasFactory = NodeCanvasFactory;
-let NodeCMapReaderFactory = class {
-  constructor() {
-    (0, _util.unreachable)("Not implemented: NodeCMapReaderFactory");
-  }
-
-};
-exports.NodeCMapReaderFactory = NodeCMapReaderFactory;
-let NodeStandardFontDataFactory = class {
-  constructor() {
-    (0, _util.unreachable)("Not implemented: NodeStandardFontDataFactory");
-  }
-
-};
-exports.NodeStandardFontDataFactory = NodeStandardFontDataFactory;
-
-if (_is_node.isNodeJS) {
-  const fetchData = function (url) {
-    return new Promise((resolve, reject) => {
-      const fs = require("fs");
-
-      fs.readFile(url, (error, data) => {
-        if (error || !data) {
-          reject(new Error(error));
-          return;
-        }
-
-        resolve(new Uint8Array(data));
-      });
-    });
-  };
-
-  exports.NodeCanvasFactory = NodeCanvasFactory = class extends _base_factory.BaseCanvasFactory {
-    _createCanvas(width, height) {
-      const Canvas = require("canvas");
-
-      return Canvas.createCanvas(width, height);
-    }
-
-  };
-  exports.NodeCMapReaderFactory = NodeCMapReaderFactory = class extends _base_factory.BaseCMapReaderFactory {
-    _fetchData(url, compressionType) {
-      return fetchData(url).then(data => {
-        return {
-          cMapData: data,
-          compressionType
-        };
-      });
-    }
-
-  };
-  exports.NodeStandardFontDataFactory = NodeStandardFontDataFactory = class extends _base_factory.BaseStandardFontDataFactory {
-    _fetchData(url) {
-      return fetchData(url);
-    }
-
-  };
-}
-
-/***/ }),
-/* 9 */
-/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
-
-
-
-Object.defineProperty(exports, "__esModule", ({
-  value: true
-}));
 exports.AnnotationStorage = void 0;
+
+var _murmurhash = __w_pdfjs_require__(9);
 
 var _util = __w_pdfjs_require__(1);
 
 class AnnotationStorage {
   constructor() {
     this._storage = new Map();
-    this._timeStamp = Date.now();
     this._modified = false;
     this.onSetModified = null;
     this.onResetModified = null;
@@ -4642,6 +4576,10 @@ class AnnotationStorage {
     }
 
     return Object.assign(defaultValue, value);
+  }
+
+  getRawValue(key) {
+    return this._storage.get(key);
   }
 
   setValue(key, value) {
@@ -4663,8 +4601,6 @@ class AnnotationStorage {
     }
 
     if (modified) {
-      this._timeStamp = Date.now();
-
       this._setModified();
     }
   }
@@ -4701,13 +4637,144 @@ class AnnotationStorage {
     return this._storage.size > 0 ? this._storage : null;
   }
 
-  get lastModified() {
-    return this._timeStamp.toString();
+  get hash() {
+    const hash = new _murmurhash.MurmurHash3_64();
+
+    for (const [key, value] of this._storage) {
+      hash.update(`${key}:${JSON.stringify(value)}`);
+    }
+
+    return hash.hexdigest();
   }
 
 }
 
 exports.AnnotationStorage = AnnotationStorage;
+
+/***/ }),
+/* 9 */
+/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
+
+
+
+Object.defineProperty(exports, "__esModule", ({
+  value: true
+}));
+exports.MurmurHash3_64 = void 0;
+
+var _util = __w_pdfjs_require__(1);
+
+const SEED = 0xc3d2e1f0;
+const MASK_HIGH = 0xffff0000;
+const MASK_LOW = 0xffff;
+
+class MurmurHash3_64 {
+  constructor(seed) {
+    this.h1 = seed ? seed & 0xffffffff : SEED;
+    this.h2 = seed ? seed & 0xffffffff : SEED;
+  }
+
+  update(input) {
+    let data, length;
+
+    if (typeof input === "string") {
+      data = new Uint8Array(input.length * 2);
+      length = 0;
+
+      for (let i = 0, ii = input.length; i < ii; i++) {
+        const code = input.charCodeAt(i);
+
+        if (code <= 0xff) {
+          data[length++] = code;
+        } else {
+          data[length++] = code >>> 8;
+          data[length++] = code & 0xff;
+        }
+      }
+    } else if ((0, _util.isArrayBuffer)(input)) {
+      data = input.slice();
+      length = data.byteLength;
+    } else {
+      throw new Error("Wrong data format in MurmurHash3_64_update. " + "Input must be a string or array.");
+    }
+
+    const blockCounts = length >> 2;
+    const tailLength = length - blockCounts * 4;
+    const dataUint32 = new Uint32Array(data.buffer, 0, blockCounts);
+    let k1 = 0,
+        k2 = 0;
+    let h1 = this.h1,
+        h2 = this.h2;
+    const C1 = 0xcc9e2d51,
+          C2 = 0x1b873593;
+    const C1_LOW = C1 & MASK_LOW,
+          C2_LOW = C2 & MASK_LOW;
+
+    for (let i = 0; i < blockCounts; i++) {
+      if (i & 1) {
+        k1 = dataUint32[i];
+        k1 = k1 * C1 & MASK_HIGH | k1 * C1_LOW & MASK_LOW;
+        k1 = k1 << 15 | k1 >>> 17;
+        k1 = k1 * C2 & MASK_HIGH | k1 * C2_LOW & MASK_LOW;
+        h1 ^= k1;
+        h1 = h1 << 13 | h1 >>> 19;
+        h1 = h1 * 5 + 0xe6546b64;
+      } else {
+        k2 = dataUint32[i];
+        k2 = k2 * C1 & MASK_HIGH | k2 * C1_LOW & MASK_LOW;
+        k2 = k2 << 15 | k2 >>> 17;
+        k2 = k2 * C2 & MASK_HIGH | k2 * C2_LOW & MASK_LOW;
+        h2 ^= k2;
+        h2 = h2 << 13 | h2 >>> 19;
+        h2 = h2 * 5 + 0xe6546b64;
+      }
+    }
+
+    k1 = 0;
+
+    switch (tailLength) {
+      case 3:
+        k1 ^= data[blockCounts * 4 + 2] << 16;
+
+      case 2:
+        k1 ^= data[blockCounts * 4 + 1] << 8;
+
+      case 1:
+        k1 ^= data[blockCounts * 4];
+        k1 = k1 * C1 & MASK_HIGH | k1 * C1_LOW & MASK_LOW;
+        k1 = k1 << 15 | k1 >>> 17;
+        k1 = k1 * C2 & MASK_HIGH | k1 * C2_LOW & MASK_LOW;
+
+        if (blockCounts & 1) {
+          h1 ^= k1;
+        } else {
+          h2 ^= k1;
+        }
+
+    }
+
+    this.h1 = h1;
+    this.h2 = h2;
+  }
+
+  hexdigest() {
+    let h1 = this.h1,
+        h2 = this.h2;
+    h1 ^= h2 >>> 1;
+    h1 = h1 * 0xed558ccd & MASK_HIGH | h1 * 0x8ccd & MASK_LOW;
+    h2 = h2 * 0xff51afd7 & MASK_HIGH | ((h2 << 16 | h1 >>> 16) * 0xafd7ed55 & MASK_HIGH) >>> 16;
+    h1 ^= h2 >>> 1;
+    h1 = h1 * 0x1a85ec53 & MASK_HIGH | h1 * 0xec53 & MASK_LOW;
+    h2 = h2 * 0xc4ceb9fe & MASK_HIGH | ((h2 << 16 | h1 >>> 16) * 0xb9fe1a85 & MASK_HIGH) >>> 16;
+    h1 ^= h2 >>> 1;
+    const hex1 = (h1 >>> 0).toString(16),
+          hex2 = (h2 >>> 0).toString(16);
+    return hex1.padStart(8, "0") + hex2.padStart(8, "0");
+  }
+
+}
+
+exports.MurmurHash3_64 = MurmurHash3_64;
 
 /***/ }),
 /* 10 */
@@ -4725,6 +4792,8 @@ var _util = __w_pdfjs_require__(1);
 var _pattern_helper = __w_pdfjs_require__(11);
 
 var _image_utils = __w_pdfjs_require__(12);
+
+var _is_node = __w_pdfjs_require__(3);
 
 var _display_utils = __w_pdfjs_require__(5);
 
@@ -5067,20 +5136,25 @@ function drawImageAtIntegerCoords(ctx, srcImg, srcX, srcY, srcW, srcH, destX, de
 }
 
 function compileType3Glyph(imgData) {
+  const {
+    width,
+    height
+  } = imgData;
+
+  if (!COMPILE_TYPE3_GLYPHS || width > MAX_SIZE_TO_COMPILE || height > MAX_SIZE_TO_COMPILE) {
+    return null;
+  }
+
   const POINT_TO_PROCESS_LIMIT = 1000;
   const POINT_TYPES = new Uint8Array([0, 2, 4, 0, 1, 0, 5, 4, 8, 10, 0, 8, 0, 2, 1, 0]);
-  const width = imgData.width,
-        height = imgData.height,
-        width1 = width + 1;
-  let i, ii, j, j0;
-  const points = new Uint8Array(width1 * (height + 1));
-  const lineSize = width + 7 & ~7,
-        data0 = imgData.data;
-  const data = new Uint8Array(lineSize * height);
-  let pos = 0;
+  const width1 = width + 1;
+  let points = new Uint8Array(width1 * (height + 1));
+  let i, j, j0;
+  const lineSize = width + 7 & ~7;
+  let data = new Uint8Array(lineSize * height),
+      pos = 0;
 
-  for (i = 0, ii = data0.length; i < ii; i++) {
-    const elem = data0[i];
+  for (const elem of imgData.data) {
     let mask = 128;
 
     while (mask > 0) {
@@ -5170,7 +5244,13 @@ function compileType3Glyph(imgData) {
   }
 
   const steps = new Int32Array([0, width1, -1, 0, -width1, 0, 0, 0, 1]);
-  const outlines = [];
+  let path, outlines, coords;
+
+  if (!_is_node.isNodeJS) {
+    path = new Path2D();
+  } else {
+    outlines = [];
+  }
 
   for (i = 0; count && i <= height; i++) {
     let p = i * width1;
@@ -5184,7 +5264,12 @@ function compileType3Glyph(imgData) {
       continue;
     }
 
-    const coords = [p % width1, i];
+    if (path) {
+      path.moveTo(p % width1, i);
+    } else {
+      coords = [p % width1, i];
+    }
+
     const p0 = p;
     let type = points[p];
 
@@ -5205,33 +5290,48 @@ function compileType3Glyph(imgData) {
         points[p] &= type >> 2 | type << 2;
       }
 
-      coords.push(p % width1, p / width1 | 0);
+      if (path) {
+        path.lineTo(p % width1, p / width1 | 0);
+      } else {
+        coords.push(p % width1, p / width1 | 0);
+      }
 
       if (!points[p]) {
         --count;
       }
     } while (p0 !== p);
 
-    outlines.push(coords);
+    if (!path) {
+      outlines.push(coords);
+    }
+
     --i;
   }
+
+  data = null;
+  points = null;
 
   const drawOutline = function (c) {
     c.save();
     c.scale(1 / width, -1 / height);
     c.translate(0, -height);
-    c.beginPath();
 
-    for (let k = 0, kk = outlines.length; k < kk; k++) {
-      const o = outlines[k];
-      c.moveTo(o[0], o[1]);
+    if (path) {
+      c.fill(path);
+    } else {
+      c.beginPath();
 
-      for (let l = 2, ll = o.length; l < ll; l += 2) {
-        c.lineTo(o[l], o[l + 1]);
+      for (const o of outlines) {
+        c.moveTo(o[0], o[1]);
+
+        for (let l = 2, ll = o.length; l < ll; l += 2) {
+          c.lineTo(o[l], o[l + 1]);
+        }
       }
+
+      c.fill();
     }
 
-    c.fill();
     c.beginPath();
     c.restore();
   };
@@ -5600,9 +5700,8 @@ function copyCtxState(sourceCtx, destCtx) {
   }
 }
 
-function resetCtxToDefault(ctx) {
-  ctx.strokeStyle = "#000000";
-  ctx.fillStyle = "#000000";
+function resetCtxToDefault(ctx, foregroundColor) {
+  ctx.strokeStyle = ctx.fillStyle = foregroundColor || "#000000";
   ctx.fillRule = "nonzero";
   ctx.globalAlpha = 1;
   ctx.lineWidth = 1;
@@ -5727,7 +5826,7 @@ const NORMAL_CLIP = {};
 const EO_CLIP = {};
 
 class CanvasGraphics {
-  constructor(canvasCtx, commonObjs, objs, canvasFactory, imageLayer, optionalContentConfig, annotationCanvasMap) {
+  constructor(canvasCtx, commonObjs, objs, canvasFactory, imageLayer, optionalContentConfig, annotationCanvasMap, pageColors) {
     this.ctx = canvasCtx;
     this.current = new CanvasExtraState(this.ctx.canvas.width, this.ctx.canvas.height);
     this.stateStack = [];
@@ -5757,6 +5856,8 @@ class CanvasGraphics {
     this.viewportScale = 1;
     this.outputScaleX = 1;
     this.outputScaleY = 1;
+    this.backgroundColor = pageColors?.background || null;
+    this.foregroundColor = pageColors?.foreground || null;
 
     if (canvasCtx) {
       addContextCurrentTransform(canvasCtx);
@@ -5783,8 +5884,43 @@ class CanvasGraphics {
   }) {
     const width = this.ctx.canvas.width;
     const height = this.ctx.canvas.height;
+    const defaultBackgroundColor = background || "#ffffff";
     this.ctx.save();
-    this.ctx.fillStyle = background || "rgb(255, 255, 255)";
+
+    if (this.foregroundColor && this.backgroundColor) {
+      this.ctx.fillStyle = this.foregroundColor;
+      const fg = this.foregroundColor = this.ctx.fillStyle;
+      this.ctx.fillStyle = this.backgroundColor;
+      const bg = this.backgroundColor = this.ctx.fillStyle;
+      let isValidDefaultBg = true;
+      let defaultBg = defaultBackgroundColor;
+      this.ctx.fillStyle = defaultBackgroundColor;
+      defaultBg = this.ctx.fillStyle;
+      isValidDefaultBg = typeof defaultBg === "string" && /^#[0-9A-Fa-f]{6}$/.test(defaultBg);
+
+      if (fg === "#000000" && bg === "#ffffff" || !isValidDefaultBg) {
+        this.foregroundColor = this.backgroundColor = null;
+      } else {
+        const cB = parseInt(defaultBg.slice(1), 16);
+        const rB = (cB && 0xff0000) >> 16;
+        const gB = (cB && 0x00ff00) >> 8;
+        const bB = cB && 0x0000ff;
+
+        const newComp = x => {
+          x /= 255;
+          return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+        };
+
+        const lumB = Math.round(0.2126 * newComp(rB) + 0.7152 * newComp(gB) + 0.0722 * newComp(bB));
+
+        this.selectColor = (r, g, b) => {
+          const lumC = 0.2126 * newComp(r) + 0.7152 * newComp(g) + 0.0722 * newComp(b);
+          return Math.round(lumC) === lumB ? bg : fg;
+        };
+      }
+    }
+
+    this.ctx.fillStyle = this.backgroundColor || defaultBackgroundColor;
     this.ctx.fillRect(0, 0, width, height);
     this.ctx.restore();
 
@@ -5798,7 +5934,7 @@ class CanvasGraphics {
     }
 
     this.ctx.save();
-    resetCtxToDefault(this.ctx);
+    resetCtxToDefault(this.ctx, this.foregroundColor);
 
     if (transform) {
       this.ctx.transform.apply(this.ctx, transform);
@@ -6904,14 +7040,14 @@ class CanvasGraphics {
   }
 
   setStrokeRGBColor(r, g, b) {
-    const color = _util.Util.makeHexColor(r, g, b);
+    const color = this.selectColor?.(r, g, b) || _util.Util.makeHexColor(r, g, b);
 
     this.ctx.strokeStyle = color;
     this.current.strokeColor = color;
   }
 
   setFillRGBColor(r, g, b) {
-    const color = _util.Util.makeHexColor(r, g, b);
+    const color = this.selectColor?.(r, g, b) || _util.Util.makeHexColor(r, g, b);
 
     this.ctx.fillStyle = color;
     this.current.fillColor = color;
@@ -7185,9 +7321,9 @@ class CanvasGraphics {
         this.ctx = context;
         this.ctx.setTransform(scaleX, 0, 0, -scaleY, 0, height * scaleY);
         addContextCurrentTransform(this.ctx);
-        resetCtxToDefault(this.ctx);
+        resetCtxToDefault(this.ctx, this.foregroundColor);
       } else {
-        resetCtxToDefault(this.ctx);
+        resetCtxToDefault(this.ctx, this.foregroundColor);
         this.ctx.rect(rect[0], rect[1], width, height);
         this.ctx.clip();
         this.endPath();
@@ -7218,25 +7354,17 @@ class CanvasGraphics {
     img = this.getObject(img.data, img);
     img.count = count;
     const ctx = this.ctx;
-    const width = img.width,
-          height = img.height;
     const glyph = this.processingType3;
 
-    if (COMPILE_TYPE3_GLYPHS && glyph && glyph.compiled === undefined) {
-      if (width <= MAX_SIZE_TO_COMPILE && height <= MAX_SIZE_TO_COMPILE) {
-        glyph.compiled = compileType3Glyph({
-          data: img.data,
-          width,
-          height
-        });
-      } else {
-        glyph.compiled = null;
+    if (glyph) {
+      if (glyph.compiled === undefined) {
+        glyph.compiled = compileType3Glyph(img);
       }
-    }
 
-    if (glyph?.compiled) {
-      glyph.compiled(ctx);
-      return;
+      if (glyph.compiled) {
+        glyph.compiled(ctx);
+        return;
+      }
     }
 
     const mask = this._createMaskCanvas(img);
@@ -7633,6 +7761,8 @@ exports.getShadingPattern = getShadingPattern;
 
 var _util = __w_pdfjs_require__(1);
 
+var _is_node = __w_pdfjs_require__(3);
+
 const PathType = {
   FILL: "Fill",
   STROKE: "Stroke",
@@ -7641,7 +7771,7 @@ const PathType = {
 exports.PathType = PathType;
 
 function applyBoundingBox(ctx, bbox) {
-  if (!bbox || typeof Path2D === "undefined") {
+  if (!bbox || _is_node.isNodeJS) {
     return;
   }
 
@@ -9432,17 +9562,81 @@ exports.XfaText = XfaText;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
+exports.NodeStandardFontDataFactory = exports.NodeCanvasFactory = exports.NodeCMapReaderFactory = void 0;
+
+var _base_factory = __w_pdfjs_require__(6);
+
+;
+
+const fetchData = function (url) {
+  return new Promise((resolve, reject) => {
+    const fs = require("fs");
+
+    fs.readFile(url, (error, data) => {
+      if (error || !data) {
+        reject(new Error(error));
+        return;
+      }
+
+      resolve(new Uint8Array(data));
+    });
+  });
+};
+
+class NodeCanvasFactory extends _base_factory.BaseCanvasFactory {
+  _createCanvas(width, height) {
+    const Canvas = require("canvas");
+
+    return Canvas.createCanvas(width, height);
+  }
+
+}
+
+exports.NodeCanvasFactory = NodeCanvasFactory;
+
+class NodeCMapReaderFactory extends _base_factory.BaseCMapReaderFactory {
+  _fetchData(url, compressionType) {
+    return fetchData(url).then(data => {
+      return {
+        cMapData: data,
+        compressionType
+      };
+    });
+  }
+
+}
+
+exports.NodeCMapReaderFactory = NodeCMapReaderFactory;
+
+class NodeStandardFontDataFactory extends _base_factory.BaseStandardFontDataFactory {
+  _fetchData(url) {
+    return fetchData(url);
+  }
+
+}
+
+exports.NodeStandardFontDataFactory = NodeStandardFontDataFactory;
+
+/***/ }),
+/* 20 */
+/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
+
+
+
+Object.defineProperty(exports, "__esModule", ({
+  value: true
+}));
 exports.AnnotationLayer = void 0;
 
 var _util = __w_pdfjs_require__(1);
 
 var _display_utils = __w_pdfjs_require__(5);
 
-var _annotation_storage = __w_pdfjs_require__(9);
+var _annotation_storage = __w_pdfjs_require__(8);
 
-var _scripting_utils = __w_pdfjs_require__(20);
+var _scripting_utils = __w_pdfjs_require__(21);
 
-var _xfa_layer = __w_pdfjs_require__(21);
+var _xfa_layer = __w_pdfjs_require__(22);
 
 const DEFAULT_TAB_INDEX = 1000;
 const GetElementsByNameSet = new WeakSet();
@@ -9665,6 +9859,113 @@ class AnnotationElement {
     }
 
     return container;
+  }
+
+  get _commonActions() {
+    const setColor = (jsName, styleName, event) => {
+      const color = event.detail[jsName];
+      event.target.style[styleName] = _scripting_utils.ColorConverters[`${color[0]}_HTML`](color.slice(1));
+    };
+
+    return (0, _util.shadow)(this, "_commonActions", {
+      display: event => {
+        const hidden = event.detail.display % 2 === 1;
+        event.target.style.visibility = hidden ? "hidden" : "visible";
+        this.annotationStorage.setValue(this.data.id, {
+          hidden,
+          print: event.detail.display === 0 || event.detail.display === 3
+        });
+      },
+      print: event => {
+        this.annotationStorage.setValue(this.data.id, {
+          print: event.detail.print
+        });
+      },
+      hidden: event => {
+        event.target.style.visibility = event.detail.hidden ? "hidden" : "visible";
+        this.annotationStorage.setValue(this.data.id, {
+          hidden: event.detail.hidden
+        });
+      },
+      focus: event => {
+        setTimeout(() => event.target.focus({
+          preventScroll: false
+        }), 0);
+      },
+      userName: event => {
+        event.target.title = event.detail.userName;
+      },
+      readonly: event => {
+        if (event.detail.readonly) {
+          event.target.setAttribute("readonly", "");
+        } else {
+          event.target.removeAttribute("readonly");
+        }
+      },
+      required: event => {
+        if (event.detail.required) {
+          event.target.setAttribute("required", "");
+        } else {
+          event.target.removeAttribute("required");
+        }
+      },
+      bgColor: event => {
+        setColor("bgColor", "backgroundColor", event);
+      },
+      fillColor: event => {
+        setColor("fillColor", "backgroundColor", event);
+      },
+      fgColor: event => {
+        setColor("fgColor", "color", event);
+      },
+      textColor: event => {
+        setColor("textColor", "color", event);
+      },
+      borderColor: event => {
+        setColor("borderColor", "borderColor", event);
+      },
+      strokeColor: event => {
+        setColor("strokeColor", "borderColor", event);
+      }
+    });
+  }
+
+  _dispatchEventFromSandbox(actions, jsEvent) {
+    const commonActions = this._commonActions;
+
+    for (const name of Object.keys(jsEvent.detail)) {
+      const action = actions[name] || commonActions[name];
+
+      if (action) {
+        action(jsEvent);
+      }
+    }
+  }
+
+  _setDefaultPropertiesFromJS(element) {
+    if (!this.enableScripting) {
+      return;
+    }
+
+    const storedData = this.annotationStorage.getRawValue(this.data.id);
+
+    if (!storedData) {
+      return;
+    }
+
+    const commonActions = this._commonActions;
+
+    for (const [actionName, detail] of Object.entries(storedData)) {
+      const action = commonActions[actionName];
+
+      if (action) {
+        action({
+          detail,
+          target: element
+        });
+        delete storedData[actionName];
+      }
+    }
   }
 
   _createQuadrilaterals(ignoreBorder = false) {
@@ -9979,8 +10280,7 @@ class LinkAnnotationElement extends AnnotationElement {
             {
               const value = field.defaultValue || "";
               storage.setValue(id, {
-                value,
-                valueAsString: value
+                value
               });
               break;
             }
@@ -10123,83 +10423,6 @@ class WidgetAnnotationElement extends AnnotationElement {
     element.style.backgroundColor = color === null ? "transparent" : _util.Util.makeHexColor(color[0], color[1], color[2]);
   }
 
-  _dispatchEventFromSandbox(actions, jsEvent) {
-    const setColor = (jsName, styleName, event) => {
-      const color = event.detail[jsName];
-      event.target.style[styleName] = _scripting_utils.ColorConverters[`${color[0]}_HTML`](color.slice(1));
-    };
-
-    const commonActions = {
-      display: event => {
-        const hidden = event.detail.display % 2 === 1;
-        event.target.style.visibility = hidden ? "hidden" : "visible";
-        this.annotationStorage.setValue(this.data.id, {
-          hidden,
-          print: event.detail.display === 0 || event.detail.display === 3
-        });
-      },
-      print: event => {
-        this.annotationStorage.setValue(this.data.id, {
-          print: event.detail.print
-        });
-      },
-      hidden: event => {
-        event.target.style.visibility = event.detail.hidden ? "hidden" : "visible";
-        this.annotationStorage.setValue(this.data.id, {
-          hidden: event.detail.hidden
-        });
-      },
-      focus: event => {
-        setTimeout(() => event.target.focus({
-          preventScroll: false
-        }), 0);
-      },
-      userName: event => {
-        event.target.title = event.detail.userName;
-      },
-      readonly: event => {
-        if (event.detail.readonly) {
-          event.target.setAttribute("readonly", "");
-        } else {
-          event.target.removeAttribute("readonly");
-        }
-      },
-      required: event => {
-        if (event.detail.required) {
-          event.target.setAttribute("required", "");
-        } else {
-          event.target.removeAttribute("required");
-        }
-      },
-      bgColor: event => {
-        setColor("bgColor", "backgroundColor", event);
-      },
-      fillColor: event => {
-        setColor("fillColor", "backgroundColor", event);
-      },
-      fgColor: event => {
-        setColor("fgColor", "color", event);
-      },
-      textColor: event => {
-        setColor("textColor", "color", event);
-      },
-      borderColor: event => {
-        setColor("borderColor", "borderColor", event);
-      },
-      strokeColor: event => {
-        setColor("strokeColor", "borderColor", event);
-      }
-    };
-
-    for (const name of Object.keys(jsEvent.detail)) {
-      const action = actions[name] || commonActions[name];
-
-      if (action) {
-        action(jsEvent);
-      }
-    }
-  }
-
 }
 
 class TextWidgetAnnotationElement extends WidgetAnnotationElement {
@@ -10232,13 +10455,13 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
 
     if (this.renderForms) {
       const storedData = storage.getValue(id, {
-        value: this.data.fieldValue,
-        valueAsString: this.data.fieldValue
+        value: this.data.fieldValue
       });
-      const textContent = storedData.valueAsString || storedData.value || "";
+      const textContent = storedData.formattedValue || storedData.value || "";
       const elementData = {
         userValue: null,
-        formattedValue: null
+        formattedValue: null,
+        valueOnFocus: ""
       };
 
       if (this.data.multiLine) {
@@ -10263,14 +10486,18 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
         this.setPropertyOnSiblings(element, "value", event.target.value, "value");
       });
       element.addEventListener("resetform", event => {
-        const defaultValue = this.data.defaultFieldValue || "";
+        const defaultValue = this.data.defaultFieldValue ?? "";
         element.value = elementData.userValue = defaultValue;
-        delete elementData.formattedValue;
+        elementData.formattedValue = null;
       });
 
       let blurListener = event => {
-        if (elementData.formattedValue) {
-          event.target.value = elementData.formattedValue;
+        const {
+          formattedValue
+        } = elementData;
+
+        if (formattedValue !== null && formattedValue !== undefined) {
+          event.target.value = formattedValue;
         }
 
         event.target.scrollLeft = 0;
@@ -10281,38 +10508,36 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
           if (elementData.userValue) {
             event.target.value = elementData.userValue;
           }
+
+          elementData.valueOnFocus = event.target.value;
         });
         element.addEventListener("updatefromsandbox", jsEvent => {
           const actions = {
             value(event) {
-              elementData.userValue = event.detail.value || "";
+              elementData.userValue = event.detail.value ?? "";
               storage.setValue(id, {
                 value: elementData.userValue.toString()
               });
-
-              if (!elementData.formattedValue) {
-                event.target.value = elementData.userValue;
-              }
+              event.target.value = elementData.userValue;
             },
 
-            valueAsString(event) {
-              elementData.formattedValue = event.detail.valueAsString || "";
+            formattedValue(event) {
+              const {
+                formattedValue
+              } = event.detail;
+              elementData.formattedValue = formattedValue;
 
-              if (event.target !== document.activeElement) {
-                event.target.value = elementData.formattedValue;
+              if (formattedValue !== null && formattedValue !== undefined && event.target !== document.activeElement) {
+                event.target.value = formattedValue;
               }
 
               storage.setValue(id, {
-                formattedValue: elementData.formattedValue
+                formattedValue
               });
             },
 
             selRange(event) {
-              const [selStart, selEnd] = event.detail.selRange;
-
-              if (selStart >= 0 && selEnd < event.target.value.length) {
-                event.target.setSelectionRange(selStart, selEnd);
-              }
+              event.target.setSelectionRange(...event.detail.selRange);
             }
 
           };
@@ -10334,13 +10559,21 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
             return;
           }
 
-          elementData.userValue = event.target.value;
+          const {
+            value
+          } = event.target;
+
+          if (elementData.valueOnFocus === value) {
+            return;
+          }
+
+          elementData.userValue = value;
           this.linkService.eventBus?.dispatch("dispatcheventinsandbox", {
             source: this,
             detail: {
               id,
               name: "Keystroke",
-              value: event.target.value,
+              value,
               willCommit: true,
               commitKey,
               selStart: event.target.selectionStart,
@@ -10351,15 +10584,18 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
         const _blurListener = blurListener;
         blurListener = null;
         element.addEventListener("blur", event => {
-          elementData.userValue = event.target.value;
+          const {
+            value
+          } = event.target;
+          elementData.userValue = value;
 
-          if (this._mouseState.isDown) {
+          if (this._mouseState.isDown && elementData.valueOnFocus !== value) {
             this.linkService.eventBus?.dispatch("dispatcheventinsandbox", {
               source: this,
               detail: {
                 id,
                 name: "Keystroke",
-                value: event.target.value,
+                value,
                 willCommit: true,
                 commitKey: 1,
                 selStart: event.target.selectionStart,
@@ -10373,7 +10609,6 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
 
         if (this.data.actions?.Keystroke) {
           element.addEventListener("beforeinput", event => {
-            elementData.formattedValue = "";
             const {
               data,
               target
@@ -10383,16 +10618,58 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
               selectionStart,
               selectionEnd
             } = target;
+            let selStart = selectionStart,
+                selEnd = selectionEnd;
+
+            switch (event.inputType) {
+              case "deleteWordBackward":
+                {
+                  const match = value.substring(0, selectionStart).match(/\w*[^\w]*$/);
+
+                  if (match) {
+                    selStart -= match[0].length;
+                  }
+
+                  break;
+                }
+
+              case "deleteWordForward":
+                {
+                  const match = value.substring(selectionStart).match(/^[^\w]*\w*/);
+
+                  if (match) {
+                    selEnd += match[0].length;
+                  }
+
+                  break;
+                }
+
+              case "deleteContentBackward":
+                if (selectionStart === selectionEnd) {
+                  selStart -= 1;
+                }
+
+                break;
+
+              case "deleteContentForward":
+                if (selectionStart === selectionEnd) {
+                  selEnd += 1;
+                }
+
+                break;
+            }
+
+            event.preventDefault();
             this.linkService.eventBus?.dispatch("dispatcheventinsandbox", {
               source: this,
               detail: {
                 id,
                 name: "Keystroke",
                 value,
-                change: data,
+                change: data || "",
                 willCommit: false,
-                selStart: selectionStart,
-                selEnd: selectionEnd
+                selStart,
+                selEnd
               }
             });
           });
@@ -10425,6 +10702,8 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
     this._setTextStyle(element);
 
     this._setBackgroundColor(element);
+
+    this._setDefaultPropertiesFromJS(element);
 
     this.container.appendChild(element);
     return this.container;
@@ -10534,6 +10813,8 @@ class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
 
     this._setBackgroundColor(element);
 
+    this._setDefaultPropertiesFromJS(element);
+
     this.container.appendChild(element);
     return this.container;
   }
@@ -10625,6 +10906,8 @@ class RadioButtonWidgetAnnotationElement extends WidgetAnnotationElement {
 
     this._setBackgroundColor(element);
 
+    this._setDefaultPropertiesFromJS(element);
+
     this.container.appendChild(element);
     return this.container;
   }
@@ -10645,6 +10928,8 @@ class PushButtonWidgetAnnotationElement extends LinkAnnotationElement {
     if (this.data.alternativeText) {
       container.title = this.data.alternativeText;
     }
+
+    this._setDefaultPropertiesFromJS(container);
 
     return container;
   }
@@ -10882,6 +11167,8 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
     }
 
     this._setBackgroundColor(selectElement);
+
+    this._setDefaultPropertiesFromJS(selectElement);
 
     this.container.appendChild(selectElement);
     return this.container;
@@ -11449,7 +11736,6 @@ class FileAttachmentAnnotationElement extends AnnotationElement {
     this.content = content;
     this.linkService.eventBus?.dispatch("fileattachmentannotation", {
       source: this,
-      id: (0, _util.stringToPDFString)(filename),
       filename,
       content
     });
@@ -11632,7 +11918,7 @@ class AnnotationLayer {
 exports.AnnotationLayer = AnnotationLayer;
 
 /***/ }),
-/* 20 */
+/* 21 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -11700,7 +11986,7 @@ class ColorConverters {
 exports.ColorConverters = ColorConverters;
 
 /***/ }),
-/* 21 */
+/* 22 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -11948,7 +12234,7 @@ class XfaLayer {
 exports.XfaLayer = XfaLayer;
 
 /***/ }),
-/* 22 */
+/* 23 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -12730,7 +13016,7 @@ function renderTextLayer(renderParameters) {
 }
 
 /***/ }),
-/* 23 */
+/* 24 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -14285,7 +14571,7 @@ exports.SVGGraphics = SVGGraphics;
 }
 
 /***/ }),
-/* 24 */
+/* 25 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -14297,7 +14583,7 @@ exports.PDFNodeStream = void 0;
 
 var _util = __w_pdfjs_require__(1);
 
-var _network_utils = __w_pdfjs_require__(25);
+var _network_utils = __w_pdfjs_require__(26);
 
 ;
 
@@ -14751,7 +15037,7 @@ class PDFNodeStreamFsRangeReader extends BaseRangeReader {
 }
 
 /***/ }),
-/* 25 */
+/* 26 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -14766,7 +15052,7 @@ exports.validateResponseStatus = validateResponseStatus;
 
 var _util = __w_pdfjs_require__(1);
 
-var _content_disposition = __w_pdfjs_require__(26);
+var _content_disposition = __w_pdfjs_require__(27);
 
 var _display_utils = __w_pdfjs_require__(5);
 
@@ -14843,7 +15129,7 @@ function validateResponseStatus(status) {
 }
 
 /***/ }),
-/* 26 */
+/* 27 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -15023,7 +15309,7 @@ function getFilenameFromContentDispositionHeader(contentDisposition) {
 }
 
 /***/ }),
-/* 27 */
+/* 28 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -15035,7 +15321,7 @@ exports.PDFNetworkStream = void 0;
 
 var _util = __w_pdfjs_require__(1);
 
-var _network_utils = __w_pdfjs_require__(25);
+var _network_utils = __w_pdfjs_require__(26);
 
 ;
 const OK_RESPONSE = 200;
@@ -15564,7 +15850,7 @@ class PDFNetworkStreamRangeRequestReader {
 }
 
 /***/ }),
-/* 28 */
+/* 29 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -15576,7 +15862,7 @@ exports.PDFFetchStream = void 0;
 
 var _util = __w_pdfjs_require__(1);
 
-var _network_utils = __w_pdfjs_require__(25);
+var _network_utils = __w_pdfjs_require__(26);
 
 ;
 
@@ -16090,25 +16376,25 @@ var _api = __w_pdfjs_require__(4);
 
 var _display_utils = __w_pdfjs_require__(5);
 
-var _annotation_layer = __w_pdfjs_require__(19);
+var _annotation_layer = __w_pdfjs_require__(20);
 
 var _worker_options = __w_pdfjs_require__(13);
 
 var _is_node = __w_pdfjs_require__(3);
 
-var _text_layer = __w_pdfjs_require__(22);
+var _text_layer = __w_pdfjs_require__(23);
 
-var _svg = __w_pdfjs_require__(23);
+var _svg = __w_pdfjs_require__(24);
 
-var _xfa_layer = __w_pdfjs_require__(21);
+var _xfa_layer = __w_pdfjs_require__(22);
 
 const pdfjsVersion = '2.14.0';
-const pdfjsBuild = '75ac897';
+const pdfjsBuild = 'f8838eb';
 {
   if (_is_node.isNodeJS) {
     const {
       PDFNodeStream
-    } = __w_pdfjs_require__(24);
+    } = __w_pdfjs_require__(25);
 
     (0, _api.setPDFNetworkStreamFactory)(params => {
       return new PDFNodeStream(params);
@@ -16116,11 +16402,11 @@ const pdfjsBuild = '75ac897';
   } else {
     const {
       PDFNetworkStream
-    } = __w_pdfjs_require__(27);
+    } = __w_pdfjs_require__(28);
 
     const {
       PDFFetchStream
-    } = __w_pdfjs_require__(28);
+    } = __w_pdfjs_require__(29);
 
     (0, _api.setPDFNetworkStreamFactory)(params => {
       if ((0, _display_utils.isValidFetchUrl)(params.url)) {

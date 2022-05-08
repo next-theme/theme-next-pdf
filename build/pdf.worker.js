@@ -19285,7 +19285,7 @@ class WidgetAnnotation extends Annotation {
     }
 
     const storageEntry = annotationStorage ? annotationStorage.get(this.data.id) : undefined;
-    let value = storageEntry && storageEntry.value;
+    let value = storageEntry && (storageEntry.formattedValue || storageEntry.value);
 
     if (value === undefined) {
       if (!this._hasValueFromXFA || this.appearance) {
@@ -19644,7 +19644,7 @@ class TextWidgetAnnotation extends WidgetAnnotation {
     return {
       id: this.data.id,
       value: this.data.fieldValue,
-      defaultValue: this.data.defaultFieldValue,
+      defaultValue: this.data.defaultFieldValue || "",
       multiline: this.data.multiLine,
       password: this.hasFieldFlag(_util.AnnotationFieldFlag.PASSWORD),
       charLimit: this.data.maxLen,
@@ -38360,12 +38360,13 @@ class Font {
       }
 
       const format = file.getUint16();
-      file.skip(2 + 2);
       let hasShortCmap = false;
       const mappings = [];
       let j, glyphId;
 
       if (format === 0) {
+        file.skip(2 + 2);
+
         for (j = 0; j < 256; j++) {
           const index = file.getByte();
 
@@ -38381,6 +38382,7 @@ class Font {
 
         hasShortCmap = true;
       } else if (format === 2) {
+        file.skip(2 + 2);
         const subHeaderKeys = [];
         let maxSubHeaderKey = 0;
 
@@ -38429,6 +38431,7 @@ class Font {
           }
         }
       } else if (format === 4) {
+        file.skip(2 + 2);
         const segCount = file.getUint16() >> 1;
         file.skip(6);
         const segments = [];
@@ -38494,6 +38497,7 @@ class Font {
           }
         }
       } else if (format === 6) {
+        file.skip(2 + 2);
         const firstCode = file.getUint16();
         const entryCount = file.getUint16();
 
@@ -38504,6 +38508,22 @@ class Font {
             charCode,
             glyphId
           });
+        }
+      } else if (format === 12) {
+        file.skip(2 + 4 + 4);
+        const nGroups = file.getInt32() >>> 0;
+
+        for (j = 0; j < nGroups; j++) {
+          const startCharCode = file.getInt32() >>> 0;
+          const endCharCode = file.getInt32() >>> 0;
+          let glyphCode = file.getInt32() >>> 0;
+
+          for (let charCode = startCharCode; charCode <= endCharCode; charCode++) {
+            mappings.push({
+              charCode,
+              glyphId: glyphCode++
+            });
+          }
         }
       } else {
         (0, _util.warn)("cmap table has unsupported format: " + format);
@@ -55271,7 +55291,9 @@ class Catalog {
         dest = dest.name;
       }
 
-      if (typeof dest === "string" || Array.isArray(dest)) {
+      if (typeof dest === "string") {
+        resultObj.dest = (0, _util.stringToPDFString)(dest);
+      } else if (Array.isArray(dest)) {
         resultObj.dest = dest;
       }
     }
@@ -74355,7 +74377,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.14.0';
-const pdfjsBuild = '75ac897';
+const pdfjsBuild = 'f8838eb';
 })();
 
 /******/ 	return __webpack_exports__;
