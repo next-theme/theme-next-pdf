@@ -117,11 +117,11 @@ const defaultOptions = {
     compatibility: compatibilityParams.maxCanvasPixels,
     kind: OptionKind.VIEWER
   },
-  pageBackgroundColor: {
+  pageColorsBackground: {
     value: "Canvas",
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE
   },
-  pageForegroundColor: {
+  pageColorsForeground: {
     value: "CanvasText",
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE
   },
@@ -731,8 +731,8 @@ const PDFViewerApplication = {
       maxCanvasPixels: _app_options.AppOptions.get("maxCanvasPixels"),
       enablePermissions: _app_options.AppOptions.get("enablePermissions"),
       pageColors: {
-        background: _app_options.AppOptions.get("pageBackgroundColor"),
-        foreground: _app_options.AppOptions.get("pageForegroundColor")
+        background: _app_options.AppOptions.get("pageColorsBackground"),
+        foreground: _app_options.AppOptions.get("pageColorsForeground")
       }
     });
     pdfRenderingQueue.setViewer(this.pdfViewer);
@@ -3103,7 +3103,6 @@ const SCROLLBAR_PADDING = 40;
 exports.SCROLLBAR_PADDING = SCROLLBAR_PADDING;
 const VERTICAL_PADDING = 5;
 exports.VERTICAL_PADDING = VERTICAL_PADDING;
-const LOADINGBAR_END_OFFSET_VAR = "--loadingBar-end-offset";
 const RenderingStates = {
   INITIAL: 0,
   RUNNING: 1,
@@ -3546,31 +3545,26 @@ function clamp(v, min, max) {
 }
 
 class ProgressBar {
-  constructor(id, {
-    height,
-    width,
-    units
-  } = {}) {
+  constructor(id) {
+    if (arguments.length > 1) {
+      throw new Error("ProgressBar no longer accepts any additional options, " + "please use CSS rules to modify its appearance instead.");
+    }
+
     this.visible = true;
     this.div = document.querySelector(id + " .progress");
     this.bar = this.div.parentNode;
-    this.height = height || 100;
-    this.width = width || 100;
-    this.units = units || "%";
-    this.div.style.height = this.height + this.units;
     this.percent = 0;
   }
 
-  _updateBar() {
+  #updateBar() {
     if (this._indeterminate) {
       this.div.classList.add("indeterminate");
-      this.div.style.width = this.width + this.units;
       return;
     }
 
     this.div.classList.remove("indeterminate");
-    const progressSize = this.width * this._percent / 100;
-    this.div.style.width = progressSize + this.units;
+    const doc = document.documentElement;
+    doc.style.setProperty("--progressBar-percent", `${this._percent}%`);
   }
 
   get percent() {
@@ -3580,8 +3574,7 @@ class ProgressBar {
   set percent(val) {
     this._indeterminate = isNaN(val);
     this._percent = clamp(val, 0, 100);
-
-    this._updateBar();
+    this.#updateBar();
   }
 
   setWidth(viewer) {
@@ -3594,7 +3587,7 @@ class ProgressBar {
 
     if (scrollbarWidth > 0) {
       const doc = document.documentElement;
-      doc.style.setProperty(LOADINGBAR_END_OFFSET_VAR, `${scrollbarWidth}px`);
+      doc.style.setProperty("--progressBar-end-offset", `${scrollbarWidth}px`);
     }
   }
 
@@ -4818,6 +4811,8 @@ var _pdfjsLib = __webpack_require__(5);
 
 var _base_tree_viewer = __webpack_require__(12);
 
+var _event_utils = __webpack_require__(4);
+
 class PDFAttachmentViewer extends _base_tree_viewer.BaseTreeViewer {
   constructor(options) {
     super(options);
@@ -4834,32 +4829,26 @@ class PDFAttachmentViewer extends _base_tree_viewer.BaseTreeViewer {
       this._renderedCapability = (0, _pdfjsLib.createPromiseCapability)();
     }
 
-    if (this._pendingDispatchEvent) {
-      clearTimeout(this._pendingDispatchEvent);
-    }
-
-    this._pendingDispatchEvent = null;
+    this._pendingDispatchEvent = false;
   }
 
-  _dispatchEvent(attachmentsCount) {
+  async _dispatchEvent(attachmentsCount) {
     this._renderedCapability.resolve();
 
-    if (this._pendingDispatchEvent) {
-      clearTimeout(this._pendingDispatchEvent);
-      this._pendingDispatchEvent = null;
-    }
-
-    if (attachmentsCount === 0) {
-      this._pendingDispatchEvent = setTimeout(() => {
-        this.eventBus.dispatch("attachmentsloaded", {
-          source: this,
-          attachmentsCount: 0
-        });
-        this._pendingDispatchEvent = null;
+    if (attachmentsCount === 0 && !this._pendingDispatchEvent) {
+      this._pendingDispatchEvent = true;
+      await (0, _event_utils.waitOnEventOrTimeout)({
+        target: this.eventBus,
+        name: "annotationlayerrendered",
+        delay: 1000
       });
-      return;
+
+      if (!this._pendingDispatchEvent) {
+        return;
+      }
     }
 
+    this._pendingDispatchEvent = false;
     this.eventBus.dispatch("attachmentsloaded", {
       source: this,
       attachmentsCount
@@ -9322,7 +9311,6 @@ class TempImageFactory {
     const tempCanvas = this.#tempCanvas ||= document.createElement("canvas");
     tempCanvas.width = width;
     tempCanvas.height = height;
-    tempCanvas.mozOpaque = true;
     const ctx = tempCanvas.getContext("2d", {
       alpha: false
     });
@@ -9476,7 +9464,6 @@ class PDFThumbnailView {
 
   _getPageDrawContext(upscaleFactor = 1) {
     const canvas = document.createElement("canvas");
-    canvas.mozOpaque = true;
     const ctx = canvas.getContext("2d", {
       alpha: false
     });
@@ -9851,7 +9838,7 @@ class BaseViewer {
       throw new Error("Cannot initialize BaseViewer.");
     }
 
-    const viewerVersion = '2.14.0';
+    const viewerVersion = '2.15.0';
 
     if (_pdfjsLib.version !== viewerVersion) {
       throw new Error(`The API version "${_pdfjsLib.version}" does not match the Viewer version "${viewerVersion}".`);
@@ -12348,7 +12335,6 @@ class PDFPageView {
 
     canvasWrapper.appendChild(canvas);
     this.canvas = canvas;
-    canvas.mozOpaque = true;
     const ctx = canvas.getContext("2d", {
       alpha: false
     });
@@ -13596,8 +13582,7 @@ class Toolbar {
 
     this.eventBus._on("localized", () => {
       this._wasLocalized = true;
-
-      this._adjustScaleWidth();
+      this.#adjustScaleWidth();
 
       this._updateUIState(true);
     });
@@ -13674,21 +13659,20 @@ class Toolbar {
     pageNumberInput.classList.toggle(PAGE_NUMBER_LOADING_INDICATOR, loading);
   }
 
-  async _adjustScaleWidth() {
+  async #adjustScaleWidth() {
     const {
       items,
       l10n
     } = this;
     const predefinedValuesPromise = Promise.all([l10n.get("page_scale_auto"), l10n.get("page_scale_actual"), l10n.get("page_scale_fit"), l10n.get("page_scale_width")]);
+    await _ui_utils.animationStarted;
     const style = getComputedStyle(items.scaleSelect),
           scaleSelectContainerWidth = parseInt(style.getPropertyValue("--scale-select-container-width"), 10),
           scaleSelectOverflow = parseInt(style.getPropertyValue("--scale-select-overflow"), 10);
-    let canvas = document.createElement("canvas");
-    canvas.mozOpaque = true;
-    let ctx = canvas.getContext("2d", {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", {
       alpha: false
     });
-    await _ui_utils.animationStarted;
     ctx.font = `${style.fontSize} ${style.fontFamily}`;
     let maxWidth = 0;
 
@@ -13711,7 +13695,6 @@ class Toolbar {
 
     canvas.width = 0;
     canvas.height = 0;
-    canvas = ctx = null;
   }
 
 }
@@ -13899,8 +13882,8 @@ class BasePreferences {
     "externalLinkTarget": 0,
     "historyUpdateUrl": false,
     "ignoreDestinationZoom": false,
-    "pageBackgroundColor": "Canvas",
-    "pageForegroundColor": "CanvasText",
+    "pageColorsBackground": "Canvas",
+    "pageColorsForeground": "CanvasText",
     "pdfBugEnabled": false,
     "renderer": "canvas",
     "sidebarViewOnLoad": -1,
@@ -15442,8 +15425,8 @@ var _app_options = __webpack_require__(1);
 
 var _app = __webpack_require__(2);
 
-const pdfjsVersion = '2.14.0';
-const pdfjsBuild = 'f8838eb';
+const pdfjsVersion = '2.15.0';
+const pdfjsBuild = '46e4a30';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;

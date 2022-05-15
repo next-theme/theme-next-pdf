@@ -1355,7 +1355,7 @@ async function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
 
   const workerId = await worker.messageHandler.sendWithPromise("GetDocRequest", {
     docId,
-    apiVersion: '2.14.0',
+    apiVersion: '2.15.0',
     source: {
       data: source.data,
       url: source.url,
@@ -3488,9 +3488,9 @@ class InternalRenderTask {
 
 }
 
-const version = '2.14.0';
+const version = '2.15.0';
 exports.version = version;
-const build = 'f8838eb';
+const build = '46e4a30';
 exports.build = build;
 
 /***/ }),
@@ -5898,7 +5898,7 @@ class CanvasGraphics {
       defaultBg = this.ctx.fillStyle;
       isValidDefaultBg = typeof defaultBg === "string" && /^#[0-9A-Fa-f]{6}$/.test(defaultBg);
 
-      if (fg === "#000000" && bg === "#ffffff" || !isValidDefaultBg) {
+      if (fg === "#000000" && bg === "#ffffff" || fg === bg || !isValidDefaultBg) {
         this.foregroundColor = this.backgroundColor = null;
       } else {
         const cB = parseInt(defaultBg.slice(1), 16);
@@ -12878,7 +12878,6 @@ class TextLayerRenderTask {
     const canvas = this._document.createElement("canvas");
 
     canvas.height = canvas.width = DEFAULT_FONT_SIZE;
-    canvas.mozOpaque = true;
     this._layoutTextCtx = canvas.getContext("2d", {
       alpha: false
     });
@@ -16388,8 +16387,8 @@ var _svg = __w_pdfjs_require__(24);
 
 var _xfa_layer = __w_pdfjs_require__(22);
 
-const pdfjsVersion = '2.14.0';
-const pdfjsBuild = 'f8838eb';
+const pdfjsVersion = '2.15.0';
+const pdfjsBuild = '46e4a30';
 {
   if (_is_node.isNodeJS) {
     const {
