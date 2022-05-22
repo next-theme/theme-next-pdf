@@ -2943,6 +2943,7 @@ exports.getInheritableProperty = getInheritableProperty;
 exports.getLookupTableFactory = getLookupTableFactory;
 exports.isWhiteSpace = isWhiteSpace;
 exports.log2 = log2;
+exports.numberToString = numberToString;
 exports.parseXFAPath = parseXFAPath;
 exports.readInt8 = readInt8;
 exports.readUint16 = readUint16;
@@ -3410,6 +3411,24 @@ function recoverJsURL(str) {
   }
 
   return null;
+}
+
+function numberToString(value) {
+  if (Number.isInteger(value)) {
+    return value.toString();
+  }
+
+  const roundedValue = Math.round(value * 100);
+
+  if (roundedValue % 100 === 0) {
+    return (roundedValue / 100).toString();
+  }
+
+  if (roundedValue % 10 === 0) {
+    return value.toFixed(1);
+  }
+
+  return value.toFixed(2);
 }
 
 /***/ }),
@@ -18651,6 +18670,28 @@ class Annotation {
     }
   }
 
+  getBorderAndBackgroundAppearances() {
+    if (!this.backgroundColor && !this.borderColor) {
+      return "";
+    }
+
+    const width = this.data.rect[2] - this.data.rect[0];
+    const height = this.data.rect[3] - this.data.rect[1];
+    const rect = `0 0 ${width} ${height} re`;
+    let str = "";
+
+    if (this.backgroundColor) {
+      str = `${(0, _default_appearance.getPdfColor)(this.backgroundColor)} ${rect} f `;
+    }
+
+    if (this.borderColor) {
+      const borderWidth = this.borderStyle.width || 1;
+      str += `${borderWidth} w ${(0, _default_appearance.getPdfColor)(this.borderColor)} ${rect} S `;
+    }
+
+    return str;
+  }
+
   setBorderStyle(borderStyle) {
     this.borderStyle = new AnnotationBorderStyle();
 
@@ -19362,7 +19403,8 @@ class WidgetAnnotation extends Annotation {
       descent = 0;
     }
 
-    const vPadding = defaultPadding + Math.abs(descent) * fontSize;
+    const defaultVPadding = Math.min(Math.floor((totalHeight - fontSize) / 2), defaultPadding);
+    const vPadding = defaultVPadding + Math.abs(descent) * fontSize;
     const alignment = this.data.textAlignment;
 
     if (this.data.multiLine) {
@@ -19375,13 +19417,15 @@ class WidgetAnnotation extends Annotation {
       return this._getCombAppearance(defaultAppearance, font, encodedString, totalWidth, hPadding, vPadding);
     }
 
+    const colors = this.getBorderAndBackgroundAppearances();
+
     if (alignment === 0 || alignment > 2) {
-      return "/Tx BMC q BT " + defaultAppearance + ` 1 0 0 1 ${hPadding} ${vPadding} Tm (${(0, _util.escapeString)(encodedString)}) Tj` + " ET Q EMC";
+      return `/Tx BMC q ${colors}BT ` + defaultAppearance + ` 1 0 0 1 ${hPadding} ${vPadding} Tm (${(0, _util.escapeString)(encodedString)}) Tj` + " ET Q EMC";
     }
 
     const renderedText = this._renderText(encodedString, font, fontSize, totalWidth, alignment, hPadding, vPadding);
 
-    return "/Tx BMC q BT " + defaultAppearance + ` 1 0 0 1 0 0 Tm ${renderedText}` + " ET Q EMC";
+    return `/Tx BMC q ${colors}BT ` + defaultAppearance + ` 1 0 0 1 0 0 Tm ${renderedText}` + " ET Q EMC";
   }
 
   async _getFontData(evaluator, task) {
@@ -19494,8 +19538,8 @@ class WidgetAnnotation extends Annotation {
       shift = hPadding;
     }
 
-    shift = shift.toFixed(2);
-    vPadding = vPadding.toFixed(2);
+    shift = (0, _core_utils.numberToString)(shift);
+    vPadding = (0, _core_utils.numberToString)(vPadding);
     return `${shift} ${vPadding} Td (${(0, _util.escapeString)(text)}) Tj`;
   }
 
@@ -19581,7 +19625,7 @@ class TextWidgetAnnotation extends WidgetAnnotation {
   }
 
   _getCombAppearance(defaultAppearance, font, text, width, hPadding, vPadding) {
-    const combWidth = (width / this.data.maxLen).toFixed(2);
+    const combWidth = (0, _core_utils.numberToString)(width / this.data.maxLen);
     const buf = [];
     const positions = font.getCharPositions(text);
 
@@ -19589,8 +19633,9 @@ class TextWidgetAnnotation extends WidgetAnnotation {
       buf.push(`(${(0, _util.escapeString)(text.substring(start, end))}) Tj`);
     }
 
+    const colors = this.getBorderAndBackgroundAppearances();
     const renderedComb = buf.join(` ${combWidth} 0 Td `);
-    return "/Tx BMC q BT " + defaultAppearance + ` 1 0 0 1 ${hPadding} ${vPadding} Tm ${renderedComb}` + " ET Q EMC";
+    return `/Tx BMC q ${colors}BT ` + defaultAppearance + ` 1 0 0 1 ${hPadding} ${vPadding} Tm ${renderedComb}` + " ET Q EMC";
   }
 
   _getMultilineAppearance(defaultAppearance, text, font, fontSize, width, height, alignment, hPadding, vPadding) {
@@ -19608,7 +19653,8 @@ class TextWidgetAnnotation extends WidgetAnnotation {
     }
 
     const renderedText = buf.join("\n");
-    return "/Tx BMC q BT " + defaultAppearance + ` 1 0 0 1 0 ${height} Tm ${renderedText}` + " ET Q EMC";
+    const colors = this.getBorderAndBackgroundAppearances();
+    return `/Tx BMC q ${colors}BT ` + defaultAppearance + ` 1 0 0 1 0 ${height} Tm ${renderedText}` + " ET Q EMC";
   }
 
   _splitLine(line, font, fontSize, width, cache = {}) {
@@ -19922,8 +19968,8 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
       (0, _util.unreachable)(`_getDefaultCheckedAppearance - unsupported type: ${type}`);
     }
 
-    const xShift = (width - metrics.width) / 2;
-    const yShift = (height - metrics.height) / 2;
+    const xShift = (0, _core_utils.numberToString)((width - metrics.width) / 2);
+    const yShift = (0, _core_utils.numberToString)((height - metrics.height) / 2);
     const appearance = `q BT /PdfJsZaDb ${fontSize} Tf 0 g ${xShift} ${yShift} Td (${char}) Tj ET Q`;
     const appearanceStreamDict = new _primitives.Dict(params.xref);
     appearanceStreamDict.set("FormType", 1);
@@ -20871,13 +20917,14 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.createDefaultAppearance = createDefaultAppearance;
+exports.getPdfColor = getPdfColor;
 exports.parseDefaultAppearance = parseDefaultAppearance;
+
+var _core_utils = __w_pdfjs_require__(8);
 
 var _util = __w_pdfjs_require__(2);
 
 var _colorspace = __w_pdfjs_require__(24);
-
-var _core_utils = __w_pdfjs_require__(8);
 
 var _evaluator = __w_pdfjs_require__(25);
 
@@ -20961,20 +21008,21 @@ function parseDefaultAppearance(str) {
   return new DefaultAppearanceEvaluator(str).parse();
 }
 
+function getPdfColor(color) {
+  if (color[0] === color[1] && color[1] === color[2]) {
+    const gray = color[0] / 255;
+    return `${(0, _core_utils.numberToString)(gray)} g`;
+  }
+
+  return Array.from(color).map(c => (0, _core_utils.numberToString)(c / 255)).join(" ") + " rg";
+}
+
 function createDefaultAppearance({
   fontSize,
   fontName,
   fontColor
 }) {
-  let colorCmd;
-
-  if (fontColor.every(c => c === 0)) {
-    colorCmd = "0 g";
-  } else {
-    colorCmd = Array.from(fontColor).map(c => (c / 255).toFixed(2)).join(" ") + " rg";
-  }
-
-  return `/${(0, _core_utils.escapePDFName)(fontName)} ${fontSize} Tf ${colorCmd}`;
+  return `/${(0, _core_utils.escapePDFName)(fontName)} ${fontSize} Tf ${getPdfColor(fontColor)}`;
 }
 
 /***/ }),
@@ -26500,6 +26548,7 @@ class EvaluatorPreprocessor {
     });
     this.stateManager = stateManager;
     this.nonProcessedArgs = [];
+    this._isPathOp = false;
     this._numInvalidPathOPS = 0;
   }
 
@@ -26526,6 +26575,12 @@ class EvaluatorPreprocessor {
         const numArgs = opSpec.numArgs;
         let argsLength = args !== null ? args.length : 0;
 
+        if (!this._isPathOp) {
+          this._numInvalidPathOPS = 0;
+        }
+
+        this._isPathOp = fn >= _util.OPS.moveTo && fn <= _util.OPS.endPath;
+
         if (!opSpec.variableArgs) {
           if (argsLength !== numArgs) {
             const nonProcessedArgs = this.nonProcessedArgs;
@@ -26548,7 +26603,7 @@ class EvaluatorPreprocessor {
           if (argsLength < numArgs) {
             const partialMsg = `command ${cmd}: expected ${numArgs} args, ` + `but received ${argsLength} args.`;
 
-            if (fn >= _util.OPS.moveTo && fn <= _util.OPS.endPath && ++this._numInvalidPathOPS > EvaluatorPreprocessor.MAX_INVALID_PATH_OPS) {
+            if (this._isPathOp && ++this._numInvalidPathOPS > EvaluatorPreprocessor.MAX_INVALID_PATH_OPS) {
               throw new _util.FormatError(`Invalid ${partialMsg}`);
             }
 
@@ -56915,24 +56970,6 @@ function writeArray(array, buffer, transform) {
   buffer.push("]");
 }
 
-function numberToString(value) {
-  if (Number.isInteger(value)) {
-    return value.toString();
-  }
-
-  const roundedValue = Math.round(value * 100);
-
-  if (roundedValue % 100 === 0) {
-    return (roundedValue / 100).toString();
-  }
-
-  if (roundedValue % 10 === 0) {
-    return value.toFixed(1);
-  }
-
-  return value.toFixed(2);
-}
-
 function writeValue(value, buffer, transform) {
   if (value instanceof _primitives.Name) {
     buffer.push(`/${(0, _core_utils.escapePDFName)(value.name)}`);
@@ -56947,7 +56984,7 @@ function writeValue(value, buffer, transform) {
 
     buffer.push(`(${(0, _util.escapeString)(value)})`);
   } else if (typeof value === "number") {
-    buffer.push(numberToString(value));
+    buffer.push((0, _core_utils.numberToString)(value));
   } else if (typeof value === "boolean") {
     buffer.push(value.toString());
   } else if (value instanceof _primitives.Dict) {
@@ -74421,7 +74458,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.15.0';
-const pdfjsBuild = '46e4a30';
+const pdfjsBuild = '42a6217';
 })();
 
 /******/ 	return __webpack_exports__;

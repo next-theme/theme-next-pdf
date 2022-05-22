@@ -950,9 +950,7 @@ const PDFViewerApplication = {
 
     if (this.pdfDocument?.annotationStorage.size > 0 && this._annotationStorageModified) {
       try {
-        await this.save({
-          sourceEventType: "save"
-        });
+        await this.save();
       } catch (reason) {}
     }
 
@@ -1088,9 +1086,7 @@ const PDFViewerApplication = {
     throw new Error("PDF document not downloaded.");
   },
 
-  async download({
-    sourceEventType = "download"
-  } = {}) {
+  async download() {
     const url = this._downloadUrl,
           filename = this._docFilename;
 
@@ -1101,15 +1097,13 @@ const PDFViewerApplication = {
       const blob = new Blob([data], {
         type: "application/pdf"
       });
-      await this.downloadManager.download(blob, url, filename, sourceEventType);
+      await this.downloadManager.download(blob, url, filename);
     } catch (reason) {
       await this.downloadManager.downloadUrl(url, filename);
     }
   },
 
-  async save({
-    sourceEventType = "download"
-  } = {}) {
+  async save() {
     if (this._saveInProgress) {
       return;
     }
@@ -1126,23 +1120,21 @@ const PDFViewerApplication = {
       const blob = new Blob([data], {
         type: "application/pdf"
       });
-      await this.downloadManager.download(blob, url, filename, sourceEventType);
+      await this.downloadManager.download(blob, url, filename);
     } catch (reason) {
       console.error(`Error when saving the document: ${reason.message}`);
-      await this.download({
-        sourceEventType
-      });
+      await this.download();
     } finally {
       await this.pdfScriptingManager.dispatchDidSave();
       this._saveInProgress = false;
     }
   },
 
-  downloadOrSave(options) {
+  downloadOrSave() {
     if (this.pdfDocument?.annotationStorage.size > 0) {
-      this.save(options);
+      this.save();
     } else {
-      this.download(options);
+      this.download();
     }
   },
 
@@ -1888,8 +1880,6 @@ const PDFViewerApplication = {
 
     eventBus._on("download", webViewerDownload);
 
-    eventBus._on("save", webViewerSave);
-
     eventBus._on("firstpage", webViewerFirstPage);
 
     eventBus._on("lastpage", webViewerLastPage);
@@ -2034,8 +2024,6 @@ const PDFViewerApplication = {
     eventBus._off("print", webViewerPrint);
 
     eventBus._off("download", webViewerDownload);
-
-    eventBus._off("save", webViewerSave);
 
     eventBus._off("firstpage", webViewerFirstPage);
 
@@ -2381,7 +2369,7 @@ function webViewerNamedAction(evt) {
       break;
 
     case "SaveAs":
-      webViewerSave();
+      PDFViewerApplication.downloadOrSave();
       break;
   }
 }
@@ -2499,15 +2487,7 @@ function webViewerPrint() {
 }
 
 function webViewerDownload() {
-  PDFViewerApplication.downloadOrSave({
-    sourceEventType: "download"
-  });
-}
-
-function webViewerSave() {
-  PDFViewerApplication.downloadOrSave({
-    sourceEventType: "save"
-  });
+  PDFViewerApplication.downloadOrSave();
 }
 
 function webViewerFirstPage() {
@@ -8294,7 +8274,7 @@ class PDFScriptingManager {
           break;
 
         case "SaveAs":
-          this._eventBus.dispatch("save", {
+          this._eventBus.dispatch("download", {
             source: this
           });
 
@@ -14083,7 +14063,7 @@ class DownloadManager {
     return false;
   }
 
-  download(blob, url, filename, sourceEventType = "download") {
+  download(blob, url, filename) {
     const blobUrl = URL.createObjectURL(blob);
     download(blobUrl, filename);
   }
@@ -15426,7 +15406,7 @@ var _app_options = __webpack_require__(1);
 var _app = __webpack_require__(2);
 
 const pdfjsVersion = '2.15.0';
-const pdfjsBuild = '46e4a30';
+const pdfjsBuild = '42a6217';
 window.PDFViewerApplication = _app.PDFViewerApplication;
 window.PDFViewerApplicationOptions = _app_options.AppOptions;
 ;
