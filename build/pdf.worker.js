@@ -719,7 +719,7 @@ if (typeof window === "undefined" && !_is_node.isNodeJS && typeof self !== "unde
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.VerbosityLevel = exports.Util = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.UNSUPPORTED_FEATURES = exports.TextRenderingMode = exports.StreamType = exports.RenderingIntentFlag = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FontType = exports.FeatureTest = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMode = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
+exports.VerbosityLevel = exports.Util = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.UNSUPPORTED_FEATURES = exports.TextRenderingMode = exports.StreamType = exports.RenderingIntentFlag = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.LINE_FACTOR = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FontType = exports.FeatureTest = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMode = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
 exports.arrayByteLength = arrayByteLength;
 exports.arraysToBytes = arraysToBytes;
 exports.assert = assert;
@@ -752,6 +752,8 @@ const IDENTITY_MATRIX = [1, 0, 0, 1, 0, 0];
 exports.IDENTITY_MATRIX = IDENTITY_MATRIX;
 const FONT_IDENTITY_MATRIX = [0.001, 0, 0, 0.001, 0, 0];
 exports.FONT_IDENTITY_MATRIX = FONT_IDENTITY_MATRIX;
+const LINE_FACTOR = 1.35;
+exports.LINE_FACTOR = LINE_FACTOR;
 const RenderingIntentFlag = {
   ANY: 0x01,
   DISPLAY: 0x02,
@@ -18238,8 +18240,6 @@ var _writer = __w_pdfjs_require__(73);
 
 var _factory = __w_pdfjs_require__(76);
 
-const LINE_FACTOR = 1.35;
-
 class AnnotationFactory {
   static create(xref, ref, pdfManager, idFactory, collectFields) {
     return Promise.all([pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("baseUrl"), pdfManager.ensureDoc("xfaDatasets"), collectFields ? this._getPageIndex(xref, ref, pdfManager) : -1]).then(([acroForm, baseUrl, xfaDatasets, pageIndex]) => pdfManager.ensure(this, "_create", [xref, ref, pdfManager, idFactory, acroForm, xfaDatasets, collectFields, pageIndex]));
@@ -19461,7 +19461,7 @@ class WidgetAnnotation extends Annotation {
       if (lineCount === -1) {
         const textWidth = this._getTextWidth(text, font);
 
-        fontSize = roundWithTwoDigits(Math.min(height / LINE_FACTOR, width / textWidth));
+        fontSize = roundWithTwoDigits(Math.min(height / _util.LINE_FACTOR, width / textWidth));
       } else {
         const lines = text.split(/\r\n?|\n/);
         const cachedLines = [];
@@ -19494,13 +19494,13 @@ class WidgetAnnotation extends Annotation {
         };
 
         fontSize = 12;
-        let lineHeight = fontSize * LINE_FACTOR;
+        let lineHeight = fontSize * _util.LINE_FACTOR;
         let numberOfLines = Math.round(height / lineHeight);
         numberOfLines = Math.max(numberOfLines, lineCount);
 
         while (true) {
           lineHeight = height / numberOfLines;
-          fontSize = roundWithTwoDigits(lineHeight / LINE_FACTOR);
+          fontSize = roundWithTwoDigits(lineHeight / _util.LINE_FACTOR);
 
           if (isTooBig(fontSize)) {
             numberOfLines++;
@@ -19622,6 +19622,7 @@ class TextWidgetAnnotation extends WidgetAnnotation {
     this.data.maxLen = maximumLength;
     this.data.multiLine = this.hasFieldFlag(_util.AnnotationFieldFlag.MULTILINE);
     this.data.comb = this.hasFieldFlag(_util.AnnotationFieldFlag.COMB) && !this.hasFieldFlag(_util.AnnotationFieldFlag.MULTILINE) && !this.hasFieldFlag(_util.AnnotationFieldFlag.PASSWORD) && !this.hasFieldFlag(_util.AnnotationFieldFlag.FILESELECT) && this.data.maxLen !== null;
+    this.data.doNotScroll = this.hasFieldFlag(_util.AnnotationFieldFlag.DONOTSCROLL);
   }
 
   _getCombAppearance(defaultAppearance, font, text, width, hPadding, vPadding) {
@@ -20275,7 +20276,7 @@ class ChoiceWidgetAnnotation extends WidgetAnnotation {
       defaultAppearance = this._defaultAppearance;
     }
 
-    const lineHeight = fontSize * LINE_FACTOR;
+    const lineHeight = fontSize * _util.LINE_FACTOR;
     const vPadding = (lineHeight - fontSize) / 2;
     const numberOfVisibleLines = Math.floor(totalHeight / lineHeight);
     let firstIndex;
@@ -20370,6 +20371,8 @@ class LinkAnnotation extends Annotation {
     if (quadPoints) {
       this.data.quadPoints = quadPoints;
     }
+
+    this.data.borderColor = this.data.borderColor || this.data.color;
 
     _catalog.Catalog.parseDestDictionary({
       destDict: params.dict,
@@ -25981,12 +25984,17 @@ class TranslatedFont {
   }
 
   _removeType3ColorOperators(operatorList, isEmptyBBox = false) {
-    if (isEmptyBBox) {
+    const charBBox = _util.Util.normalizeRect(operatorList.argsArray[0].slice(2)),
+          width = charBBox[2] - charBBox[0],
+          height = charBBox[3] - charBBox[1];
+
+    if (width === 0 || height === 0) {
+      operatorList.fnArray.splice(0, 1);
+      operatorList.argsArray.splice(0, 1);
+    } else if (isEmptyBBox) {
       if (!this._bbox) {
         this._bbox = [Infinity, Infinity, -Infinity, -Infinity];
       }
-
-      const charBBox = _util.Util.normalizeRect(operatorList.argsArray[0].slice(2));
 
       this._bbox[0] = Math.min(this._bbox[0], charBBox[0]);
       this._bbox[1] = Math.min(this._bbox[1], charBBox[1]);
@@ -25994,11 +26002,14 @@ class TranslatedFont {
       this._bbox[3] = Math.max(this._bbox[3], charBBox[3]);
     }
 
-    let i = 1,
+    let i = 0,
         ii = operatorList.length;
 
     while (i < ii) {
       switch (operatorList.fnArray[i]) {
+        case _util.OPS.setCharWidthAndBounds:
+          break;
+
         case _util.OPS.setStrokeColorSpace:
         case _util.OPS.setFillColorSpace:
         case _util.OPS.setStrokeColor:
@@ -74458,7 +74469,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '2.15.0';
-const pdfjsBuild = '42a6217';
+const pdfjsBuild = '9bdf27e';
 })();
 
 /******/ 	return __webpack_exports__;
