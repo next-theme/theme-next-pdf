@@ -29,7 +29,7 @@
 		exports["pdfjs-dist/build/pdf"] = factory();
 	else
 		root["pdfjs-dist/build/pdf"] = root.pdfjsLib = factory();
-})(this, () => {
+})(globalThis, () => {
 return /******/ (() => { // webpackBootstrap
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ([
@@ -42,7 +42,7 @@ return /******/ (() => { // webpackBootstrap
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.VerbosityLevel = exports.Util = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.UNSUPPORTED_FEATURES = exports.TextRenderingMode = exports.StreamType = exports.RenderingIntentFlag = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.LINE_FACTOR = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FontType = exports.FeatureTest = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMode = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
+exports.VerbosityLevel = exports.Util = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.UNSUPPORTED_FEATURES = exports.TextRenderingMode = exports.StreamType = exports.RenderingIntentFlag = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.LINE_FACTOR = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FontType = exports.FeatureTest = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMode = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationEditorType = exports.AnnotationEditorPrefix = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
 exports.arrayByteLength = arrayByteLength;
 exports.arraysToBytes = arraysToBytes;
 exports.assert = assert;
@@ -94,6 +94,13 @@ const AnnotationMode = {
   ENABLE_STORAGE: 3
 };
 exports.AnnotationMode = AnnotationMode;
+const AnnotationEditorPrefix = "pdfjs_internal_editor_";
+exports.AnnotationEditorPrefix = AnnotationEditorPrefix;
+const AnnotationEditorType = {
+  NONE: 0,
+  FREETEXT: 3
+};
+exports.AnnotationEditorType = AnnotationEditorType;
 const PermissionFlag = {
   PRINT: 0x04,
   MODIFY_CONTENTS: 0x08,
@@ -1102,21 +1109,21 @@ var _font_loader = __w_pdfjs_require__(7);
 
 var _annotation_storage = __w_pdfjs_require__(8);
 
-var _canvas = __w_pdfjs_require__(10);
+var _canvas = __w_pdfjs_require__(12);
 
-var _worker_options = __w_pdfjs_require__(13);
+var _worker_options = __w_pdfjs_require__(15);
 
 var _is_node = __w_pdfjs_require__(3);
 
-var _message_handler = __w_pdfjs_require__(14);
+var _message_handler = __w_pdfjs_require__(16);
 
-var _metadata = __w_pdfjs_require__(15);
+var _metadata = __w_pdfjs_require__(17);
 
-var _optional_content_config = __w_pdfjs_require__(16);
+var _optional_content_config = __w_pdfjs_require__(18);
 
-var _transport_stream = __w_pdfjs_require__(17);
+var _transport_stream = __w_pdfjs_require__(19);
 
-var _xfa_text = __w_pdfjs_require__(18);
+var _xfa_text = __w_pdfjs_require__(20);
 
 const DEFAULT_RANGE_CHUNK_SIZE = 65536;
 const RENDERING_CANCELLED_TIMEOUT = 100;
@@ -1132,7 +1139,7 @@ if (_is_node.isNodeJS) {
     NodeCanvasFactory,
     NodeCMapReaderFactory,
     NodeStandardFontDataFactory
-  } = __w_pdfjs_require__(19);
+  } = __w_pdfjs_require__(21);
 
   exports.DefaultCanvasFactory = DefaultCanvasFactory = NodeCanvasFactory;
   exports.DefaultCMapReaderFactory = DefaultCMapReaderFactory = NodeCMapReaderFactory;
@@ -1377,6 +1384,10 @@ async function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
     cMapUrl: source.useWorkerFetch ? source.cMapUrl : null,
     standardFontDataUrl: source.useWorkerFetch ? source.standardFontDataUrl : null
   });
+
+  if (source.data) {
+    source.data = null;
+  }
 
   if (worker.destroyed) {
     throw new Error("Worker was destroyed");
@@ -3492,7 +3503,7 @@ class InternalRenderTask {
 
 const version = '2.15.0';
 exports.version = version;
-const build = '9bdf27e';
+const build = '9b22483';
 exports.build = build;
 
 /***/ }),
@@ -4558,7 +4569,9 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.AnnotationStorage = void 0;
 
-var _murmurhash = __w_pdfjs_require__(9);
+var _editor = __w_pdfjs_require__(9);
+
+var _murmurhash = __w_pdfjs_require__(11);
 
 var _util = __w_pdfjs_require__(1);
 
@@ -4582,6 +4595,14 @@ class AnnotationStorage {
 
   getRawValue(key) {
     return this._storage.get(key);
+  }
+
+  removeKey(key) {
+    this._storage.delete(key);
+
+    if (this._storage.size === 0) {
+      this.resetModified();
+    }
   }
 
   setValue(key, value) {
@@ -4636,7 +4657,21 @@ class AnnotationStorage {
   }
 
   get serializable() {
-    return this._storage.size > 0 ? this._storage : null;
+    if (this._storage.size === 0) {
+      return null;
+    }
+
+    const clone = new Map();
+
+    for (const [key, value] of this._storage) {
+      if (value instanceof _editor.AnnotationEditor) {
+        clone.set(key, value.serialize());
+      } else {
+        clone.set(key, value);
+      }
+    }
+
+    return clone;
   }
 
   get hash() {
@@ -4655,6 +4690,608 @@ exports.AnnotationStorage = AnnotationStorage;
 
 /***/ }),
 /* 9 */
+/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
+
+
+
+Object.defineProperty(exports, "__esModule", ({
+  value: true
+}));
+exports.AnnotationEditor = void 0;
+
+var _util = __w_pdfjs_require__(1);
+
+var _tools = __w_pdfjs_require__(10);
+
+class AnnotationEditor {
+  #isInEditMode = false;
+
+  constructor(parameters) {
+    if (this.constructor === AnnotationEditor) {
+      (0, _util.unreachable)("Cannot initialize AnnotationEditor.");
+    }
+
+    this.parent = parameters.parent;
+    this.id = parameters.id;
+    this.width = this.height = null;
+    this.pageIndex = parameters.parent.pageIndex;
+    this.name = parameters.name;
+    this.div = null;
+    this.x = Math.round(parameters.x);
+    this.y = Math.round(parameters.y);
+    this.isAttachedToDOM = false;
+  }
+
+  focusin() {
+    this.parent.setActiveEditor(this);
+  }
+
+  focusout(event) {
+    if (!this.isAttachedToDOM) {
+      return;
+    }
+
+    const target = event.relatedTarget;
+
+    if (target?.closest(`#${this.id}`)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (this.isEmpty()) {
+      this.remove();
+    } else {
+      this.commit();
+    }
+
+    this.parent.setActiveEditor(null);
+  }
+
+  mousedown(event) {
+    this.mouseX = event.offsetX;
+    this.mouseY = event.offsetY;
+  }
+
+  dragstart(event) {
+    event.dataTransfer.setData("text/plain", this.id);
+    event.dataTransfer.effectAllowed = "move";
+  }
+
+  setAt(x, y) {
+    this.x = Math.round(x);
+    this.y = Math.round(y);
+    this.div.style.left = `${this.x}px`;
+    this.div.style.top = `${this.y}px`;
+  }
+
+  translate(x, y) {
+    this.setAt(this.x + x, this.y + y);
+  }
+
+  setDims(width, height) {
+    this.div.style.width = `${width}px`;
+    this.div.style.height = `${height}px`;
+  }
+
+  render() {
+    this.div = document.createElement("div");
+    this.div.className = this.name;
+    this.div.setAttribute("id", this.id);
+    this.div.draggable = true;
+    this.div.tabIndex = 100;
+    this.div.style.left = `${this.x}px`;
+    this.div.style.top = `${this.y}px`;
+    (0, _tools.bindEvents)(this, this.div, ["dragstart", "focusin", "focusout", "mousedown"]);
+    return this.div;
+  }
+
+  onceAdded() {}
+
+  transform(transform) {
+    const {
+      style
+    } = this.div;
+    const width = parseFloat(style.width);
+    const height = parseFloat(style.height);
+
+    const [x1, y1] = _util.Util.applyTransform([this.x, this.y], transform);
+
+    if (!Number.isNaN(width)) {
+      const [x2] = _util.Util.applyTransform([this.x + width, 0], transform);
+
+      this.div.style.width = `${x2 - x1}px`;
+    }
+
+    if (!Number.isNaN(height)) {
+      const [, y2] = _util.Util.applyTransform([0, this.y + height], transform);
+
+      this.div.style.height = `${y2 - y1}px`;
+    }
+
+    this.setAt(x1, y1);
+  }
+
+  isEmpty() {
+    return false;
+  }
+
+  enableEditMode() {
+    this.#isInEditMode = true;
+  }
+
+  disableEditMode() {
+    this.#isInEditMode = false;
+  }
+
+  isInEditMode() {
+    return this.#isInEditMode;
+  }
+
+  shouldGetKeyboardEvents() {
+    return false;
+  }
+
+  copy() {
+    (0, _util.unreachable)("An editor must be copyable");
+  }
+
+  needsToBeRebuilt() {
+    return this.div && !this.isAttachedToDOM;
+  }
+
+  rebuild() {
+    (0, _util.unreachable)("An editor must be rebuildable");
+  }
+
+  serialize() {
+    (0, _util.unreachable)("An editor must be serializable");
+  }
+
+  remove() {
+    this.parent.remove(this);
+  }
+
+  select() {
+    if (this.div) {
+      this.div.classList.add("selectedEditor");
+    }
+  }
+
+  unselect() {
+    if (this.div) {
+      this.div.classList.remove("selectedEditor");
+    }
+  }
+
+}
+
+exports.AnnotationEditor = AnnotationEditor;
+
+/***/ }),
+/* 10 */
+/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
+
+
+
+Object.defineProperty(exports, "__esModule", ({
+  value: true
+}));
+exports.KeyboardManager = exports.AnnotationEditorUIManager = void 0;
+exports.bindEvents = bindEvents;
+
+var _util = __w_pdfjs_require__(1);
+
+function bindEvents(obj, element, names) {
+  for (const name of names) {
+    element.addEventListener(name, obj[name].bind(obj));
+  }
+}
+
+class IdManager {
+  #id = 0;
+
+  getId() {
+    return `${_util.AnnotationEditorPrefix}${this.#id++}`;
+  }
+
+}
+
+class CommandManager {
+  #commands = [];
+  #maxSize = 100;
+  #position = NaN;
+  #start = 0;
+
+  add(cmd, undo) {
+    const save = [cmd, undo];
+    const next = (this.#position + 1) % this.#maxSize;
+
+    if (next !== this.#start) {
+      if (this.#start < next) {
+        this.#commands = this.#commands.slice(this.#start, next);
+      } else {
+        this.#commands = this.#commands.slice(this.#start).concat(this.#commands.slice(0, next));
+      }
+
+      this.#start = 0;
+      this.#position = this.#commands.length - 1;
+    }
+
+    this.#setCommands(save);
+    cmd();
+  }
+
+  undo() {
+    if (isNaN(this.#position)) {
+      return;
+    }
+
+    this.#commands[this.#position][1]();
+
+    if (this.#position === this.#start) {
+      this.#position = NaN;
+    } else {
+      this.#position = (this.#maxSize + this.#position - 1) % this.#maxSize;
+    }
+  }
+
+  redo() {
+    if (isNaN(this.#position)) {
+      if (this.#start < this.#commands.length) {
+        this.#commands[this.#start][0]();
+        this.#position = this.#start;
+      }
+
+      return;
+    }
+
+    const next = (this.#position + 1) % this.#maxSize;
+
+    if (next !== this.#start && next < this.#commands.length) {
+      this.#commands[next][0]();
+      this.#position = next;
+    }
+  }
+
+  #setCommands(cmds) {
+    if (this.#commands.length < this.#maxSize) {
+      this.#commands.push(cmds);
+      this.#position = isNaN(this.#position) ? 0 : this.#position + 1;
+      return;
+    }
+
+    if (isNaN(this.#position)) {
+      this.#position = this.#start;
+    } else {
+      this.#position = (this.#position + 1) % this.#maxSize;
+
+      if (this.#position === this.#start) {
+        this.#start = (this.#start + 1) % this.#maxSize;
+      }
+    }
+
+    this.#commands[this.#position] = cmds;
+  }
+
+}
+
+class KeyboardManager {
+  constructor(callbacks) {
+    this.buffer = [];
+    this.callbacks = new Map();
+    this.allKeys = new Set();
+    const isMac = KeyboardManager.platform.isMac;
+
+    for (const [keys, callback] of callbacks) {
+      for (const key of keys) {
+        const isMacKey = key.startsWith("mac+");
+
+        if (isMac && isMacKey) {
+          this.callbacks.set(key.slice(4), callback);
+          this.allKeys.add(key.split("+").at(-1));
+        } else if (!isMac && !isMacKey) {
+          this.callbacks.set(key, callback);
+          this.allKeys.add(key.split("+").at(-1));
+        }
+      }
+    }
+  }
+
+  static get platform() {
+    const platform = typeof navigator !== "undefined" ? navigator.platform : "";
+    return (0, _util.shadow)(this, "platform", {
+      isWin: platform.includes("Win"),
+      isMac: platform.includes("Mac")
+    });
+  }
+
+  #serialize(event) {
+    if (event.altKey) {
+      this.buffer.push("alt");
+    }
+
+    if (event.ctrlKey) {
+      this.buffer.push("ctrl");
+    }
+
+    if (event.metaKey) {
+      this.buffer.push("meta");
+    }
+
+    if (event.shiftKey) {
+      this.buffer.push("shift");
+    }
+
+    this.buffer.push(event.key);
+    const str = this.buffer.join("+");
+    this.buffer.length = 0;
+    return str;
+  }
+
+  exec(page, event) {
+    if (!this.allKeys.has(event.key)) {
+      return;
+    }
+
+    const callback = this.callbacks.get(this.#serialize(event));
+
+    if (!callback) {
+      return;
+    }
+
+    callback.bind(page)();
+    event.preventDefault();
+  }
+
+}
+
+exports.KeyboardManager = KeyboardManager;
+
+class ClipboardManager {
+  constructor() {
+    this.element = null;
+  }
+
+  copy(element) {
+    this.element = element.copy();
+  }
+
+  paste() {
+    return this.element?.copy() || null;
+  }
+
+}
+
+class AnnotationEditorUIManager {
+  #activeEditor = null;
+  #allEditors = new Map();
+  #allLayers = new Set();
+  #allowClick = true;
+  #clipboardManager = new ClipboardManager();
+  #commandManager = new CommandManager();
+  #idManager = new IdManager();
+  #isAllSelected = false;
+  #isEnabled = false;
+  #mode = _util.AnnotationEditorType.NONE;
+
+  getId() {
+    return this.#idManager.getId();
+  }
+
+  addLayer(layer) {
+    this.#allLayers.add(layer);
+
+    if (this.#isEnabled) {
+      layer.enable();
+    } else {
+      layer.disable();
+    }
+  }
+
+  removeLayer(layer) {
+    this.#allLayers.delete(layer);
+  }
+
+  updateMode(mode) {
+    this.#mode = mode;
+
+    if (mode === _util.AnnotationEditorType.NONE) {
+      this.#disableAll();
+    } else {
+      this.#enableAll();
+    }
+  }
+
+  #enableAll() {
+    if (!this.#isEnabled) {
+      this.#isEnabled = true;
+
+      for (const layer of this.#allLayers) {
+        layer.enable();
+      }
+    }
+  }
+
+  #disableAll() {
+    if (this.#isEnabled) {
+      this.#isEnabled = false;
+
+      for (const layer of this.#allLayers) {
+        layer.disable();
+      }
+    }
+  }
+
+  getEditors(pageIndex) {
+    const editors = [];
+
+    for (const editor of this.#allEditors.values()) {
+      if (editor.pageIndex === pageIndex) {
+        editors.push(editor);
+      }
+    }
+
+    return editors;
+  }
+
+  getEditor(id) {
+    return this.#allEditors.get(id);
+  }
+
+  addEditor(editor) {
+    this.#allEditors.set(editor.id, editor);
+  }
+
+  removeEditor(editor) {
+    this.#allEditors.delete(editor.id);
+  }
+
+  setActiveEditor(editor) {
+    this.#activeEditor = editor;
+  }
+
+  undo() {
+    this.#commandManager.undo();
+  }
+
+  redo() {
+    this.#commandManager.redo();
+  }
+
+  addCommands(cmd, undo) {
+    this.#commandManager.add(cmd, undo);
+  }
+
+  get allowClick() {
+    return this.#allowClick;
+  }
+
+  set allowClick(allow) {
+    this.#allowClick = allow;
+  }
+
+  unselect() {
+    if (this.#activeEditor) {
+      this.#activeEditor.parent.setActiveEditor(null);
+    }
+
+    this.#allowClick = true;
+  }
+
+  suppress(layer) {
+    let cmd, undo;
+
+    if (this.#isAllSelected) {
+      const editors = Array.from(this.#allEditors.values());
+
+      cmd = () => {
+        for (const editor of editors) {
+          editor.remove();
+        }
+      };
+
+      undo = () => {
+        for (const editor of editors) {
+          layer.addOrRebuild(editor);
+        }
+      };
+
+      this.addCommands(cmd, undo);
+    } else {
+      if (!this.#activeEditor) {
+        return;
+      }
+
+      const editor = this.#activeEditor;
+
+      cmd = () => {
+        editor.remove();
+      };
+
+      undo = () => {
+        layer.addOrRebuild(editor);
+      };
+    }
+
+    this.addCommands(cmd, undo);
+  }
+
+  copy() {
+    if (this.#activeEditor) {
+      this.#clipboardManager.copy(this.#activeEditor);
+    }
+  }
+
+  cut(layer) {
+    if (this.#activeEditor) {
+      this.#clipboardManager.copy(this.#activeEditor);
+      const editor = this.#activeEditor;
+
+      const cmd = () => {
+        editor.remove();
+      };
+
+      const undo = () => {
+        layer.addOrRebuild(editor);
+      };
+
+      this.addCommands(cmd, undo);
+    }
+  }
+
+  paste(layer) {
+    const editor = this.#clipboardManager.paste();
+
+    if (!editor) {
+      return;
+    }
+
+    const cmd = () => {
+      layer.addOrRebuild(editor);
+    };
+
+    const undo = () => {
+      editor.remove();
+    };
+
+    this.addCommands(cmd, undo);
+  }
+
+  selectAll() {
+    this.#isAllSelected = true;
+
+    for (const editor of this.#allEditors.values()) {
+      editor.select();
+    }
+  }
+
+  unselectAll() {
+    this.#isAllSelected = false;
+
+    for (const editor of this.#allEditors.values()) {
+      editor.unselect();
+    }
+  }
+
+  isActive(editor) {
+    return this.#activeEditor === editor;
+  }
+
+  getActive() {
+    return this.#activeEditor;
+  }
+
+  getMode() {
+    return this.#mode;
+  }
+
+}
+
+exports.AnnotationEditorUIManager = AnnotationEditorUIManager;
+
+/***/ }),
+/* 11 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -4779,7 +5416,7 @@ class MurmurHash3_64 {
 exports.MurmurHash3_64 = MurmurHash3_64;
 
 /***/ }),
-/* 10 */
+/* 12 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -4791,9 +5428,9 @@ exports.CanvasGraphics = void 0;
 
 var _util = __w_pdfjs_require__(1);
 
-var _pattern_helper = __w_pdfjs_require__(11);
+var _pattern_helper = __w_pdfjs_require__(13);
 
-var _image_utils = __w_pdfjs_require__(12);
+var _image_utils = __w_pdfjs_require__(14);
 
 var _is_node = __w_pdfjs_require__(3);
 
@@ -7750,7 +8387,7 @@ for (const op in _util.OPS) {
 }
 
 /***/ }),
-/* 11 */
+/* 13 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -8311,7 +8948,7 @@ class TilingPattern {
 exports.TilingPattern = TilingPattern;
 
 /***/ }),
-/* 12 */
+/* 14 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -8370,7 +9007,7 @@ function applyMaskImageData({
 }
 
 /***/ }),
-/* 13 */
+/* 15 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -8385,7 +9022,7 @@ GlobalWorkerOptions.workerPort = GlobalWorkerOptions.workerPort === undefined ? 
 GlobalWorkerOptions.workerSrc = GlobalWorkerOptions.workerSrc === undefined ? "" : GlobalWorkerOptions.workerSrc;
 
 /***/ }),
-/* 14 */
+/* 16 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -8871,7 +9508,7 @@ class MessageHandler {
 exports.MessageHandler = MessageHandler;
 
 /***/ }),
-/* 15 */
+/* 17 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -8916,7 +9553,7 @@ class Metadata {
 exports.Metadata = Metadata;
 
 /***/ }),
-/* 16 */
+/* 18 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -9137,7 +9774,7 @@ class OptionalContentConfig {
 exports.OptionalContentConfig = OptionalContentConfig;
 
 /***/ }),
-/* 17 */
+/* 19 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -9492,7 +10129,7 @@ class PDFDataTransportStreamRangeReader {
 }
 
 /***/ }),
-/* 18 */
+/* 20 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -9556,7 +10193,7 @@ class XfaText {
 exports.XfaText = XfaText;
 
 /***/ }),
-/* 19 */
+/* 21 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -9620,7 +10257,465 @@ class NodeStandardFontDataFactory extends _base_factory.BaseStandardFontDataFact
 exports.NodeStandardFontDataFactory = NodeStandardFontDataFactory;
 
 /***/ }),
-/* 20 */
+/* 22 */
+/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
+
+
+
+Object.defineProperty(exports, "__esModule", ({
+  value: true
+}));
+exports.AnnotationEditorLayer = void 0;
+
+var _util = __w_pdfjs_require__(1);
+
+var _tools = __w_pdfjs_require__(10);
+
+var _freetext = __w_pdfjs_require__(23);
+
+var _display_utils = __w_pdfjs_require__(5);
+
+class AnnotationEditorLayer {
+  #boundClick;
+  #editors = new Map();
+  #uiManager;
+  static _l10nInitialized = false;
+  static _keyboardManager = new _tools.KeyboardManager([[["ctrl+a", "mac+meta+a"], AnnotationEditorLayer.prototype.selectAll], [["ctrl+c", "mac+meta+c"], AnnotationEditorLayer.prototype.copy], [["ctrl+v", "mac+meta+v"], AnnotationEditorLayer.prototype.paste], [["ctrl+x", "mac+meta+x"], AnnotationEditorLayer.prototype.cut], [["ctrl+z", "mac+meta+z"], AnnotationEditorLayer.prototype.undo], [["ctrl+y", "ctrl+shift+Z", "mac+meta+shift+Z"], AnnotationEditorLayer.prototype.redo], [["ctrl+Backspace", "mac+Backspace", "mac+ctrl+Backspace", "mac+alt+Backspace"], AnnotationEditorLayer.prototype.suppress]]);
+
+  constructor(options) {
+    if (!AnnotationEditorLayer._l10nInitialized) {
+      AnnotationEditorLayer._l10nInitialized = true;
+
+      _freetext.FreeTextEditor.setL10n(options.l10n);
+    }
+
+    this.#uiManager = options.uiManager;
+    this.annotationStorage = options.annotationStorage;
+    this.pageIndex = options.pageIndex;
+    this.div = options.div;
+    this.#boundClick = this.click.bind(this);
+
+    for (const editor of this.#uiManager.getEditors(options.pageIndex)) {
+      this.add(editor);
+    }
+
+    this.#uiManager.addLayer(this);
+  }
+
+  addCommands(cmd, undo) {
+    this.#uiManager.addCommands(cmd, undo);
+  }
+
+  undo() {
+    this.#uiManager.undo();
+  }
+
+  redo() {
+    this.#uiManager.redo();
+  }
+
+  suppress() {
+    this.#uiManager.suppress();
+  }
+
+  copy() {
+    this.#uiManager.copy();
+  }
+
+  cut() {
+    this.#uiManager.cut(this);
+  }
+
+  paste() {
+    this.#uiManager.paste(this);
+  }
+
+  selectAll() {
+    this.#uiManager.selectAll();
+  }
+
+  unselectAll() {
+    this.#uiManager.unselectAll();
+  }
+
+  enable() {
+    this.div.style.pointerEvents = "auto";
+  }
+
+  disable() {
+    this.div.style.pointerEvents = "none";
+  }
+
+  setActiveEditor(editor) {
+    if (editor) {
+      this.unselectAll();
+      this.div.removeEventListener("click", this.#boundClick);
+    } else {
+      this.#uiManager.allowClick = false;
+      this.div.addEventListener("click", this.#boundClick);
+    }
+
+    this.#uiManager.setActiveEditor(editor);
+  }
+
+  attach(editor) {
+    this.#editors.set(editor.id, editor);
+  }
+
+  detach(editor) {
+    this.#editors.delete(editor.id);
+  }
+
+  remove(editor) {
+    this.#uiManager.removeEditor(editor);
+    this.detach(editor);
+    this.annotationStorage.removeKey(editor.id);
+    editor.div.remove();
+    editor.isAttachedToDOM = false;
+
+    if (this.#uiManager.isActive(editor) || this.#editors.size === 0) {
+      this.setActiveEditor(null);
+      this.#uiManager.allowClick = true;
+      this.div.focus();
+    }
+  }
+
+  #changeParent(editor) {
+    if (editor.parent === this) {
+      return;
+    }
+
+    this.attach(editor);
+    editor.pageIndex = this.pageIndex;
+    editor.parent.detach(editor);
+    editor.parent = this;
+
+    if (editor.div && editor.isAttachedToDOM) {
+      editor.div.remove();
+      this.div.appendChild(editor.div);
+    }
+  }
+
+  add(editor) {
+    this.#changeParent(editor);
+    this.annotationStorage.setValue(editor.id, editor);
+    this.#uiManager.addEditor(editor);
+    this.attach(editor);
+
+    if (!editor.isAttachedToDOM) {
+      const div = editor.render();
+      this.div.appendChild(div);
+      editor.isAttachedToDOM = true;
+    }
+
+    editor.onceAdded();
+  }
+
+  addOrRebuild(editor) {
+    if (editor.needsToBeRebuilt()) {
+      editor.rebuild();
+    } else {
+      this.add(editor);
+    }
+  }
+
+  addANewEditor(editor) {
+    const cmd = () => {
+      this.addOrRebuild(editor);
+    };
+
+    const undo = () => {
+      editor.remove();
+    };
+
+    this.addCommands(cmd, undo);
+  }
+
+  getNextId() {
+    return this.#uiManager.getId();
+  }
+
+  #createNewEditor(params) {
+    switch (this.#uiManager.getMode()) {
+      case _util.AnnotationEditorType.FREETEXT:
+        return new _freetext.FreeTextEditor(params);
+    }
+
+    return null;
+  }
+
+  click(event) {
+    if (!this.#uiManager.allowClick) {
+      this.#uiManager.allowClick = true;
+      return;
+    }
+
+    const id = this.getNextId();
+    const editor = this.#createNewEditor({
+      parent: this,
+      id,
+      x: event.offsetX,
+      y: event.offsetY
+    });
+
+    if (editor) {
+      this.addANewEditor(editor);
+    }
+  }
+
+  drop(event) {
+    const id = event.dataTransfer.getData("text/plain");
+    const editor = this.#uiManager.getEditor(id);
+
+    if (!editor) {
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    this.#changeParent(editor);
+    const rect = this.div.getBoundingClientRect();
+    editor.setAt(event.clientX - rect.x - editor.mouseX, event.clientY - rect.y - editor.mouseY);
+  }
+
+  dragover(event) {
+    event.preventDefault();
+  }
+
+  keydown(event) {
+    if (!this.#uiManager.getActive()?.shouldGetKeyboardEvents()) {
+      AnnotationEditorLayer._keyboardManager.exec(this, event);
+    }
+  }
+
+  destroy() {
+    for (const editor of this.#editors.values()) {
+      editor.isAttachedToDOM = false;
+      editor.div.remove();
+      editor.parent = null;
+      this.div = null;
+    }
+
+    this.#editors.clear();
+    this.#uiManager.removeLayer(this);
+  }
+
+  render(parameters) {
+    this.viewport = parameters.viewport;
+    this.inverseViewportTransform = _util.Util.inverseTransform(this.viewport.transform);
+    (0, _tools.bindEvents)(this, this.div, ["dragover", "drop", "keydown"]);
+    this.div.addEventListener("click", this.#boundClick);
+  }
+
+  update(parameters) {
+    const transform = _util.Util.transform(parameters.viewport.transform, this.inverseViewportTransform);
+
+    this.viewport = parameters.viewport;
+    this.inverseViewportTransform = _util.Util.inverseTransform(this.viewport.transform);
+
+    for (const editor of this.#editors.values()) {
+      editor.transform(transform);
+    }
+  }
+
+  get scaleFactor() {
+    return this.viewport.scale;
+  }
+
+  get zoomFactor() {
+    return this.viewport.scale / _display_utils.PixelsPerInch.PDF_TO_CSS_UNITS;
+  }
+
+}
+
+exports.AnnotationEditorLayer = AnnotationEditorLayer;
+
+/***/ }),
+/* 23 */
+/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
+
+
+
+Object.defineProperty(exports, "__esModule", ({
+  value: true
+}));
+exports.FreeTextEditor = void 0;
+
+var _util = __w_pdfjs_require__(1);
+
+var _editor = __w_pdfjs_require__(9);
+
+var _tools = __w_pdfjs_require__(10);
+
+class FreeTextEditor extends _editor.AnnotationEditor {
+  #color;
+  #content = "";
+  #contentHTML = "";
+  #fontSize;
+  static _freeTextDefaultContent = "";
+  static _l10nPromise;
+
+  constructor(params) {
+    super({ ...params,
+      name: "freeTextEditor"
+    });
+    this.#color = params.color || "CanvasText";
+    this.#fontSize = params.fontSize || 10;
+  }
+
+  static setL10n(l10n) {
+    this._l10nPromise = l10n.get("freetext_default_content");
+  }
+
+  copy() {
+    const editor = new FreeTextEditor({
+      parent: this.parent,
+      id: this.parent.getNextId(),
+      x: this.x,
+      y: this.y
+    });
+    editor.width = this.width;
+    editor.height = this.height;
+    editor.#color = this.#color;
+    editor.#fontSize = this.#fontSize;
+    editor.#content = this.#content;
+    editor.#contentHTML = this.#contentHTML;
+    return editor;
+  }
+
+  rebuild() {
+    if (this.div === null) {
+      return;
+    }
+
+    if (!this.isAttachedToDOM) {
+      this.parent.add(this);
+    }
+  }
+
+  enableEditMode() {
+    super.enableEditMode();
+    this.overlayDiv.classList.remove("enabled");
+    this.div.draggable = false;
+  }
+
+  disableEditMode() {
+    super.disableEditMode();
+    this.overlayDiv.classList.add("enabled");
+    this.div.draggable = true;
+  }
+
+  onceAdded() {
+    if (this.width) {
+      this.div.focus();
+      return;
+    }
+
+    this.enableEditMode();
+    this.editorDiv.focus();
+  }
+
+  isEmpty() {
+    return this.editorDiv.innerText.trim() === "";
+  }
+
+  #extractText() {
+    const divs = this.editorDiv.getElementsByTagName("div");
+
+    if (divs.length === 0) {
+      return this.editorDiv.innerText;
+    }
+
+    const buffer = [];
+
+    for (let i = 0, ii = divs.length; i < ii; i++) {
+      const div = divs[i];
+      const first = div.firstChild;
+
+      if (first?.nodeName === "#text") {
+        buffer.push(first.data);
+      } else {
+        buffer.push("");
+      }
+    }
+
+    return buffer.join("\n");
+  }
+
+  commit() {
+    this.disableEditMode();
+    this.#contentHTML = this.editorDiv.innerHTML;
+    this.#content = this.#extractText().trimEnd();
+    const style = getComputedStyle(this.div);
+    this.width = parseFloat(style.width);
+    this.height = parseFloat(style.height);
+  }
+
+  shouldGetKeyboardEvents() {
+    return this.isInEditMode();
+  }
+
+  dblclick(event) {
+    this.enableEditMode();
+    this.editorDiv.focus();
+  }
+
+  render() {
+    if (this.div) {
+      return this.div;
+    }
+
+    super.render();
+    this.editorDiv = document.createElement("div");
+    this.editorDiv.tabIndex = 0;
+    this.editorDiv.className = "internal";
+
+    FreeTextEditor._l10nPromise.then(msg => this.editorDiv.setAttribute("default-content", msg));
+
+    this.editorDiv.contentEditable = true;
+    const {
+      style
+    } = this.editorDiv;
+    style.fontSize = `calc(${this.#fontSize}px * var(--zoom-factor))`;
+    style.minHeight = `calc(${1.5 * this.#fontSize}px * var(--zoom-factor))`;
+    style.color = this.#color;
+    this.div.appendChild(this.editorDiv);
+    this.overlayDiv = document.createElement("div");
+    this.overlayDiv.classList.add("overlay", "enabled");
+    this.div.appendChild(this.overlayDiv);
+    (0, _tools.bindEvents)(this, this.div, ["dblclick"]);
+
+    if (this.width) {
+      this.setAt(this.x + this.width, this.y + this.height);
+      this.editorDiv.innerHTML = this.#contentHTML;
+    }
+
+    return this.div;
+  }
+
+  serialize() {
+    const rect = this.div.getBoundingClientRect();
+
+    const [x1, y1] = _util.Util.applyTransform([this.x, this.y + rect.height], this.parent.viewport.inverseTransform);
+
+    const [x2, y2] = _util.Util.applyTransform([this.x + rect.width, this.y], this.parent.viewport.inverseTransform);
+
+    return {
+      annotationType: _util.AnnotationEditorType.FREETEXT,
+      color: [0, 0, 0],
+      fontSize: this.#fontSize,
+      value: this.#content,
+      pageIndex: this.parent.pageIndex,
+      rect: [x1, y1, x2, y2]
+    };
+  }
+
+}
+
+exports.FreeTextEditor = FreeTextEditor;
+
+/***/ }),
+/* 24 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -9636,9 +10731,9 @@ var _display_utils = __w_pdfjs_require__(5);
 
 var _annotation_storage = __w_pdfjs_require__(8);
 
-var _scripting_utils = __w_pdfjs_require__(21);
+var _scripting_utils = __w_pdfjs_require__(25);
 
-var _xfa_layer = __w_pdfjs_require__(22);
+var _xfa_layer = __w_pdfjs_require__(26);
 
 const DEFAULT_TAB_INDEX = 1000;
 const DEFAULT_FONT_SIZE = 9;
@@ -10105,12 +11200,12 @@ class AnnotationElement {
 
 class LinkAnnotationElement extends AnnotationElement {
   constructor(parameters, options = null) {
-    const isRenderable = !!(parameters.data.url || parameters.data.dest || parameters.data.action || parameters.data.isTooltipOnly || parameters.data.resetForm || parameters.data.actions && (parameters.data.actions.Action || parameters.data.actions["Mouse Up"] || parameters.data.actions["Mouse Down"]));
     super(parameters, {
-      isRenderable,
+      isRenderable: true,
       ignoreBorder: !!options?.ignoreBorder,
       createQuadrilaterals: true
     });
+    this.isTooltipOnly = parameters.data.isTooltipOnly;
   }
 
   render() {
@@ -10119,26 +11214,34 @@ class LinkAnnotationElement extends AnnotationElement {
       linkService
     } = this;
     const link = document.createElement("a");
+    let isBound = false;
 
     if (data.url) {
       linkService.addLinkAttributes(link, data.url, data.newWindow);
+      isBound = true;
     } else if (data.action) {
       this._bindNamedAction(link, data.action);
+
+      isBound = true;
     } else if (data.dest) {
       this._bindLink(link, data.dest);
+
+      isBound = true;
     } else {
-      let hasClickAction = false;
-
       if (data.actions && (data.actions.Action || data.actions["Mouse Up"] || data.actions["Mouse Down"]) && this.enableScripting && this.hasJSActions) {
-        hasClickAction = true;
-
         this._bindJSAction(link, data);
+
+        isBound = true;
       }
 
       if (data.resetForm) {
         this._bindResetFormAction(link, data.resetForm);
-      } else if (!hasClickAction) {
+
+        isBound = true;
+      } else if (this.isTooltipOnly && !isBound) {
         this._bindLink(link, "");
+
+        isBound = true;
       }
     }
 
@@ -10151,7 +11254,11 @@ class LinkAnnotationElement extends AnnotationElement {
     }
 
     this.container.className = "linkAnnotation";
-    this.container.appendChild(link);
+
+    if (isBound) {
+      this.container.appendChild(link);
+    }
+
     return this.container;
   }
 
@@ -11916,7 +13023,9 @@ class AnnotationLayer {
         firstChild
       } = element;
 
-      if (firstChild.nodeName === "CANVAS") {
+      if (!firstChild) {
+        element.appendChild(canvas);
+      } else if (firstChild.nodeName === "CANVAS") {
         element.replaceChild(canvas, firstChild);
       } else {
         element.insertBefore(canvas, firstChild);
@@ -11931,7 +13040,7 @@ class AnnotationLayer {
 exports.AnnotationLayer = AnnotationLayer;
 
 /***/ }),
-/* 21 */
+/* 25 */
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -11999,7 +13108,7 @@ class ColorConverters {
 exports.ColorConverters = ColorConverters;
 
 /***/ }),
-/* 22 */
+/* 26 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -12009,7 +13118,7 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.XfaLayer = void 0;
 
-var _xfa_text = __w_pdfjs_require__(18);
+var _xfa_text = __w_pdfjs_require__(20);
 
 class XfaLayer {
   static setupStorage(html, id, element, storage, intent) {
@@ -12247,7 +13356,7 @@ class XfaLayer {
 exports.XfaLayer = XfaLayer;
 
 /***/ }),
-/* 23 */
+/* 27 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -13028,7 +14137,7 @@ function renderTextLayer(renderParameters) {
 }
 
 /***/ }),
-/* 24 */
+/* 28 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -14583,7 +15692,7 @@ exports.SVGGraphics = SVGGraphics;
 }
 
 /***/ }),
-/* 25 */
+/* 29 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -14595,7 +15704,7 @@ exports.PDFNodeStream = void 0;
 
 var _util = __w_pdfjs_require__(1);
 
-var _network_utils = __w_pdfjs_require__(26);
+var _network_utils = __w_pdfjs_require__(30);
 
 ;
 
@@ -15049,7 +16158,7 @@ class PDFNodeStreamFsRangeReader extends BaseRangeReader {
 }
 
 /***/ }),
-/* 26 */
+/* 30 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -15064,7 +16173,7 @@ exports.validateResponseStatus = validateResponseStatus;
 
 var _util = __w_pdfjs_require__(1);
 
-var _content_disposition = __w_pdfjs_require__(27);
+var _content_disposition = __w_pdfjs_require__(31);
 
 var _display_utils = __w_pdfjs_require__(5);
 
@@ -15141,7 +16250,7 @@ function validateResponseStatus(status) {
 }
 
 /***/ }),
-/* 27 */
+/* 31 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -15321,7 +16430,7 @@ function getFilenameFromContentDispositionHeader(contentDisposition) {
 }
 
 /***/ }),
-/* 28 */
+/* 32 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -15333,7 +16442,7 @@ exports.PDFNetworkStream = void 0;
 
 var _util = __w_pdfjs_require__(1);
 
-var _network_utils = __w_pdfjs_require__(26);
+var _network_utils = __w_pdfjs_require__(30);
 
 ;
 const OK_RESPONSE = 200;
@@ -15862,7 +16971,7 @@ class PDFNetworkStreamRangeRequestReader {
 }
 
 /***/ }),
-/* 29 */
+/* 33 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -15874,7 +16983,7 @@ exports.PDFFetchStream = void 0;
 
 var _util = __w_pdfjs_require__(1);
 
-var _network_utils = __w_pdfjs_require__(26);
+var _network_utils = __w_pdfjs_require__(30);
 
 ;
 
@@ -16183,6 +17292,24 @@ var exports = __webpack_exports__;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
+Object.defineProperty(exports, "AnnotationEditorLayer", ({
+  enumerable: true,
+  get: function () {
+    return _annotation_editor_layer.AnnotationEditorLayer;
+  }
+}));
+Object.defineProperty(exports, "AnnotationEditorType", ({
+  enumerable: true,
+  get: function () {
+    return _util.AnnotationEditorType;
+  }
+}));
+Object.defineProperty(exports, "AnnotationEditorUIManager", ({
+  enumerable: true,
+  get: function () {
+    return _tools.AnnotationEditorUIManager;
+  }
+}));
 Object.defineProperty(exports, "AnnotationLayer", ({
   enumerable: true,
   get: function () {
@@ -16388,25 +17515,29 @@ var _api = __w_pdfjs_require__(4);
 
 var _display_utils = __w_pdfjs_require__(5);
 
-var _annotation_layer = __w_pdfjs_require__(20);
+var _annotation_editor_layer = __w_pdfjs_require__(22);
 
-var _worker_options = __w_pdfjs_require__(13);
+var _tools = __w_pdfjs_require__(10);
+
+var _annotation_layer = __w_pdfjs_require__(24);
+
+var _worker_options = __w_pdfjs_require__(15);
 
 var _is_node = __w_pdfjs_require__(3);
 
-var _text_layer = __w_pdfjs_require__(23);
+var _text_layer = __w_pdfjs_require__(27);
 
-var _svg = __w_pdfjs_require__(24);
+var _svg = __w_pdfjs_require__(28);
 
-var _xfa_layer = __w_pdfjs_require__(22);
+var _xfa_layer = __w_pdfjs_require__(26);
 
 const pdfjsVersion = '2.15.0';
-const pdfjsBuild = '9bdf27e';
+const pdfjsBuild = '9b22483';
 {
   if (_is_node.isNodeJS) {
     const {
       PDFNodeStream
-    } = __w_pdfjs_require__(25);
+    } = __w_pdfjs_require__(29);
 
     (0, _api.setPDFNetworkStreamFactory)(params => {
       return new PDFNodeStream(params);
@@ -16414,11 +17545,11 @@ const pdfjsBuild = '9bdf27e';
   } else {
     const {
       PDFNetworkStream
-    } = __w_pdfjs_require__(28);
+    } = __w_pdfjs_require__(32);
 
     const {
       PDFFetchStream
-    } = __w_pdfjs_require__(29);
+    } = __w_pdfjs_require__(33);
 
     (0, _api.setPDFNetworkStreamFactory)(params => {
       if ((0, _display_utils.isValidFetchUrl)(params.url)) {
