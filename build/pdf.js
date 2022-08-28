@@ -3543,7 +3543,7 @@ class InternalRenderTask {
 
 const version = '2.16.0';
 exports.version = version;
-const build = '1a00716';
+const build = 'd62cce4';
 exports.build = build;
 
 /***/ }),
@@ -3586,11 +3586,21 @@ class AnnotationStorage {
     return this._storage.get(key);
   }
 
-  removeKey(key) {
+  remove(key) {
     this._storage.delete(key);
 
     if (this._storage.size === 0) {
       this.resetModified();
+    }
+
+    if (typeof this.onAnnotationEditor === "function") {
+      for (const value of this._storage.values()) {
+        if (value instanceof _editor.AnnotationEditor) {
+          return;
+        }
+      }
+
+      this.onAnnotationEditor(null);
     }
   }
 
@@ -3673,16 +3683,6 @@ class AnnotationStorage {
     }
 
     return clone;
-  }
-
-  get hasAnnotationEditors() {
-    for (const value of this._storage.values()) {
-      if (value instanceof _editor.AnnotationEditor) {
-        return true;
-      }
-    }
-
-    return false;
   }
 
   static getHash(map) {
@@ -6091,9 +6091,9 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.CanvasGraphics = void 0;
 
-var _util = __w_pdfjs_require__(1);
-
 var _display_utils = __w_pdfjs_require__(8);
+
+var _util = __w_pdfjs_require__(1);
 
 var _pattern_helper = __w_pdfjs_require__(13);
 
@@ -7082,6 +7082,7 @@ class CanvasGraphics {
     this.baseTransform = (0, _display_utils.getCurrentTransform)(this.ctx);
 
     if (this.imageLayer) {
+      (0, _display_utils.deprecated)("The `imageLayer` functionality will be removed in the future.");
       this.imageLayer.beginLayout();
     }
   }
@@ -8636,11 +8637,12 @@ class CanvasGraphics {
     const [rWidth, rHeight] = drawImageAtIntegerCoords(ctx, scaled.img, 0, 0, scaled.paintWidth, scaled.paintHeight, 0, -height, width, height);
 
     if (this.imageLayer) {
-      const position = this.getCanvasPosition(0, -height);
+      const [left, top] = _util.Util.applyTransform([0, -height], (0, _display_utils.getCurrentTransform)(this.ctx));
+
       this.imageLayer.appendImage({
         imgData,
-        left: position[0],
-        top: position[1],
+        left,
+        top,
         width: rWidth,
         height: rHeight
       });
@@ -8669,11 +8671,12 @@ class CanvasGraphics {
       drawImageAtIntegerCoords(ctx, tmpCanvas.canvas, entry.x, entry.y, entry.w, entry.h, 0, -1, 1, 1);
 
       if (this.imageLayer) {
-        const position = this.getCanvasPosition(entry.x, entry.y);
+        const [left, top] = _util.Util.applyTransform([entry.x, entry.y], (0, _display_utils.getCurrentTransform)(this.ctx));
+
         this.imageLayer.appendImage({
           imgData,
-          left: position[0],
-          top: position[1],
+          left,
+          top,
           width: w,
           height: h
         });
@@ -8849,11 +8852,6 @@ class CanvasGraphics {
       ctx.setLineDash(savedDashes);
       ctx.lineDashOffset = savedDashOffset;
     }
-  }
-
-  getCanvasPosition(x, y) {
-    const transform = (0, _display_utils.getCurrentTransform)(this.ctx);
-    return [transform[0] * x + transform[2] * y + transform[4], transform[1] * x + transform[3] * y + transform[5]];
   }
 
   isContentVisible() {
@@ -10933,7 +10931,7 @@ class AnnotationEditorLayer {
   remove(editor) {
     this.#uiManager.removeEditor(editor);
     this.detach(editor);
-    this.annotationStorage.removeKey(editor.id);
+    this.annotationStorage.remove(editor.id);
     editor.div.style.display = "none";
     setTimeout(() => {
       editor.div.style.display = "";
@@ -19202,7 +19200,7 @@ function createFetchOptions(headers, withCredentials, abortController) {
   return {
     method: "GET",
     headers,
-    signal: abortController?.signal,
+    signal: abortController.signal,
     mode: "cors",
     credentials: withCredentials ? "include" : "same-origin",
     redirect: "follow"
@@ -19287,10 +19285,7 @@ class PDFFetchStreamReader {
       this._disableRange = true;
     }
 
-    if (typeof AbortController !== "undefined") {
-      this._abortController = new AbortController();
-    }
-
+    this._abortController = new AbortController();
     this._isStreamingSupported = !source.disableStream;
     this._isRangeSupported = !source.disableRange;
     this._headers = createHeaders(this._stream.httpHeaders);
@@ -19383,9 +19378,7 @@ class PDFFetchStreamReader {
       this._reader.cancel(reason);
     }
 
-    if (this._abortController) {
-      this._abortController.abort();
-    }
+    this._abortController.abort();
   }
 
 }
@@ -19399,11 +19392,7 @@ class PDFFetchStreamRangeReader {
     this._withCredentials = source.withCredentials || false;
     this._readCapability = (0, _util.createPromiseCapability)();
     this._isStreamingSupported = !source.disableStream;
-
-    if (typeof AbortController !== "undefined") {
-      this._abortController = new AbortController();
-    }
-
+    this._abortController = new AbortController();
     this._headers = createHeaders(this._stream.httpHeaders);
 
     this._headers.append("Range", `bytes=${begin}-${end - 1}`);
@@ -19459,9 +19448,7 @@ class PDFFetchStreamRangeReader {
       this._reader.cancel(reason);
     }
 
-    if (this._abortController) {
-      this._abortController.abort();
-    }
+    this._abortController.abort();
   }
 
 }
@@ -19749,7 +19736,7 @@ var _svg = __w_pdfjs_require__(31);
 var _xfa_layer = __w_pdfjs_require__(29);
 
 const pdfjsVersion = '2.16.0';
-const pdfjsBuild = '1a00716';
+const pdfjsBuild = 'd62cce4';
 {
   if (_is_node.isNodeJS) {
     const {

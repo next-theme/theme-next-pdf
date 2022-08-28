@@ -1664,6 +1664,8 @@ const PDFViewerApplication = {
   _wheelUnusedTicks: 0,
   _idleCallbacks: new Set(),
   _PDFBug: null,
+  _hasAnnotationEditors: false,
+  _title: document.title,
   _printAnnotationStoragePromise: null,
 
   async initialize(appConfig) {
@@ -2087,12 +2089,14 @@ const PDFViewerApplication = {
     this.setTitle(title);
   },
 
-  setTitle(title) {
+  setTitle(title = this._title) {
+    this._title = title;
+
     if (this.isViewerEmbedded) {
       return;
     }
 
-    document.title = title;
+    document.title = `${this._hasAnnotationEditors ? "* " : ""}${title}`;
   },
 
   get _docFilename() {
@@ -2165,10 +2169,12 @@ const PDFViewerApplication = {
     this._contentLength = null;
     this._saveInProgress = false;
     this._docStats = null;
+    this._hasAnnotationEditors = false;
 
     this._cancelIdleCallbacks();
 
     promises.push(this.pdfScriptingManager.destroyPromise);
+    this.setTitle();
     this.pdfSidebar.reset();
     this.pdfOutlineViewer.reset();
     this.pdfAttachmentViewer.reset();
@@ -2315,7 +2321,7 @@ const PDFViewerApplication = {
       this._saveInProgress = false;
     }
 
-    if (this.pdfDocument?.annotationStorage.hasAnnotationEditors) {
+    if (this._hasAnnotationEditors) {
       this.externalServices.reportTelemetry({
         type: "editing",
         data: {
@@ -2763,7 +2769,7 @@ const PDFViewerApplication = {
     }
 
     if (pdfTitle) {
-      this.setTitle(`${pdfTitle} - ${this._contentDispositionFilename || document.title}`);
+      this.setTitle(`${pdfTitle} - ${this._contentDispositionFilename || this._title}`);
     } else if (this._contentDispositionFilename) {
       this.setTitle(this._contentDispositionFilename);
     }
@@ -2916,12 +2922,17 @@ const PDFViewerApplication = {
     };
 
     annotationStorage.onAnnotationEditor = typeStr => {
-      this.externalServices.reportTelemetry({
-        type: "editing",
-        data: {
-          type: typeStr
-        }
-      });
+      this._hasAnnotationEditors = !!typeStr;
+      this.setTitle();
+
+      if (typeStr) {
+        this.externalServices.reportTelemetry({
+          type: "editing",
+          data: {
+            type: typeStr
+          }
+        });
+      }
     };
   },
 
@@ -3022,7 +3033,7 @@ const PDFViewerApplication = {
       type: "print"
     });
 
-    if (this.pdfDocument?.annotationStorage.hasAnnotationEditors) {
+    if (this._hasAnnotationEditors) {
       this.externalServices.reportTelemetry({
         type: "editing",
         data: {
@@ -4913,6 +4924,7 @@ exports.PasswordPrompt = void 0;
 var _pdfjsLib = __webpack_require__(5);
 
 class PasswordPrompt {
+  #activeCapability = null;
   #updateCallback = null;
   #reason = null;
 
@@ -4926,7 +4938,7 @@ class PasswordPrompt {
     this.l10n = l10n;
     this._isViewerEmbedded = isViewerEmbedded;
     this.submitButton.addEventListener("click", this.#verify.bind(this));
-    this.cancelButton.addEventListener("click", this.#cancel.bind(this));
+    this.cancelButton.addEventListener("click", this.close.bind(this));
     this.input.addEventListener("keydown", e => {
       if (e.keyCode === 13) {
         this.#verify();
@@ -4937,7 +4949,19 @@ class PasswordPrompt {
   }
 
   async open() {
-    await this.overlayManager.open(this.dialog);
+    if (this.#activeCapability) {
+      await this.#activeCapability.promise;
+    }
+
+    this.#activeCapability = (0, _pdfjsLib.createPromiseCapability)();
+
+    try {
+      await this.overlayManager.open(this.dialog);
+    } catch (ex) {
+      this.#activeCapability = null;
+      throw ex;
+    }
+
     const passwordIncorrect = this.#reason === _pdfjsLib.PasswordResponses.INCORRECT_PASSWORD;
 
     if (!this._isViewerEmbedded || passwordIncorrect) {
@@ -4963,6 +4987,7 @@ class PasswordPrompt {
 
   #cancel() {
     this.#invokeCallback(new Error("PasswordPrompt cancelled."));
+    this.#activeCapability.resolve();
   }
 
   #invokeCallback(password) {
@@ -4976,7 +5001,11 @@ class PasswordPrompt {
     this.#updateCallback = null;
   }
 
-  setUpdateCallback(updateCallback, reason) {
+  async setUpdateCallback(updateCallback, reason) {
+    if (this.#activeCapability) {
+      await this.#activeCapability.promise;
+    }
+
     this.#updateCallback = updateCallback;
     this.#reason = reason;
   }
@@ -7830,6 +7859,7 @@ class PDFPresentationMode {
 
     try {
       await promise;
+      pdfViewer.focus();
       return true;
     } catch (reason) {
       this.#removeFullscreenChangeListeners();
@@ -14308,22 +14338,28 @@ class Toolbar {
       element: options.viewBookmark,
       eventName: null
     }, {
-      element: options.editorNoneButton,
-      eventName: "switchannotationeditormode",
-      eventDetails: {
-        mode: _pdfjsLib.AnnotationEditorType.NONE
-      }
-    }, {
       element: options.editorFreeTextButton,
       eventName: "switchannotationeditormode",
       eventDetails: {
-        mode: _pdfjsLib.AnnotationEditorType.FREETEXT
+        get mode() {
+          const {
+            classList
+          } = options.editorFreeTextButton;
+          return classList.contains("toggled") ? _pdfjsLib.AnnotationEditorType.NONE : _pdfjsLib.AnnotationEditorType.FREETEXT;
+        }
+
       }
     }, {
       element: options.editorInkButton,
       eventName: "switchannotationeditormode",
       eventDetails: {
-        mode: _pdfjsLib.AnnotationEditorType.INK
+        get mode() {
+          const {
+            classList
+          } = options.editorInkButton;
+          return classList.contains("toggled") ? _pdfjsLib.AnnotationEditorType.NONE : _pdfjsLib.AnnotationEditorType.INK;
+        }
+
       }
     }];
     this.buttons.push({
@@ -14338,12 +14374,7 @@ class Toolbar {
       previous: options.previous,
       next: options.next,
       zoomIn: options.zoomIn,
-      zoomOut: options.zoomOut,
-      editorNoneButton: options.editorNoneButton,
-      editorFreeTextButton: options.editorFreeTextButton,
-      editorFreeTextParamsToolbar: options.editorFreeTextParamsToolbar,
-      editorInkButton: options.editorInkButton,
-      editorInkParamsToolbar: options.editorInkParamsToolbar
+      zoomOut: options.zoomOut
     };
     this.#bindListeners(options);
     this.reset();
@@ -14448,7 +14479,6 @@ class Toolbar {
   }
 
   #bindEditorToolsListener({
-    editorNoneButton,
     editorFreeTextButton,
     editorFreeTextParamsToolbar,
     editorInkButton,
@@ -14456,9 +14486,6 @@ class Toolbar {
   }) {
     const editorModeChanged = (evt, disableButtons = false) => {
       const editorButtons = [{
-        mode: _pdfjsLib.AnnotationEditorType.NONE,
-        button: editorNoneButton
-      }, {
         mode: _pdfjsLib.AnnotationEditorType.FREETEXT,
         button: editorFreeTextButton,
         toolbar: editorFreeTextParamsToolbar
@@ -14477,10 +14504,7 @@ class Toolbar {
         button.classList.toggle("toggled", checked);
         button.setAttribute("aria-checked", checked);
         button.disabled = disableButtons;
-
-        if (toolbar) {
-          toolbar.classList.toggle("hidden", !checked);
-        }
+        toolbar?.classList.toggle("hidden", !checked);
       }
     };
 
@@ -16343,7 +16367,7 @@ var _pdf_link_service = __webpack_require__(3);
 var _app = __webpack_require__(4);
 
 const pdfjsVersion = '2.16.0';
-const pdfjsBuild = '1a00716';
+const pdfjsBuild = 'd62cce4';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,
@@ -16391,7 +16415,6 @@ function getViewerConfiguration() {
       viewFind: document.getElementById("viewFind"),
       openFile: document.getElementById("openFile"),
       print: document.getElementById("print"),
-      editorNoneButton: document.getElementById("editorNone"),
       editorFreeTextButton: document.getElementById("editorFreeText"),
       editorFreeTextParamsToolbar: document.getElementById("editorFreeTextParamsToolbar"),
       editorInkButton: document.getElementById("editorInk"),
