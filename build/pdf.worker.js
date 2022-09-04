@@ -117,7 +117,7 @@ class WorkerMessageHandler {
     const WorkerTasks = [];
     const verbosity = (0, _util.getVerbosityLevel)();
     const apiVersion = docParams.apiVersion;
-    const workerVersion = '2.16.0';
+    const workerVersion = '3.0.0';
 
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
@@ -57467,7 +57467,8 @@ class Catalog {
 
       const data = {
         url: null,
-        dest: null
+        dest: null,
+        action: null
       };
       Catalog.parseDestDictionary({
         destDict: outlineDict,
@@ -57485,10 +57486,12 @@ class Catalog {
       }
 
       const outlineItem = {
+        action: data.action,
         dest: data.dest,
         url: data.url,
         unsafeUrl: data.unsafeUrl,
         newWindow: data.newWindow,
+        setOCGState: data.setOCGState,
         title: (0, _util.stringToPDFString)(title),
         color: rgbColor,
         count: Number.isInteger(count) ? count : undefined,
@@ -58766,6 +58769,40 @@ class Catalog {
             resultObj.action = namedAction.name;
           }
 
+          break;
+
+        case "SetOCGState":
+          const state = action.get("State");
+          const preserveRB = action.get("PreserveRB");
+
+          if (!Array.isArray(state) || state.length === 0) {
+            break;
+          }
+
+          const stateArr = [];
+
+          for (const elem of state) {
+            if (elem instanceof _primitives.Name) {
+              switch (elem.name) {
+                case "ON":
+                case "OFF":
+                case "Toggle":
+                  stateArr.push(elem.name);
+                  break;
+              }
+            } else if (elem instanceof _primitives.Ref) {
+              stateArr.push(elem.toString());
+            }
+          }
+
+          if (stateArr.length !== state.length) {
+            break;
+          }
+
+          resultObj.setOCGState = {
+            state: stateArr,
+            preserveRB: typeof preserveRB === "boolean" ? preserveRB : true
+          };
           break;
 
         case "JavaScript":
@@ -75379,8 +75416,8 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 
 var _worker = __w_pdfjs_require__(1);
 
-const pdfjsVersion = '2.16.0';
-const pdfjsBuild = 'd62cce4';
+const pdfjsVersion = '3.0.0';
+const pdfjsBuild = '50d72fc';
 })();
 
 /******/ 	return __webpack_exports__;
