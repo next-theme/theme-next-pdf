@@ -25068,6 +25068,10 @@ function adjustToUnicode(properties, builtInEncoding) {
     return;
   }
 
+  if (properties.hasIncludedToUnicodeMap) {
+    return;
+  }
+
   if (builtInEncoding === properties.defaultEncoding) {
     return;
   }
@@ -25080,11 +25084,7 @@ function adjustToUnicode(properties, builtInEncoding) {
         glyphsUnicodeMap = (0, _glyphlist.getGlyphsUnicode)();
 
   for (const charCode in builtInEncoding) {
-    if (properties.hasIncludedToUnicodeMap) {
-      if (properties.toUnicode.has(charCode)) {
-        continue;
-      }
-    } else if (properties.hasEncoding) {
+    if (properties.hasEncoding) {
       if (properties.differences.length === 0 || properties.differences[charCode] !== undefined) {
         continue;
       }
@@ -48382,6 +48382,8 @@ exports.Type1Font = void 0;
 
 var _cff_parser = __w_pdfjs_require__(35);
 
+var _util = __w_pdfjs_require__(2);
+
 var _fonts_utils = __w_pdfjs_require__(38);
 
 var _core_utils = __w_pdfjs_require__(6);
@@ -48389,8 +48391,6 @@ var _core_utils = __w_pdfjs_require__(6);
 var _stream = __w_pdfjs_require__(10);
 
 var _type1_parser = __w_pdfjs_require__(49);
-
-var _util = __w_pdfjs_require__(2);
 
 function findBlock(streamBytes, signature, startIndex) {
   const streamBytesLength = streamBytes.length;
@@ -48486,6 +48486,11 @@ function getHeaderBlock(stream, suggestedLength) {
 
 function getEexecBlock(stream, suggestedLength) {
   const eexecBytes = stream.getBytes();
+
+  if (eexecBytes.length === 0) {
+    throw new _util.FormatError("getEexecBlock - no font program found.");
+  }
+
   return {
     stream: new _stream.Stream(eexecBytes),
     length: eexecBytes.length
@@ -75417,7 +75422,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '3.0.0';
-const pdfjsBuild = '50d72fc';
+const pdfjsBuild = 'f63d584';
 })();
 
 /******/ 	return __webpack_exports__;
