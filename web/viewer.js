@@ -675,7 +675,7 @@ const OptionKind = {
 exports.OptionKind = OptionKind;
 const defaultOptions = {
   annotationEditorMode: {
-    value: -1,
+    value: 0,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE
   },
   annotationMode: {
@@ -1977,9 +1977,9 @@ const PDFViewerApplication = {
 
     if (annotationEditorMode !== _pdfjsLib.AnnotationEditorType.DISABLE) {
       this.annotationEditorParams = new _annotation_editor_params.AnnotationEditorParams(appConfig.annotationEditorParams, eventBus);
-
+    } else {
       for (const element of [document.getElementById("editorModeButtons"), document.getElementById("editorModeSeparator")]) {
-        element.classList.remove("hidden");
+        element.hidden = true;
       }
     }
 
@@ -1992,7 +1992,7 @@ const PDFViewerApplication = {
       cursorToolOnLoad: _app_options.AppOptions.get("cursorToolOnLoad")
     });
     this.toolbar = new _toolbar.Toolbar(appConfig.toolbar, eventBus, this.l10n);
-    this.secondaryToolbar = new _secondary_toolbar.SecondaryToolbar(appConfig.secondaryToolbar, eventBus);
+    this.secondaryToolbar = new _secondary_toolbar.SecondaryToolbar(appConfig.secondaryToolbar, eventBus, this.externalServices);
 
     if (this.supportsFullscreen) {
       this.pdfPresentationMode = new _pdf_presentation_mode.PDFPresentationMode({
@@ -2134,7 +2134,8 @@ const PDFViewerApplication = {
       return;
     }
 
-    document.title = `${this._hasAnnotationEditors ? "* " : ""}${title}`;
+    const editorIndicator = this._hasAnnotationEditors && !this.pdfRenderingQueue.printing;
+    document.title = `${editorIndicator ? "* " : ""}${title}`;
   },
 
   get _docFilename() {
@@ -3020,6 +3021,7 @@ const PDFViewerApplication = {
     const printService = PDFPrintServiceFactory.instance.createPrintService(this.pdfDocument, pagesOverview, printContainer, printResolution, optionalContentConfigPromise, this._printAnnotationStoragePromise, this.l10n);
     this.printService = printService;
     this.forceRendering();
+    this.setTitle();
     printService.layout();
     this.externalServices.reportTelemetry({
       type: "print"
@@ -3051,6 +3053,7 @@ const PDFViewerApplication = {
     }
 
     this.forceRendering();
+    this.setTitle();
   },
 
   rotatePages(delta) {
@@ -4108,6 +4111,12 @@ function webViewerKeyDown(evt) {
       case 80:
         PDFViewerApplication.requestPresentationMode();
         handled = true;
+        PDFViewerApplication.externalServices.reportTelemetry({
+          type: "buttons",
+          data: {
+            id: "presentationModeKeyboard"
+          }
+        });
         break;
 
       case 71:
@@ -4582,8 +4591,12 @@ class PDFCursorTools {
         case _ui_utils.PresentationModeState.NORMAL:
           {
             const previouslyActive = this.activeBeforePresentationMode;
-            this.activeBeforePresentationMode = null;
-            this.switchTool(previouslyActive);
+
+            if (previouslyActive !== null) {
+              this.activeBeforePresentationMode = null;
+              this.switchTool(previouslyActive);
+            }
+
             break;
           }
       }
@@ -10092,7 +10105,7 @@ exports.PDFPageViewBuffer = PDFPageViewBuffer;
 
 class PDFViewer {
   #buffer = null;
-  #annotationEditorMode = _pdfjsLib.AnnotationEditorType.DISABLE;
+  #annotationEditorMode = _pdfjsLib.AnnotationEditorType.NONE;
   #annotationEditorUIManager = null;
   #annotationMode = _pdfjsLib.AnnotationMode.ENABLE_FORMS;
   #enablePermissions = false;
@@ -10126,7 +10139,7 @@ class PDFViewer {
     this.removePageBorders = options.removePageBorders || false;
     this.textLayerMode = options.textLayerMode ?? _ui_utils.TextLayerMode.ENABLE;
     this.#annotationMode = options.annotationMode ?? _pdfjsLib.AnnotationMode.ENABLE_FORMS;
-    this.#annotationEditorMode = options.annotationEditorMode ?? _pdfjsLib.AnnotationEditorType.DISABLE;
+    this.#annotationEditorMode = options.annotationEditorMode ?? _pdfjsLib.AnnotationEditorType.NONE;
     this.imageResourcesPath = options.imageResourcesPath || "";
     this.enablePrintAutoRotate = options.enablePrintAutoRotate || false;
     this.renderer = options.renderer || _ui_utils.RendererType.CANVAS;
@@ -13926,7 +13939,7 @@ var _pdf_cursor_tools = __webpack_require__(7);
 var _pdf_viewer = __webpack_require__(28);
 
 class SecondaryToolbar {
-  constructor(options, eventBus) {
+  constructor(options, eventBus, externalServices) {
     this.toolbar = options.toolbar;
     this.toggleButton = options.toggleButton;
     this.buttons = [{
@@ -14041,6 +14054,7 @@ class SecondaryToolbar {
       pageRotateCcw: options.pageRotateCcwButton
     };
     this.eventBus = eventBus;
+    this.externalServices = externalServices;
     this.opened = false;
     this.#bindClickListeners();
     this.#bindCursorToolsListener(options);
@@ -14104,6 +14118,13 @@ class SecondaryToolbar {
         if (close) {
           this.close();
         }
+
+        this.externalServices.reportTelemetry({
+          type: "buttons",
+          data: {
+            id: element.id
+          }
+        });
       });
     }
   }
@@ -14742,7 +14763,7 @@ var _app_options = __webpack_require__(2);
 
 class BasePreferences {
   #defaults = Object.freeze({
-    "annotationEditorMode": -1,
+    "annotationEditorMode": 0,
     "annotationMode": 2,
     "cursorToolOnLoad": 0,
     "defaultZoomValue": "",
@@ -16305,7 +16326,7 @@ var _pdf_link_service = __webpack_require__(3);
 var _app = __webpack_require__(4);
 
 const pdfjsVersion = '3.0.0';
-const pdfjsBuild = 'f63d584';
+const pdfjsBuild = 'bcdf161';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,
