@@ -2179,35 +2179,31 @@ class PDFPageProxy {
 exports.PDFPageProxy = PDFPageProxy;
 
 class LoopbackPort {
-  constructor() {
-    this._listeners = [];
-    this._deferred = Promise.resolve();
-  }
+  #listeners = [];
+  #deferred = Promise.resolve();
 
   postMessage(obj, transfers) {
     const event = {
       data: structuredClone(obj, transfers)
     };
-
-    this._deferred.then(() => {
-      for (const listener of this._listeners) {
+    this.#deferred.then(() => {
+      for (const listener of this.#listeners) {
         listener.call(this, event);
       }
     });
   }
 
   addEventListener(name, listener) {
-    this._listeners.push(listener);
+    this.#listeners.push(listener);
   }
 
   removeEventListener(name, listener) {
-    const i = this._listeners.indexOf(listener);
-
-    this._listeners.splice(i, 1);
+    const i = this.#listeners.indexOf(listener);
+    this.#listeners.splice(i, 1);
   }
 
   terminate() {
-    this._listeners.length = 0;
+    this.#listeners.length = 0;
   }
 
 }
@@ -3453,7 +3449,7 @@ class InternalRenderTask {
 
 const version = '3.0.0';
 exports.version = version;
-const build = 'bcdf161';
+const build = '5f65df7';
 exports.build = build;
 
 /***/ }),
@@ -4729,7 +4725,7 @@ class AnnotationEditorUIManager {
       return;
     }
 
-    if (this.#selectEditors.size === 0) {
+    if (this.#selectedEditors.size === 0) {
       return;
     }
 
@@ -10278,22 +10274,14 @@ class PDFDataTransportStream {
 
   _onProgress(evt) {
     if (evt.total === undefined) {
-      const firstReader = this._rangeReaders[0];
-
-      if (firstReader?.onProgress) {
-        firstReader.onProgress({
-          loaded: evt.loaded
-        });
-      }
+      this._rangeReaders[0]?.onProgress?.({
+        loaded: evt.loaded
+      });
     } else {
-      const fullReader = this._fullRequestReader;
-
-      if (fullReader?.onProgress) {
-        fullReader.onProgress({
-          loaded: evt.loaded,
-          total: evt.total
-        });
-      }
+      this._fullRequestReader?.onProgress?.({
+        loaded: evt.loaded,
+        total: evt.total
+      });
     }
   }
 
@@ -17531,14 +17519,10 @@ class BaseFullReader {
     }
 
     this._loaded += chunk.length;
-
-    if (this.onProgress) {
-      this.onProgress({
-        loaded: this._loaded,
-        total: this._contentLength
-      });
-    }
-
+    this.onProgress?.({
+      loaded: this._loaded,
+      total: this._contentLength
+    });
     const buffer = new Uint8Array(chunk).buffer;
     return {
       value: buffer,
@@ -18825,14 +18809,10 @@ class PDFFetchStreamReader {
     }
 
     this._loaded += value.byteLength;
-
-    if (this.onProgress) {
-      this.onProgress({
-        loaded: this._loaded,
-        total: this._contentLength
-      });
-    }
-
+    this.onProgress?.({
+      loaded: this._loaded,
+      total: this._contentLength
+    });
     const buffer = new Uint8Array(value).buffer;
     return {
       value: buffer,
@@ -19001,12 +18981,6 @@ Object.defineProperty(exports, "InvalidPDFException", ({
   enumerable: true,
   get: function () {
     return _util.InvalidPDFException;
-  }
-}));
-Object.defineProperty(exports, "LoopbackPort", ({
-  enumerable: true,
-  get: function () {
-    return _api.LoopbackPort;
   }
 }));
 Object.defineProperty(exports, "MissingPDFException", ({
@@ -19195,7 +19169,7 @@ var _svg = __w_pdfjs_require__(31);
 var _xfa_layer = __w_pdfjs_require__(29);
 
 const pdfjsVersion = '3.0.0';
-const pdfjsBuild = 'bcdf161';
+const pdfjsBuild = '5f65df7';
 {
   if (_is_node.isNodeJS) {
     const {

@@ -3398,11 +3398,10 @@ const PDFViewerApplication = {
 
 };
 exports.PDFViewerApplication = PDFViewerApplication;
-let validateFileURL;
 {
   const HOSTED_VIEWER_ORIGINS = ["null", "http://mozilla.github.io", "https://mozilla.github.io"];
 
-  validateFileURL = function (file) {
+  var validateFileURL = function (file) {
     if (!file) {
       return;
     }
@@ -3663,13 +3662,13 @@ function webViewerUpdateViewarea({
 }
 
 function webViewerScrollModeChanged(evt) {
-  if (PDFViewerApplication.isInitialViewSet) {
+  if (PDFViewerApplication.isInitialViewSet && !PDFViewerApplication.pdfViewer.isInPresentationMode) {
     PDFViewerApplication.store?.set("scrollMode", evt.mode).catch(() => {});
   }
 }
 
 function webViewerSpreadModeChanged(evt) {
-  if (PDFViewerApplication.isInitialViewSet) {
+  if (PDFViewerApplication.isInitialViewSet && !PDFViewerApplication.pdfViewer.isInPresentationMode) {
     PDFViewerApplication.store?.set("spreadMode", evt.mode).catch(() => {});
   }
 }
@@ -12354,7 +12353,7 @@ class PDFPageView {
     try {
       const result = await this.xfaLayer.render(this.viewport, "display");
 
-      if (this.textHighlighter) {
+      if (result?.textDivs && this.textHighlighter) {
         this._buildXfaTextContentItems(result.textDivs);
       }
     } catch (ex) {
@@ -16173,18 +16172,13 @@ window.addEventListener("keydown", function (event) {
   if (event.keyCode === 80 && (event.ctrlKey || event.metaKey) && !event.altKey && (!event.shiftKey || window.chrome || window.opera)) {
     window.print();
     event.preventDefault();
-
-    if (event.stopImmediatePropagation) {
-      event.stopImmediatePropagation();
-    } else {
-      event.stopPropagation();
-    }
+    event.stopImmediatePropagation();
   }
 }, true);
 
 if ("onbeforeprint" in window) {
   const stopPropagationIfNeeded = function (event) {
-    if (event.detail !== "custom" && event.stopImmediatePropagation) {
+    if (event.detail !== "custom") {
       event.stopImmediatePropagation();
     }
   };
@@ -16326,7 +16320,7 @@ var _pdf_link_service = __webpack_require__(3);
 var _app = __webpack_require__(4);
 
 const pdfjsVersion = '3.0.0';
-const pdfjsBuild = 'bcdf161';
+const pdfjsBuild = '5f65df7';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,
@@ -16348,15 +16342,6 @@ window.PDFViewerApplicationOptions = _app_options.AppOptions;
 }
 
 function getViewerConfiguration() {
-  let errorWrapper = null;
-  errorWrapper = {
-    container: document.getElementById("errorWrapper"),
-    errorMessage: document.getElementById("errorMessage"),
-    closeButton: document.getElementById("errorClose"),
-    errorMoreInfo: document.getElementById("errorMoreInfo"),
-    moreInfoButton: document.getElementById("errorShowMore"),
-    lessInfoButton: document.getElementById("errorShowLess")
-  };
   return {
     appContainer: document.body,
     mainContainer: document.getElementById("viewerContainer"),
@@ -16469,7 +16454,14 @@ function getViewerConfiguration() {
       editorInkThickness: document.getElementById("editorInkThickness"),
       editorInkOpacity: document.getElementById("editorInkOpacity")
     },
-    errorWrapper,
+    errorWrapper: {
+      container: document.getElementById("errorWrapper"),
+      errorMessage: document.getElementById("errorMessage"),
+      closeButton: document.getElementById("errorClose"),
+      errorMoreInfo: document.getElementById("errorMoreInfo"),
+      moreInfoButton: document.getElementById("errorShowMore"),
+      lessInfoButton: document.getElementById("errorShowLess")
+    },
     printContainer: document.getElementById("printContainer"),
     openFileInput: document.getElementById("fileInput"),
     debuggerScriptPath: "./debugger.js"

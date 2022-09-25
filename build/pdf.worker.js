@@ -11020,15 +11020,31 @@ class PartialEvaluator {
       args = [];
     }
 
-    let minMax;
-
     if (lastIndex < 0 || operatorList.fnArray[lastIndex] !== _util.OPS.constructPath) {
       if (parsingText) {
         (0, _util.warn)(`Encountered path operator "${fn}" inside of a text object.`);
         operatorList.addOp(_util.OPS.save, null);
       }
 
-      minMax = [Infinity, -Infinity, Infinity, -Infinity];
+      let minMax;
+
+      switch (fn) {
+        case _util.OPS.rectangle:
+          const x = args[0] + args[2];
+          const y = args[1] + args[3];
+          minMax = [Math.min(args[0], x), Math.max(args[0], x), Math.min(args[1], y), Math.max(args[1], y)];
+          break;
+
+        case _util.OPS.moveTo:
+        case _util.OPS.lineTo:
+          minMax = [args[0], args[0], args[1], args[1]];
+          break;
+
+        default:
+          minMax = [Infinity, -Infinity, Infinity, -Infinity];
+          break;
+      }
+
       operatorList.addOp(_util.OPS.constructPath, [[fn], args, minMax]);
 
       if (parsingText) {
@@ -11037,25 +11053,27 @@ class PartialEvaluator {
     } else {
       const opArgs = operatorList.argsArray[lastIndex];
       opArgs[0].push(fn);
-      Array.prototype.push.apply(opArgs[1], args);
-      minMax = opArgs[2];
-    }
+      opArgs[1].push(...args);
+      const minMax = opArgs[2];
 
-    switch (fn) {
-      case _util.OPS.rectangle:
-        minMax[0] = Math.min(minMax[0], args[0], args[0] + args[2]);
-        minMax[1] = Math.max(minMax[1], args[0], args[0] + args[2]);
-        minMax[2] = Math.min(minMax[2], args[1], args[1] + args[3]);
-        minMax[3] = Math.max(minMax[3], args[1], args[1] + args[3]);
-        break;
+      switch (fn) {
+        case _util.OPS.rectangle:
+          const x = args[0] + args[2];
+          const y = args[1] + args[3];
+          minMax[0] = Math.min(minMax[0], args[0], x);
+          minMax[1] = Math.max(minMax[1], args[0], x);
+          minMax[2] = Math.min(minMax[2], args[1], y);
+          minMax[3] = Math.max(minMax[3], args[1], y);
+          break;
 
-      case _util.OPS.moveTo:
-      case _util.OPS.lineTo:
-        minMax[0] = Math.min(minMax[0], args[0]);
-        minMax[1] = Math.max(minMax[1], args[0]);
-        minMax[2] = Math.min(minMax[2], args[1]);
-        minMax[3] = Math.max(minMax[3], args[1]);
-        break;
+        case _util.OPS.moveTo:
+        case _util.OPS.lineTo:
+          minMax[0] = Math.min(minMax[0], args[0]);
+          minMax[1] = Math.max(minMax[1], args[0]);
+          minMax[2] = Math.min(minMax[2], args[1]);
+          minMax[3] = Math.max(minMax[3], args[1]);
+          break;
+      }
     }
   }
 
@@ -11476,16 +11494,12 @@ class PartialEvaluator {
               continue;
             }
 
-            var arr = args[0];
             var combinedGlyphs = [];
-            var arrLength = arr.length;
             var state = stateManager.state;
 
-            for (i = 0; i < arrLength; ++i) {
-              const arrItem = arr[i];
-
+            for (const arrItem of args[0]) {
               if (typeof arrItem === "string") {
-                Array.prototype.push.apply(combinedGlyphs, self.handleText(arrItem, state));
+                combinedGlyphs.push(...self.handleText(arrItem, state));
               } else if (typeof arrItem === "number") {
                 combinedGlyphs.push(arrItem);
               }
@@ -13184,7 +13198,7 @@ class PartialEvaluator {
 
   isSerifFont(baseFontName) {
     const fontNameWoStyle = baseFontName.split("-")[0];
-    return fontNameWoStyle in (0, _standard_fonts.getSerifFonts)() || fontNameWoStyle.search(/serif/gi) !== -1;
+    return fontNameWoStyle in (0, _standard_fonts.getSerifFonts)() || /serif/gi.test(fontNameWoStyle);
   }
 
   getBaseFontMetrics(name) {
@@ -21001,7 +21015,7 @@ function decodeScan(data, offset, frame, components, resetInterval, spectralStar
           if (parseDNLMarker) {
             const maybeScanLines = blockRow * (frame.precision === 8 ? 8 : 0);
 
-            if (maybeScanLines > 0 && Math.round(frame.scanLines / maybeScanLines) >= 10) {
+            if (maybeScanLines > 0 && Math.round(frame.scanLines / maybeScanLines) >= 5) {
               throw new DNLMarkerError("Found EOI marker (0xFFD9) while parsing scan data, " + "possibly caused by incorrect `scanLines` parameter", maybeScanLines);
             }
           }
@@ -25865,10 +25879,10 @@ class Font {
       }
     }
 
-    this.bold = fontName.search(/bold/gi) !== -1;
-    this.italic = fontName.search(/oblique/gi) !== -1 || fontName.search(/italic/gi) !== -1;
-    this.black = name.search(/Black/g) !== -1;
-    const isNarrow = name.search(/Narrow/g) !== -1;
+    this.bold = /bold/gi.test(fontName);
+    this.italic = /oblique|italic/gi.test(fontName);
+    this.black = /Black/g.test(name);
+    const isNarrow = /Narrow/g.test(name);
     this.remeasure = (!isStandardFont || isNarrow) && Object.keys(this.widths).length > 0;
 
     if ((isStandardFont || isMappedToStandardFont) && type === "CIDFontType2" && this.cidEncoding.startsWith("Identity-")) {
@@ -51398,7 +51412,7 @@ class PostScriptStack {
   }
 
   constructor(initialStack) {
-    this.stack = !initialStack ? [] : Array.prototype.slice.call(initialStack, 0);
+    this.stack = initialStack ? Array.from(initialStack) : [];
   }
 
   push(value) {
@@ -52115,7 +52129,7 @@ class PostScriptCompiler {
             break;
           }
 
-          Array.prototype.push.apply(stack, stack.splice(stack.length - n, n - j));
+          stack.push(...stack.splice(stack.length - n, n - j));
           break;
 
         default:
@@ -71538,7 +71552,7 @@ class Rename extends _xfa_object.ContentObject {
   [_xfa_object.$finalize]() {
     this[_xfa_object.$content] = this[_xfa_object.$content].trim();
 
-    if (this[_xfa_object.$content].toLowerCase().startsWith("xml") || this[_xfa_object.$content].match(new RegExp("[\\p{L}_][\\p{L}\\d._\\p{M}-]*", "u"))) {
+    if (this[_xfa_object.$content].toLowerCase().startsWith("xml") || new RegExp("[\\p{L}_][\\p{L}\\d._\\p{M}-]*", "u").test(this[_xfa_object.$content])) {
       (0, _util.warn)("XFA - Rename: invalid XFA name");
     }
   }
@@ -75434,7 +75448,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '3.0.0';
-const pdfjsBuild = 'bcdf161';
+const pdfjsBuild = '5f65df7';
 })();
 
 /******/ 	return __webpack_exports__;
