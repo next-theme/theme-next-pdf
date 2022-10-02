@@ -2151,11 +2151,6 @@ const PDFViewerApplication = {
 
     this._hideViewBookmark();
 
-    const {
-      container
-    } = this.appConfig.errorWrapper;
-    container.hidden = true;
-
     if (!this.pdfLoadingTask) {
       return;
     }
@@ -2407,42 +2402,10 @@ const PDFViewerApplication = {
       }
     }
 
-    const errorWrapperConfig = this.appConfig.errorWrapper;
-    const errorWrapper = errorWrapperConfig.container;
-    errorWrapper.hidden = false;
-    const errorMessage = errorWrapperConfig.errorMessage;
-    errorMessage.textContent = message;
-    const closeButton = errorWrapperConfig.closeButton;
-
-    closeButton.onclick = function () {
-      errorWrapper.hidden = true;
-    };
-
-    const errorMoreInfo = errorWrapperConfig.errorMoreInfo;
-    const moreInfoButton = errorWrapperConfig.moreInfoButton;
-    const lessInfoButton = errorWrapperConfig.lessInfoButton;
-
-    moreInfoButton.onclick = function () {
-      errorMoreInfo.hidden = false;
-      moreInfoButton.hidden = true;
-      lessInfoButton.hidden = false;
-      errorMoreInfo.style.height = errorMoreInfo.scrollHeight + "px";
-    };
-
-    lessInfoButton.onclick = function () {
-      errorMoreInfo.hidden = true;
-      moreInfoButton.hidden = false;
-      lessInfoButton.hidden = true;
-    };
-
-    moreInfoButton.oncontextmenu = _ui_utils.noContextMenuHandler;
-    lessInfoButton.oncontextmenu = _ui_utils.noContextMenuHandler;
-    closeButton.oncontextmenu = _ui_utils.noContextMenuHandler;
-    moreInfoButton.hidden = false;
-    lessInfoButton.hidden = true;
     Promise.all(moreInfoText).then(parts => {
-      errorMoreInfo.value = parts.join("\n");
+      console.error(`${message}\n${parts.join("\n")}`);
     });
+    this.fallback();
   },
 
   progress(level) {
@@ -4489,6 +4452,8 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.PDFCursorTools = exports.CursorTool = void 0;
 
+var _pdfjsLib = __webpack_require__(5);
+
 var _grab_to_pan = __webpack_require__(8);
 
 var _ui_utils = __webpack_require__(1);
@@ -4509,7 +4474,7 @@ class PDFCursorTools {
     this.container = container;
     this.eventBus = eventBus;
     this.active = CursorTool.SELECT;
-    this.activeBeforePresentationMode = null;
+    this.previouslyActive = null;
     this.handTool = new _grab_to_pan.GrabToPan({
       element: this.container
     });
@@ -4524,7 +4489,7 @@ class PDFCursorTools {
   }
 
   switchTool(tool) {
-    if (this.activeBeforePresentationMode !== null) {
+    if (this.previouslyActive !== null) {
       return;
     }
 
@@ -4577,27 +4542,53 @@ class PDFCursorTools {
       this.switchTool(evt.tool);
     });
 
-    this.eventBus._on("presentationmodechanged", evt => {
-      switch (evt.state) {
-        case _ui_utils.PresentationModeState.FULLSCREEN:
-          {
-            const previouslyActive = this.active;
-            this.switchTool(CursorTool.SELECT);
-            this.activeBeforePresentationMode = previouslyActive;
-            break;
-          }
+    let annotationEditorMode = _pdfjsLib.AnnotationEditorType.NONE,
+        presentationModeState = _ui_utils.PresentationModeState.NORMAL;
 
-        case _ui_utils.PresentationModeState.NORMAL:
-          {
-            const previouslyActive = this.activeBeforePresentationMode;
+    const disableActive = () => {
+      const previouslyActive = this.active;
+      this.switchTool(CursorTool.SELECT);
+      this.previouslyActive ??= previouslyActive;
+    };
 
-            if (previouslyActive !== null) {
-              this.activeBeforePresentationMode = null;
-              this.switchTool(previouslyActive);
-            }
+    const enableActive = () => {
+      const previouslyActive = this.previouslyActive;
 
-            break;
-          }
+      if (previouslyActive !== null && annotationEditorMode === _pdfjsLib.AnnotationEditorType.NONE && presentationModeState === _ui_utils.PresentationModeState.NORMAL) {
+        this.previouslyActive = null;
+        this.switchTool(previouslyActive);
+      }
+    };
+
+    this.eventBus._on("secondarytoolbarreset", evt => {
+      if (this.previouslyActive !== null) {
+        annotationEditorMode = _pdfjsLib.AnnotationEditorType.NONE;
+        presentationModeState = _ui_utils.PresentationModeState.NORMAL;
+        enableActive();
+      }
+    });
+
+    this.eventBus._on("annotationeditormodechanged", ({
+      mode
+    }) => {
+      annotationEditorMode = mode;
+
+      if (mode === _pdfjsLib.AnnotationEditorType.NONE) {
+        enableActive();
+      } else {
+        disableActive();
+      }
+    });
+
+    this.eventBus._on("presentationmodechanged", ({
+      state
+    }) => {
+      presentationModeState = state;
+
+      if (state === _ui_utils.PresentationModeState.NORMAL) {
+        enableActive();
+      } else if (state === _ui_utils.PresentationModeState.FULLSCREEN) {
+        disableActive();
       }
     });
   }
@@ -9086,9 +9077,8 @@ class PDFSidebar {
   }
 
   #showUINotification() {
-    this.l10n.get("toggle_sidebar_notification2.title").then(msg => {
-      this.toggleButton.title = msg;
-    });
+    this.toggleButton.setAttribute("data-l10n-id", "toggle_sidebar_notification2");
+    this.l10n.translate(this.toggleButton);
 
     if (!this.isOpen) {
       this.toggleButton.classList.add(UI_NOTIFICATION_CLASS);
@@ -9101,9 +9091,8 @@ class PDFSidebar {
     }
 
     if (reset) {
-      this.l10n.get("toggle_sidebar.title").then(msg => {
-        this.toggleButton.title = msg;
-      });
+      this.toggleButton.setAttribute("data-l10n-id", "toggle_sidebar");
+      this.l10n.translate(this.toggleButton);
     }
   }
 
@@ -11980,9 +11969,6 @@ const DEFAULT_L10N_STRINGS = {
   document_properties_page_size_dimension_name_string: "{{width}} × {{height}} {{unit}} ({{name}}, {{orientation}})",
   document_properties_linearized_yes: "Yes",
   document_properties_linearized_no: "No",
-  print_progress_percent: "{{progress}}%",
-  "toggle_sidebar.title": "Toggle Sidebar",
-  "toggle_sidebar_notification2.title": "Toggle Sidebar (document contains outline/attachments/layers)",
   additional_layers: "Additional Layers",
   page_landmark: "Page {{page}}",
   thumb_page_title: "Page {{page}}",
@@ -12018,6 +12004,9 @@ const DEFAULT_L10N_STRINGS = {
   editor_ink2_aria_label: "Draw Editor",
   editor_ink_canvas_aria_label: "User-created image"
 };
+{
+  DEFAULT_L10N_STRINGS.print_progress_percent = "{{progress}}%";
+}
 
 function getL10nFallback(key, args) {
   switch (key) {
@@ -16320,7 +16309,7 @@ var _pdf_link_service = __webpack_require__(3);
 var _app = __webpack_require__(4);
 
 const pdfjsVersion = '3.0.0';
-const pdfjsBuild = '5f65df7';
+const pdfjsBuild = 'beff913';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,
@@ -16453,14 +16442,6 @@ function getViewerConfiguration() {
       editorInkColor: document.getElementById("editorInkColor"),
       editorInkThickness: document.getElementById("editorInkThickness"),
       editorInkOpacity: document.getElementById("editorInkOpacity")
-    },
-    errorWrapper: {
-      container: document.getElementById("errorWrapper"),
-      errorMessage: document.getElementById("errorMessage"),
-      closeButton: document.getElementById("errorClose"),
-      errorMoreInfo: document.getElementById("errorMoreInfo"),
-      moreInfoButton: document.getElementById("errorShowMore"),
-      lessInfoButton: document.getElementById("errorShowLess")
     },
     printContainer: document.getElementById("printContainer"),
     openFileInput: document.getElementById("fileInput"),
