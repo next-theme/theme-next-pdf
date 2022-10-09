@@ -834,10 +834,6 @@ class Util {
     return [m[3] / d, -m[1] / d, -m[2] / d, m[0] / d, (m[2] * m[5] - m[4] * m[3]) / d, (m[4] * m[1] - m[5] * m[0]) / d];
   }
 
-  static apply3dTransform(m, v) {
-    return [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[3] * v[0] + m[4] * v[1] + m[5] * v[2], m[6] * v[0] + m[7] * v[1] + m[8] * v[2]];
-  }
-
   static singularValueDecompose2dScale(m) {
     const transpose = [m[0], m[2], m[1], m[3]];
     const a = m[0] * transpose[0] + m[1] * transpose[2];
@@ -1255,6 +1251,10 @@ function getDocument(src) {
     params.isEvalSupported = true;
   }
 
+  if (typeof params.isOffscreenCanvasSupported !== "boolean") {
+    params.isOffscreenCanvasSupported = !_is_node.isNodeJS;
+  }
+
   if (typeof params.disableFontFace !== "boolean") {
     params.disableFontFace = _is_node.isNodeJS;
   }
@@ -1366,6 +1366,7 @@ async function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
     docBaseUrl: source.docBaseUrl,
     ignoreErrors: source.ignoreErrors,
     isEvalSupported: source.isEvalSupported,
+    isOffscreenCanvasSupported: source.isOffscreenCanvasSupported,
     fontExtraProperties: source.fontExtraProperties,
     enableXfa: source.enableXfa,
     useSystemFonts: source.useSystemFonts,
@@ -2490,7 +2491,6 @@ class WorkerTransport {
     this.loadingTask = loadingTask;
     this.commonObjs = new PDFObjects();
     this.fontLoader = new _font_loader.FontLoader({
-      docId: loadingTask.docId,
       onUnsupportedFeature: this._onUnsupportedFeature.bind(this),
       ownerDocument: params.ownerDocument,
       styleElement: params.styleElement
@@ -3424,7 +3424,7 @@ class InternalRenderTask {
 
 const version = '3.0.0';
 exports.version = version;
-const build = 'beff913';
+const build = '3dc9b42';
 exports.build = build;
 
 /***/ }),
@@ -5576,12 +5576,10 @@ var _util = __w_pdfjs_require__(1);
 
 class FontLoader {
   constructor({
-    docId,
     onUnsupportedFeature,
     ownerDocument = globalThis.document,
     styleElement = null
   }) {
-    this.docId = docId;
     this._onUnsupportedFeature = onUnsupportedFeature;
     this._document = ownerDocument;
     this.nativeFontFaces = [];
@@ -5597,16 +5595,13 @@ class FontLoader {
   }
 
   insertRule(rule) {
-    let styleElement = this.styleElement;
+    if (!this.styleElement) {
+      this.styleElement = this._document.createElement("style");
 
-    if (!styleElement) {
-      styleElement = this.styleElement = this._document.createElement("style");
-      styleElement.id = `PDFJS_FONT_STYLE_TAG_${this.docId}`;
-
-      this._document.documentElement.getElementsByTagName("head")[0].append(styleElement);
+      this._document.documentElement.getElementsByTagName("head")[0].append(this.styleElement);
     }
 
-    const styleSheet = styleElement.sheet;
+    const styleSheet = this.styleElement.sheet;
     styleSheet.insertRule(rule, styleSheet.cssRules.length);
   }
 
@@ -6673,9 +6668,7 @@ function putBinaryImageMask(ctx, imgData) {
 function copyCtxState(sourceCtx, destCtx) {
   const properties = ["strokeStyle", "fillStyle", "fillRule", "globalAlpha", "lineWidth", "lineCap", "lineJoin", "miterLimit", "globalCompositeOperation", "font"];
 
-  for (let i = 0, ii = properties.length; i < ii; i++) {
-    const property = properties[i];
-
+  for (const property of properties) {
     if (sourceCtx[property] !== undefined) {
       destCtx[property] = sourceCtx[property];
     }
@@ -7183,11 +7176,7 @@ class CanvasGraphics {
   setFlatness(flatness) {}
 
   setGState(states) {
-    for (let i = 0, ii = states.length; i < ii; i++) {
-      const state = states[i];
-      const key = state[0];
-      const value = state[1];
-
+    for (const [key, value] of states) {
       switch (key) {
         case "LW":
           this.setLineWidth(value);
@@ -7222,12 +7211,12 @@ class CanvasGraphics {
           break;
 
         case "CA":
-          this.current.strokeAlpha = state[1];
+          this.current.strokeAlpha = value;
           break;
 
         case "ca":
-          this.current.fillAlpha = state[1];
-          this.ctx.globalAlpha = state[1];
+          this.current.fillAlpha = value;
+          this.ctx.globalAlpha = value;
           break;
 
         case "BM":
@@ -11259,8 +11248,7 @@ class FreeTextEditor extends _editor.AnnotationEditor {
 
     const buffer = [];
 
-    for (let i = 0, ii = divs.length; i < ii; i++) {
-      const div = divs[i];
+    for (const div of divs) {
       const first = div.firstChild;
 
       if (first?.nodeName === "#text") {
@@ -13119,6 +13107,10 @@ class LinkAnnotationElement extends AnnotationElement {
       this._bindNamedAction(link, data.action);
 
       isBound = true;
+    } else if (data.attachment) {
+      this._bindAttachment(link, data.attachment);
+
+      isBound = true;
     } else if (data.setOCGState) {
       this.#bindSetOCGState(link, data.setOCGState);
       isBound = true;
@@ -13182,6 +13174,17 @@ class LinkAnnotationElement extends AnnotationElement {
 
     link.onclick = () => {
       this.linkService.executeNamedAction(action);
+      return false;
+    };
+
+    link.className = "internalLink";
+  }
+
+  _bindAttachment(link, attachment) {
+    link.href = this.linkService.getAnchorUrl("");
+
+    link.onclick = () => {
+      this.downloadManager?.openOrDownloadData(this.container, attachment.content, attachment.filename);
       return false;
     };
 
@@ -15537,8 +15540,8 @@ function render(task) {
   }
 
   if (!task._textContentStream) {
-    for (let i = 0; i < textDivsLength; i++) {
-      task._layoutText(textDivs[i]);
+    for (const textDiv of textDivs) {
+      task._layoutText(textDiv);
     }
   }
 
@@ -15608,29 +15611,29 @@ class TextLayerRenderTask {
   }
 
   _processItems(items, styleCache) {
-    for (let i = 0, len = items.length; i < len; i++) {
-      if (items[i].str === undefined) {
-        if (items[i].type === "beginMarkedContentProps" || items[i].type === "beginMarkedContent") {
+    for (const item of items) {
+      if (item.str === undefined) {
+        if (item.type === "beginMarkedContentProps" || item.type === "beginMarkedContent") {
           const parent = this._container;
           this._container = document.createElement("span");
 
           this._container.classList.add("markedContent");
 
-          if (items[i].id !== null) {
-            this._container.setAttribute("id", `${items[i].id}`);
+          if (item.id !== null) {
+            this._container.setAttribute("id", `${item.id}`);
           }
 
           parent.append(this._container);
-        } else if (items[i].type === "endMarkedContent") {
+        } else if (item.type === "endMarkedContent") {
           this._container = this._container.parentNode;
         }
 
         continue;
       }
 
-      this._textContentItemsStr.push(items[i].str);
+      this._textContentItemsStr.push(item.str);
 
-      appendText(this, items[i], styleCache, this._layoutTextCtx);
+      appendText(this, item, styleCache, this._layoutTextCtx);
     }
   }
 
@@ -16155,6 +16158,14 @@ exports.SVGGraphics = SVGGraphics;
       for (const op in _util.OPS) {
         this._operatorIdMapping[_util.OPS[op]] = op;
       }
+    }
+
+    getObject(data, fallback = null) {
+      if (typeof data === "string") {
+        return data.startsWith("g_") ? this.commonObjs.get(data) : this.objs.get(data);
+      }
+
+      return fallback;
     }
 
     save() {
@@ -17188,7 +17199,7 @@ exports.SVGGraphics = SVGGraphics;
     }
 
     paintImageXObject(objId) {
-      const imgData = objId.startsWith("g_") ? this.commonObjs.get(objId) : this.objs.get(objId);
+      const imgData = this.getObject(objId);
 
       if (!imgData) {
         (0, _util.warn)(`Dependent image with object ID ${objId} is not ready yet`);
@@ -17224,7 +17235,14 @@ exports.SVGGraphics = SVGGraphics;
       }
     }
 
-    paintImageMaskXObject(imgData) {
+    paintImageMaskXObject(img) {
+      const imgData = this.getObject(img.data, img);
+
+      if (imgData.bitmap) {
+        (0, _util.warn)("paintImageMaskXObject: ImageBitmap support is not implemented, " + "ensure that the `isOffscreenCanvasSupported` API parameter is disabled.");
+        return;
+      }
+
       const current = this.current;
       const width = imgData.width;
       const height = imgData.height;
@@ -19114,7 +19132,7 @@ var _svg = __w_pdfjs_require__(30);
 var _xfa_layer = __w_pdfjs_require__(28);
 
 const pdfjsVersion = '3.0.0';
-const pdfjsBuild = 'beff913';
+const pdfjsBuild = '3dc9b42';
 {
   if (_is_node.isNodeJS) {
     const {

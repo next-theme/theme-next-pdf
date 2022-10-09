@@ -365,6 +365,7 @@ class WorkerMessageHandler {
         disableFontFace: data.disableFontFace,
         ignoreErrors: data.ignoreErrors,
         isEvalSupported: data.isEvalSupported,
+        isOffscreenCanvasSupported: data.isOffscreenCanvasSupported,
         fontExtraProperties: data.fontExtraProperties,
         useSystemFonts: data.useSystemFonts,
         cMapUrl: data.cMapUrl,
@@ -1526,10 +1527,6 @@ class Util {
   static inverseTransform(m) {
     const d = m[0] * m[3] - m[1] * m[2];
     return [m[3] / d, -m[1] / d, -m[2] / d, m[0] / d, (m[2] * m[5] - m[4] * m[3]) / d, (m[4] * m[1] - m[5] * m[0]) / d];
-  }
-
-  static apply3dTransform(m, v) {
-    return [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[3] * v[0] + m[4] * v[1] + m[5] * v[2], m[6] * v[0] + m[7] * v[1] + m[8] * v[2]];
   }
 
   static singularValueDecompose2dScale(m) {
@@ -4957,8 +4954,8 @@ class PDFDocument {
     function hexString(hash) {
       const buf = [];
 
-      for (let i = 0, ii = hash.length; i < ii; i++) {
-        const hex = hash[i].toString(16);
+      for (const num of hash) {
+        const hex = num.toString(16);
         buf.push(hex.padStart(2, "0"));
       }
 
@@ -5319,10 +5316,10 @@ var _factory = __w_pdfjs_require__(74);
 
 class AnnotationFactory {
   static create(xref, ref, pdfManager, idFactory, collectFields) {
-    return Promise.all([pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("baseUrl"), pdfManager.ensureDoc("xfaDatasets"), collectFields ? this._getPageIndex(xref, ref, pdfManager) : -1]).then(([acroForm, baseUrl, xfaDatasets, pageIndex]) => pdfManager.ensure(this, "_create", [xref, ref, pdfManager, idFactory, acroForm, xfaDatasets, collectFields, pageIndex]));
+    return Promise.all([pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("baseUrl"), pdfManager.ensureCatalog("attachments"), pdfManager.ensureDoc("xfaDatasets"), collectFields ? this._getPageIndex(xref, ref, pdfManager) : -1]).then(([acroForm, baseUrl, attachments, xfaDatasets, pageIndex]) => pdfManager.ensure(this, "_create", [xref, ref, pdfManager, idFactory, acroForm, attachments, xfaDatasets, collectFields, pageIndex]));
   }
 
-  static _create(xref, ref, pdfManager, idFactory, acroForm, xfaDatasets, collectFields, pageIndex = -1) {
+  static _create(xref, ref, pdfManager, idFactory, acroForm, attachments = null, xfaDatasets, collectFields, pageIndex = -1) {
     const dict = xref.fetchIfRef(ref);
 
     if (!(dict instanceof _primitives.Dict)) {
@@ -5340,6 +5337,7 @@ class AnnotationFactory {
       id,
       pdfManager,
       acroForm: acroForm instanceof _primitives.Dict ? acroForm : _primitives.Dict.empty,
+      attachments,
       xfaDatasets,
       collectFields,
       pageIndex
@@ -7565,7 +7563,8 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
     _catalog.Catalog.parseDestDictionary({
       destDict: params.dict,
       resultObj: this.data,
-      docBaseUrl: params.pdfManager.docBaseUrl
+      docBaseUrl: params.pdfManager.docBaseUrl,
+      docAttachments: params.attachments
     });
   }
 
@@ -7848,7 +7847,8 @@ class LinkAnnotation extends Annotation {
     _catalog.Catalog.parseDestDictionary({
       destDict: params.dict,
       resultObj: this.data,
-      docBaseUrl: params.pdfManager.docBaseUrl
+      docBaseUrl: params.pdfManager.docBaseUrl,
+      docAttachments: params.attachments
     });
   }
 
@@ -9883,6 +9883,7 @@ const DefaultPartialEvaluatorOptions = Object.freeze({
   disableFontFace: false,
   ignoreErrors: false,
   isEvalSupported: true,
+  isOffscreenCanvasSupported: true,
   fontExtraProperties: false,
   useSystemFonts: true,
   cMapUrl: null,
@@ -9897,8 +9898,8 @@ const deferred = Promise.resolve();
 
 function normalizeBlendMode(value, parsingArray = false) {
   if (Array.isArray(value)) {
-    for (let i = 0, ii = value.length; i < ii; i++) {
-      const maybeBM = normalizeBlendMode(value[i], true);
+    for (const val of value) {
+      const maybeBM = normalizeBlendMode(val, true);
 
       if (maybeBM) {
         return maybeBM;
@@ -10417,7 +10418,8 @@ class PartialEvaluator {
         height: h,
         imageIsFromDecodeStream: image instanceof _decode_stream.DecodeStream,
         inverseDecode: !!decode && decode[0] > 0,
-        interpolate
+        interpolate,
+        isOffscreenCanvasSupported: this.options.isOffscreenCanvasSupported
       });
 
       if (imgData.isSingleOpaquePixel) {
@@ -10733,11 +10735,9 @@ class PartialEvaluator {
     const gStateRef = gState.objId;
     let isSimpleGState = true;
     const gStateObj = [];
-    const gStateKeys = gState.getKeys();
     let promise = Promise.resolve();
 
-    for (let i = 0, ii = gStateKeys.length; i < ii; i++) {
-      const key = gStateKeys[i];
+    for (const key of gState.getKeys()) {
       const value = gState.get(key);
 
       switch (key) {
@@ -12762,8 +12762,8 @@ class PartialEvaluator {
           const diffEncoding = encoding.get("Differences");
           let index = 0;
 
-          for (let j = 0, jj = diffEncoding.length; j < jj; j++) {
-            const data = xref.fetchIfRef(diffEncoding[j]);
+          for (const entry of diffEncoding) {
+            const data = xref.fetchIfRef(entry);
 
             if (typeof data === "number") {
               index = data;
@@ -13435,8 +13435,8 @@ class PartialEvaluator {
             const glyphWidths = [];
             let j = firstChar;
 
-            for (let i = 0, ii = widths.length; i < ii; i++) {
-              glyphWidths[j++] = this.xref.fetchIfRef(widths[i]);
+            for (const width of widths) {
+              glyphWidths[j++] = this.xref.fetchIfRef(width);
             }
 
             newProperties.widths = glyphWidths;
@@ -21609,8 +21609,7 @@ class JpegImage {
       const mcusPerLine = Math.ceil(frame.samplesPerLine / 8 / frame.maxH);
       const mcusPerColumn = Math.ceil(frame.scanLines / 8 / frame.maxV);
 
-      for (let i = 0, ii = frame.components.length; i < ii; i++) {
-        const component = frame.components[i];
+      for (const component of frame.components) {
         const blocksPerLine = Math.ceil(Math.ceil(frame.samplesPerLine / 8) * component.h / frame.maxH);
         const blocksPerColumn = Math.ceil(Math.ceil(frame.scanLines / 8) * component.v / frame.maxV);
         const blocksPerLineForMcu = mcusPerLine * component.h;
@@ -21887,8 +21886,7 @@ class JpegImage {
     this.adobe = adobe;
     this.components = [];
 
-    for (let i = 0, ii = frame.components.length; i < ii; i++) {
-      const component = frame.components[i];
+    for (const component of frame.components) {
       const quantizationTable = quantizationTables[component.quantizationId];
 
       if (quantizationTable) {
@@ -22068,12 +22066,10 @@ class JpegImage {
     const data = this._getLinearizedBlockData(width, height, isSourcePDF);
 
     if (this.numComponents === 1 && forceRGB) {
-      const dataLength = data.length;
-      const rgbData = new Uint8ClampedArray(dataLength * 3);
+      const rgbData = new Uint8ClampedArray(data.length * 3);
       let offset = 0;
 
-      for (let i = 0; i < dataLength; i++) {
-        const grayColor = data[i];
+      for (const grayColor of data) {
         rgbData[offset++] = grayColor;
         rgbData[offset++] = grayColor;
         rgbData[offset++] = grayColor;
@@ -27380,7 +27376,6 @@ class Font {
       const cmapPlatformId = cmapTable.platformId;
       const cmapEncodingId = cmapTable.encodingId;
       const cmapMappings = cmapTable.mappings;
-      const cmapMappingsLength = cmapMappings.length;
       let baseEncoding = [],
           forcePostTable = false;
 
@@ -27429,30 +27424,30 @@ class Font {
             }
           }
 
-          for (let i = 0; i < cmapMappingsLength; ++i) {
-            if (cmapMappings[i].charCode !== unicodeOrCharCode) {
+          for (const mapping of cmapMappings) {
+            if (mapping.charCode !== unicodeOrCharCode) {
               continue;
             }
 
-            charCodeToGlyphId[charCode] = cmapMappings[i].glyphId;
+            charCodeToGlyphId[charCode] = mapping.glyphId;
             break;
           }
         }
       } else if (cmapPlatformId === 0) {
-        for (let i = 0; i < cmapMappingsLength; ++i) {
-          charCodeToGlyphId[cmapMappings[i].charCode] = cmapMappings[i].glyphId;
+        for (const mapping of cmapMappings) {
+          charCodeToGlyphId[mapping.charCode] = mapping.glyphId;
         }
 
         forcePostTable = true;
       } else {
-        for (let i = 0; i < cmapMappingsLength; ++i) {
-          let charCode = cmapMappings[i].charCode;
+        for (const mapping of cmapMappings) {
+          let charCode = mapping.charCode;
 
           if (cmapPlatformId === 3 && charCode >= 0xf000 && charCode <= 0xf0ff) {
             charCode &= 0xff;
           }
 
-          charCodeToGlyphId[charCode] = cmapMappings[i].glyphId;
+          charCodeToGlyphId[charCode] = mapping.glyphId;
         }
       }
 
@@ -27619,8 +27614,7 @@ class Font {
           continue;
         }
 
-        for (let i = 0, ii = charCodes.length; i < ii; i++) {
-          const charCode = charCodes[i];
+        for (const charCode of charCodes) {
           const charCodeToGlyphId = newMapping.charCodeToGlyphId;
           const baseFontCharCode = createCharCode(charCodeToGlyphId, baseGlyphId);
           const accentFontCharCode = createCharCode(charCodeToGlyphId, accentGlyphId);
@@ -27672,9 +27666,7 @@ class Font {
     const possibleSpaceReplacements = ["space", "minus", "one", "i", "I"];
     let width;
 
-    for (let i = 0, ii = possibleSpaceReplacements.length; i < ii; i++) {
-      const glyphName = possibleSpaceReplacements[i];
-
+    for (const glyphName of possibleSpaceReplacements) {
       if (glyphName in this.widths) {
         width = this.widths[glyphName];
         break;
@@ -28417,10 +28409,7 @@ class CFFParser {
   createDict(Type, dict, strings) {
     const cffDict = new Type(strings);
 
-    for (let i = 0, ii = dict.length; i < ii; ++i) {
-      const pair = dict[i];
-      const key = pair[0];
-      const value = pair[1];
+    for (const [key, value] of dict) {
       cffDict.setByKey(key, value);
     }
 
@@ -29053,15 +29042,13 @@ class CFFDict {
       return false;
     }
 
-    const valueLength = value.length;
-
-    if (valueLength === 0) {
+    if (value.length === 0) {
       return true;
     }
 
-    for (let i = 0; i < valueLength; i++) {
-      if (isNaN(value[i])) {
-        (0, _util.warn)('Invalid CFFDict value: "' + value + '" for key "' + key + '".');
+    for (const val of value) {
+      if (isNaN(val)) {
+        (0, _util.warn)(`Invalid CFFDict value: "${value}" for key "${key}".`);
         return true;
       }
     }
@@ -29116,8 +29103,7 @@ class CFFDict {
       order: []
     };
 
-    for (let i = 0, ii = layout.length; i < ii; ++i) {
-      const entry = layout[i];
+    for (const entry of layout) {
       const key = Array.isArray(entry[0]) ? (entry[0][0] << 8) + entry[0][1] : entry[0];
       tables.keyToNameMap[key] = entry[1];
       tables.nameToKeyMap[entry[1]] = key;
@@ -29289,8 +29275,7 @@ class CFFCompiler {
         const base = cff.topDict.getByName("FontMatrix");
         cff.topDict.removeByName("FontMatrix");
 
-        for (let i = 0, ii = cff.fdArray.length; i < ii; i++) {
-          const subDict = cff.fdArray[i];
+        for (const subDict of cff.fdArray) {
           let matrix = base.slice(0);
 
           if (subDict.hasName("FontMatrix")) {
@@ -29425,8 +29410,7 @@ class CFFCompiler {
   compileNameIndex(names) {
     const nameIndex = new CFFIndex();
 
-    for (let i = 0, ii = names.length; i < ii; ++i) {
-      const name = names[i];
+    for (const name of names) {
       const length = Math.min(name.length, 127);
       let sanitizedName = new Array(length);
 
@@ -29456,9 +29440,7 @@ class CFFCompiler {
     const fontDictTrackers = [];
     let fdArrayIndex = new CFFIndex();
 
-    for (let i = 0, ii = dicts.length; i < ii; ++i) {
-      const fontDict = dicts[i];
-
+    for (const fontDict of dicts) {
       if (removeCidKeys) {
         fontDict.removeByName("CIDFontVersion");
         fontDict.removeByName("CIDFontRevision");
@@ -29577,8 +29559,8 @@ class CFFCompiler {
   compileStringIndex(strings) {
     const stringIndex = new CFFIndex();
 
-    for (let i = 0, ii = strings.length; i < ii; ++i) {
-      stringIndex.add((0, _util.stringToBytes)(strings[i]));
+    for (const string of strings) {
+      stringIndex.add((0, _util.stringToBytes)(string));
     }
 
     return this.compileIndex(stringIndex);
@@ -29751,9 +29733,7 @@ class CFFCompiler {
         trackers[i].offset(data.length);
       }
 
-      for (let j = 0, jj = objects[i].length; j < jj; j++) {
-        data.push(objects[i][j]);
-      }
+      data.push(...objects[i]);
     }
 
     return data;
@@ -48273,8 +48253,8 @@ function writeData(dest, offset, data) {
       dest[offset++] = data.charCodeAt(i) & 0xff;
     }
   } else {
-    for (let i = 0, ii = data.length; i < ii; i++) {
-      dest[offset++] = data[i] & 0xff;
+    for (const num of data) {
+      dest[offset++] = num & 0xff;
     }
   }
 }
@@ -48628,8 +48608,8 @@ class Type1Font {
   getType2Charstrings(type1Charstrings) {
     const type2Charstrings = [];
 
-    for (let i = 0, ii = type1Charstrings.length; i < ii; i++) {
-      type2Charstrings.push(type1Charstrings[i].charstring);
+    for (const type1Charstring of type1Charstrings) {
+      type2Charstrings.push(type1Charstring.charstring);
     }
 
     return type2Charstrings;
@@ -51061,11 +51041,11 @@ class PDFFunction {
 
     const fnArray = [];
 
-    for (let j = 0, jj = fnObj.length; j < jj; j++) {
+    for (const fn of fnObj) {
       fnArray.push(this.parse({
         xref,
         isEvalSupported,
-        fn: xref.fetchIfRef(fnObj[j])
+        fn: xref.fetchIfRef(fn)
       }));
     }
 
@@ -51232,14 +51212,13 @@ class PDFFunction {
       throw new _util.FormatError("Bad domain for stiched function");
     }
 
-    const fnRefs = dict.get("Functions");
     const fns = [];
 
-    for (let i = 0, ii = fnRefs.length; i < ii; ++i) {
+    for (const fn of dict.get("Functions")) {
       fns.push(this.parse({
         xref,
         isEvalSupported,
-        fn: xref.fetchIfRef(fnRefs[i])
+        fn: xref.fetchIfRef(fn)
       }));
     }
 
@@ -54143,7 +54122,8 @@ class PDFImage {
     height,
     imageIsFromDecodeStream,
     inverseDecode,
-    interpolate
+    interpolate,
+    isOffscreenCanvasSupported = true
   }) {
     const isSingleOpaquePixel = width === 1 && height === 1 && inverseDecode === (imgArray.length === 0 || !!(imgArray[0] & 128));
 
@@ -54153,7 +54133,7 @@ class PDFImage {
       };
     }
 
-    if (_util.FeatureTest.isOffscreenCanvasSupported) {
+    if (isOffscreenCanvasSupported && _util.FeatureTest.isOffscreenCanvasSupported) {
       const canvas = new OffscreenCanvas(width, height);
       const ctx = canvas.getContext("2d");
       const imgData = ctx.createImageData(width, height);
@@ -55521,8 +55501,8 @@ class SimpleXMLParser extends XMLParserBase {
       return null;
     }
 
-    for (let i = 0, ii = lastElement.childNodes.length; i < ii; i++) {
-      lastElement.childNodes[i].parentNode = lastElement;
+    for (const childNode of lastElement.childNodes) {
+      childNode.parentNode = lastElement;
     }
 
     return lastElement;
@@ -56641,14 +56621,7 @@ const PDF20 = function PDF20Closure() {
 
       const cipher = new AES128Cipher(k.subarray(0, 16));
       e = cipher.encrypt(k1, k.subarray(16, 32));
-      let remainder = 0;
-
-      for (let z = 0; z < 16; z++) {
-        remainder *= 256 % 3;
-        remainder %= 3;
-        remainder += (e[z] >>> 0) % 3;
-        remainder %= 3;
-      }
+      const remainder = e.slice(0, 16).reduce((a, b) => a + b, 0) % 3;
 
       if (remainder === 0) {
         k = calculateSHA256(e, 0, e.length);
@@ -57171,15 +57144,11 @@ class DecryptStream extends _decode_stream.DecodeStream {
     const hasMoreData = this.nextChunk && this.nextChunk.length > 0;
     const decrypt = this.decrypt;
     chunk = decrypt(chunk, !hasMoreData);
-    let bufferLength = this.bufferLength;
-    const n = chunk.length,
-          buffer = this.ensureBuffer(bufferLength + n);
-
-    for (let i = 0; i < n; i++) {
-      buffer[bufferLength++] = chunk[i];
-    }
-
-    this.bufferLength = bufferLength;
+    const bufferLength = this.bufferLength,
+          newLength = bufferLength + chunk.length,
+          buffer = this.ensureBuffer(newLength);
+    buffer.set(chunk, bufferLength);
+    this.bufferLength = newLength;
   }
 
 }
@@ -57487,7 +57456,8 @@ class Catalog {
       Catalog.parseDestDictionary({
         destDict: outlineDict,
         resultObj: data,
-        docBaseUrl: this.pdfManager.docBaseUrl
+        docBaseUrl: this.pdfManager.docBaseUrl,
+        docAttachments: this.attachments
       });
       const title = outlineDict.get("Title");
       const flags = outlineDict.get("F") || 0;
@@ -57501,6 +57471,7 @@ class Catalog {
 
       const outlineItem = {
         action: data.action,
+        attachment: data.attachment,
         dest: data.dest,
         url: data.url,
         unsafeUrl: data.unsafeUrl,
@@ -58588,9 +58559,7 @@ class Catalog {
         const kidPromises = [];
         let found = false;
 
-        for (let i = 0, ii = kids.length; i < ii; i++) {
-          const kid = kids[i];
-
+        for (const kid of kids) {
           if (!(kid instanceof _primitives.Ref)) {
             throw new _util.FormatError("Kid must be a reference.");
           }
@@ -58675,6 +58644,7 @@ class Catalog {
     }
 
     const docBaseUrl = params.docBaseUrl || null;
+    const docAttachments = params.docAttachments || null;
     let action = destDict.get("A"),
         url,
         dest;
@@ -58772,6 +58742,27 @@ class Catalog {
 
           if (typeof newWindow === "boolean") {
             resultObj.newWindow = newWindow;
+          }
+
+          break;
+
+        case "GoToE":
+          const target = action.get("T");
+          let attachment;
+
+          if (docAttachments && target instanceof _primitives.Dict) {
+            const relationship = target.get("R");
+            const name = target.get("N");
+
+            if ((0, _primitives.isName)(relationship, "C") && typeof name === "string") {
+              attachment = docAttachments[(0, _util.stringToPDFString)(name)];
+            }
+          }
+
+          if (attachment) {
+            resultObj.attachment = attachment;
+          } else {
+            (0, _util.warn)(`parseDestDictionary - unimplemented "GoToE" action.`);
           }
 
           break;
@@ -59739,8 +59730,8 @@ class ObjectLoader {
     this.refSet = new _primitives.RefSet();
     const nodesToVisit = [];
 
-    for (let i = 0, ii = keys.length; i < ii; i++) {
-      const rawValue = dict.getRaw(keys[i]);
+    for (const key of keys) {
+      const rawValue = dict.getRaw(key);
 
       if (rawValue !== undefined) {
         nodesToVisit.push(rawValue);
@@ -74335,15 +74326,15 @@ class XRef {
       }
     }
 
-    for (let i = 0, ii = xrefStms.length; i < ii; ++i) {
-      this.startXRefQueue.push(xrefStms[i]);
+    for (const xrefStm of xrefStms) {
+      this.startXRefQueue.push(xrefStm);
       this.readXRef(true);
     }
 
     let trailerDict;
 
-    for (let i = 0, ii = trailers.length; i < ii; ++i) {
-      stream.pos = trailers[i];
+    for (const trailer of trailers) {
+      stream.pos = trailer;
       const parser = new _parser.Parser({
         lexer: new _parser.Lexer(stream),
         xref: this,
@@ -75444,7 +75435,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '3.0.0';
-const pdfjsBuild = 'beff913';
+const pdfjsBuild = '3dc9b42';
 })();
 
 /******/ 	return __webpack_exports__;
