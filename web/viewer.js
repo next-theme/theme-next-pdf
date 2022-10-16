@@ -14545,9 +14545,8 @@ class Toolbar {
     } = this;
     const predefinedValuesPromise = Promise.all([l10n.get("page_scale_auto"), l10n.get("page_scale_actual"), l10n.get("page_scale_fit"), l10n.get("page_scale_width")]);
     await _ui_utils.animationStarted;
-    const style = getComputedStyle(items.scaleSelect),
-          scaleSelectContainerWidth = parseInt(style.getPropertyValue("--scale-select-container-width"), 10),
-          scaleSelectOverflow = parseInt(style.getPropertyValue("--scale-select-overflow"), 10);
+    const style = getComputedStyle(items.scaleSelect);
+    const scaleSelectWidth = parseFloat(style.getPropertyValue("--scale-select-width"));
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d", {
       alpha: false
@@ -14565,10 +14564,10 @@ class Toolbar {
       }
     }
 
-    maxWidth += 2 * scaleSelectOverflow;
+    maxWidth += 0.3 * scaleSelectWidth;
 
-    if (maxWidth > scaleSelectContainerWidth) {
-      _ui_utils.docStyle.setProperty("--scale-select-container-width", `${maxWidth}px`);
+    if (maxWidth > scaleSelectWidth) {
+      _ui_utils.docStyle.setProperty("--scale-select-width", `${maxWidth}px`);
     }
 
     canvas.width = 0;
@@ -16308,7 +16307,7 @@ var _pdf_link_service = __webpack_require__(3);
 var _app = __webpack_require__(4);
 
 const pdfjsVersion = '3.0.0';
-const pdfjsBuild = '3dc9b42';
+const pdfjsBuild = 'e0cf25d';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,

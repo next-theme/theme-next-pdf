@@ -303,8 +303,7 @@ const VerbosityLevel = {
 exports.VerbosityLevel = VerbosityLevel;
 const CMapCompressionType = {
   NONE: 0,
-  BINARY: 1,
-  STREAM: 2
+  BINARY: 1
 };
 exports.CMapCompressionType = CMapCompressionType;
 const OPS = {
@@ -385,11 +384,8 @@ const OPS = {
   paintFormXObjectEnd: 75,
   beginGroup: 76,
   endGroup: 77,
-  beginAnnotations: 78,
-  endAnnotations: 79,
   beginAnnotation: 80,
   endAnnotation: 81,
-  paintJpegXObject: 82,
   paintImageMaskXObject: 83,
   paintImageMaskXObjectGroup: 84,
   paintImageXObject: 85,
@@ -402,13 +398,11 @@ const OPS = {
 };
 exports.OPS = OPS;
 const UNSUPPORTED_FEATURES = {
-  unknown: "unknown",
   forms: "forms",
   javaScript: "javaScript",
   signatures: "signatures",
   smask: "smask",
   shadingPattern: "shadingPattern",
-  font: "font",
   errorTilingPattern: "errorTilingPattern",
   errorExtGState: "errorExtGState",
   errorXObject: "errorXObject",
@@ -1353,25 +1347,24 @@ async function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
   const workerId = await worker.messageHandler.sendWithPromise("GetDocRequest", {
     docId,
     apiVersion: '3.0.0',
-    source: {
-      data: source.data,
-      url: source.url,
-      password: source.password,
-      disableAutoFetch: source.disableAutoFetch,
-      rangeChunkSize: source.rangeChunkSize,
-      length: source.length
-    },
-    maxImageSize: source.maxImageSize,
-    disableFontFace: source.disableFontFace,
+    data: source.data,
+    password: source.password,
+    disableAutoFetch: source.disableAutoFetch,
+    rangeChunkSize: source.rangeChunkSize,
+    length: source.length,
     docBaseUrl: source.docBaseUrl,
-    ignoreErrors: source.ignoreErrors,
-    isEvalSupported: source.isEvalSupported,
-    isOffscreenCanvasSupported: source.isOffscreenCanvasSupported,
-    fontExtraProperties: source.fontExtraProperties,
     enableXfa: source.enableXfa,
-    useSystemFonts: source.useSystemFonts,
-    cMapUrl: source.useWorkerFetch ? source.cMapUrl : null,
-    standardFontDataUrl: source.useWorkerFetch ? source.standardFontDataUrl : null
+    evaluatorOptions: {
+      maxImageSize: source.maxImageSize,
+      disableFontFace: source.disableFontFace,
+      ignoreErrors: source.ignoreErrors,
+      isEvalSupported: source.isEvalSupported,
+      isOffscreenCanvasSupported: source.isOffscreenCanvasSupported,
+      fontExtraProperties: source.fontExtraProperties,
+      useSystemFonts: source.useSystemFonts,
+      cMapUrl: source.useWorkerFetch ? source.cMapUrl : null,
+      standardFontDataUrl: source.useWorkerFetch ? source.standardFontDataUrl : null
+    }
   });
 
   if (source.data) {
@@ -3140,11 +3133,11 @@ class WorkerTransport {
   }
 
   async startCleanup(keepLoadedFonts = false) {
-    await this.messageHandler.sendWithPromise("Cleanup", null);
-
     if (this.destroyed) {
       return;
     }
+
+    await this.messageHandler.sendWithPromise("Cleanup", null);
 
     for (const page of this.#pageCache.values()) {
       const cleanupSuccessful = page.cleanup();
@@ -3424,7 +3417,7 @@ class InternalRenderTask {
 
 const version = '3.0.0';
 exports.version = version;
-const build = '3dc9b42';
+const build = 'e0cf25d';
 exports.build = build;
 
 /***/ }),
@@ -3747,6 +3740,32 @@ class AnnotationEditor {
     const [parentWidth, parentHeight] = this.parent.viewportBaseDimensions;
     this.div.style.width = `${100 * width / parentWidth}%`;
     this.div.style.height = `${100 * height / parentHeight}%`;
+  }
+
+  fixDims() {
+    const {
+      style
+    } = this.div;
+    const {
+      height,
+      width
+    } = style;
+    const widthPercent = width.endsWith("%");
+    const heightPercent = height.endsWith("%");
+
+    if (widthPercent && heightPercent) {
+      return;
+    }
+
+    const [parentWidth, parentHeight] = this.parent.viewportBaseDimensions;
+
+    if (!widthPercent) {
+      style.width = `${100 * parseFloat(width) / parentWidth}%`;
+    }
+
+    if (!heightPercent) {
+      style.height = `${100 * parseFloat(height) / parentHeight}%`;
+    }
   }
 
   getInitialTranslation() {
@@ -4413,6 +4432,10 @@ class AnnotationEditorUIManager {
   }
 
   registerEditorTypes(types) {
+    if (this.#editorTypes) {
+      return;
+    }
+
     this.#editorTypes = types;
 
     for (const editorType of this.#editorTypes) {
@@ -7062,8 +7085,7 @@ class CanvasGraphics {
 
     if ((img.bitmap || img.data) && img.count > 1) {
       const mainKey = img.bitmap || img.data.buffer;
-      const withoutTranslation = currentTransform.slice(0, 4);
-      cacheKey = JSON.stringify(isPatternFill ? withoutTranslation : [withoutTranslation, fillColor]);
+      cacheKey = JSON.stringify(isPatternFill ? currentTransform : [currentTransform.slice(0, 4), fillColor]);
       cache = this._cachedBitmapsMap.get(mainKey);
 
       if (!cache) {
@@ -10622,10 +10644,9 @@ class AnnotationEditorLayer {
       _freetext.FreeTextEditor.initialize(options.l10n);
 
       _ink.InkEditor.initialize(options.l10n);
-
-      options.uiManager.registerEditorTypes([_freetext.FreeTextEditor, _ink.InkEditor]);
     }
 
+    options.uiManager.registerEditorTypes([_freetext.FreeTextEditor, _ink.InkEditor]);
     this.#uiManager = options.uiManager;
     this.annotationStorage = options.annotationStorage;
     this.pageIndex = options.pageIndex;
@@ -11058,6 +11079,7 @@ var _editor = __w_pdfjs_require__(4);
 class FreeTextEditor extends _editor.AnnotationEditor {
   #boundEditorDivBlur = this.editorDivBlur.bind(this);
   #boundEditorDivFocus = this.editorDivFocus.bind(this);
+  #boundEditorDivInput = this.editorDivInput.bind(this);
   #boundEditorDivKeydown = this.editorDivKeydown.bind(this);
   #color;
   #content = "";
@@ -11189,7 +11211,7 @@ class FreeTextEditor extends _editor.AnnotationEditor {
     this.editorDiv.addEventListener("keydown", this.#boundEditorDivKeydown);
     this.editorDiv.addEventListener("focus", this.#boundEditorDivFocus);
     this.editorDiv.addEventListener("blur", this.#boundEditorDivBlur);
-    this.parent.div.classList.remove("freeTextEditing");
+    this.editorDiv.addEventListener("input", this.#boundEditorDivInput);
   }
 
   disableEditMode() {
@@ -11206,6 +11228,7 @@ class FreeTextEditor extends _editor.AnnotationEditor {
     this.editorDiv.removeEventListener("keydown", this.#boundEditorDivKeydown);
     this.editorDiv.removeEventListener("focus", this.#boundEditorDivFocus);
     this.editorDiv.removeEventListener("blur", this.#boundEditorDivBlur);
+    this.editorDiv.removeEventListener("input", this.#boundEditorDivInput);
     this.div.focus();
     this.isEditing = false;
     this.parent.div.classList.add("freeTextEditing");
@@ -11307,6 +11330,10 @@ class FreeTextEditor extends _editor.AnnotationEditor {
 
   editorDivBlur(event) {
     this.isEditing = false;
+  }
+
+  editorDivInput(event) {
+    this.parent.div.classList.toggle("freeTextEditing", this.isEmpty());
   }
 
   disableEditing() {
@@ -11436,6 +11463,7 @@ var _pdfjsFitCurve = __w_pdfjs_require__(24);
 var _tools = __w_pdfjs_require__(5);
 
 const RESIZER_SIZE = 16;
+const TIME_TO_WAIT_BEFORE_FIXING_DIMS = 100;
 
 class InkEditor extends _editor.AnnotationEditor {
   #aspectRatio = 0;
@@ -11875,10 +11903,19 @@ class InkEditor extends _editor.AnnotationEditor {
   }
 
   #createObserver() {
+    let timeoutId = null;
     this.#observer = new ResizeObserver(entries => {
       const rect = entries[0].contentRect;
 
       if (rect.width && rect.height) {
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+        }
+
+        timeoutId = setTimeout(() => {
+          this.fixDims();
+          timeoutId = null;
+        }, TIME_TO_WAIT_BEFORE_FIXING_DIMS);
         this.setDimensions(rect.width, rect.height);
       }
     });
@@ -19132,7 +19169,7 @@ var _svg = __w_pdfjs_require__(30);
 var _xfa_layer = __w_pdfjs_require__(28);
 
 const pdfjsVersion = '3.0.0';
-const pdfjsBuild = '3dc9b42';
+const pdfjsBuild = 'e0cf25d';
 {
   if (_is_node.isNodeJS) {
     const {
