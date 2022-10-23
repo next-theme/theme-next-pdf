@@ -16174,19 +16174,14 @@ class Lexer {
     }
 
     if (ch < 0x30 || ch > 0x39) {
-      if ((0, _core_utils.isWhiteSpace)(ch) || ch === -1) {
-        if (divideBy === 10 && sign === 0) {
-          (0, _util.warn)("Lexer.getNumber - treating a single decimal point as zero.");
-          return 0;
-        }
+      const msg = `Invalid number: ${String.fromCharCode(ch)} (charCode ${ch})`;
 
-        if (divideBy === 0 && sign === -1) {
-          (0, _util.warn)("Lexer.getNumber - treating a single minus sign as zero.");
-          return 0;
-        }
+      if ((0, _core_utils.isWhiteSpace)(ch) || ch === -1) {
+        (0, _util.info)(`Lexer.getNumber - "${msg}".`);
+        return 0;
       }
 
-      throw new _util.FormatError(`Invalid number: ${String.fromCharCode(ch)} (charCode ${ch})`);
+      throw new _util.FormatError(msg);
     }
 
     sign = sign || 1;
@@ -25119,10 +25114,6 @@ class Glyph {
     this.isInvisibleFormatMark = category.isInvisibleFormatMark;
   }
 
-  matchesForCache(originalCharCode, fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont) {
-    return this.originalCharCode === originalCharCode && this.fontChar === fontChar && this.unicode === unicode && this.accent === accent && this.width === width && this.vmetric === vmetric && this.operatorListId === operatorListId && this.isSpace === isSpace && this.isInFont === isInFont;
-  }
-
 }
 
 function int16(b0, b1) {
@@ -27694,6 +27685,12 @@ class Font {
   }
 
   _charToGlyph(charcode, isSpace = false) {
+    let glyph = this._glyphCache[charcode];
+
+    if (glyph && glyph.isSpace === isSpace) {
+      return glyph;
+    }
+
     let fontCharCode, width, operatorListId;
     let widthCode = charcode;
 
@@ -27757,14 +27754,8 @@ class Font {
       }
     }
 
-    let glyph = this._glyphCache[charcode];
-
-    if (!glyph || !glyph.matchesForCache(charcode, fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont)) {
-      glyph = new Glyph(charcode, fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont);
-      this._glyphCache[charcode] = glyph;
-    }
-
-    return glyph;
+    glyph = new Glyph(charcode, fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont);
+    return this._glyphCache[charcode] = glyph;
   }
 
   charsToGlyphs(chars) {
@@ -43181,6 +43172,7 @@ const getSupplementalGlyphMapForCalibri = (0, _core_utils.getLookupTableFactory)
   t[4] = 65;
   t[5] = 192;
   t[6] = 193;
+  t[9] = 196;
   t[17] = 66;
   t[18] = 67;
   t[21] = 268;
@@ -43202,6 +43194,7 @@ const getSupplementalGlyphMapForCalibri = (0, _core_utils.getLookupTableFactory)
   t[69] = 78;
   t[75] = 79;
   t[76] = 210;
+  t[80] = 214;
   t[87] = 80;
   t[89] = 81;
   t[90] = 82;
@@ -43210,6 +43203,7 @@ const getSupplementalGlyphMapForCalibri = (0, _core_utils.getLookupTableFactory)
   t[97] = 352;
   t[100] = 84;
   t[104] = 85;
+  t[109] = 220;
   t[115] = 86;
   t[116] = 87;
   t[121] = 88;
@@ -43220,6 +43214,7 @@ const getSupplementalGlyphMapForCalibri = (0, _core_utils.getLookupTableFactory)
   t[258] = 97;
   t[259] = 224;
   t[260] = 225;
+  t[263] = 228;
   t[268] = 261;
   t[271] = 98;
   t[272] = 99;
@@ -43246,6 +43241,7 @@ const getSupplementalGlyphMapForCalibri = (0, _core_utils.getLookupTableFactory)
   t[381] = 111;
   t[382] = 242;
   t[383] = 243;
+  t[386] = 246;
   t[393] = 112;
   t[395] = 113;
   t[396] = 114;
@@ -43255,6 +43251,7 @@ const getSupplementalGlyphMapForCalibri = (0, _core_utils.getLookupTableFactory)
   t[403] = 353;
   t[410] = 116;
   t[437] = 117;
+  t[442] = 252;
   t[448] = 118;
   t[449] = 119;
   t[454] = 120;
@@ -74352,9 +74349,18 @@ class XRef {
       this.readXRef(true);
     }
 
-    let trailerDict;
+    let trailerDict, trailerError;
 
-    for (const trailer of trailers) {
+    for (const trailer of [...trailers, "generationFallback", ...trailers]) {
+      if (trailer === "generationFallback") {
+        if (!trailerError) {
+          break;
+        }
+
+        this._generationFallback = true;
+        continue;
+      }
+
       stream.pos = trailer;
       const parser = new _parser.Parser({
         lexer: new _parser.Lexer(stream),
@@ -74374,6 +74380,8 @@ class XRef {
         continue;
       }
 
+      let validPagesDict = false;
+
       try {
         const rootDict = dict.get("Root");
 
@@ -74389,14 +74397,15 @@ class XRef {
 
         const pagesCount = pagesDict.get("Count");
 
-        if (!Number.isInteger(pagesCount)) {
-          continue;
+        if (Number.isInteger(pagesCount)) {
+          validPagesDict = true;
         }
       } catch (ex) {
+        trailerError = ex;
         continue;
       }
 
-      if (dict.has("ID")) {
+      if (validPagesDict && dict.has("ID")) {
         return dict;
       }
 
@@ -74581,7 +74590,14 @@ class XRef {
     let num = ref.num;
 
     if (xrefEntry.gen !== gen) {
-      throw new _core_utils.XRefEntryException(`Inconsistent generation in XRef: ${ref}`);
+      const msg = `Inconsistent generation in XRef: ${ref}`;
+
+      if (this._generationFallback && xrefEntry.gen < gen) {
+        (0, _util.warn)(msg);
+        return this.fetchUncompressed(_primitives.Ref.get(num, xrefEntry.gen), xrefEntry, suppressEncryption);
+      }
+
+      throw new _core_utils.XRefEntryException(msg);
     }
 
     const stream = this.stream.makeSubStream(xrefEntry.offset + this.stream.start);
@@ -75456,7 +75472,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 var _worker = __w_pdfjs_require__(1);
 
 const pdfjsVersion = '3.0.0';
-const pdfjsBuild = 'e0cf25d';
+const pdfjsBuild = '987062c';
 })();
 
 /******/ 	return __webpack_exports__;

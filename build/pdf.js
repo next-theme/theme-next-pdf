@@ -3417,7 +3417,7 @@ class InternalRenderTask {
 
 const version = '3.0.0';
 exports.version = version;
-const build = 'e0cf25d';
+const build = '987062c';
 exports.build = build;
 
 /***/ }),
@@ -4663,9 +4663,7 @@ class AnnotationEditorUIManager {
   }
 
   delete() {
-    if (this.#activeEditor) {
-      this.#activeEditor.commitOrRemove();
-    }
+    this.commitOrRemove();
 
     if (!this.hasSelection) {
       return;
@@ -4690,6 +4688,10 @@ class AnnotationEditorUIManager {
       undo,
       mustExec: true
     });
+  }
+
+  commitOrRemove() {
+    this.#activeEditor?.commitOrRemove();
   }
 
   #selectEditors(editors) {
@@ -8797,12 +8799,7 @@ class RadialAxialShadingPattern extends BaseShadingPattern {
       tmpCtx.fill();
       pattern = ctx.createPattern(tmpCanvas.canvas, "no-repeat");
       const domMatrix = new DOMMatrix(inverse);
-
-      try {
-        pattern.setTransform(domMatrix);
-      } catch (ex) {
-        (0, _util.warn)(`RadialAxialShadingPattern.getPattern: "${ex?.message}".`);
-      }
+      pattern.setTransform(domMatrix);
     } else {
       applyBoundingBox(ctx, this._bbox);
       pattern = this._createGradient(ctx);
@@ -9242,13 +9239,7 @@ class TilingPattern {
     domMatrix = domMatrix.translate(temporaryPatternCanvas.offsetX, temporaryPatternCanvas.offsetY);
     domMatrix = domMatrix.scale(1 / temporaryPatternCanvas.scaleX, 1 / temporaryPatternCanvas.scaleY);
     const pattern = ctx.createPattern(temporaryPatternCanvas.canvas, "repeat");
-
-    try {
-      pattern.setTransform(domMatrix);
-    } catch (ex) {
-      (0, _util.warn)(`TilingPattern.getPattern: "${ex?.message}".`);
-    }
-
+    pattern.setTransform(domMatrix);
     return pattern;
   }
 
@@ -11016,6 +11007,7 @@ class AnnotationEditorLayer {
   }
 
   update(parameters) {
+    this.#uiManager.commitOrRemove();
     this.viewport = parameters.viewport;
     this.setDimensions();
     this.updateMode();
@@ -11083,6 +11075,7 @@ class FreeTextEditor extends _editor.AnnotationEditor {
   #boundEditorDivKeydown = this.editorDivKeydown.bind(this);
   #color;
   #content = "";
+  #editorDivId = `${this.id}-editor`;
   #hasAlreadyBeenCommitted = false;
   #fontSize;
   static _freeTextDefaultContent = "";
@@ -11204,10 +11197,10 @@ class FreeTextEditor extends _editor.AnnotationEditor {
     this.parent.setEditingState(false);
     this.parent.updateToolbar(_util.AnnotationEditorType.FREETEXT);
     super.enableEditMode();
-    this.enableEditing();
     this.overlayDiv.classList.remove("enabled");
     this.editorDiv.contentEditable = true;
     this.div.draggable = false;
+    this.div.removeAttribute("aria-activedescendant");
     this.editorDiv.addEventListener("keydown", this.#boundEditorDivKeydown);
     this.editorDiv.addEventListener("focus", this.#boundEditorDivFocus);
     this.editorDiv.addEventListener("blur", this.#boundEditorDivBlur);
@@ -11221,9 +11214,9 @@ class FreeTextEditor extends _editor.AnnotationEditor {
 
     this.parent.setEditingState(true);
     super.disableEditMode();
-    this.disableEditing();
     this.overlayDiv.classList.add("enabled");
     this.editorDiv.contentEditable = false;
+    this.div.setAttribute("aria-activedescendant", this.#editorDivId);
     this.div.draggable = true;
     this.editorDiv.removeEventListener("keydown", this.#boundEditorDivKeydown);
     this.editorDiv.removeEventListener("focus", this.#boundEditorDivFocus);
@@ -11361,7 +11354,7 @@ class FreeTextEditor extends _editor.AnnotationEditor {
     super.render();
     this.editorDiv = document.createElement("div");
     this.editorDiv.className = "internal";
-    this.editorDiv.setAttribute("id", `${this.id}-editor`);
+    this.editorDiv.setAttribute("id", this.#editorDivId);
     this.enableEditing();
 
     FreeTextEditor._l10nPromise.get("editor_free_text2_aria_label").then(msg => this.editorDiv?.setAttribute("aria-label", msg));
@@ -13086,9 +13079,9 @@ class AnnotationElement {
 
     for (const domElement of document.getElementsByName(name)) {
       const {
-        id,
         exportValue
       } = domElement;
+      const id = domElement.getAttribute("data-element-id");
 
       if (id === skipId) {
         continue;
@@ -13489,15 +13482,18 @@ class WidgetAnnotationElement extends AnnotationElement {
     const fontSize = this.data.defaultAppearanceData.fontSize || DEFAULT_FONT_SIZE;
     const style = element.style;
     let computedFontSize;
+    const BORDER_SIZE = 2;
+
+    const roundToOneDecimal = x => Math.round(10 * x) / 10;
 
     if (this.data.multiLine) {
-      const height = Math.abs(this.data.rect[3] - this.data.rect[1]);
+      const height = Math.abs(this.data.rect[3] - this.data.rect[1] - BORDER_SIZE);
       const numberOfLines = Math.round(height / (_util.LINE_FACTOR * fontSize)) || 1;
       const lineHeight = height / numberOfLines;
-      computedFontSize = Math.min(fontSize, Math.round(lineHeight / _util.LINE_FACTOR));
+      computedFontSize = Math.min(fontSize, roundToOneDecimal(lineHeight / _util.LINE_FACTOR));
     } else {
-      const height = Math.abs(this.data.rect[3] - this.data.rect[1]);
-      computedFontSize = Math.min(fontSize, Math.round(height / _util.LINE_FACTOR));
+      const height = Math.abs(this.data.rect[3] - this.data.rect[1] - BORDER_SIZE);
+      computedFontSize = Math.min(fontSize, roundToOneDecimal(height / _util.LINE_FACTOR));
     }
 
     style.fontSize = `calc(${computedFontSize}px * var(--scale-factor))`;
@@ -19169,7 +19165,7 @@ var _svg = __w_pdfjs_require__(30);
 var _xfa_layer = __w_pdfjs_require__(28);
 
 const pdfjsVersion = '3.0.0';
-const pdfjsBuild = 'e0cf25d';
+const pdfjsBuild = '987062c';
 {
   if (_is_node.isNodeJS) {
     const {
