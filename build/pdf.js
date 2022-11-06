@@ -492,10 +492,10 @@ function createValidAbsoluteUrl(url, baseUrl = null, options = null) {
   } catch (ex) {}
   return null;
 }
-function shadow(obj, prop, value) {
+function shadow(obj, prop, value, nonSerializable = false) {
   Object.defineProperty(obj, prop, {
     value,
-    enumerable: true,
+    enumerable: !nonSerializable,
     configurable: true,
     writable: false
   });
@@ -2810,7 +2810,7 @@ class InternalRenderTask {
 }
 const version = '3.1.0';
 exports.version = version;
-const build = 'c059c13';
+const build = '7e5008f';
 exports.build = build;
 
 /***/ }),
@@ -10722,6 +10722,9 @@ class LinkAnnotationElement extends AnnotationElement {
     }
     return this.container;
   }
+  #setInternalLink() {
+    this.container.setAttribute("data-internal-link", "");
+  }
   _bindLink(link, destination) {
     link.href = this.linkService.getDestinationHash(destination);
     link.onclick = () => {
@@ -10731,7 +10734,7 @@ class LinkAnnotationElement extends AnnotationElement {
       return false;
     };
     if (destination || destination === "") {
-      link.className = "internalLink";
+      this.#setInternalLink();
     }
   }
   _bindNamedAction(link, action) {
@@ -10740,7 +10743,7 @@ class LinkAnnotationElement extends AnnotationElement {
       this.linkService.executeNamedAction(action);
       return false;
     };
-    link.className = "internalLink";
+    this.#setInternalLink();
   }
   _bindAttachment(link, attachment) {
     link.href = this.linkService.getAnchorUrl("");
@@ -10748,7 +10751,7 @@ class LinkAnnotationElement extends AnnotationElement {
       this.downloadManager?.openOrDownloadData(this.container, attachment.content, attachment.filename);
       return false;
     };
-    link.className = "internalLink";
+    this.#setInternalLink();
   }
   #bindSetOCGState(link, action) {
     link.href = this.linkService.getAnchorUrl("");
@@ -10756,7 +10759,7 @@ class LinkAnnotationElement extends AnnotationElement {
       this.linkService.executeSetOCGState(action);
       return false;
     };
-    link.className = "internalLink";
+    this.#setInternalLink();
   }
   _bindJSAction(link, data) {
     link.href = this.linkService.getAnchorUrl("");
@@ -10780,14 +10783,14 @@ class LinkAnnotationElement extends AnnotationElement {
     if (!link.onclick) {
       link.onclick = () => false;
     }
-    link.className = "internalLink";
+    this.#setInternalLink();
   }
   _bindResetFormAction(link, resetForm) {
     const otherClickAction = link.onclick;
     if (!otherClickAction) {
       link.href = this.linkService.getAnchorUrl("");
     }
-    link.className = "internalLink";
+    this.#setInternalLink();
     if (!this._fieldObjects) {
       (0, _util.warn)(`_bindResetFormAction - "resetForm" action not supported, ` + "ensure that the `fieldObjects` parameter is provided.");
       if (!otherClickAction) {
@@ -15584,7 +15587,7 @@ var _text_layer = __w_pdfjs_require__(29);
 var _svg = __w_pdfjs_require__(30);
 var _xfa_layer = __w_pdfjs_require__(28);
 const pdfjsVersion = '3.1.0';
-const pdfjsBuild = 'c059c13';
+const pdfjsBuild = '7e5008f';
 {
   if (_is_node.isNodeJS) {
     const {

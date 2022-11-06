@@ -1082,10 +1082,10 @@ function createValidAbsoluteUrl(url, baseUrl = null, options = null) {
   } catch (ex) {}
   return null;
 }
-function shadow(obj, prop, value) {
+function shadow(obj, prop, value, nonSerializable = false) {
   Object.defineProperty(obj, prop, {
     value,
-    enumerable: true,
+    enumerable: !nonSerializable,
     configurable: true,
     writable: false
   });
@@ -4286,6 +4286,7 @@ class AnnotationFactory {
     const id = ref instanceof _primitives.Ref ? ref.toString() : `annot_${idFactory.createObjId()}`;
     let subtype = dict.get("Subtype");
     subtype = subtype instanceof _primitives.Name ? subtype.name : null;
+    const acroFormDict = acroForm instanceof _primitives.Dict ? acroForm : _primitives.Dict.empty;
     const parameters = {
       xref,
       ref,
@@ -4293,10 +4294,11 @@ class AnnotationFactory {
       subtype,
       id,
       pdfManager,
-      acroForm: acroForm instanceof _primitives.Dict ? acroForm : _primitives.Dict.empty,
+      acroForm: acroFormDict,
       attachments,
       xfaDatasets,
       collectFields,
+      needAppearances: !collectFields && acroFormDict.get("NeedAppearances") === true,
       pageIndex
     };
     switch (subtype) {
@@ -4562,6 +4564,7 @@ class Annotation {
       this.data.pageIndex = params.pageIndex;
     }
     this._fallbackFontDict = null;
+    this._needAppearances = false;
   }
   _hasFlag(flags, flag) {
     return !!(flags & flag);
@@ -5151,6 +5154,7 @@ class WidgetAnnotation extends Annotation {
     const dict = params.dict;
     const data = this.data;
     this.ref = params.ref;
+    this._needAppearances = params.needAppearances;
     data.annotationType = _util.AnnotationType.WIDGET;
     if (data.fieldName === undefined) {
       data.fieldName = this._constructFieldName(dict);
@@ -5187,6 +5191,7 @@ class WidgetAnnotation extends Annotation {
     }) || params.acroForm.get("DA");
     this._defaultAppearance = typeof defaultAppearance === "string" ? defaultAppearance : "";
     data.defaultAppearanceData = (0, _default_appearance.parseDefaultAppearance)(this._defaultAppearance);
+    data.hasAppearance = this._needAppearances && data.fieldValue !== undefined && data.fieldValue !== null || data.hasAppearance;
     const fieldType = (0, _core_utils.getInheritableProperty)({
       dict,
       key: "FT"
@@ -5430,15 +5435,16 @@ class WidgetAnnotation extends Annotation {
       value = storageEntry.formattedValue || storageEntry.value;
       rotation = storageEntry.rotation;
     }
-    if (rotation === undefined && value === undefined) {
+    if (rotation === undefined && value === undefined && !this._needAppearances) {
       if (!this._hasValueFromXFA || this.appearance) {
         return null;
       }
     }
+    const colors = this.getBorderAndBackgroundAppearances(annotationStorage);
     if (value === undefined) {
       value = this.data.fieldValue;
       if (!value) {
-        return "";
+        return `/Tx BMC q ${colors}Q EMC`;
       }
     }
     if (Array.isArray(value) && value.length === 1) {
@@ -5447,7 +5453,7 @@ class WidgetAnnotation extends Annotation {
     (0, _util.assert)(typeof value === "string", "Expected `value` to be a string.");
     value = value.trim();
     if (value === "") {
-      return "";
+      return `/Tx BMC q ${colors}Q EMC`;
     }
     if (rotation === undefined) {
       rotation = this.rotation;
@@ -5482,7 +5488,6 @@ class WidgetAnnotation extends Annotation {
     if (this.data.comb) {
       return this._getCombAppearance(defaultAppearance, font, encodedString, totalWidth, hPadding, vPadding, annotationStorage);
     }
-    const colors = this.getBorderAndBackgroundAppearances(annotationStorage);
     if (alignment === 0 || alignment > 2) {
       return `/Tx BMC q ${colors}BT ` + defaultAppearance + ` 1 0 0 1 ${hPadding} ${vPadding} Tm (${(0, _util.escapeString)(encodedString)}) Tj` + " ET Q EMC";
     }
@@ -6172,16 +6177,13 @@ class ChoiceWidgetAnnotation extends WidgetAnnotation {
     if (this.data.combo) {
       return super._getAppearance(evaluator, task, annotationStorage);
     }
-    if (!annotationStorage) {
-      return null;
+    let exportedValue, rotation;
+    const storageEntry = annotationStorage ? annotationStorage.get(this.data.id) : undefined;
+    if (storageEntry) {
+      rotation = storageEntry.rotation;
+      exportedValue = storageEntry.value;
     }
-    const storageEntry = annotationStorage.get(this.data.id);
-    if (!storageEntry) {
-      return null;
-    }
-    const rotation = storageEntry.rotation;
-    let exportedValue = storageEntry.value;
-    if (rotation === undefined && exportedValue === undefined) {
+    if (rotation === undefined && exportedValue === undefined && !this._needAppearances) {
       return null;
     }
     if (exportedValue === undefined) {
@@ -7937,7 +7939,6 @@ var _fonts = __w_pdfjs_require__(32);
 var _fonts_utils = __w_pdfjs_require__(36);
 var _encodings = __w_pdfjs_require__(35);
 var _standard_fonts = __w_pdfjs_require__(39);
-var _unicode = __w_pdfjs_require__(38);
 var _pattern = __w_pdfjs_require__(48);
 var _xfa_fonts = __w_pdfjs_require__(49);
 var _to_unicode_map = __w_pdfjs_require__(40);
@@ -7952,6 +7953,7 @@ var _decode_stream = __w_pdfjs_require__(17);
 var _glyphlist = __w_pdfjs_require__(37);
 var _core_utils = __w_pdfjs_require__(4);
 var _metrics = __w_pdfjs_require__(43);
+var _unicode = __w_pdfjs_require__(38);
 var _murmurhash = __w_pdfjs_require__(59);
 var _operator_list = __w_pdfjs_require__(60);
 var _image = __w_pdfjs_require__(61);
@@ -9540,7 +9542,6 @@ class PartialEvaluator {
         level: 0
       };
     }
-    const NormalizedUnicodes = (0, _unicode.getNormalizedUnicodes)();
     const textContent = {
       items: [],
       styles: Object.create(null)
@@ -9828,7 +9829,10 @@ class PartialEvaluator {
       const scale = textState.fontMatrix[0] * textState.fontSize;
       for (let i = 0, ii = glyphs.length; i < ii; i++) {
         const glyph = glyphs[i];
-        if (glyph.isInvisibleFormatMark) {
+        const {
+          category
+        } = glyph;
+        if (category.isInvisibleFormatMark) {
           continue;
         }
         let charSpacing = textState.charSpacing + (i + 1 === ii ? extraSpacing : 0);
@@ -9837,7 +9841,7 @@ class PartialEvaluator {
           glyphWidth = glyph.vmetric ? glyph.vmetric[0] : -glyphWidth;
         }
         let scaledDim = glyphWidth * scale;
-        if (glyph.isWhitespace) {
+        if (category.isWhitespace) {
           if (!font.vertical) {
             charSpacing += scaledDim + textState.wordSpacing;
             textState.translateTextMatrix(charSpacing * textState.textHScale, 0);
@@ -9852,7 +9856,7 @@ class PartialEvaluator {
           continue;
         }
         const textChunk = ensureTextContentItem();
-        if (glyph.isZeroWidthDiacritic) {
+        if (category.isZeroWidthDiacritic) {
           scaledDim = 0;
         }
         if (!font.vertical) {
@@ -9867,9 +9871,7 @@ class PartialEvaluator {
         if (scaledDim) {
           textChunk.prevTransform = getCurrentTextTransform();
         }
-        let glyphUnicode = glyph.unicode;
-        glyphUnicode = NormalizedUnicodes[glyphUnicode] || glyphUnicode;
-        glyphUnicode = (0, _unicode.reverseIfRtl)(glyphUnicode);
+        const glyphUnicode = glyph.normalizedUnicode;
         if (saveLastChar(glyphUnicode)) {
           textChunk.str.push(" ");
         }
@@ -20381,10 +20383,15 @@ class Glyph {
     this.operatorListId = operatorListId;
     this.isSpace = isSpace;
     this.isInFont = isInFont;
-    const category = (0, _unicode.getCharUnicodeCategory)(unicode);
-    this.isWhitespace = category.isWhitespace;
-    this.isZeroWidthDiacritic = category.isZeroWidthDiacritic;
-    this.isInvisibleFormatMark = category.isInvisibleFormatMark;
+  }
+  get category() {
+    return (0, _util.shadow)(this, "category", (0, _unicode.getCharUnicodeCategory)(this.unicode), true);
+  }
+  get normalizedUnicode() {
+    return (0, _util.shadow)(this, "normalizedUnicode", (0, _unicode.reverseIfRtl)(Glyph._NormalizedUnicodes[this.unicode] || this.unicode), true);
+  }
+  static get _NormalizedUnicodes() {
+    return (0, _util.shadow)(this, "_NormalizedUnicodes", (0, _unicode.getNormalizedUnicodes)());
   }
 }
 function int16(b0, b1) {
@@ -50475,6 +50482,9 @@ class Catalog {
     throw new Error(`Page index ${pageIndex} not found.`);
   }
   async getAllPageDicts(recoveryMode = false) {
+    const {
+      ignoreErrors
+    } = this.pdfManager.evaluatorOptions;
     const queue = [{
       currentNode: this.toplevelPagesDict,
       posInKids: 0
@@ -50497,6 +50507,10 @@ class Catalog {
     function addPageError(error) {
       if (error instanceof _core_utils.XRefEntryException && !recoveryMode) {
         throw error;
+      }
+      if (recoveryMode && ignoreErrors && pageIndex === 0) {
+        (0, _util.warn)(`getAllPageDicts - Skipping invalid first page: "${error}".`);
+        error = _primitives.Dict.empty;
       }
       map.set(pageIndex++, [error, null]);
     }
@@ -63091,7 +63105,7 @@ class XRef {
             uncompressed: true
           };
         }
-        while (startPos < buffer.length) {
+        while (startPos < length) {
           const endPos = startPos + skipUntil(buffer, startPos, objBytes) + 4;
           contentLength = endPos - position;
           const checkPos = Math.max(endPos - CHECK_CONTENT_LENGTH, startPos);
@@ -63117,7 +63131,19 @@ class XRef {
         position += contentLength;
       } else if (token.startsWith("trailer") && (token.length === 7 || /\s/.test(token[7]))) {
         trailers.push(position);
-        position += skipUntil(buffer, position, startxrefBytes);
+        const contentLength = skipUntil(buffer, position, startxrefBytes);
+        if (position + contentLength >= length) {
+          const endPos = position + skipUntil(buffer, position, objBytes) + 4;
+          const checkPos = Math.max(endPos - CHECK_CONTENT_LENGTH, position);
+          const tokenStr = (0, _util.bytesToString)(buffer.subarray(checkPos, endPos));
+          const objToken = nestedObjRegExp.exec(tokenStr);
+          if (objToken && objToken[1]) {
+            (0, _util.warn)('indexObjects: Found first "obj" after "trailer", ' + 'caused by missing "startxref" -- trying to recover.');
+            position = endPos - objToken[1].length;
+            continue;
+          }
+        }
+        position += contentLength;
       } else {
         position += token.length + 1;
       }
@@ -64046,7 +64072,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.1.0';
-const pdfjsBuild = 'c059c13';
+const pdfjsBuild = '7e5008f';
 })();
 
 /******/ 	return __webpack_exports__;
