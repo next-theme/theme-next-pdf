@@ -1860,6 +1860,9 @@ const PDFViewerApplication = {
     const loadingTask = (0, _pdfjsLib.getDocument)(parameters);
     this.pdfLoadingTask = loadingTask;
     loadingTask.onPassword = (updateCallback, reason) => {
+      if (this.isViewerEmbedded) {
+        this._unblockDocumentLoadEvent();
+      }
       this.pdfLinkService.externalLinkEnabled = false;
       this.passwordPrompt.setUpdateCallback(updateCallback, reason);
       this.passwordPrompt.open();
@@ -4151,7 +4154,7 @@ class PDFAttachmentViewer extends _base_tree_viewer.BaseTreeViewer {
     for (const name of names) {
       const item = attachments[name];
       const content = item.content,
-        filename = (0, _pdfjsLib.getFilenameFromUrl)(item.filename);
+        filename = (0, _pdfjsLib.getFilenameFromUrl)(item.filename, true);
       const div = document.createElement("div");
       div.className = "treeItem";
       const element = document.createElement("a");
@@ -8207,7 +8210,7 @@ class PDFViewer {
   #scrollModePageState = null;
   #onVisibilityChange = null;
   constructor(options) {
-    const viewerVersion = '3.1.0';
+    const viewerVersion = '3.2.0';
     if (_pdfjsLib.version !== viewerVersion) {
       throw new Error(`The API version "${_pdfjsLib.version}" does not match the Viewer version "${viewerVersion}".`);
     }
@@ -8736,8 +8739,10 @@ class PDFViewer {
       div,
       id
     } = pageView;
-    if (this._scrollMode === _ui_utils.ScrollMode.PAGE) {
+    if (this._currentPageNumber !== id) {
       this._setCurrentPageNumber(id);
+    }
+    if (this._scrollMode === _ui_utils.ScrollMode.PAGE) {
       this.#ensurePageViewVisible();
       this.update();
     }
@@ -8756,6 +8761,9 @@ class PDFViewer {
       }
     }
     (0, _ui_utils.scrollIntoView)(div, pageSpot);
+    if (!this._currentScaleValue && this._location) {
+      this._location = null;
+    }
   }
   #isSameScale(newScale) {
     return newScale === this._currentScale || Math.abs(newScale - this._currentScale) < 1e-15;
@@ -13437,8 +13445,8 @@ var _ui_utils = __webpack_require__(1);
 var _app_options = __webpack_require__(2);
 var _pdf_link_service = __webpack_require__(3);
 var _app = __webpack_require__(4);
-const pdfjsVersion = '3.1.0';
-const pdfjsBuild = 'ae7c97a';
+const pdfjsVersion = '3.2.0';
+const pdfjsBuild = '7376014';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,

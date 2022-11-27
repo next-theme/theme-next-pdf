@@ -101,7 +101,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = '3.1.0';
+    const workerVersion = '3.2.0';
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }
@@ -4498,45 +4498,46 @@ function getRgbColor(color, defaultColor = new Uint8ClampedArray(3)) {
       return defaultColor;
   }
 }
+function getPdfColorArray(color) {
+  return Array.from(color, c => c / 255);
+}
 function getQuadPoints(dict, rect) {
-  if (!dict.has("QuadPoints")) {
-    return null;
-  }
   const quadPoints = dict.getArray("QuadPoints");
   if (!Array.isArray(quadPoints) || quadPoints.length === 0 || quadPoints.length % 8 > 0) {
     return null;
   }
   const quadPointsLists = [];
   for (let i = 0, ii = quadPoints.length / 8; i < ii; i++) {
-    quadPointsLists.push([]);
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity;
     for (let j = i * 8, jj = i * 8 + 8; j < jj; j += 2) {
       const x = quadPoints[j];
       const y = quadPoints[j + 1];
-      if (rect !== null && (x < rect[0] || x > rect[2] || y < rect[1] || y > rect[3])) {
-        return null;
-      }
-      quadPointsLists[i].push({
-        x,
-        y
-      });
+      minX = Math.min(x, minX);
+      maxX = Math.max(x, maxX);
+      minY = Math.min(y, minY);
+      maxY = Math.max(y, maxY);
     }
+    if (rect !== null && (minX < rect[0] || maxX > rect[2] || minY < rect[1] || maxY > rect[3])) {
+      return null;
+    }
+    quadPointsLists.push([{
+      x: minX,
+      y: maxY
+    }, {
+      x: maxX,
+      y: maxY
+    }, {
+      x: minX,
+      y: minY
+    }, {
+      x: maxX,
+      y: minY
+    }]);
   }
-  return quadPointsLists.map(quadPointsList => {
-    const [minX, maxX, minY, maxY] = quadPointsList.reduce(([mX, MX, mY, MY], quadPoint) => [Math.min(mX, quadPoint.x), Math.max(MX, quadPoint.x), Math.min(mY, quadPoint.y), Math.max(MY, quadPoint.y)], [Number.MAX_VALUE, Number.MIN_VALUE, Number.MAX_VALUE, Number.MIN_VALUE]);
-    return [{
-      x: minX,
-      y: maxY
-    }, {
-      x: maxX,
-      y: maxY
-    }, {
-      x: minX,
-      y: minY
-    }, {
-      x: maxX,
-      y: minY
-    }];
-  });
+  return quadPointsLists;
 }
 function getTransformMatrix(rect, bbox, matrix) {
   const [minX, minY, maxX, maxY] = _util.Util.getAxialAlignedBoundingBox(bbox, matrix);
@@ -4549,7 +4550,10 @@ function getTransformMatrix(rect, bbox, matrix) {
 }
 class Annotation {
   constructor(params) {
-    const dict = params.dict;
+    const {
+      dict,
+      xref
+    } = params;
     this.setTitle(dict.get("T"));
     this.setContents(dict.get("Contents"));
     this.setModificationDate(dict.get("M"));
@@ -4594,7 +4598,7 @@ class Annotation {
           this.data.kidIds = kidIds;
         }
       }
-      this.data.actions = (0, _core_utils.collectActions)(params.xref, dict, _util.AnnotationActionEventType);
+      this.data.actions = (0, _core_utils.collectActions)(xref, dict, _util.AnnotationActionEventType);
       this.data.fieldName = this._constructFieldName(dict);
       this.data.pageIndex = params.pageIndex;
     }
@@ -5031,9 +5035,11 @@ class AnnotationBorderStyle {
 }
 exports.AnnotationBorderStyle = AnnotationBorderStyle;
 class MarkupAnnotation extends Annotation {
-  constructor(parameters) {
-    super(parameters);
-    const dict = parameters.dict;
+  constructor(params) {
+    super(params);
+    const {
+      dict
+    } = params;
     if (dict.has("IRT")) {
       const rawIRT = dict.getRaw("IRT");
       this.data.inReplyTo = rawIRT instanceof _primitives.Ref ? rawIRT.toString() : null;
@@ -5201,7 +5207,10 @@ exports.MarkupAnnotation = MarkupAnnotation;
 class WidgetAnnotation extends Annotation {
   constructor(params) {
     super(params);
-    const dict = params.dict;
+    const {
+      dict,
+      xref
+    } = params;
     const data = this.data;
     this.ref = params.ref;
     this._needAppearances = params.needAppearances;
@@ -5210,7 +5219,7 @@ class WidgetAnnotation extends Annotation {
       data.fieldName = this._constructFieldName(dict);
     }
     if (data.actions === undefined) {
-      data.actions = (0, _core_utils.collectActions)(params.xref, dict, _util.AnnotationActionEventType);
+      data.actions = (0, _core_utils.collectActions)(xref, dict, _util.AnnotationActionEventType);
     }
     let fieldValue = (0, _core_utils.getInheritableProperty)({
       dict,
@@ -5253,7 +5262,7 @@ class WidgetAnnotation extends Annotation {
       acroFormResources,
       appearanceResources,
       mergedResources: _primitives.Dict.merge({
-        xref: params.xref,
+        xref,
         dictArray: [localResources, appearanceResources, acroFormResources],
         mergeSubDicts: true
       })
@@ -5374,10 +5383,10 @@ class WidgetAnnotation extends Annotation {
       mk.set("R", rotation);
     }
     if (this.borderColor) {
-      mk.set("BC", Array.from(this.borderColor, c => c / 255));
+      mk.set("BC", getPdfColorArray(this.borderColor));
     }
     if (this.backgroundColor) {
-      mk.set("BG", Array.from(this.backgroundColor, c => c / 255));
+      mk.set("BG", getPdfColorArray(this.backgroundColor));
     }
     return mk.size > 0 ? mk : null;
   }
@@ -6239,13 +6248,16 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
 class ChoiceWidgetAnnotation extends WidgetAnnotation {
   constructor(params) {
     super(params);
+    const {
+      dict,
+      xref
+    } = params;
     this.data.options = [];
     const options = (0, _core_utils.getInheritableProperty)({
-      dict: params.dict,
+      dict,
       key: "Opt"
     });
     if (Array.isArray(options)) {
-      const xref = params.xref;
       for (let i = 0, ii = options.length; i < ii; i++) {
         const option = xref.fetchIfRef(options[i]);
         const isOptionArray = Array.isArray(option);
@@ -6397,10 +6409,12 @@ class SignatureWidgetAnnotation extends WidgetAnnotation {
   }
 }
 class TextAnnotation extends MarkupAnnotation {
-  constructor(parameters) {
+  constructor(params) {
     const DEFAULT_ICON_SIZE = 22;
-    super(parameters);
-    const dict = parameters.dict;
+    super(params);
+    const {
+      dict
+    } = params;
     this.data.annotationType = _util.AnnotationType.TEXT;
     if (this.data.hasAppearance) {
       this.data.name = "NoIcon";
@@ -6436,17 +6450,20 @@ class LinkAnnotation extends Annotation {
   }
 }
 class PopupAnnotation extends Annotation {
-  constructor(parameters) {
-    super(parameters);
+  constructor(params) {
+    super(params);
+    const {
+      dict
+    } = params;
     this.data.annotationType = _util.AnnotationType.POPUP;
-    let parentItem = parameters.dict.get("Parent");
+    let parentItem = dict.get("Parent");
     if (!parentItem) {
       (0, _util.warn)("Popup annotation has a missing or invalid parent annotation.");
       return;
     }
     const parentSubtype = parentItem.get("Subtype");
     this.data.parentType = parentSubtype instanceof _primitives.Name ? parentSubtype.name : null;
-    const rawParent = parameters.dict.getRaw("Parent");
+    const rawParent = dict.getRaw("Parent");
     this.data.parentId = rawParent instanceof _primitives.Ref ? rawParent.toString() : null;
     const parentRect = parentItem.getArray("Rect");
     if (Array.isArray(parentRect) && parentRect.length === 4) {
@@ -6487,12 +6504,15 @@ class PopupAnnotation extends Annotation {
 }
 exports.PopupAnnotation = PopupAnnotation;
 class FreeTextAnnotation extends MarkupAnnotation {
-  constructor(parameters) {
-    super(parameters);
+  constructor(params) {
+    super(params);
+    const {
+      xref
+    } = params;
     this.data.annotationType = _util.AnnotationType.FREETEXT;
-    this.setDefaultAppearance(parameters);
+    this.setDefaultAppearance(params);
     if (!this.appearance && this._isOffscreenCanvasSupported) {
-      const fakeUnicodeFont = new _default_appearance.FakeUnicodeFont(parameters.xref, "sans-serif");
+      const fakeUnicodeFont = new _default_appearance.FakeUnicodeFont(xref, "sans-serif");
       const fontData = this.data.defaultAppearanceData;
       this.appearance = fakeUnicodeFont.createAppearance(this._contents.str, this.rectangle, this.rotation, fontData.fontSize || 10, fontData.fontColor);
       this._streams.push(this.appearance, _default_appearance.FakeUnicodeFont.toUnicodeStream);
@@ -6631,25 +6651,22 @@ class FreeTextAnnotation extends MarkupAnnotation {
   }
 }
 class LineAnnotation extends MarkupAnnotation {
-  constructor(parameters) {
-    super(parameters);
+  constructor(params) {
+    super(params);
     const {
-      dict
-    } = parameters;
+      dict,
+      xref
+    } = params;
     this.data.annotationType = _util.AnnotationType.LINE;
     const lineCoordinates = dict.getArray("L");
     this.data.lineCoordinates = _util.Util.normalizeRect(lineCoordinates);
     this.setLineEndings(dict.getArray("LE"));
     this.data.lineEndings = this.lineEndings;
     if (!this.appearance) {
-      const strokeColor = this.color ? Array.from(this.color, c => c / 255) : [0, 0, 0];
+      const strokeColor = this.color ? getPdfColorArray(this.color) : [0, 0, 0];
       const strokeAlpha = dict.get("CA");
-      let fillColor = null,
-        interiorColor = dict.getArray("IC");
-      if (interiorColor) {
-        interiorColor = getRgbColor(interiorColor, null);
-        fillColor = interiorColor ? Array.from(interiorColor, c => c / 255) : null;
-      }
+      const interiorColor = getRgbColor(dict.getArray("IC"), null);
+      const fillColor = interiorColor ? getPdfColorArray(interiorColor) : null;
       const fillAlpha = fillColor ? strokeAlpha : null;
       const borderWidth = this.borderStyle.width || 1,
         borderAdjust = 2 * borderWidth;
@@ -6658,7 +6675,7 @@ class LineAnnotation extends MarkupAnnotation {
         this.rectangle = bbox;
       }
       this._setDefaultAppearance({
-        xref: parameters.xref,
+        xref,
         extra: `${borderWidth} w`,
         strokeColor,
         fillColor,
@@ -6673,24 +6690,24 @@ class LineAnnotation extends MarkupAnnotation {
   }
 }
 class SquareAnnotation extends MarkupAnnotation {
-  constructor(parameters) {
-    super(parameters);
+  constructor(params) {
+    super(params);
+    const {
+      dict,
+      xref
+    } = params;
     this.data.annotationType = _util.AnnotationType.SQUARE;
     if (!this.appearance) {
-      const strokeColor = this.color ? Array.from(this.color, c => c / 255) : [0, 0, 0];
-      const strokeAlpha = parameters.dict.get("CA");
-      let fillColor = null,
-        interiorColor = parameters.dict.getArray("IC");
-      if (interiorColor) {
-        interiorColor = getRgbColor(interiorColor, null);
-        fillColor = interiorColor ? Array.from(interiorColor, c => c / 255) : null;
-      }
+      const strokeColor = this.color ? getPdfColorArray(this.color) : [0, 0, 0];
+      const strokeAlpha = dict.get("CA");
+      const interiorColor = getRgbColor(dict.getArray("IC"), null);
+      const fillColor = interiorColor ? getPdfColorArray(interiorColor) : null;
       const fillAlpha = fillColor ? strokeAlpha : null;
       if (this.borderStyle.width === 0 && !fillColor) {
         return;
       }
       this._setDefaultAppearance({
-        xref: parameters.xref,
+        xref,
         extra: `${this.borderStyle.width} w`,
         strokeColor,
         fillColor,
@@ -6714,25 +6731,25 @@ class SquareAnnotation extends MarkupAnnotation {
   }
 }
 class CircleAnnotation extends MarkupAnnotation {
-  constructor(parameters) {
-    super(parameters);
+  constructor(params) {
+    super(params);
+    const {
+      dict,
+      xref
+    } = params;
     this.data.annotationType = _util.AnnotationType.CIRCLE;
     if (!this.appearance) {
-      const strokeColor = this.color ? Array.from(this.color, c => c / 255) : [0, 0, 0];
-      const strokeAlpha = parameters.dict.get("CA");
-      let fillColor = null;
-      let interiorColor = parameters.dict.getArray("IC");
-      if (interiorColor) {
-        interiorColor = getRgbColor(interiorColor, null);
-        fillColor = interiorColor ? Array.from(interiorColor, c => c / 255) : null;
-      }
+      const strokeColor = this.color ? getPdfColorArray(this.color) : [0, 0, 0];
+      const strokeAlpha = dict.get("CA");
+      const interiorColor = getRgbColor(dict.getArray("IC"), null);
+      const fillColor = interiorColor ? getPdfColorArray(interiorColor) : null;
       const fillAlpha = fillColor ? strokeAlpha : null;
       if (this.borderStyle.width === 0 && !fillColor) {
         return;
       }
       const controlPointsDistance = 4 / 3 * Math.tan(Math.PI / (2 * 4));
       this._setDefaultAppearance({
-        xref: parameters.xref,
+        xref,
         extra: `${this.borderStyle.width} w`,
         strokeColor,
         fillColor,
@@ -6760,11 +6777,12 @@ class CircleAnnotation extends MarkupAnnotation {
   }
 }
 class PolylineAnnotation extends MarkupAnnotation {
-  constructor(parameters) {
-    super(parameters);
+  constructor(params) {
+    super(params);
     const {
-      dict
-    } = parameters;
+      dict,
+      xref
+    } = params;
     this.data.annotationType = _util.AnnotationType.POLYLINE;
     this.data.vertices = [];
     if (!(this instanceof PolygonAnnotation)) {
@@ -6782,7 +6800,7 @@ class PolylineAnnotation extends MarkupAnnotation {
       });
     }
     if (!this.appearance) {
-      const strokeColor = this.color ? Array.from(this.color, c => c / 255) : [0, 0, 0];
+      const strokeColor = this.color ? getPdfColorArray(this.color) : [0, 0, 0];
       const strokeAlpha = dict.get("CA");
       const borderWidth = this.borderStyle.width || 1,
         borderAdjust = 2 * borderWidth;
@@ -6797,7 +6815,7 @@ class PolylineAnnotation extends MarkupAnnotation {
         this.rectangle = bbox;
       }
       this._setDefaultAppearance({
-        xref: parameters.xref,
+        xref,
         extra: `${borderWidth} w`,
         strokeColor,
         strokeAlpha,
@@ -6814,27 +6832,30 @@ class PolylineAnnotation extends MarkupAnnotation {
   }
 }
 class PolygonAnnotation extends PolylineAnnotation {
-  constructor(parameters) {
-    super(parameters);
+  constructor(params) {
+    super(params);
     this.data.annotationType = _util.AnnotationType.POLYGON;
   }
 }
 class CaretAnnotation extends MarkupAnnotation {
-  constructor(parameters) {
-    super(parameters);
+  constructor(params) {
+    super(params);
     this.data.annotationType = _util.AnnotationType.CARET;
   }
 }
 class InkAnnotation extends MarkupAnnotation {
-  constructor(parameters) {
-    super(parameters);
+  constructor(params) {
+    super(params);
+    const {
+      dict,
+      xref
+    } = params;
     this.data.annotationType = _util.AnnotationType.INK;
     this.data.inkLists = [];
-    const rawInkLists = parameters.dict.getArray("InkList");
+    const rawInkLists = dict.getArray("InkList");
     if (!Array.isArray(rawInkLists)) {
       return;
     }
-    const xref = parameters.xref;
     for (let i = 0, ii = rawInkLists.length; i < ii; ++i) {
       this.data.inkLists.push([]);
       for (let j = 0, jj = rawInkLists[i].length; j < jj; j += 2) {
@@ -6845,8 +6866,8 @@ class InkAnnotation extends MarkupAnnotation {
       }
     }
     if (!this.appearance) {
-      const strokeColor = this.color ? Array.from(this.color, c => c / 255) : [0, 0, 0];
-      const strokeAlpha = parameters.dict.get("CA");
+      const strokeColor = this.color ? getPdfColorArray(this.color) : [0, 0, 0];
+      const strokeAlpha = dict.get("CA");
       const borderWidth = this.borderStyle.width || 1,
         borderAdjust = 2 * borderWidth;
       const bbox = [Infinity, Infinity, -Infinity, -Infinity];
@@ -6862,7 +6883,7 @@ class InkAnnotation extends MarkupAnnotation {
         this.rectangle = bbox;
       }
       this._setDefaultAppearance({
-        xref: parameters.xref,
+        xref,
         extra: `${borderWidth} w`,
         strokeColor,
         strokeAlpha,
@@ -6964,20 +6985,24 @@ class InkAnnotation extends MarkupAnnotation {
   }
 }
 class HighlightAnnotation extends MarkupAnnotation {
-  constructor(parameters) {
-    super(parameters);
+  constructor(params) {
+    super(params);
+    const {
+      dict,
+      xref
+    } = params;
     this.data.annotationType = _util.AnnotationType.HIGHLIGHT;
-    const quadPoints = this.data.quadPoints = getQuadPoints(parameters.dict, null);
+    const quadPoints = this.data.quadPoints = getQuadPoints(dict, null);
     if (quadPoints) {
       const resources = this.appearance && this.appearance.dict.get("Resources");
       if (!this.appearance || !(resources && resources.has("ExtGState"))) {
         if (this.appearance) {
           (0, _util.warn)("HighlightAnnotation - ignoring built-in appearance stream.");
         }
-        const fillColor = this.color ? Array.from(this.color, c => c / 255) : [1, 1, 0];
-        const fillAlpha = parameters.dict.get("CA");
+        const fillColor = this.color ? getPdfColorArray(this.color) : [1, 1, 0];
+        const fillAlpha = dict.get("CA");
         this._setDefaultAppearance({
-          xref: parameters.xref,
+          xref,
           fillColor,
           blendMode: "Multiply",
           fillAlpha,
@@ -6993,16 +7018,20 @@ class HighlightAnnotation extends MarkupAnnotation {
   }
 }
 class UnderlineAnnotation extends MarkupAnnotation {
-  constructor(parameters) {
-    super(parameters);
+  constructor(params) {
+    super(params);
+    const {
+      dict,
+      xref
+    } = params;
     this.data.annotationType = _util.AnnotationType.UNDERLINE;
-    const quadPoints = this.data.quadPoints = getQuadPoints(parameters.dict, null);
+    const quadPoints = this.data.quadPoints = getQuadPoints(dict, null);
     if (quadPoints) {
       if (!this.appearance) {
-        const strokeColor = this.color ? Array.from(this.color, c => c / 255) : [0, 0, 0];
-        const strokeAlpha = parameters.dict.get("CA");
+        const strokeColor = this.color ? getPdfColorArray(this.color) : [0, 0, 0];
+        const strokeAlpha = dict.get("CA");
         this._setDefaultAppearance({
-          xref: parameters.xref,
+          xref,
           extra: "[] 0 d 1 w",
           strokeColor,
           strokeAlpha,
@@ -7018,16 +7047,20 @@ class UnderlineAnnotation extends MarkupAnnotation {
   }
 }
 class SquigglyAnnotation extends MarkupAnnotation {
-  constructor(parameters) {
-    super(parameters);
+  constructor(params) {
+    super(params);
+    const {
+      dict,
+      xref
+    } = params;
     this.data.annotationType = _util.AnnotationType.SQUIGGLY;
-    const quadPoints = this.data.quadPoints = getQuadPoints(parameters.dict, null);
+    const quadPoints = this.data.quadPoints = getQuadPoints(dict, null);
     if (quadPoints) {
       if (!this.appearance) {
-        const strokeColor = this.color ? Array.from(this.color, c => c / 255) : [0, 0, 0];
-        const strokeAlpha = parameters.dict.get("CA");
+        const strokeColor = this.color ? getPdfColorArray(this.color) : [0, 0, 0];
+        const strokeAlpha = dict.get("CA");
         this._setDefaultAppearance({
-          xref: parameters.xref,
+          xref,
           extra: "[] 0 d 1 w",
           strokeColor,
           strokeAlpha,
@@ -7054,16 +7087,20 @@ class SquigglyAnnotation extends MarkupAnnotation {
   }
 }
 class StrikeOutAnnotation extends MarkupAnnotation {
-  constructor(parameters) {
-    super(parameters);
+  constructor(params) {
+    super(params);
+    const {
+      dict,
+      xref
+    } = params;
     this.data.annotationType = _util.AnnotationType.STRIKEOUT;
-    const quadPoints = this.data.quadPoints = getQuadPoints(parameters.dict, null);
+    const quadPoints = this.data.quadPoints = getQuadPoints(dict, null);
     if (quadPoints) {
       if (!this.appearance) {
-        const strokeColor = this.color ? Array.from(this.color, c => c / 255) : [0, 0, 0];
-        const strokeAlpha = parameters.dict.get("CA");
+        const strokeColor = this.color ? getPdfColorArray(this.color) : [0, 0, 0];
+        const strokeAlpha = dict.get("CA");
         this._setDefaultAppearance({
-          xref: parameters.xref,
+          xref,
           extra: "[] 0 d 1 w",
           strokeColor,
           strokeAlpha,
@@ -7079,17 +7116,23 @@ class StrikeOutAnnotation extends MarkupAnnotation {
   }
 }
 class StampAnnotation extends MarkupAnnotation {
-  constructor(parameters) {
-    super(parameters);
+  constructor(params) {
+    super(params);
     this.data.annotationType = _util.AnnotationType.STAMP;
   }
 }
 class FileAttachmentAnnotation extends MarkupAnnotation {
-  constructor(parameters) {
-    super(parameters);
-    const file = new _file_spec.FileSpec(parameters.dict.get("FS"), parameters.xref);
+  constructor(params) {
+    super(params);
+    const {
+      dict,
+      xref
+    } = params;
+    const file = new _file_spec.FileSpec(dict.get("FS"), xref);
     this.data.annotationType = _util.AnnotationType.FILEATTACHMENT;
     this.data.file = file.serializable;
+    const name = dict.get("Name");
+    this.data.name = name instanceof _primitives.Name ? (0, _util.stringToPDFString)(name.name) : "PushPin";
   }
 }
 
@@ -21374,7 +21417,7 @@ class Font {
         map[+charCode] = unicodeCharCode;
       });
       if (this.composite && this.toUnicode instanceof _to_unicode_map.IdentityToUnicodeMap) {
-        if (/Verdana/i.test(name)) {
+        if (/Tahoma|Verdana/i.test(name)) {
           applyStandardFontGlyphMap(map, (0, _standard_fonts.getGlyphMapForStandardFonts)());
         }
       }
@@ -64430,8 +64473,8 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
   }
 }));
 var _worker = __w_pdfjs_require__(1);
-const pdfjsVersion = '3.1.0';
-const pdfjsBuild = 'ae7c97a';
+const pdfjsVersion = '3.2.0';
+const pdfjsBuild = '7376014';
 })();
 
 /******/ 	return __webpack_exports__;

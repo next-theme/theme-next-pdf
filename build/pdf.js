@@ -1128,7 +1128,7 @@ async function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
   }
   const workerId = await worker.messageHandler.sendWithPromise("GetDocRequest", {
     docId,
-    apiVersion: '3.1.0',
+    apiVersion: '3.2.0',
     data: source.data,
     password: source.password,
     disableAutoFetch: source.disableAutoFetch,
@@ -2717,7 +2717,9 @@ class InternalRenderTask {
       transform,
       background
     } = this.params;
-    this.gfx = new _canvas.CanvasGraphics(canvasContext, this.commonObjs, this.objs, this.canvasFactory, optionalContentConfig, this.annotationCanvasMap, this.pageColors);
+    this.gfx = new _canvas.CanvasGraphics(canvasContext, this.commonObjs, this.objs, this.canvasFactory, {
+      optionalContentConfig
+    }, this.annotationCanvasMap, this.pageColors);
     this.gfx.beginDrawing({
       transform,
       viewport,
@@ -2787,9 +2789,9 @@ class InternalRenderTask {
     }
   }
 }
-const version = '3.1.0';
+const version = '3.2.0';
 exports.version = version;
-const build = 'ae7c97a';
+const build = '7376014';
 exports.build = build;
 
 /***/ }),
@@ -4072,11 +4074,11 @@ function isDataScheme(url) {
 function isPdfFile(filename) {
   return typeof filename === "string" && /\.pdf$/i.test(filename);
 }
-function getFilenameFromUrl(url) {
-  const anchor = url.indexOf("#");
-  const query = url.indexOf("?");
-  const end = Math.min(anchor > 0 ? anchor : url.length, query > 0 ? query : url.length);
-  return url.substring(url.lastIndexOf("/", end) + 1, end);
+function getFilenameFromUrl(url, onlyStripPath = false) {
+  if (!onlyStripPath) {
+    [url] = url.split(/[#?]/, 1);
+  }
+  return url.substring(url.lastIndexOf("/") + 1);
 }
 function getPdfFilenameFromUrl(url, defaultFilename = "document.pdf") {
   if (typeof url !== "string") {
@@ -5511,7 +5513,10 @@ const LINE_JOIN_STYLES = ["miter", "round", "bevel"];
 const NORMAL_CLIP = {};
 const EO_CLIP = {};
 class CanvasGraphics {
-  constructor(canvasCtx, commonObjs, objs, canvasFactory, optionalContentConfig, annotationCanvasMap, pageColors) {
+  constructor(canvasCtx, commonObjs, objs, canvasFactory, {
+    optionalContentConfig,
+    markedContentStack = null
+  }, annotationCanvasMap, pageColors) {
     this.ctx = canvasCtx;
     this.current = new CanvasExtraState(this.ctx.canvas.width, this.ctx.canvas.height);
     this.stateStack = [];
@@ -5532,7 +5537,7 @@ class CanvasGraphics {
     this.tempSMask = null;
     this.suspendedCtx = null;
     this.contentVisible = true;
-    this.markedContentStack = [];
+    this.markedContentStack = markedContentStack || [];
     this.optionalContentConfig = optionalContentConfig;
     this.cachedCanvases = new CachedCanvases(this.canvasFactory);
     this.cachedPatterns = new Map();
@@ -6480,7 +6485,10 @@ class CanvasGraphics {
       const baseTransform = this.baseTransform || (0, _display_utils.getCurrentTransform)(this.ctx);
       const canvasGraphicsFactory = {
         createCanvasGraphics: ctx => {
-          return new CanvasGraphics(ctx, this.commonObjs, this.objs, this.canvasFactory);
+          return new CanvasGraphics(ctx, this.commonObjs, this.objs, this.canvasFactory, {
+            optionalContentConfig: this.optionalContentConfig,
+            markedContentStack: this.markedContentStack
+          });
         }
       };
       pattern = new _pattern_helper.TilingPattern(IR, color, this.ctx, canvasGraphicsFactory, baseTransform);
@@ -12121,7 +12129,7 @@ class FileAttachmentAnnotationElement extends AnnotationElement {
       filename,
       content
     } = this.data.file;
-    this.filename = (0, _display_utils.getFilenameFromUrl)(filename);
+    this.filename = (0, _display_utils.getFilenameFromUrl)(filename, true);
     this.content = content;
     this.linkService.eventBus?.dispatch("fileattachmentannotation", {
       source: this,
@@ -12131,7 +12139,13 @@ class FileAttachmentAnnotationElement extends AnnotationElement {
   }
   render() {
     this.container.className = "fileAttachmentAnnotation";
-    const trigger = document.createElement("div");
+    let trigger;
+    if (this.data.hasAppearance) {
+      trigger = document.createElement("div");
+    } else {
+      trigger = document.createElement("img");
+      trigger.src = `${this.imageResourcesPath}annotation-${/paperclip/i.test(this.data.name) ? "paperclip" : "pushpin"}.svg`;
+    }
     trigger.className = "popupTriggerArea";
     trigger.addEventListener("dblclick", this._download.bind(this));
     if (!this.data.hasPopup && (this.data.titleObj?.str || this.data.contentsObj?.str || this.data.richText)) {
@@ -12538,6 +12552,7 @@ Object.defineProperty(exports, "__esModule", ({
 exports.TextLayerRenderTask = void 0;
 exports.renderTextLayer = renderTextLayer;
 var _util = __w_pdfjs_require__(1);
+var _display_utils = __w_pdfjs_require__(6);
 const MAX_TEXT_DIVS_TO_RENDER = 100000;
 const DEFAULT_FONT_SIZE = 30;
 const DEFAULT_FONT_ASCENT = 0.8;
@@ -12696,7 +12711,6 @@ class TextLayerRenderTask {
     this._canceled = false;
     this._capability = (0, _util.createPromiseCapability)();
     this._renderTimer = null;
-    this._bounds = [];
     this._devicePixelRatio = globalThis.devicePixelRatio || 1;
     this._capability.promise.finally(() => {
       this._textDivProperties = null;
@@ -12817,6 +12831,7 @@ class TextLayerRenderTask {
       if (!timeout) {
         render(this);
       } else {
+        (0, _display_utils.deprecated)("The TextLayerRender `timeout` parameter will be removed in the " + "future, since streaming of textContent has made it obsolete.");
         this._renderTimer = setTimeout(() => {
           render(this);
           this._renderTimer = null;
@@ -15571,8 +15586,8 @@ var _is_node = __w_pdfjs_require__(12);
 var _text_layer = __w_pdfjs_require__(29);
 var _svg = __w_pdfjs_require__(30);
 var _xfa_layer = __w_pdfjs_require__(28);
-const pdfjsVersion = '3.1.0';
-const pdfjsBuild = 'ae7c97a';
+const pdfjsVersion = '3.2.0';
+const pdfjsBuild = '7376014';
 {
   if (_is_node.isNodeJS) {
     const {
