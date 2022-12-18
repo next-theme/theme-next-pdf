@@ -5523,7 +5523,14 @@ class WidgetAnnotation extends Annotation {
       value = value[0];
     }
     (0, _util.assert)(typeof value === "string", "Expected `value` to be a string.");
-    value = value.trim();
+    if (!this.data.combo) {
+      value = value.trim();
+    } else {
+      const option = this.data.options.find(({
+        exportValue
+      }) => value === exportValue) || this.data.options[0];
+      value = option && option.displayValue || "";
+    }
     if (value === "") {
       return `/Tx BMC q ${colors}Q EMC`;
     }
@@ -23471,7 +23478,7 @@ class CFFParser {
     }
     let stackSize = state.stackSize;
     const stack = state.stack;
-    const length = data.length;
+    let length = data.length;
     for (let j = 0; j < length;) {
       const value = data[j++];
       let validationCommand = null;
@@ -23552,6 +23559,11 @@ class CFFParser {
       } else if (value === 0 && j === data.length) {
         data[j - 1] = 14;
         validationCommand = CharstringValidationData[14];
+      } else if (value === 9) {
+        data.copyWithin(j - 1, j, -1);
+        j -= 1;
+        length -= 1;
+        continue;
       } else {
         validationCommand = CharstringValidationData[value];
       }
@@ -23603,6 +23615,9 @@ class CFFParser {
           state.firstStackClearing = false;
         }
       }
+    }
+    if (length < data.length) {
+      data.fill(14, length);
     }
     state.stackSize = stackSize;
     return true;
@@ -63621,8 +63636,8 @@ class XRef {
   readXRef(recoveryMode = false) {
     const stream = this.stream;
     const startXRefParsedCache = new Set();
-    try {
-      while (this.startXRefQueue.length) {
+    while (this.startXRefQueue.length) {
+      try {
         const startXRef = this.startXRefQueue[0];
         if (startXRefParsedCache.has(startXRef)) {
           (0, _util.warn)("readXRef - skipping XRef table since it was already parsed.");
@@ -63671,15 +63686,16 @@ class XRef {
         } else if (obj instanceof _primitives.Ref) {
           this.startXRefQueue.push(obj.num);
         }
-        this.startXRefQueue.shift();
+      } catch (e) {
+        if (e instanceof _core_utils.MissingDataException) {
+          throw e;
+        }
+        (0, _util.info)("(while reading XRef): " + e);
       }
-      return this.topDict;
-    } catch (e) {
-      if (e instanceof _core_utils.MissingDataException) {
-        throw e;
-      }
-      (0, _util.info)("(while reading XRef): " + e);
       this.startXRefQueue.shift();
+    }
+    if (this.topDict) {
+      return this.topDict;
     }
     if (recoveryMode) {
       return undefined;
@@ -64483,7 +64499,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.2.0';
-const pdfjsBuild = '879a743';
+const pdfjsBuild = 'dd96ee1';
 })();
 
 /******/ 	return __webpack_exports__;
