@@ -1279,7 +1279,7 @@ class PDFDocumentProxy {
     return this._transport.stats;
   }
   get isPureXfa() {
-    return !!this._transport._htmlForXfa;
+    return (0, _util.shadow)(this, "isPureXfa", !!this._transport._htmlForXfa);
   }
   get allXfaHtml() {
     return this._transport._htmlForXfa;
@@ -1422,6 +1422,9 @@ class PDFPageProxy {
   }
   getJSActions() {
     return this._jsActionsPromise ||= this._transport.getPageJSActions(this._pageIndex);
+  }
+  get isPureXfa() {
+    return (0, _util.shadow)(this, "isPureXfa", !!this._transport._htmlForXfa);
   }
   async getXfa() {
     return this._transport._htmlForXfa?.children[this._pageIndex] || null;
@@ -2808,7 +2811,7 @@ class InternalRenderTask {
 }
 const version = '3.2.0';
 exports.version = version;
-const build = 'dd96ee1';
+const build = '8aed0c3';
 exports.build = build;
 
 /***/ }),
@@ -15829,7 +15832,7 @@ var _is_node = __w_pdfjs_require__(10);
 var _svg = __w_pdfjs_require__(30);
 var _xfa_layer = __w_pdfjs_require__(29);
 const pdfjsVersion = '3.2.0';
-const pdfjsBuild = 'dd96ee1';
+const pdfjsBuild = '8aed0c3';
 {
   if (_is_node.isNodeJS) {
     const {
