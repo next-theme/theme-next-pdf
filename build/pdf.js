@@ -1421,7 +1421,7 @@ class PDFPageProxy {
     return this._transport.getAnnotations(this._pageIndex, intentArgs.renderingIntent);
   }
   getJSActions() {
-    return this._jsActionsPromise ||= this._transport.getPageJSActions(this._pageIndex);
+    return this._transport.getPageJSActions(this._pageIndex);
   }
   get isPureXfa() {
     return (0, _util.shadow)(this, "isPureXfa", !!this._transport._htmlForXfa);
@@ -1629,7 +1629,6 @@ class PDFPageProxy {
       bitmap.close();
     }
     this._bitmaps.clear();
-    this._jsActionsPromise = null;
     this.pendingCleanup = false;
     return Promise.all(waitOn);
   }
@@ -1651,7 +1650,6 @@ class PDFPageProxy {
     }
     this._intentStates.clear();
     this.objs.clear();
-    this._jsActionsPromise = null;
     if (resetStats && this._stats) {
       this._stats = new _display_utils.StatTimer();
     }
@@ -1743,6 +1741,10 @@ class PDFPageProxy {
     if (!intentState.streamReader) {
       return;
     }
+    if (intentState.streamReaderCancelTimeout) {
+      clearTimeout(intentState.streamReaderCancelTimeout);
+      intentState.streamReaderCancelTimeout = null;
+    }
     if (!force) {
       if (intentState.renderTasks.size > 0) {
         return;
@@ -1752,16 +1754,13 @@ class PDFPageProxy {
         if (reason.extraDelay > 0 && reason.extraDelay < 1000) {
           delay += reason.extraDelay;
         }
-        if (intentState.streamReaderCancelTimeout) {
-          clearTimeout(intentState.streamReaderCancelTimeout);
-        }
         intentState.streamReaderCancelTimeout = setTimeout(() => {
+          intentState.streamReaderCancelTimeout = null;
           this._abortOperatorList({
             intentState,
             reason,
             force: true
           });
-          intentState.streamReaderCancelTimeout = null;
         }, delay);
         return;
       }
@@ -2811,7 +2810,7 @@ class InternalRenderTask {
 }
 const version = '3.2.0';
 exports.version = version;
-const build = '8aed0c3';
+const build = '3fd2a35';
 exports.build = build;
 
 /***/ }),
@@ -15832,7 +15831,7 @@ var _is_node = __w_pdfjs_require__(10);
 var _svg = __w_pdfjs_require__(30);
 var _xfa_layer = __w_pdfjs_require__(29);
 const pdfjsVersion = '3.2.0';
-const pdfjsBuild = '8aed0c3';
+const pdfjsBuild = '3fd2a35';
 {
   if (_is_node.isNodeJS) {
     const {
