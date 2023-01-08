@@ -101,7 +101,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = '3.2.0';
+    const workerVersion = '3.3.0';
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }
@@ -634,7 +634,7 @@ if (typeof window === "undefined" && !_is_node.isNodeJS && typeof self !== "unde
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.VerbosityLevel = exports.Util = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.UNSUPPORTED_FEATURES = exports.TextRenderingMode = exports.StreamType = exports.RenderingIntentFlag = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.LINE_FACTOR = exports.LINE_DESCENT_FACTOR = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FontType = exports.FeatureTest = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.BASELINE_FACTOR = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMode = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationEditorType = exports.AnnotationEditorPrefix = exports.AnnotationEditorParamsType = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
+exports.VerbosityLevel = exports.Util = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.UNSUPPORTED_FEATURES = exports.TextRenderingMode = exports.RenderingIntentFlag = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.LINE_FACTOR = exports.LINE_DESCENT_FACTOR = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FeatureTest = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.BASELINE_FACTOR = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMode = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationEditorType = exports.AnnotationEditorPrefix = exports.AnnotationEditorParamsType = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
 exports.arrayByteLength = arrayByteLength;
 exports.arraysToBytes = arraysToBytes;
 exports.assert = assert;
@@ -859,34 +859,6 @@ const PageActionEventType = {
   C: "PageClose"
 };
 exports.PageActionEventType = PageActionEventType;
-const StreamType = {
-  UNKNOWN: "UNKNOWN",
-  FLATE: "FLATE",
-  LZW: "LZW",
-  DCT: "DCT",
-  JPX: "JPX",
-  JBIG: "JBIG",
-  A85: "A85",
-  AHX: "AHX",
-  CCF: "CCF",
-  RLX: "RLX"
-};
-exports.StreamType = StreamType;
-const FontType = {
-  UNKNOWN: "UNKNOWN",
-  TYPE1: "TYPE1",
-  TYPE1STANDARD: "TYPE1STANDARD",
-  TYPE1C: "TYPE1C",
-  CIDFONTTYPE0: "CIDFONTTYPE0",
-  CIDFONTTYPE0C: "CIDFONTTYPE0C",
-  TRUETYPE: "TRUETYPE",
-  CIDFONTTYPE2: "CIDFONTTYPE2",
-  TYPE3: "TYPE3",
-  OPENTYPE: "OPENTYPE",
-  TYPE0: "TYPE0",
-  MMTYPE1: "MMTYPE1"
-};
-exports.FontType = FontType;
 const VerbosityLevel = {
   ERRORS: 0,
   WARNINGS: 1,
@@ -1793,7 +1765,7 @@ function clearPrimitiveCaches() {
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.XRefParseException = exports.XRefEntryException = exports.ParserEOFException = exports.PDF_VERSION_REGEXP = exports.MissingDataException = exports.DocStats = void 0;
+exports.XRefParseException = exports.XRefEntryException = exports.ParserEOFException = exports.PDF_VERSION_REGEXP = exports.MissingDataException = void 0;
 exports.collectActions = collectActions;
 exports.encodeToXmlString = encodeToXmlString;
 exports.escapePDFName = escapePDFName;
@@ -1873,42 +1845,6 @@ class XRefParseException extends _util.BaseException {
   }
 }
 exports.XRefParseException = XRefParseException;
-class DocStats {
-  constructor(handler) {
-    this._handler = handler;
-    this._streamTypes = new Set();
-    this._fontTypes = new Set();
-  }
-  _send() {
-    const streamTypes = Object.create(null),
-      fontTypes = Object.create(null);
-    for (const type of this._streamTypes) {
-      streamTypes[type] = true;
-    }
-    for (const type of this._fontTypes) {
-      fontTypes[type] = true;
-    }
-    this._handler.send("DocStats", {
-      streamTypes,
-      fontTypes
-    });
-  }
-  addStreamType(type) {
-    if (this._streamTypes.has(type)) {
-      return;
-    }
-    this._streamTypes.add(type);
-    this._send();
-  }
-  addFontType(type) {
-    if (this._fontTypes.has(type)) {
-      return;
-    }
-    this._fontTypes.add(type);
-    this._send();
-  }
-}
-exports.DocStats = DocStats;
 function getInheritableProperty({
   dict,
   key,
@@ -8320,7 +8256,6 @@ var _util = __w_pdfjs_require__(2);
 var _cmap = __w_pdfjs_require__(14);
 var _primitives = __w_pdfjs_require__(3);
 var _fonts = __w_pdfjs_require__(32);
-var _fonts_utils = __w_pdfjs_require__(36);
 var _encodings = __w_pdfjs_require__(35);
 var _standard_fonts = __w_pdfjs_require__(39);
 var _pattern = __w_pdfjs_require__(48);
@@ -8334,6 +8269,7 @@ var _base_stream = __w_pdfjs_require__(5);
 var _bidi = __w_pdfjs_require__(58);
 var _colorspace = __w_pdfjs_require__(12);
 var _decode_stream = __w_pdfjs_require__(17);
+var _fonts_utils = __w_pdfjs_require__(36);
 var _glyphlist = __w_pdfjs_require__(37);
 var _core_utils = __w_pdfjs_require__(4);
 var _metrics = __w_pdfjs_require__(43);
@@ -9210,9 +9146,6 @@ class PartialEvaluator {
     (0, _util.assert)(fontID && fontID.startsWith("f"), 'The "fontID" must be (correctly) defined.');
     font.loadedName = `${this.idFactory.getDocId()}_${fontID}`;
     this.translateFont(preEvaluatedFont).then(translatedFont => {
-      if (translatedFont.fontType !== undefined) {
-        xref.stats.addFontType(translatedFont.fontType);
-      }
       fontCapability.resolve(new TranslatedFont({
         loadedName: font.loadedName,
         font: translatedFont,
@@ -9224,14 +9157,6 @@ class PartialEvaluator {
         featureId: _util.UNSUPPORTED_FEATURES.errorFontTranslate
       });
       (0, _util.warn)(`loadFont - translateFont failed: "${reason}".`);
-      try {
-        const fontFile3 = descriptor && descriptor.get("FontFile3");
-        const subtype = fontFile3 && fontFile3.get("Subtype");
-        const fontType = (0, _fonts_utils.getFontType)(preEvaluatedFont.type, subtype && subtype.name);
-        if (fontType !== undefined) {
-          xref.stats.addFontType(fontType);
-        }
-      } catch (ex) {}
       fontCapability.resolve(new TranslatedFont({
         loadedName: font.loadedName,
         font: new _fonts.ErrorFont(reason instanceof Error ? reason.message : reason),
@@ -13396,19 +13321,16 @@ class Parser {
       (0, _util.warn)(`Empty "${name}" stream.`);
       return new _stream.NullStream();
     }
-    const xrefStats = this.xref.stats;
     try {
       switch (name) {
         case "Fl":
         case "FlateDecode":
-          xrefStats.addStreamType(_util.StreamType.FLATE);
           if (params) {
             return new _predictor_stream.PredictorStream(new _flate_stream.FlateStream(stream, maybeLength), maybeLength, params);
           }
           return new _flate_stream.FlateStream(stream, maybeLength);
         case "LZW":
         case "LZWDecode":
-          xrefStats.addStreamType(_util.StreamType.LZW);
           let earlyChange = 1;
           if (params) {
             if (params.has("EarlyChange")) {
@@ -13419,30 +13341,23 @@ class Parser {
           return new _lzw_stream.LZWStream(stream, maybeLength, earlyChange);
         case "DCT":
         case "DCTDecode":
-          xrefStats.addStreamType(_util.StreamType.DCT);
           return new _jpeg_stream.JpegStream(stream, maybeLength, params);
         case "JPX":
         case "JPXDecode":
-          xrefStats.addStreamType(_util.StreamType.JPX);
           return new _jpx_stream.JpxStream(stream, maybeLength, params);
         case "A85":
         case "ASCII85Decode":
-          xrefStats.addStreamType(_util.StreamType.A85);
           return new _ascii_85_stream.Ascii85Stream(stream, maybeLength);
         case "AHx":
         case "ASCIIHexDecode":
-          xrefStats.addStreamType(_util.StreamType.AHX);
           return new _ascii_hex_stream.AsciiHexStream(stream, maybeLength);
         case "CCF":
         case "CCITTFaxDecode":
-          xrefStats.addStreamType(_util.StreamType.CCF);
           return new _ccitt_stream.CCITTFaxStream(stream, maybeLength, params);
         case "RL":
         case "RunLengthDecode":
-          xrefStats.addStreamType(_util.StreamType.RLX);
           return new _run_length_stream.RunLengthStream(stream, maybeLength);
         case "JBIG2Decode":
-          xrefStats.addStreamType(_util.StreamType.JBIG);
           return new _jbig2_stream.Jbig2Stream(stream, maybeLength, params);
       }
       (0, _util.warn)(`Filter "${name}" is not supported.`);
@@ -20697,7 +20612,7 @@ var _stream = __w_pdfjs_require__(8);
 var _type1_font = __w_pdfjs_require__(46);
 const PRIVATE_USE_AREAS = [[0xe000, 0xf8ff], [0x100000, 0x10fffd]];
 const PDF_GLYPH_SPACE_UNITS = 1000;
-const EXPORT_DATA_PROPERTIES = ["ascent", "bbox", "black", "bold", "charProcOperatorList", "composite", "cssFontInfo", "data", "defaultVMetrics", "defaultWidth", "descent", "fallbackName", "fontMatrix", "fontType", "isInvalidPDFjsFont", "isType3Font", "italic", "loadedName", "mimetype", "missingFile", "name", "remeasure", "subtype", "type", "vertical"];
+const EXPORT_DATA_PROPERTIES = ["ascent", "bbox", "black", "bold", "charProcOperatorList", "composite", "cssFontInfo", "data", "defaultVMetrics", "defaultWidth", "descent", "fallbackName", "fontMatrix", "isInvalidPDFjsFont", "isType3Font", "italic", "loadedName", "mimetype", "missingFile", "name", "remeasure", "subtype", "type", "vertical"];
 const EXPORT_DATA_EXTRA_PROPERTIES = ["cMap", "defaultEncoding", "differences", "isMonospace", "isSerifFont", "isSymbolicFont", "seacMap", "toFontChar", "toUnicode", "vmetrics", "widths"];
 function adjustWidths(properties) {
   if (!properties.fontMatrix) {
@@ -21235,8 +21150,10 @@ class Font {
     this.isSerifFont = isSerifFont;
     this.isSymbolicFont = !!(properties.flags & _fonts_utils.FontFlags.Symbolic);
     this.isMonospace = !!(properties.flags & _fonts_utils.FontFlags.FixedPitch);
-    let type = properties.type;
-    let subtype = properties.subtype;
+    let {
+      type,
+      subtype
+    } = properties;
     this.type = type;
     this.subtype = subtype;
     const matches = name.match(/^InvalidPDFjsFont_(.*)_\d+$/);
@@ -21268,7 +21185,6 @@ class Font {
       for (let charCode = 0; charCode < 256; charCode++) {
         this.toFontChar[charCode] = this.differences[charCode] || properties.defaultEncoding[charCode];
       }
-      this.fontType = _util.FontType.TYPE3;
       return;
     }
     this.cidEncoding = properties.cidEncoding || "";
@@ -21320,7 +21236,8 @@ class Font {
     }
     amendFallbackToUnicode(properties);
     this.data = data;
-    this.fontType = (0, _fonts_utils.getFontType)(type, subtype, properties.isStandardFont);
+    this.type = type;
+    this.subtype = subtype;
     this.fontMatrix = properties.fontMatrix;
     this.widths = properties.widths;
     this.defaultWidth = properties.defaultWidth;
@@ -21345,9 +21262,10 @@ class Font {
   }
   fallbackToSystemFont(properties) {
     this.missingFile = true;
-    const name = this.name;
-    const type = this.type;
-    const subtype = this.subtype;
+    const {
+      name,
+      type
+    } = this;
     let fontName = (0, _fonts_utils.normalizeFontName)(name);
     const stdFontMap = (0, _standard_fonts.getStdFontMap)(),
       nonStdFontMap = (0, _standard_fonts.getNonStdFontMap)();
@@ -21441,7 +21359,6 @@ class Font {
     }
     amendFallbackToUnicode(properties);
     this.loadedName = fontName.split("-")[0];
-    this.fontType = (0, _fonts_utils.getFontType)(type, subtype, properties.isStandardFont);
   }
   checkAndRepair(name, font, properties) {
     const VALID_TABLES = ["OS/2", "cmap", "head", "hhea", "hmtx", "maxp", "name", "post", "loca", "glyf", "fpgm", "prep", "cvt ", "CFF "];
@@ -23715,6 +23632,9 @@ class CFFParser {
     const dict = this.parseDict(dictData);
     const privateDict = this.createDict(CFFPrivateDict, dict, parentDict.strings);
     parentDict.privateDict = privateDict;
+    if (privateDict.getByName("ExpansionFactor") === 0) {
+      privateDict.setByName("ExpansionFactor", 0.06);
+    }
     if (!privateDict.getByName("Subrs")) {
       return;
     }
@@ -24597,14 +24517,13 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.SEAC_ANALYSIS_ENABLED = exports.MacStandardGlyphOrdering = exports.FontFlags = void 0;
-exports.getFontType = getFontType;
 exports.normalizeFontName = normalizeFontName;
 exports.recoverGlyphName = recoverGlyphName;
 exports.type1FontGlyphMapping = type1FontGlyphMapping;
-var _util = __w_pdfjs_require__(2);
 var _encodings = __w_pdfjs_require__(35);
 var _glyphlist = __w_pdfjs_require__(37);
 var _unicode = __w_pdfjs_require__(38);
+var _util = __w_pdfjs_require__(2);
 const SEAC_ANALYSIS_ENABLED = true;
 exports.SEAC_ANALYSIS_ENABLED = SEAC_ANALYSIS_ENABLED;
 const FontFlags = {
@@ -24621,29 +24540,6 @@ const FontFlags = {
 exports.FontFlags = FontFlags;
 const MacStandardGlyphOrdering = [".notdef", ".null", "nonmarkingreturn", "space", "exclam", "quotedbl", "numbersign", "dollar", "percent", "ampersand", "quotesingle", "parenleft", "parenright", "asterisk", "plus", "comma", "hyphen", "period", "slash", "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "colon", "semicolon", "less", "equal", "greater", "question", "at", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "bracketleft", "backslash", "bracketright", "asciicircum", "underscore", "grave", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "braceleft", "bar", "braceright", "asciitilde", "Adieresis", "Aring", "Ccedilla", "Eacute", "Ntilde", "Odieresis", "Udieresis", "aacute", "agrave", "acircumflex", "adieresis", "atilde", "aring", "ccedilla", "eacute", "egrave", "ecircumflex", "edieresis", "iacute", "igrave", "icircumflex", "idieresis", "ntilde", "oacute", "ograve", "ocircumflex", "odieresis", "otilde", "uacute", "ugrave", "ucircumflex", "udieresis", "dagger", "degree", "cent", "sterling", "section", "bullet", "paragraph", "germandbls", "registered", "copyright", "trademark", "acute", "dieresis", "notequal", "AE", "Oslash", "infinity", "plusminus", "lessequal", "greaterequal", "yen", "mu", "partialdiff", "summation", "product", "pi", "integral", "ordfeminine", "ordmasculine", "Omega", "ae", "oslash", "questiondown", "exclamdown", "logicalnot", "radical", "florin", "approxequal", "Delta", "guillemotleft", "guillemotright", "ellipsis", "nonbreakingspace", "Agrave", "Atilde", "Otilde", "OE", "oe", "endash", "emdash", "quotedblleft", "quotedblright", "quoteleft", "quoteright", "divide", "lozenge", "ydieresis", "Ydieresis", "fraction", "currency", "guilsinglleft", "guilsinglright", "fi", "fl", "daggerdbl", "periodcentered", "quotesinglbase", "quotedblbase", "perthousand", "Acircumflex", "Ecircumflex", "Aacute", "Edieresis", "Egrave", "Iacute", "Icircumflex", "Idieresis", "Igrave", "Oacute", "Ocircumflex", "apple", "Ograve", "Uacute", "Ucircumflex", "Ugrave", "dotlessi", "circumflex", "tilde", "macron", "breve", "dotaccent", "ring", "cedilla", "hungarumlaut", "ogonek", "caron", "Lslash", "lslash", "Scaron", "scaron", "Zcaron", "zcaron", "brokenbar", "Eth", "eth", "Yacute", "yacute", "Thorn", "thorn", "minus", "multiply", "onesuperior", "twosuperior", "threesuperior", "onehalf", "onequarter", "threequarters", "franc", "Gbreve", "gbreve", "Idotaccent", "Scedilla", "scedilla", "Cacute", "cacute", "Ccaron", "ccaron", "dcroat"];
 exports.MacStandardGlyphOrdering = MacStandardGlyphOrdering;
-function getFontType(type, subtype, isStandardFont = false) {
-  switch (type) {
-    case "Type1":
-      if (isStandardFont) {
-        return _util.FontType.TYPE1STANDARD;
-      }
-      return subtype === "Type1C" ? _util.FontType.TYPE1C : _util.FontType.TYPE1;
-    case "CIDFontType0":
-      return subtype === "CIDFontType0C" ? _util.FontType.CIDFONTTYPE0C : _util.FontType.CIDFONTTYPE0;
-    case "OpenType":
-      return _util.FontType.OPENTYPE;
-    case "TrueType":
-      return _util.FontType.TRUETYPE;
-    case "CIDFontType2":
-      return _util.FontType.CIDFONTTYPE2;
-    case "MMType1":
-      return _util.FontType.MMTYPE1;
-    case "Type0":
-      return _util.FontType.TYPE0;
-    default:
-      return _util.FontType.UNKNOWN;
-  }
-}
 function recoverGlyphName(name, glyphsUnicodeMap) {
   if (glyphsUnicodeMap[name] !== undefined) {
     return name;
@@ -43522,8 +43418,10 @@ class Type1Parser {
         case "BlueFuzz":
         case "BlueScale":
         case "LanguageGroup":
-        case "ExpansionFactor":
           program.properties.privateData[token] = this.readNumber();
+          break;
+        case "ExpansionFactor":
+          program.properties.privateData[token] = this.readNumber() || 0.06;
           break;
         case "ForceBold":
           program.properties.privateData[token] = this.readBoolean();
@@ -63167,8 +63065,8 @@ Object.defineProperty(exports, "__esModule", ({
 exports.XRef = void 0;
 var _util = __w_pdfjs_require__(2);
 var _primitives = __w_pdfjs_require__(3);
-var _core_utils = __w_pdfjs_require__(4);
 var _parser = __w_pdfjs_require__(15);
+var _core_utils = __w_pdfjs_require__(4);
 var _base_stream = __w_pdfjs_require__(5);
 var _crypto = __w_pdfjs_require__(65);
 class XRef {
@@ -63179,7 +63077,6 @@ class XRef {
     this.xrefstms = Object.create(null);
     this._cacheMap = new Map();
     this._pendingRefs = new _primitives.RefSet();
-    this.stats = new _core_utils.DocStats(pdfManager.msgHandler);
     this._newPersistentRefNum = null;
     this._newTemporaryRefNum = null;
   }
@@ -63574,15 +63471,9 @@ class XRef {
       this.startXRefQueue.push(xrefStm);
       this.readXRef(true);
     }
-    let trailerDict, trailerError;
-    for (const trailer of [...trailers, "generationFallback", ...trailers]) {
-      if (trailer === "generationFallback") {
-        if (!trailerError) {
-          break;
-        }
-        this._generationFallback = true;
-        continue;
-      }
+    const trailerDicts = [];
+    let isEncrypted = false;
+    for (const trailer of trailers) {
       stream.pos = trailer;
       const parser = new _parser.Parser({
         lexer: new _parser.Lexer(stream),
@@ -63596,6 +63487,20 @@ class XRef {
       }
       const dict = parser.getObj();
       if (!(dict instanceof _primitives.Dict)) {
+        continue;
+      }
+      trailerDicts.push(dict);
+      if (dict.has("Encrypt")) {
+        isEncrypted = true;
+      }
+    }
+    let trailerDict, trailerError;
+    for (const dict of [...trailerDicts, "genFallback", ...trailerDicts]) {
+      if (dict === "genFallback") {
+        if (!trailerError) {
+          break;
+        }
+        this._generationFallback = true;
         continue;
       }
       let validPagesDict = false;
@@ -63616,7 +63521,7 @@ class XRef {
         trailerError = ex;
         continue;
       }
-      if (validPagesDict && dict.has("ID")) {
+      if (validPagesDict && (!isEncrypted || dict.has("Encrypt")) && dict.has("ID")) {
         return dict;
       }
       trailerDict = dict;
@@ -64494,8 +64399,8 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
   }
 }));
 var _worker = __w_pdfjs_require__(1);
-const pdfjsVersion = '3.2.0';
-const pdfjsBuild = '3fd2a35';
+const pdfjsVersion = '3.3.0';
+const pdfjsBuild = 'fcaeb5d';
 })();
 
 /******/ 	return __webpack_exports__;
