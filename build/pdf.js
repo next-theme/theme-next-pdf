@@ -2,7 +2,7 @@
  * @licstart The following is the entire license notice for the
  * JavaScript code in this page
  *
- * Copyright 2022 Mozilla Foundation
+ * Copyright 2023 Mozilla Foundation
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -962,6 +962,7 @@ function getDocument(src) {
       data: src
     };
   } else if (src instanceof PDFDataRangeTransport) {
+    (0, _display_utils.deprecated)("`PDFDataRangeTransport`-instance, " + "please use a parameter object with `range`-property instead.");
     source = {
       range: src
     };
@@ -978,49 +979,46 @@ function getDocument(src) {
   let rangeTransport = null,
     worker = null;
   for (const key in source) {
-    const value = source[key];
+    const val = source[key];
     switch (key) {
       case "url":
         if (typeof window !== "undefined") {
           try {
-            params[key] = new URL(value, window.location).href;
+            params[key] = new URL(val, window.location).href;
             continue;
           } catch (ex) {
             (0, _util.warn)(`Cannot create valid URL: "${ex}".`);
           }
-        } else if (typeof value === "string" || value instanceof URL) {
-          params[key] = value.toString();
+        } else if (typeof val === "string" || val instanceof URL) {
+          params[key] = val.toString();
           continue;
         }
         throw new Error("Invalid PDF url data: " + "either string or URL-object is expected in the url property.");
       case "range":
-        rangeTransport = value;
+        rangeTransport = val;
         continue;
       case "worker":
-        worker = value;
+        worker = val;
         continue;
       case "data":
-        if (_is_node.isNodeJS && typeof Buffer !== "undefined" && value instanceof Buffer) {
-          params[key] = new Uint8Array(value);
-        } else if (value instanceof Uint8Array) {
+        if (_is_node.isNodeJS && typeof Buffer !== "undefined" && val instanceof Buffer) {
+          params[key] = new Uint8Array(val);
+        } else if (val instanceof Uint8Array && val.byteLength === val.buffer.byteLength) {
           break;
-        } else if (typeof value === "string") {
-          params[key] = (0, _util.stringToBytes)(value);
-        } else if (typeof value === "object" && value !== null && !isNaN(value.length)) {
-          params[key] = new Uint8Array(value);
-        } else if ((0, _util.isArrayBuffer)(value)) {
-          params[key] = new Uint8Array(value);
+        } else if (typeof val === "string") {
+          params[key] = (0, _util.stringToBytes)(val);
+        } else if (typeof val === "object" && val !== null && !isNaN(val.length) || (0, _util.isArrayBuffer)(val)) {
+          params[key] = new Uint8Array(val);
         } else {
           throw new Error("Invalid PDF binary data: either TypedArray, " + "string, or array-like object is expected in the data property.");
         }
         continue;
     }
-    params[key] = value;
+    params[key] = val;
   }
   params.CMapReaderFactory = params.CMapReaderFactory || DefaultCMapReaderFactory;
   params.StandardFontDataFactory = params.StandardFontDataFactory || DefaultStandardFontDataFactory;
   params.ignoreErrors = params.stopAtErrors !== true;
-  params.transferPdfData = params.transferPdfData === true;
   params.fontExtraProperties = params.fontExtraProperties === true;
   params.pdfBug = params.pdfBug === true;
   params.enableXfa = params.enableXfa === true;
@@ -1087,7 +1085,6 @@ function getDocument(src) {
         networkStream = new _transport_stream.PDFDataTransportStream({
           length: params.length,
           initialData: params.initialData,
-          transferPdfData: params.transferPdfData,
           progressiveDone: params.progressiveDone,
           contentDispositionFilename: params.contentDispositionFilename,
           disableRange: params.disableRange,
@@ -1128,7 +1125,7 @@ async function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
     source.progressiveDone = pdfDataRangeTransport.progressiveDone;
     source.contentDispositionFilename = pdfDataRangeTransport.contentDispositionFilename;
   }
-  const transfers = source.transferPdfData && source.data ? [source.data.buffer] : null;
+  const transfers = source.data ? [source.data.buffer] : null;
   const workerId = await worker.messageHandler.sendWithPromise("GetDocRequest", {
     docId,
     apiVersion: '3.3.0',
@@ -2781,7 +2778,7 @@ class InternalRenderTask {
 }
 const version = '3.3.0';
 exports.version = version;
-const build = '517d7a6';
+const build = 'edfdb69';
 exports.build = build;
 
 /***/ }),
@@ -8355,11 +8352,9 @@ exports.PDFDataTransportStream = void 0;
 var _util = __w_pdfjs_require__(1);
 var _display_utils = __w_pdfjs_require__(6);
 class PDFDataTransportStream {
-  #transferPdfData = false;
   constructor({
     length,
     initialData,
-    transferPdfData = false,
     progressiveDone = false,
     contentDispositionFilename = null,
     disableRange = false,
@@ -8367,11 +8362,10 @@ class PDFDataTransportStream {
   }, pdfDataRangeTransport) {
     (0, _util.assert)(pdfDataRangeTransport, 'PDFDataTransportStream - missing required "pdfDataRangeTransport" argument.');
     this._queuedChunks = [];
-    this.#transferPdfData = transferPdfData;
     this._progressiveDone = progressiveDone;
     this._contentDispositionFilename = contentDispositionFilename;
     if (initialData?.length > 0) {
-      const buffer = this.#transferPdfData ? initialData.buffer : new Uint8Array(initialData).buffer;
+      const buffer = initialData instanceof Uint8Array && initialData.byteLength === initialData.buffer.byteLength ? initialData.buffer : new Uint8Array(initialData).buffer;
       this._queuedChunks.push(buffer);
     }
     this._pdfDataRangeTransport = pdfDataRangeTransport;
@@ -8406,7 +8400,7 @@ class PDFDataTransportStream {
     begin,
     chunk
   }) {
-    const buffer = this.#transferPdfData && chunk?.length >= 0 ? chunk.buffer : new Uint8Array(chunk).buffer;
+    const buffer = chunk instanceof Uint8Array && chunk.byteLength === chunk.buffer.byteLength ? chunk.buffer : new Uint8Array(chunk).buffer;
     if (begin === undefined) {
       if (this._fullRequestReader) {
         this._fullRequestReader._enqueue(buffer);
@@ -15820,7 +15814,7 @@ var _worker_options = __w_pdfjs_require__(14);
 var _svg = __w_pdfjs_require__(35);
 var _xfa_layer = __w_pdfjs_require__(34);
 const pdfjsVersion = '3.3.0';
-const pdfjsBuild = '517d7a6';
+const pdfjsBuild = 'edfdb69';
 })();
 
 /******/ 	return __webpack_exports__;
