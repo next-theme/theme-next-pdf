@@ -164,11 +164,24 @@ class WorkerMessageHandler {
       enableXfa,
       evaluatorOptions
     }) {
+      const pdfManagerArgs = {
+        source: null,
+        disableAutoFetch,
+        docBaseUrl,
+        docId,
+        enableXfa,
+        evaluatorOptions,
+        handler,
+        length,
+        password,
+        rangeChunkSize
+      };
       const pdfManagerCapability = (0, _util.createPromiseCapability)();
       let newPdfManager;
       if (data) {
         try {
-          newPdfManager = new _pdf_manager.LocalPdfManager(docId, data, password, handler, evaluatorOptions, enableXfa, docBaseUrl);
+          pdfManagerArgs.source = data;
+          newPdfManager = new _pdf_manager.LocalPdfManager(pdfManagerArgs);
           pdfManagerCapability.resolve(newPdfManager);
         } catch (ex) {
           pdfManagerCapability.reject(ex);
@@ -188,14 +201,10 @@ class WorkerMessageHandler {
         if (!fullRequest.isRangeSupported) {
           return;
         }
-        disableAutoFetch = disableAutoFetch || fullRequest.isStreamingSupported;
-        newPdfManager = new _pdf_manager.NetworkPdfManager(docId, pdfStream, {
-          msgHandler: handler,
-          password,
-          length: fullRequest.contentLength,
-          disableAutoFetch,
-          rangeChunkSize
-        }, evaluatorOptions, enableXfa, docBaseUrl);
+        pdfManagerArgs.source = pdfStream;
+        pdfManagerArgs.length = fullRequest.contentLength;
+        pdfManagerArgs.disableAutoFetch = pdfManagerArgs.disableAutoFetch || fullRequest.isStreamingSupported;
+        newPdfManager = new _pdf_manager.NetworkPdfManager(pdfManagerArgs);
         for (const chunk of cachedChunks) {
           newPdfManager.sendProgressiveData(chunk);
         }
@@ -213,7 +222,8 @@ class WorkerMessageHandler {
           (0, _util.warn)("reported HTTP length is different from actual");
         }
         try {
-          newPdfManager = new _pdf_manager.LocalPdfManager(docId, pdfFile, password, handler, evaluatorOptions, enableXfa, docBaseUrl);
+          pdfManagerArgs.source = pdfFile;
+          newPdfManager = new _pdf_manager.LocalPdfManager(pdfManagerArgs);
           pdfManagerCapability.resolve(newPdfManager);
         } catch (ex) {
           pdfManagerCapability.reject(ex);
@@ -234,7 +244,7 @@ class WorkerMessageHandler {
               cancelXHRs = null;
               return;
             }
-            loaded += (0, _util.arrayByteLength)(value);
+            loaded += value.byteLength;
             if (!fullRequest.isStreamingSupported) {
               handler.send("DocProgress", {
                 loaded,
@@ -402,6 +412,7 @@ class WorkerMessageHandler {
           return data;
         }, reason => {
           finishWorkerTask(task);
+          throw reason;
         });
       });
     });
@@ -635,7 +646,6 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.VerbosityLevel = exports.Util = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.UNSUPPORTED_FEATURES = exports.TextRenderingMode = exports.RenderingIntentFlag = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.LINE_FACTOR = exports.LINE_DESCENT_FACTOR = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FeatureTest = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.BASELINE_FACTOR = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMode = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationEditorType = exports.AnnotationEditorPrefix = exports.AnnotationEditorParamsType = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
-exports.arrayByteLength = arrayByteLength;
 exports.arraysToBytes = arraysToBytes;
 exports.assert = assert;
 exports.bytesToString = bytesToString;
@@ -2296,10 +2306,15 @@ function parseDocBaseUrl(url) {
   return null;
 }
 class BasePdfManager {
-  constructor() {
+  constructor(args) {
     if (this.constructor === BasePdfManager) {
       (0, _util.unreachable)("Cannot initialize BasePdfManager.");
     }
+    this._docBaseUrl = parseDocBaseUrl(args.docBaseUrl);
+    this._docId = args.docId;
+    this._password = args.password;
+    this.enableXfa = args.enableXfa;
+    this.evaluatorOptions = args.evaluatorOptions;
   }
   get docId() {
     return this._docId;
@@ -2358,15 +2373,9 @@ class BasePdfManager {
   }
 }
 class LocalPdfManager extends BasePdfManager {
-  constructor(docId, data, password, msgHandler, evaluatorOptions, enableXfa, docBaseUrl) {
-    super();
-    this._docId = docId;
-    this._password = password;
-    this._docBaseUrl = parseDocBaseUrl(docBaseUrl);
-    this.msgHandler = msgHandler;
-    this.evaluatorOptions = evaluatorOptions;
-    this.enableXfa = enableXfa;
-    const stream = new _stream.Stream(data);
+  constructor(args) {
+    super(args);
+    const stream = new _stream.Stream(args.source);
     this.pdfDocument = new _document.PDFDocument(this, stream);
     this._loadedStreamPromise = Promise.resolve(stream);
   }
@@ -2387,16 +2396,10 @@ class LocalPdfManager extends BasePdfManager {
 }
 exports.LocalPdfManager = LocalPdfManager;
 class NetworkPdfManager extends BasePdfManager {
-  constructor(docId, pdfNetworkStream, args, evaluatorOptions, enableXfa, docBaseUrl) {
-    super();
-    this._docId = docId;
-    this._password = args.password;
-    this._docBaseUrl = parseDocBaseUrl(docBaseUrl);
-    this.msgHandler = args.msgHandler;
-    this.evaluatorOptions = evaluatorOptions;
-    this.enableXfa = enableXfa;
-    this.streamManager = new _chunked_stream.ChunkedStreamManager(pdfNetworkStream, {
-      msgHandler: args.msgHandler,
+  constructor(args) {
+    super(args);
+    this.streamManager = new _chunked_stream.ChunkedStreamManager(args.source, {
+      msgHandler: args.handler,
       length: args.length,
       disableAutoFetch: args.disableAutoFetch,
       rangeChunkSize: args.rangeChunkSize
@@ -2657,23 +2660,25 @@ class ChunkedStreamManager {
     let chunks = [],
       loaded = 0;
     return new Promise((resolve, reject) => {
-      const readChunk = chunk => {
+      const readChunk = ({
+        value,
+        done
+      }) => {
         try {
-          if (!chunk.done) {
-            const data = chunk.value;
-            chunks.push(data);
-            loaded += (0, _util.arrayByteLength)(data);
-            if (rangeReader.isStreamingSupported) {
-              this.onProgress({
-                loaded
-              });
-            }
-            rangeReader.read().then(readChunk, reject);
+          if (done) {
+            const chunkData = (0, _util.arraysToBytes)(chunks);
+            chunks = null;
+            resolve(chunkData);
             return;
           }
-          const chunkData = (0, _util.arraysToBytes)(chunks);
-          chunks = null;
-          resolve(chunkData);
+          loaded += value.byteLength;
+          if (rangeReader.isStreamingSupported) {
+            this.onProgress({
+              loaded
+            });
+          }
+          chunks.push(value);
+          rangeReader.read().then(readChunk, reject);
         } catch (e) {
           reject(e);
         }
@@ -5338,6 +5343,7 @@ class WidgetAnnotation extends Annotation {
     }
     return mk.size > 0 ? mk : null;
   }
+  amendSavedDict(annotationStorage, dict) {}
   async save(evaluator, task, annotationStorage) {
     const storageEntry = annotationStorage ? annotationStorage.get(this.data.id) : undefined;
     let value = storageEntry && storageEntry.value;
@@ -5387,6 +5393,7 @@ class WidgetAnnotation extends Annotation {
       return (0, _core_utils.isAscii)(val) ? val : (0, _core_utils.stringToUTF16String)(val, true);
     };
     dict.set("V", Array.isArray(value) ? value.map(encoder) : encoder(value));
+    this.amendSavedDict(annotationStorage, dict);
     const maybeMK = this._getMKDict(rotation);
     if (maybeMK) {
       dict.set("MK", maybeMK);
@@ -5408,12 +5415,10 @@ class WidgetAnnotation extends Annotation {
       let newTransform = null;
       if (encrypt) {
         newTransform = encrypt.createCipherTransform(newRef.num, newRef.gen);
-        appearance = newTransform.encryptString(appearance);
       }
       const resources = this._getSaveFieldResources(xref);
       const appearanceStream = new _stream.StringStream(appearance);
       const appearanceDict = appearanceStream.dict = new _primitives.Dict(xref);
-      appearanceDict.set("Length", appearance.length);
       appearanceDict.set("Subtype", _primitives.Name.get("Form"));
       appearanceDict.set("Resources", resources);
       appearanceDict.set("BBox", [0, 0, this.data.rect[2] - this.data.rect[0], this.data.rect[3] - this.data.rect[1]]);
@@ -5462,13 +5467,12 @@ class WidgetAnnotation extends Annotation {
       value = value[0];
     }
     (0, _util.assert)(typeof value === "string", "Expected `value` to be a string.");
-    if (!this.data.combo) {
-      value = value.trim();
-    } else {
+    value = value.trim();
+    if (this.data.combo) {
       const option = this.data.options.find(({
         exportValue
-      }) => value === exportValue) || this.data.options[0];
-      value = option && option.displayValue || "";
+      }) => value === exportValue);
+      value = option && option.displayValue || value;
     }
     if (value === "") {
       return `/Tx BMC q ${colors}Q EMC`;
@@ -6211,6 +6215,8 @@ class ChoiceWidgetAnnotation extends WidgetAnnotation {
       dict,
       xref
     } = params;
+    this.indices = dict.getArray("I");
+    this.hasIndices = Array.isArray(this.indices) && this.indices.length > 0;
     this.data.options = [];
     const options = (0, _core_utils.getInheritableProperty)({
       dict,
@@ -6226,10 +6232,20 @@ class ChoiceWidgetAnnotation extends WidgetAnnotation {
         };
       }
     }
-    if (typeof this.data.fieldValue === "string") {
-      this.data.fieldValue = [this.data.fieldValue];
-    } else if (!this.data.fieldValue) {
+    if (!this.hasIndices) {
+      if (typeof this.data.fieldValue === "string") {
+        this.data.fieldValue = [this.data.fieldValue];
+      } else if (!this.data.fieldValue) {
+        this.data.fieldValue = [];
+      }
+    } else {
       this.data.fieldValue = [];
+      const ii = this.data.options.length;
+      for (const i of this.indices) {
+        if (Number.isInteger(i) && i >= 0 && i < ii) {
+          this.data.fieldValue.push(this.data.options[i].exportValue);
+        }
+      }
     }
     this.data.combo = this.hasFieldFlag(_util.AnnotationFieldFlag.COMBO);
     this.data.multiSelect = this.hasFieldFlag(_util.AnnotationFieldFlag.MULTISELECT);
@@ -6256,6 +6272,27 @@ class ChoiceWidgetAnnotation extends WidgetAnnotation {
       rotation: this.rotation,
       type
     };
+  }
+  amendSavedDict(annotationStorage, dict) {
+    if (!this.hasIndices) {
+      return;
+    }
+    const storageEntry = annotationStorage ? annotationStorage.get(this.data.id) : undefined;
+    let values = storageEntry && storageEntry.value;
+    if (!Array.isArray(values)) {
+      values = [values];
+    }
+    const indices = [];
+    const {
+      options
+    } = this.data;
+    for (let i = 0, j = 0, ii = options.length; i < ii; i++) {
+      if (options[i].exportValue === values[j]) {
+        indices.push(i);
+        j += 1;
+      }
+    }
+    dict.set("I", indices);
   }
   async _getAppearance(evaluator, task, intent, annotationStorage) {
     if (this.data.combo) {
@@ -6471,9 +6508,10 @@ class FreeTextAnnotation extends MarkupAnnotation {
     this.data.annotationType = _util.AnnotationType.FREETEXT;
     this.setDefaultAppearance(params);
     if (!this.appearance && this._isOffscreenCanvasSupported) {
+      const strokeAlpha = params.dict.get("CA");
       const fakeUnicodeFont = new _default_appearance.FakeUnicodeFont(xref, "sans-serif");
       const fontData = this.data.defaultAppearanceData;
-      this.appearance = fakeUnicodeFont.createAppearance(this._contents.str, this.rectangle, this.rotation, fontData.fontSize || 10, fontData.fontColor);
+      this.appearance = fakeUnicodeFont.createAppearance(this._contents.str, this.rectangle, this.rotation, fontData.fontSize || 10, fontData.fontColor, strokeAlpha);
       this._streams.push(this.appearance, _default_appearance.FakeUnicodeFont.toUnicodeStream);
     } else if (!this._isOffscreenCanvasSupported) {
       (0, _util.warn)("FreeTextAnnotation: OffscreenCanvas is not supported, annotation may not render correctly.");
@@ -6598,7 +6636,6 @@ class FreeTextAnnotation extends MarkupAnnotation {
     appearanceStreamDict.set("Subtype", _primitives.Name.get("Form"));
     appearanceStreamDict.set("Type", _primitives.Name.get("XObject"));
     appearanceStreamDict.set("BBox", [0, 0, w, h]);
-    appearanceStreamDict.set("Length", appearance.length);
     appearanceStreamDict.set("Resources", resources);
     if (rotation) {
       const matrix = (0, _core_utils.getRotationMatrix)(rotation, w, h);
@@ -7316,7 +7353,7 @@ endcmap CMapName currentdict /CMap defineresource pop end end`;
     }
     return this.resources;
   }
-  createAppearance(text, rect, rotation, fontSize, bgColor) {
+  createAppearance(text, rect, rotation, fontSize, bgColor, strokeAlpha) {
     const ctx = this._createContext();
     const lines = [];
     let maxWidth = -Infinity;
@@ -7357,6 +7394,20 @@ endcmap CMapName currentdict /CMap defineresource pop end end`;
     const fscale = Math.min(hscale, vscale);
     const newFontSize = fontSize * fscale;
     const buffer = ["q", `0 0 ${(0, _core_utils.numberToString)(w)} ${(0, _core_utils.numberToString)(h)} re W n`, `BT`, `1 0 0 1 0 ${(0, _core_utils.numberToString)(h + lineDescent)} Tm 0 Tc ${getPdfColor(bgColor, true)}`, `/${this.fontName.name} ${(0, _core_utils.numberToString)(newFontSize)} Tf`];
+    const {
+      resources
+    } = this;
+    strokeAlpha = typeof strokeAlpha === "number" && strokeAlpha >= 0 && strokeAlpha <= 1 ? strokeAlpha : 1;
+    if (strokeAlpha !== 1) {
+      buffer.push("/R0 gs");
+      const extGState = new _primitives.Dict(this.xref);
+      const r0 = new _primitives.Dict(this.xref);
+      r0.set("ca", strokeAlpha);
+      r0.set("CA", strokeAlpha);
+      r0.set("Type", _primitives.Name.get("ExtGState"));
+      extGState.set("R0", r0);
+      resources.set("ExtGState", extGState);
+    }
     const vShift = (0, _core_utils.numberToString)(lineHeight);
     for (const line of lines) {
       buffer.push(`0 -${vShift} Td <${(0, _core_utils.stringToUTF16HexString)(line)}> Tj`);
@@ -7368,7 +7419,7 @@ endcmap CMapName currentdict /CMap defineresource pop end end`;
     appearanceStreamDict.set("Type", _primitives.Name.get("XObject"));
     appearanceStreamDict.set("BBox", [0, 0, w, h]);
     appearanceStreamDict.set("Length", appearance.length);
-    appearanceStreamDict.set("Resources", this.resources);
+    appearanceStreamDict.set("Resources", resources);
     if (rotation) {
       const matrix = (0, _core_utils.getRotationMatrix)(rotation, w, h);
       appearanceStreamDict.set("Matrix", matrix);
@@ -10171,7 +10222,7 @@ class PartialEvaluator {
           saveLastChar(" ");
           continue;
         }
-        if (!compareWithLastPosition()) {
+        if (!category.isZeroWidthDiacritic && !compareWithLastPosition()) {
           continue;
         }
         const textChunk = ensureTextContentItem();
@@ -47844,13 +47895,13 @@ function writeDict(dict, buffer, transform) {
   buffer.push(">>");
 }
 function writeStream(stream, buffer, transform) {
-  writeDict(stream.dict, buffer, transform);
-  buffer.push(" stream\n");
   let string = stream.getString();
   if (transform !== null) {
     string = transform.encryptString(string);
   }
-  buffer.push(string, "\nendstream");
+  stream.dict.set("Length", string.length);
+  writeDict(stream.dict, buffer, transform);
+  buffer.push(" stream\n", string, "\nendstream");
 }
 function writeArray(array, buffer, transform) {
   buffer.push("[");
@@ -64468,7 +64519,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.4.0';
-const pdfjsBuild = 'e698664';
+const pdfjsBuild = '25a6bc4';
 })();
 
 /******/ 	return __webpack_exports__;
