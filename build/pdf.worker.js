@@ -44,8 +44,8 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.WorkerTask = exports.WorkerMessageHandler = void 0;
 var _util = __w_pdfjs_require__(2);
-var _primitives = __w_pdfjs_require__(3);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _pdf_manager = __w_pdfjs_require__(6);
 var _cleanup_helper = __w_pdfjs_require__(69);
 var _writer = __w_pdfjs_require__(63);
@@ -95,7 +95,7 @@ class WorkerMessageHandler {
     let pdfManager;
     let terminated = false;
     let cancelXHRs = null;
-    const WorkerTasks = [];
+    const WorkerTasks = new Set();
     const verbosity = (0, _util.getVerbosityLevel)();
     const {
       docId,
@@ -127,12 +127,11 @@ class WorkerMessageHandler {
       }
     }
     function startWorkerTask(task) {
-      WorkerTasks.push(task);
+      WorkerTasks.add(task);
     }
     function finishWorkerTask(task) {
       task.finish();
-      const i = WorkerTasks.indexOf(task);
-      WorkerTasks.splice(i, 1);
+      WorkerTasks.delete(task);
     }
     async function loadDocument(recoveryMode) {
       await pdfManager.ensureDoc("checkHeader");
@@ -217,7 +216,7 @@ class WorkerMessageHandler {
       });
       let loaded = 0;
       const flushChunks = function () {
-        const pdfFile = (0, _util.arraysToBytes)(cachedChunks);
+        const pdfFile = (0, _core_utils.arrayBuffersToBytes)(cachedChunks);
         if (length && pdfFile.length !== length) {
           (0, _util.warn)("reported HTTP length is different from actual");
         }
@@ -646,7 +645,6 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.VerbosityLevel = exports.Util = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.UNSUPPORTED_FEATURES = exports.TextRenderingMode = exports.RenderingIntentFlag = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.LINE_FACTOR = exports.LINE_DESCENT_FACTOR = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FeatureTest = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.BASELINE_FACTOR = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMode = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationEditorType = exports.AnnotationEditorPrefix = exports.AnnotationEditorParamsType = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
-exports.arraysToBytes = arraysToBytes;
 exports.assert = assert;
 exports.bytesToString = bytesToString;
 exports.createPromiseCapability = createPromiseCapability;
@@ -1161,41 +1159,6 @@ function stringToBytes(str) {
   }
   return bytes;
 }
-function arrayByteLength(arr) {
-  if (arr.length !== undefined) {
-    return arr.length;
-  }
-  if (arr.byteLength !== undefined) {
-    return arr.byteLength;
-  }
-  unreachable("Invalid argument for arrayByteLength");
-}
-function arraysToBytes(arr) {
-  const length = arr.length;
-  if (length === 1 && arr[0] instanceof Uint8Array) {
-    return arr[0];
-  }
-  let resultLength = 0;
-  for (let i = 0; i < length; i++) {
-    resultLength += arrayByteLength(arr[i]);
-  }
-  let pos = 0;
-  const data = new Uint8Array(resultLength);
-  for (let i = 0; i < length; i++) {
-    let item = arr[i];
-    if (!(item instanceof Uint8Array)) {
-      if (typeof item === "string") {
-        item = stringToBytes(item);
-      } else {
-        item = new Uint8Array(item);
-      }
-    }
-    const itemLength = item.byteLength;
-    data.set(item, pos);
-    pos += itemLength;
-  }
-  return data;
-}
 function string32(value) {
   return String.fromCharCode(value >> 24 & 0xff, value >> 16 & 0xff, value >> 8 & 0xff, value & 0xff);
 }
@@ -1498,284 +1461,8 @@ function createPromiseCapability() {
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.RefSetCache = exports.RefSet = exports.Ref = exports.Name = exports.EOF = exports.Dict = exports.Cmd = exports.CIRCULAR_REF = void 0;
-exports.clearPrimitiveCaches = clearPrimitiveCaches;
-exports.isCmd = isCmd;
-exports.isDict = isDict;
-exports.isName = isName;
-exports.isRefsEqual = isRefsEqual;
-var _util = __w_pdfjs_require__(2);
-const CIRCULAR_REF = Symbol("CIRCULAR_REF");
-exports.CIRCULAR_REF = CIRCULAR_REF;
-const EOF = Symbol("EOF");
-exports.EOF = EOF;
-const Name = function NameClosure() {
-  let nameCache = Object.create(null);
-  class Name {
-    constructor(name) {
-      this.name = name;
-    }
-    static get(name) {
-      return nameCache[name] || (nameCache[name] = new Name(name));
-    }
-    static _clearCache() {
-      nameCache = Object.create(null);
-    }
-  }
-  return Name;
-}();
-exports.Name = Name;
-const Cmd = function CmdClosure() {
-  let cmdCache = Object.create(null);
-  class Cmd {
-    constructor(cmd) {
-      this.cmd = cmd;
-    }
-    static get(cmd) {
-      return cmdCache[cmd] || (cmdCache[cmd] = new Cmd(cmd));
-    }
-    static _clearCache() {
-      cmdCache = Object.create(null);
-    }
-  }
-  return Cmd;
-}();
-exports.Cmd = Cmd;
-const nonSerializable = function nonSerializableClosure() {
-  return nonSerializable;
-};
-class Dict {
-  constructor(xref = null) {
-    this._map = Object.create(null);
-    this.xref = xref;
-    this.objId = null;
-    this.suppressEncryption = false;
-    this.__nonSerializable__ = nonSerializable;
-  }
-  assignXref(newXref) {
-    this.xref = newXref;
-  }
-  get size() {
-    return Object.keys(this._map).length;
-  }
-  get(key1, key2, key3) {
-    let value = this._map[key1];
-    if (value === undefined && key2 !== undefined) {
-      value = this._map[key2];
-      if (value === undefined && key3 !== undefined) {
-        value = this._map[key3];
-      }
-    }
-    if (value instanceof Ref && this.xref) {
-      return this.xref.fetch(value, this.suppressEncryption);
-    }
-    return value;
-  }
-  async getAsync(key1, key2, key3) {
-    let value = this._map[key1];
-    if (value === undefined && key2 !== undefined) {
-      value = this._map[key2];
-      if (value === undefined && key3 !== undefined) {
-        value = this._map[key3];
-      }
-    }
-    if (value instanceof Ref && this.xref) {
-      return this.xref.fetchAsync(value, this.suppressEncryption);
-    }
-    return value;
-  }
-  getArray(key1, key2, key3) {
-    let value = this._map[key1];
-    if (value === undefined && key2 !== undefined) {
-      value = this._map[key2];
-      if (value === undefined && key3 !== undefined) {
-        value = this._map[key3];
-      }
-    }
-    if (value instanceof Ref && this.xref) {
-      value = this.xref.fetch(value, this.suppressEncryption);
-    }
-    if (Array.isArray(value)) {
-      value = value.slice();
-      for (let i = 0, ii = value.length; i < ii; i++) {
-        if (value[i] instanceof Ref && this.xref) {
-          value[i] = this.xref.fetch(value[i], this.suppressEncryption);
-        }
-      }
-    }
-    return value;
-  }
-  getRaw(key) {
-    return this._map[key];
-  }
-  getKeys() {
-    return Object.keys(this._map);
-  }
-  getRawValues() {
-    return Object.values(this._map);
-  }
-  set(key, value) {
-    this._map[key] = value;
-  }
-  has(key) {
-    return this._map[key] !== undefined;
-  }
-  forEach(callback) {
-    for (const key in this._map) {
-      callback(key, this.get(key));
-    }
-  }
-  static get empty() {
-    const emptyDict = new Dict(null);
-    emptyDict.set = (key, value) => {
-      (0, _util.unreachable)("Should not call `set` on the empty dictionary.");
-    };
-    return (0, _util.shadow)(this, "empty", emptyDict);
-  }
-  static merge({
-    xref,
-    dictArray,
-    mergeSubDicts = false
-  }) {
-    const mergedDict = new Dict(xref),
-      properties = new Map();
-    for (const dict of dictArray) {
-      if (!(dict instanceof Dict)) {
-        continue;
-      }
-      for (const [key, value] of Object.entries(dict._map)) {
-        let property = properties.get(key);
-        if (property === undefined) {
-          property = [];
-          properties.set(key, property);
-        } else if (!mergeSubDicts || !(value instanceof Dict)) {
-          continue;
-        }
-        property.push(value);
-      }
-    }
-    for (const [name, values] of properties) {
-      if (values.length === 1 || !(values[0] instanceof Dict)) {
-        mergedDict._map[name] = values[0];
-        continue;
-      }
-      const subDict = new Dict(xref);
-      for (const dict of values) {
-        for (const [key, value] of Object.entries(dict._map)) {
-          if (subDict._map[key] === undefined) {
-            subDict._map[key] = value;
-          }
-        }
-      }
-      if (subDict.size > 0) {
-        mergedDict._map[name] = subDict;
-      }
-    }
-    properties.clear();
-    return mergedDict.size > 0 ? mergedDict : Dict.empty;
-  }
-}
-exports.Dict = Dict;
-const Ref = function RefClosure() {
-  let refCache = Object.create(null);
-  class Ref {
-    constructor(num, gen) {
-      this.num = num;
-      this.gen = gen;
-    }
-    toString() {
-      if (this.gen === 0) {
-        return `${this.num}R`;
-      }
-      return `${this.num}R${this.gen}`;
-    }
-    static get(num, gen) {
-      const key = gen === 0 ? `${num}R` : `${num}R${gen}`;
-      return refCache[key] || (refCache[key] = new Ref(num, gen));
-    }
-    static _clearCache() {
-      refCache = Object.create(null);
-    }
-  }
-  return Ref;
-}();
-exports.Ref = Ref;
-class RefSet {
-  constructor(parent = null) {
-    this._set = new Set(parent && parent._set);
-  }
-  has(ref) {
-    return this._set.has(ref.toString());
-  }
-  put(ref) {
-    this._set.add(ref.toString());
-  }
-  remove(ref) {
-    this._set.delete(ref.toString());
-  }
-  [Symbol.iterator]() {
-    return this._set.values();
-  }
-  clear() {
-    this._set.clear();
-  }
-}
-exports.RefSet = RefSet;
-class RefSetCache {
-  constructor() {
-    this._map = new Map();
-  }
-  get size() {
-    return this._map.size;
-  }
-  get(ref) {
-    return this._map.get(ref.toString());
-  }
-  has(ref) {
-    return this._map.has(ref.toString());
-  }
-  put(ref, obj) {
-    this._map.set(ref.toString(), obj);
-  }
-  putAlias(ref, aliasRef) {
-    this._map.set(ref.toString(), this.get(aliasRef));
-  }
-  [Symbol.iterator]() {
-    return this._map.values();
-  }
-  clear() {
-    this._map.clear();
-  }
-}
-exports.RefSetCache = RefSetCache;
-function isName(v, name) {
-  return v instanceof Name && (name === undefined || v.name === name);
-}
-function isCmd(v, cmd) {
-  return v instanceof Cmd && (cmd === undefined || v.cmd === cmd);
-}
-function isDict(v, type) {
-  return v instanceof Dict && (type === undefined || isName(v.get("Type"), type));
-}
-function isRefsEqual(v1, v2) {
-  return v1.num === v2.num && v1.gen === v2.gen;
-}
-function clearPrimitiveCaches() {
-  Cmd._clearCache();
-  Name._clearCache();
-  Ref._clearCache();
-}
-
-/***/ }),
-/* 4 */
-/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
-
-
-
-Object.defineProperty(exports, "__esModule", ({
-  value: true
-}));
 exports.XRefParseException = exports.XRefEntryException = exports.ParserEOFException = exports.PDF_VERSION_REGEXP = exports.MissingDataException = void 0;
+exports.arrayBuffersToBytes = arrayBuffersToBytes;
 exports.collectActions = collectActions;
 exports.encodeToXmlString = encodeToXmlString;
 exports.escapePDFName = escapePDFName;
@@ -1799,7 +1486,7 @@ exports.stringToUTF16String = stringToUTF16String;
 exports.toRomanNumerals = toRomanNumerals;
 exports.validateCSSFont = validateCSSFont;
 var _util = __w_pdfjs_require__(2);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _base_stream = __w_pdfjs_require__(5);
 const PDF_VERSION_REGEXP = /^[1-9]\.\d$/;
 exports.PDF_VERSION_REGEXP = PDF_VERSION_REGEXP;
@@ -1855,6 +1542,27 @@ class XRefParseException extends _util.BaseException {
   }
 }
 exports.XRefParseException = XRefParseException;
+function arrayBuffersToBytes(arr) {
+  const length = arr.length;
+  if (length === 0) {
+    return new Uint8Array(0);
+  }
+  if (length === 1) {
+    return new Uint8Array(arr[0]);
+  }
+  let dataLength = 0;
+  for (let i = 0; i < length; i++) {
+    dataLength += arr[i].byteLength;
+  }
+  const data = new Uint8Array(dataLength);
+  let pos = 0;
+  for (let i = 0; i < length; i++) {
+    const item = new Uint8Array(arr[i]);
+    data.set(item, pos);
+    pos += item.byteLength;
+  }
+  return data;
+}
 function getInheritableProperty({
   dict,
   key,
@@ -2198,6 +1906,283 @@ function getRotationMatrix(rotation, width, height) {
 }
 
 /***/ }),
+/* 4 */
+/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
+
+
+
+Object.defineProperty(exports, "__esModule", ({
+  value: true
+}));
+exports.RefSetCache = exports.RefSet = exports.Ref = exports.Name = exports.EOF = exports.Dict = exports.Cmd = exports.CIRCULAR_REF = void 0;
+exports.clearPrimitiveCaches = clearPrimitiveCaches;
+exports.isCmd = isCmd;
+exports.isDict = isDict;
+exports.isName = isName;
+exports.isRefsEqual = isRefsEqual;
+var _util = __w_pdfjs_require__(2);
+const CIRCULAR_REF = Symbol("CIRCULAR_REF");
+exports.CIRCULAR_REF = CIRCULAR_REF;
+const EOF = Symbol("EOF");
+exports.EOF = EOF;
+const Name = function NameClosure() {
+  let nameCache = Object.create(null);
+  class Name {
+    constructor(name) {
+      this.name = name;
+    }
+    static get(name) {
+      return nameCache[name] || (nameCache[name] = new Name(name));
+    }
+    static _clearCache() {
+      nameCache = Object.create(null);
+    }
+  }
+  return Name;
+}();
+exports.Name = Name;
+const Cmd = function CmdClosure() {
+  let cmdCache = Object.create(null);
+  class Cmd {
+    constructor(cmd) {
+      this.cmd = cmd;
+    }
+    static get(cmd) {
+      return cmdCache[cmd] || (cmdCache[cmd] = new Cmd(cmd));
+    }
+    static _clearCache() {
+      cmdCache = Object.create(null);
+    }
+  }
+  return Cmd;
+}();
+exports.Cmd = Cmd;
+const nonSerializable = function nonSerializableClosure() {
+  return nonSerializable;
+};
+class Dict {
+  constructor(xref = null) {
+    this._map = Object.create(null);
+    this.xref = xref;
+    this.objId = null;
+    this.suppressEncryption = false;
+    this.__nonSerializable__ = nonSerializable;
+  }
+  assignXref(newXref) {
+    this.xref = newXref;
+  }
+  get size() {
+    return Object.keys(this._map).length;
+  }
+  get(key1, key2, key3) {
+    let value = this._map[key1];
+    if (value === undefined && key2 !== undefined) {
+      value = this._map[key2];
+      if (value === undefined && key3 !== undefined) {
+        value = this._map[key3];
+      }
+    }
+    if (value instanceof Ref && this.xref) {
+      return this.xref.fetch(value, this.suppressEncryption);
+    }
+    return value;
+  }
+  async getAsync(key1, key2, key3) {
+    let value = this._map[key1];
+    if (value === undefined && key2 !== undefined) {
+      value = this._map[key2];
+      if (value === undefined && key3 !== undefined) {
+        value = this._map[key3];
+      }
+    }
+    if (value instanceof Ref && this.xref) {
+      return this.xref.fetchAsync(value, this.suppressEncryption);
+    }
+    return value;
+  }
+  getArray(key1, key2, key3) {
+    let value = this._map[key1];
+    if (value === undefined && key2 !== undefined) {
+      value = this._map[key2];
+      if (value === undefined && key3 !== undefined) {
+        value = this._map[key3];
+      }
+    }
+    if (value instanceof Ref && this.xref) {
+      value = this.xref.fetch(value, this.suppressEncryption);
+    }
+    if (Array.isArray(value)) {
+      value = value.slice();
+      for (let i = 0, ii = value.length; i < ii; i++) {
+        if (value[i] instanceof Ref && this.xref) {
+          value[i] = this.xref.fetch(value[i], this.suppressEncryption);
+        }
+      }
+    }
+    return value;
+  }
+  getRaw(key) {
+    return this._map[key];
+  }
+  getKeys() {
+    return Object.keys(this._map);
+  }
+  getRawValues() {
+    return Object.values(this._map);
+  }
+  set(key, value) {
+    this._map[key] = value;
+  }
+  has(key) {
+    return this._map[key] !== undefined;
+  }
+  forEach(callback) {
+    for (const key in this._map) {
+      callback(key, this.get(key));
+    }
+  }
+  static get empty() {
+    const emptyDict = new Dict(null);
+    emptyDict.set = (key, value) => {
+      (0, _util.unreachable)("Should not call `set` on the empty dictionary.");
+    };
+    return (0, _util.shadow)(this, "empty", emptyDict);
+  }
+  static merge({
+    xref,
+    dictArray,
+    mergeSubDicts = false
+  }) {
+    const mergedDict = new Dict(xref),
+      properties = new Map();
+    for (const dict of dictArray) {
+      if (!(dict instanceof Dict)) {
+        continue;
+      }
+      for (const [key, value] of Object.entries(dict._map)) {
+        let property = properties.get(key);
+        if (property === undefined) {
+          property = [];
+          properties.set(key, property);
+        } else if (!mergeSubDicts || !(value instanceof Dict)) {
+          continue;
+        }
+        property.push(value);
+      }
+    }
+    for (const [name, values] of properties) {
+      if (values.length === 1 || !(values[0] instanceof Dict)) {
+        mergedDict._map[name] = values[0];
+        continue;
+      }
+      const subDict = new Dict(xref);
+      for (const dict of values) {
+        for (const [key, value] of Object.entries(dict._map)) {
+          if (subDict._map[key] === undefined) {
+            subDict._map[key] = value;
+          }
+        }
+      }
+      if (subDict.size > 0) {
+        mergedDict._map[name] = subDict;
+      }
+    }
+    properties.clear();
+    return mergedDict.size > 0 ? mergedDict : Dict.empty;
+  }
+}
+exports.Dict = Dict;
+const Ref = function RefClosure() {
+  let refCache = Object.create(null);
+  class Ref {
+    constructor(num, gen) {
+      this.num = num;
+      this.gen = gen;
+    }
+    toString() {
+      if (this.gen === 0) {
+        return `${this.num}R`;
+      }
+      return `${this.num}R${this.gen}`;
+    }
+    static get(num, gen) {
+      const key = gen === 0 ? `${num}R` : `${num}R${gen}`;
+      return refCache[key] || (refCache[key] = new Ref(num, gen));
+    }
+    static _clearCache() {
+      refCache = Object.create(null);
+    }
+  }
+  return Ref;
+}();
+exports.Ref = Ref;
+class RefSet {
+  constructor(parent = null) {
+    this._set = new Set(parent && parent._set);
+  }
+  has(ref) {
+    return this._set.has(ref.toString());
+  }
+  put(ref) {
+    this._set.add(ref.toString());
+  }
+  remove(ref) {
+    this._set.delete(ref.toString());
+  }
+  [Symbol.iterator]() {
+    return this._set.values();
+  }
+  clear() {
+    this._set.clear();
+  }
+}
+exports.RefSet = RefSet;
+class RefSetCache {
+  constructor() {
+    this._map = new Map();
+  }
+  get size() {
+    return this._map.size;
+  }
+  get(ref) {
+    return this._map.get(ref.toString());
+  }
+  has(ref) {
+    return this._map.has(ref.toString());
+  }
+  put(ref, obj) {
+    this._map.set(ref.toString(), obj);
+  }
+  putAlias(ref, aliasRef) {
+    this._map.set(ref.toString(), this.get(aliasRef));
+  }
+  [Symbol.iterator]() {
+    return this._map.values();
+  }
+  clear() {
+    this._map.clear();
+  }
+}
+exports.RefSetCache = RefSetCache;
+function isName(v, name) {
+  return v instanceof Name && (name === undefined || v.name === name);
+}
+function isCmd(v, cmd) {
+  return v instanceof Cmd && (cmd === undefined || v.cmd === cmd);
+}
+function isDict(v, type) {
+  return v instanceof Dict && (type === undefined || isName(v.get("Type"), type));
+}
+function isRefsEqual(v1, v2) {
+  return v1.num === v2.num && v1.gen === v2.gen;
+}
+function clearPrimitiveCaches() {
+  Cmd._clearCache();
+  Name._clearCache();
+  Ref._clearCache();
+}
+
+/***/ }),
 /* 5 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
@@ -2292,7 +2277,7 @@ Object.defineProperty(exports, "__esModule", ({
 exports.NetworkPdfManager = exports.LocalPdfManager = void 0;
 var _util = __w_pdfjs_require__(2);
 var _chunked_stream = __w_pdfjs_require__(7);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _document = __w_pdfjs_require__(9);
 var _stream = __w_pdfjs_require__(8);
 function parseDocBaseUrl(url) {
@@ -2448,8 +2433,8 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.ChunkedStreamManager = exports.ChunkedStream = void 0;
+var _core_utils = __w_pdfjs_require__(3);
 var _util = __w_pdfjs_require__(2);
-var _core_utils = __w_pdfjs_require__(4);
 var _stream = __w_pdfjs_require__(8);
 class ChunkedStream extends _stream.Stream {
   constructor(length, chunkSize, manager) {
@@ -2666,7 +2651,7 @@ class ChunkedStreamManager {
       }) => {
         try {
           if (done) {
-            const chunkData = (0, _util.arraysToBytes)(chunks);
+            const chunkData = (0, _core_utils.arrayBuffersToBytes)(chunks);
             chunks = null;
             resolve(chunkData);
             return;
@@ -2972,8 +2957,8 @@ Object.defineProperty(exports, "__esModule", ({
 exports.Page = exports.PDFDocument = void 0;
 var _annotation = __w_pdfjs_require__(10);
 var _util = __w_pdfjs_require__(2);
-var _core_utils = __w_pdfjs_require__(4);
-var _primitives = __w_pdfjs_require__(3);
+var _core_utils = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _xfa_fonts = __w_pdfjs_require__(49);
 var _base_stream = __w_pdfjs_require__(5);
 var _crypto = __w_pdfjs_require__(65);
@@ -4241,9 +4226,9 @@ Object.defineProperty(exports, "__esModule", ({
 exports.PopupAnnotation = exports.MarkupAnnotation = exports.AnnotationFactory = exports.AnnotationBorderStyle = exports.Annotation = void 0;
 exports.getQuadPoints = getQuadPoints;
 var _util = __w_pdfjs_require__(2);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _default_appearance = __w_pdfjs_require__(11);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _writer = __w_pdfjs_require__(63);
 var _base_stream = __w_pdfjs_require__(5);
 var _bidi = __w_pdfjs_require__(58);
@@ -7145,8 +7130,8 @@ exports.FakeUnicodeFont = void 0;
 exports.createDefaultAppearance = createDefaultAppearance;
 exports.getPdfColor = getPdfColor;
 exports.parseDefaultAppearance = parseDefaultAppearance;
-var _primitives = __w_pdfjs_require__(3);
-var _core_utils = __w_pdfjs_require__(4);
+var _primitives = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _util = __w_pdfjs_require__(2);
 var _colorspace = __w_pdfjs_require__(12);
 var _evaluator = __w_pdfjs_require__(13);
@@ -7442,9 +7427,9 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.ColorSpace = void 0;
 var _util = __w_pdfjs_require__(2);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _base_stream = __w_pdfjs_require__(5);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 function resizeRgbImage(src, dest, w1, h1, w2, h2, alpha01) {
   const COMPONENTS = 3;
   alpha01 = alpha01 !== 1 ? 0 : alpha01;
@@ -8312,7 +8297,7 @@ Object.defineProperty(exports, "__esModule", ({
 exports.PartialEvaluator = exports.EvaluatorPreprocessor = void 0;
 var _util = __w_pdfjs_require__(2);
 var _cmap = __w_pdfjs_require__(14);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _fonts = __w_pdfjs_require__(32);
 var _encodings = __w_pdfjs_require__(35);
 var _standard_fonts = __w_pdfjs_require__(39);
@@ -8329,7 +8314,7 @@ var _colorspace = __w_pdfjs_require__(12);
 var _decode_stream = __w_pdfjs_require__(17);
 var _fonts_utils = __w_pdfjs_require__(36);
 var _glyphlist = __w_pdfjs_require__(37);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _metrics = __w_pdfjs_require__(43);
 var _unicode = __w_pdfjs_require__(38);
 var _murmurhash = __w_pdfjs_require__(59);
@@ -12125,10 +12110,10 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.IdentityCMap = exports.CMapFactory = exports.CMap = void 0;
 var _util = __w_pdfjs_require__(2);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _base_stream = __w_pdfjs_require__(5);
 var _parser = __w_pdfjs_require__(15);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _stream = __w_pdfjs_require__(8);
 const BUILT_IN_CMAPS = ["Adobe-GB1-UCS2", "Adobe-CNS1-UCS2", "Adobe-Japan1-UCS2", "Adobe-Korea1-UCS2", "78-EUC-H", "78-EUC-V", "78-H", "78-RKSJ-H", "78-RKSJ-V", "78-V", "78ms-RKSJ-H", "78ms-RKSJ-V", "83pv-RKSJ-H", "90ms-RKSJ-H", "90ms-RKSJ-V", "90msp-RKSJ-H", "90msp-RKSJ-V", "90pv-RKSJ-H", "90pv-RKSJ-V", "Add-H", "Add-RKSJ-H", "Add-RKSJ-V", "Add-V", "Adobe-CNS1-0", "Adobe-CNS1-1", "Adobe-CNS1-2", "Adobe-CNS1-3", "Adobe-CNS1-4", "Adobe-CNS1-5", "Adobe-CNS1-6", "Adobe-GB1-0", "Adobe-GB1-1", "Adobe-GB1-2", "Adobe-GB1-3", "Adobe-GB1-4", "Adobe-GB1-5", "Adobe-Japan1-0", "Adobe-Japan1-1", "Adobe-Japan1-2", "Adobe-Japan1-3", "Adobe-Japan1-4", "Adobe-Japan1-5", "Adobe-Japan1-6", "Adobe-Korea1-0", "Adobe-Korea1-1", "Adobe-Korea1-2", "B5-H", "B5-V", "B5pc-H", "B5pc-V", "CNS-EUC-H", "CNS-EUC-V", "CNS1-H", "CNS1-V", "CNS2-H", "CNS2-V", "ETHK-B5-H", "ETHK-B5-V", "ETen-B5-H", "ETen-B5-V", "ETenms-B5-H", "ETenms-B5-V", "EUC-H", "EUC-V", "Ext-H", "Ext-RKSJ-H", "Ext-RKSJ-V", "Ext-V", "GB-EUC-H", "GB-EUC-V", "GB-H", "GB-V", "GBK-EUC-H", "GBK-EUC-V", "GBK2K-H", "GBK2K-V", "GBKp-EUC-H", "GBKp-EUC-V", "GBT-EUC-H", "GBT-EUC-V", "GBT-H", "GBT-V", "GBTpc-EUC-H", "GBTpc-EUC-V", "GBpc-EUC-H", "GBpc-EUC-V", "H", "HKdla-B5-H", "HKdla-B5-V", "HKdlb-B5-H", "HKdlb-B5-V", "HKgccs-B5-H", "HKgccs-B5-V", "HKm314-B5-H", "HKm314-B5-V", "HKm471-B5-H", "HKm471-B5-V", "HKscs-B5-H", "HKscs-B5-V", "Hankaku", "Hiragana", "KSC-EUC-H", "KSC-EUC-V", "KSC-H", "KSC-Johab-H", "KSC-Johab-V", "KSC-V", "KSCms-UHC-H", "KSCms-UHC-HW-H", "KSCms-UHC-HW-V", "KSCms-UHC-V", "KSCpc-EUC-H", "KSCpc-EUC-V", "Katakana", "NWP-H", "NWP-V", "RKSJ-H", "RKSJ-V", "Roman", "UniCNS-UCS2-H", "UniCNS-UCS2-V", "UniCNS-UTF16-H", "UniCNS-UTF16-V", "UniCNS-UTF32-H", "UniCNS-UTF32-V", "UniCNS-UTF8-H", "UniCNS-UTF8-V", "UniGB-UCS2-H", "UniGB-UCS2-V", "UniGB-UTF16-H", "UniGB-UTF16-V", "UniGB-UTF32-H", "UniGB-UTF32-V", "UniGB-UTF8-H", "UniGB-UTF8-V", "UniJIS-UCS2-H", "UniJIS-UCS2-HW-H", "UniJIS-UCS2-HW-V", "UniJIS-UCS2-V", "UniJIS-UTF16-H", "UniJIS-UTF16-V", "UniJIS-UTF32-H", "UniJIS-UTF32-V", "UniJIS-UTF8-H", "UniJIS-UTF8-V", "UniJIS2004-UTF16-H", "UniJIS2004-UTF16-V", "UniJIS2004-UTF32-H", "UniJIS2004-UTF32-V", "UniJIS2004-UTF8-H", "UniJIS2004-UTF8-V", "UniJISPro-UCS2-HW-V", "UniJISPro-UCS2-V", "UniJISPro-UTF8-V", "UniJISX0213-UTF32-H", "UniJISX0213-UTF32-V", "UniJISX02132004-UTF32-H", "UniJISX02132004-UTF32-V", "UniKS-UCS2-H", "UniKS-UCS2-V", "UniKS-UTF16-H", "UniKS-UTF16-V", "UniKS-UTF32-H", "UniKS-UTF32-V", "UniKS-UTF8-H", "UniKS-UTF8-V", "V", "WP-Symbol"];
 const MAX_MAP_RANGE = 2 ** 24 - 1;
@@ -12844,8 +12829,8 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.Parser = exports.Linearization = exports.Lexer = void 0;
 var _util = __w_pdfjs_require__(2);
-var _primitives = __w_pdfjs_require__(3);
-var _core_utils = __w_pdfjs_require__(4);
+var _primitives = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _ascii_85_stream = __w_pdfjs_require__(16);
 var _ascii_hex_stream = __w_pdfjs_require__(18);
 var _ccitt_stream = __w_pdfjs_require__(19);
@@ -13918,7 +13903,7 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.Ascii85Stream = void 0;
 var _decode_stream = __w_pdfjs_require__(17);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 class Ascii85Stream extends _decode_stream.DecodeStream {
   constructor(str, maybeLength) {
     if (maybeLength) {
@@ -14203,7 +14188,7 @@ Object.defineProperty(exports, "__esModule", ({
 exports.CCITTFaxStream = void 0;
 var _ccitt = __w_pdfjs_require__(20);
 var _decode_stream = __w_pdfjs_require__(17);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 class CCITTFaxStream extends _decode_stream.DecodeStream {
   constructor(str, maybeLength, params) {
     super(maybeLength);
@@ -15033,7 +15018,7 @@ Object.defineProperty(exports, "__esModule", ({
 exports.Jbig2Stream = void 0;
 var _base_stream = __w_pdfjs_require__(5);
 var _decode_stream = __w_pdfjs_require__(17);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _jbig = __w_pdfjs_require__(23);
 var _util = __w_pdfjs_require__(2);
 class Jbig2Stream extends _decode_stream.DecodeStream {
@@ -15093,7 +15078,7 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.Jbig2Image = void 0;
 var _util = __w_pdfjs_require__(2);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _arithmetic_decoder = __w_pdfjs_require__(24);
 var _ccitt = __w_pdfjs_require__(20);
 class Jbig2Error extends _util.BaseException {
@@ -17180,7 +17165,7 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.JpegStream = void 0;
 var _decode_stream = __w_pdfjs_require__(17);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _jpg = __w_pdfjs_require__(26);
 var _util = __w_pdfjs_require__(2);
 class JpegStream extends _decode_stream.DecodeStream {
@@ -17260,7 +17245,7 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.JpegImage = void 0;
 var _util = __w_pdfjs_require__(2);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 class JpegError extends _util.BaseException {
   constructor(msg) {
     super(`JPEG error: ${msg}`, "JpegError");
@@ -18355,7 +18340,7 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.JpxImage = void 0;
 var _util = __w_pdfjs_require__(2);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _arithmetic_decoder = __w_pdfjs_require__(24);
 class JpxError extends _util.BaseException {
   constructor(msg) {
@@ -20410,7 +20395,7 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.PredictorStream = void 0;
 var _decode_stream = __w_pdfjs_require__(17);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _util = __w_pdfjs_require__(2);
 class PredictorStream extends _decode_stream.DecodeStream {
   constructor(str, maybeLength, params) {
@@ -20671,7 +20656,7 @@ var _metrics = __w_pdfjs_require__(43);
 var _glyf = __w_pdfjs_require__(44);
 var _cmap = __w_pdfjs_require__(14);
 var _opentype_file_builder = __w_pdfjs_require__(45);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _stream = __w_pdfjs_require__(8);
 var _type1_font = __w_pdfjs_require__(46);
 const PRIVATE_USE_AREAS = [[0xe000, 0xf8ff], [0x100000, 0x10fffd]];
@@ -24749,7 +24734,7 @@ __w_pdfjs_require__.r(__webpack_exports__);
 /* harmony export */   "getDingbatsGlyphsUnicode": () => (/* binding */ getDingbatsGlyphsUnicode),
 /* harmony export */   "getGlyphsUnicode": () => (/* binding */ getGlyphsUnicode)
 /* harmony export */ });
-/* harmony import */ var _core_utils_js__WEBPACK_IMPORTED_MODULE_0__ = __w_pdfjs_require__(4);
+/* harmony import */ var _core_utils_js__WEBPACK_IMPORTED_MODULE_0__ = __w_pdfjs_require__(3);
 
 const getGlyphsUnicode = (0,_core_utils_js__WEBPACK_IMPORTED_MODULE_0__.getArrayLookupTableFactory)(function () {
  return [
@@ -33833,7 +33818,7 @@ __w_pdfjs_require__.r(__webpack_exports__);
 /* harmony export */   "mapSpecialUnicodeValues": () => (/* binding */ mapSpecialUnicodeValues),
 /* harmony export */   "reverseIfRtl": () => (/* binding */ reverseIfRtl)
 /* harmony export */ });
-/* harmony import */ var _core_utils_js__WEBPACK_IMPORTED_MODULE_0__ = __w_pdfjs_require__(4);
+/* harmony import */ var _core_utils_js__WEBPACK_IMPORTED_MODULE_0__ = __w_pdfjs_require__(3);
 
 const getSpecialPUASymbols = (0,_core_utils_js__WEBPACK_IMPORTED_MODULE_0__.getLookupTableFactory)(function (t) {
  t[63721] = 0x00a9;
@@ -37214,7 +37199,7 @@ Object.defineProperty(exports, "__esModule", ({
 exports.getSerifFonts = exports.getNonStdFontMap = exports.getGlyphMapForStandardFonts = exports.getFontNameToFileMap = void 0;
 exports.getStandardFontName = getStandardFontName;
 exports.getSymbolsFonts = exports.getSupplementalGlyphMapForCalibri = exports.getSupplementalGlyphMapForArialBlack = exports.getStdFontMap = void 0;
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _fonts_utils = __w_pdfjs_require__(36);
 const getStdFontMap = (0, _core_utils.getLookupTableFactory)(function (t) {
   t["Times-Roman"] = "Times-Roman";
@@ -39081,7 +39066,7 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.getMetrics = exports.getFontBasicMetrics = void 0;
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 const getMetrics = (0, _core_utils.getLookupTableFactory)(function (t) {
   t.Courier = 600;
   t["Courier-Bold"] = 600;
@@ -42664,7 +42649,7 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.OpenTypeFileBuilder = void 0;
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _util = __w_pdfjs_require__(2);
 function writeInt16(dest, offset, num) {
   dest[offset] = num >> 8 & 0xff;
@@ -42783,7 +42768,7 @@ exports.Type1Font = void 0;
 var _cff_parser = __w_pdfjs_require__(33);
 var _util = __w_pdfjs_require__(2);
 var _fonts_utils = __w_pdfjs_require__(36);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _stream = __w_pdfjs_require__(8);
 var _type1_parser = __w_pdfjs_require__(47);
 function findBlock(streamBytes, signature, startIndex) {
@@ -43067,7 +43052,7 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.Type1Parser = void 0;
 var _encodings = __w_pdfjs_require__(35);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _stream = __w_pdfjs_require__(8);
 var _util = __w_pdfjs_require__(2);
 const HINTING_ENABLED = false;
@@ -43645,7 +43630,7 @@ exports.getTilingPatternIR = getTilingPatternIR;
 var _util = __w_pdfjs_require__(2);
 var _base_stream = __w_pdfjs_require__(5);
 var _colorspace = __w_pdfjs_require__(12);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 const ShadingType = {
   FUNCTION_BASED: 1,
   AXIAL: 2,
@@ -44430,12 +44415,12 @@ Object.defineProperty(exports, "__esModule", ({
 exports.getXfaFontDict = getXfaFontDict;
 exports.getXfaFontName = getXfaFontName;
 var _calibri_factors = __w_pdfjs_require__(50);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _helvetica_factors = __w_pdfjs_require__(51);
 var _liberationsans_widths = __w_pdfjs_require__(52);
 var _myriadpro_factors = __w_pdfjs_require__(53);
 var _segoeui_factors = __w_pdfjs_require__(54);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _fonts_utils = __w_pdfjs_require__(36);
 const getXFAFontMap = (0, _core_utils.getLookupTableFactory)(function (t) {
   t["MyriadPro-Regular"] = t["PdfJS-Fallback-Regular"] = {
@@ -44825,7 +44810,7 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.PostScriptEvaluator = exports.PostScriptCompiler = exports.PDFFunctionFactory = void 0;
 exports.isPDFFunction = isPDFFunction;
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _util = __w_pdfjs_require__(2);
 var _ps_parser = __w_pdfjs_require__(56);
 var _base_stream = __w_pdfjs_require__(5);
@@ -45877,8 +45862,8 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.PostScriptParser = exports.PostScriptLexer = void 0;
 var _util = __w_pdfjs_require__(2);
-var _primitives = __w_pdfjs_require__(3);
-var _core_utils = __w_pdfjs_require__(4);
+var _primitives = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 class PostScriptParser {
   constructor(lexer) {
     this.lexer = lexer;
@@ -46081,7 +46066,7 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.LocalTilingPatternCache = exports.LocalImageCache = exports.LocalGStateCache = exports.LocalFunctionCache = exports.LocalColorSpaceCache = exports.GlobalImageCache = void 0;
 var _util = __w_pdfjs_require__(2);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 class BaseLocalCache {
   constructor(options) {
     if (this.constructor === BaseLocalCache) {
@@ -47197,7 +47182,7 @@ var _colorspace = __w_pdfjs_require__(12);
 var _decode_stream = __w_pdfjs_require__(17);
 var _jpeg_stream = __w_pdfjs_require__(25);
 var _jpx = __w_pdfjs_require__(28);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 function decodeAndClamp(value, addend, coefficient, max) {
   value = addend + value * coefficient;
   if (value < 0) {
@@ -47872,8 +47857,8 @@ exports.incrementalUpdate = incrementalUpdate;
 exports.writeDict = writeDict;
 exports.writeObject = writeObject;
 var _util = __w_pdfjs_require__(2);
-var _primitives = __w_pdfjs_require__(3);
-var _core_utils = __w_pdfjs_require__(4);
+var _primitives = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _xml_parser = __w_pdfjs_require__(64);
 var _base_stream = __w_pdfjs_require__(5);
 var _crypto = __w_pdfjs_require__(65);
@@ -48181,7 +48166,7 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.XMLParserErrorCode = exports.XMLParserBase = exports.SimpleXMLParser = exports.SimpleDOMNode = void 0;
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 const XMLParserErrorCode = {
   NoError: 0,
   EndOfDocument: -1,
@@ -48612,7 +48597,7 @@ exports.calculateSHA256 = exports.calculateMD5 = exports.PDF20 = exports.PDF17 =
 exports.calculateSHA384 = calculateSHA384;
 exports.calculateSHA512 = void 0;
 var _util = __w_pdfjs_require__(2);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _decrypt_stream = __w_pdfjs_require__(66);
 class ARCFourCipher {
   constructor(key) {
@@ -49964,9 +49949,9 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.Catalog = void 0;
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _util = __w_pdfjs_require__(2);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _name_number_tree = __w_pdfjs_require__(68);
 var _base_stream = __w_pdfjs_require__(5);
 var _cleanup_helper = __w_pdfjs_require__(69);
@@ -51302,7 +51287,7 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.NumberTree = exports.NameTree = void 0;
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _util = __w_pdfjs_require__(2);
 class NameOrNumberTree {
   constructor(root, xref, type) {
@@ -51430,7 +51415,7 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.clearGlobalCaches = clearGlobalCaches;
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _unicode = __w_pdfjs_require__(38);
 function clearGlobalCaches() {
   (0, _primitives.clearPrimitiveCaches)();
@@ -51449,7 +51434,7 @@ Object.defineProperty(exports, "__esModule", ({
 exports.FileSpec = void 0;
 var _util = __w_pdfjs_require__(2);
 var _base_stream = __w_pdfjs_require__(5);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 function pickPlatformItem(dict) {
   if (dict.has("UF")) {
     return dict.get("UF");
@@ -51638,7 +51623,7 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.StructTreeRoot = exports.StructTreePage = void 0;
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _util = __w_pdfjs_require__(2);
 var _name_number_tree = __w_pdfjs_require__(68);
 const MAX_DEPTH = 40;
@@ -51926,9 +51911,9 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.ObjectLoader = void 0;
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _base_stream = __w_pdfjs_require__(5);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _util = __w_pdfjs_require__(2);
 function mayHaveChildren(value) {
   return value instanceof _primitives.Ref || value instanceof _primitives.Dict || value instanceof _base_stream.BaseStream || Array.isArray(value);
@@ -52199,7 +52184,7 @@ Object.defineProperty(exports, "__esModule", ({
 exports.XmlObject = exports.XFAObjectArray = exports.XFAObject = exports.XFAAttribute = exports.StringObject = exports.OptionObject = exports.Option10 = exports.Option01 = exports.IntegerObject = exports.ContentObject = exports.$uid = exports.$toStyle = exports.$toString = exports.$toPages = exports.$toHTML = exports.$text = exports.$tabIndex = exports.$setValue = exports.$setSetAttributes = exports.$setId = exports.$searchNode = exports.$root = exports.$resolvePrototypes = exports.$removeChild = exports.$pushPara = exports.$pushGlyphs = exports.$popPara = exports.$onText = exports.$onChildCheck = exports.$onChild = exports.$nsAttributes = exports.$nodeName = exports.$namespaceId = exports.$isUsable = exports.$isTransparent = exports.$isThereMoreWidth = exports.$isSplittable = exports.$isNsAgnostic = exports.$isDescendent = exports.$isDataValue = exports.$isCDATAXml = exports.$isBindable = exports.$insertAt = exports.$indexOf = exports.$ids = exports.$hasSettableValue = exports.$globalData = exports.$getTemplateRoot = exports.$getSubformParent = exports.$getRealChildrenByNameIt = exports.$getParent = exports.$getNextPage = exports.$getExtra = exports.$getDataValue = exports.$getContainedChildren = exports.$getChildrenByNameIt = exports.$getChildrenByName = exports.$getChildrenByClass = exports.$getChildren = exports.$getAvailableSpace = exports.$getAttributes = exports.$getAttributeIt = exports.$flushHTML = exports.$finalize = exports.$extra = exports.$dump = exports.$data = exports.$content = exports.$consumed = exports.$clone = exports.$cleanup = exports.$cleanPage = exports.$clean = exports.$childrenToHTML = exports.$appendChild = exports.$addHTML = exports.$acceptWhitespace = void 0;
 var _utils = __w_pdfjs_require__(76);
 var _util = __w_pdfjs_require__(2);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _namespaces = __w_pdfjs_require__(77);
 var _som = __w_pdfjs_require__(78);
 const $acceptWhitespace = Symbol();
@@ -54141,7 +54126,7 @@ var _html_utils = __w_pdfjs_require__(82);
 var _utils = __w_pdfjs_require__(76);
 var _util = __w_pdfjs_require__(2);
 var _fonts = __w_pdfjs_require__(83);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _som = __w_pdfjs_require__(78);
 const TEMPLATE_NS_ID = _namespaces.NamespaceIds.template.id;
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -63116,7 +63101,7 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.DatasetReader = void 0;
 var _util = __w_pdfjs_require__(2);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _xml_parser = __w_pdfjs_require__(64);
 function decodeString(str) {
   try {
@@ -63183,9 +63168,9 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.XRef = void 0;
 var _util = __w_pdfjs_require__(2);
-var _primitives = __w_pdfjs_require__(3);
+var _primitives = __w_pdfjs_require__(4);
 var _parser = __w_pdfjs_require__(15);
-var _core_utils = __w_pdfjs_require__(4);
+var _core_utils = __w_pdfjs_require__(3);
 var _base_stream = __w_pdfjs_require__(5);
 var _crypto = __w_pdfjs_require__(65);
 class XRef {
@@ -64519,7 +64504,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.4.0';
-const pdfjsBuild = '25a6bc4';
+const pdfjsBuild = '13af3f3';
 })();
 
 /******/ 	return __webpack_exports__;
