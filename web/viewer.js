@@ -10526,9 +10526,6 @@ class PDFPageView {
         accessibilityManager: this._accessibilityManager
       });
     }
-    if (this.xfaLayer?.div) {
-      div.append(this.xfaLayer.div);
-    }
     let renderContinueCallback = null;
     if (this.renderingQueue) {
       renderContinueCallback = cont => {
@@ -10607,6 +10604,8 @@ class PDFPageView {
           annotationStorage,
           linkService
         });
+      } else if (this.xfaLayer.div) {
+        div.append(this.xfaLayer.div);
       }
       this.#renderXfaLayer();
     }
@@ -13757,7 +13756,7 @@ var _app_options = __webpack_require__(5);
 var _pdf_link_service = __webpack_require__(7);
 var _app = __webpack_require__(2);
 const pdfjsVersion = '3.4.0';
-const pdfjsBuild = '13af3f3';
+const pdfjsBuild = 'af64149';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,

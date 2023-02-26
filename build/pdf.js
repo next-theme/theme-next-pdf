@@ -1085,12 +1085,16 @@ function getUrlProp(val) {
 }
 function getDataProp(val) {
   if (_is_node.isNodeJS && typeof Buffer !== "undefined" && val instanceof Buffer) {
+    (0, _display_utils.deprecated)("Please provide binary data as `Uint8Array`, rather than `Buffer`.");
     return new Uint8Array(val);
-  } else if (val instanceof Uint8Array && val.byteLength === val.buffer.byteLength) {
+  }
+  if (val instanceof Uint8Array && val.byteLength === val.buffer.byteLength) {
     return val;
-  } else if (typeof val === "string") {
+  }
+  if (typeof val === "string") {
     return (0, _util.stringToBytes)(val);
-  } else if (typeof val === "object" && !isNaN(val?.length) || (0, _util.isArrayBuffer)(val)) {
+  }
+  if (typeof val === "object" && !isNaN(val?.length) || (0, _util.isArrayBuffer)(val)) {
     return new Uint8Array(val);
   }
   throw new Error("Invalid PDF binary data: either TypedArray, " + "string, or array-like object is expected in the data property.");
@@ -1300,7 +1304,6 @@ class PDFPageProxy {
     this._pdfBug = pdfBug;
     this.commonObjs = transport.commonObjs;
     this.objs = new PDFObjects();
-    this._bitmaps = new Set();
     this.cleanupAfterRender = false;
     this.pendingCleanup = false;
     this._intentStates = new Map();
@@ -1548,10 +1551,6 @@ class PDFPageProxy {
       }
     }
     this.objs.clear();
-    for (const bitmap of this._bitmaps) {
-      bitmap.close();
-    }
-    this._bitmaps.clear();
     this.pendingCleanup = false;
     return Promise.all(waitOn);
   }
@@ -1576,10 +1575,6 @@ class PDFPageProxy {
     if (resetStats && this._stats) {
       this._stats = new _display_utils.StatTimer();
     }
-    for (const bitmap of this._bitmaps) {
-      bitmap.close();
-    }
-    this._bitmaps.clear();
     this.pendingCleanup = false;
     return true;
   }
@@ -2300,12 +2295,10 @@ class WorkerTransport {
             let length;
             if (imageData.bitmap) {
               const {
-                bitmap,
                 width,
                 height
               } = imageData;
               length = width * height * 4;
-              pageProxy._bitmaps.add(bitmap);
             } else {
               length = imageData.data?.length || 0;
             }
@@ -2558,6 +2551,12 @@ class PDFObjects {
     obj.capability.resolve();
   }
   clear() {
+    for (const objId in this.#objs) {
+      const {
+        data
+      } = this.#objs[objId];
+      data?.bitmap?.close();
+    }
     this.#objs = Object.create(null);
   }
 }
@@ -2727,7 +2726,7 @@ class InternalRenderTask {
 }
 const version = '3.4.0';
 exports.version = version;
-const build = '13af3f3';
+const build = 'af64149';
 exports.build = build;
 
 /***/ }),
@@ -10087,6 +10086,7 @@ class TextLayerRenderTask {
     this._container = this._rootContainer = container;
     this._textDivs = textDivs || [];
     this._textContentItemsStr = textContentItemsStr || [];
+    this._isOffscreenCanvasSupported = isOffscreenCanvasSupported;
     this._fontInspectorEnabled = !!globalThis.FontInspector?.enabled;
     this._reader = null;
     this._textDivProperties = textDivProperties || new WeakMap();
@@ -13326,7 +13326,7 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
           }
         });
       });
-      this._setEventListeners(selectElement, [["focus", "Focus"], ["blur", "Blur"], ["mousedown", "Mouse Down"], ["mouseenter", "Mouse Enter"], ["mouseleave", "Mouse Exit"], ["mouseup", "Mouse Up"], ["input", "Action"]], event => event.target.checked);
+      this._setEventListeners(selectElement, [["focus", "Focus"], ["blur", "Blur"], ["mousedown", "Mouse Down"], ["mouseenter", "Mouse Enter"], ["mouseleave", "Mouse Exit"], ["mouseup", "Mouse Up"], ["input", "Action"], ["input", "Validate"]], event => event.target.value);
     } else {
       selectElement.addEventListener("input", function (event) {
         storage.setValue(id, {
@@ -15782,7 +15782,7 @@ var _worker_options = __w_pdfjs_require__(14);
 var _svg = __w_pdfjs_require__(35);
 var _xfa_layer = __w_pdfjs_require__(34);
 const pdfjsVersion = '3.4.0';
-const pdfjsBuild = '13af3f3';
+const pdfjsBuild = 'af64149';
 })();
 
 /******/ 	return __webpack_exports__;
