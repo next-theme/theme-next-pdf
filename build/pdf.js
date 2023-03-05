@@ -922,15 +922,9 @@ function getDocument(src) {
     src = {
       data: src
     };
-  } else if (src instanceof PDFDataRangeTransport) {
-    (0, _display_utils.deprecated)("`PDFDataRangeTransport`-instance, " + "please use a parameter object with `range`-property instead.");
-    src = {
-      range: src
-    };
-  } else {
-    if (typeof src !== "object") {
-      throw new Error("Invalid parameter in getDocument, " + "need either string, URL, TypedArray, or parameter object.");
-    }
+  }
+  if (typeof src !== "object") {
+    throw new Error("Invalid parameter in getDocument, need parameter object.");
   }
   if (!src.url && !src.data && !src.range) {
     throw new Error("Invalid parameter object: need either .data, .range or .url");
@@ -966,17 +960,27 @@ function getDocument(src) {
   const length = rangeTransport ? rangeTransport.length : src.length ?? NaN;
   const useSystemFonts = typeof src.useSystemFonts === "boolean" ? src.useSystemFonts : !_is_node.isNodeJS && !disableFontFace;
   const useWorkerFetch = typeof src.useWorkerFetch === "boolean" ? src.useWorkerFetch : CMapReaderFactory === _display_utils.DOMCMapReaderFactory && StandardFontDataFactory === _display_utils.DOMStandardFontDataFactory && (0, _display_utils.isValidFetchUrl)(cMapUrl, document.baseURI) && (0, _display_utils.isValidFetchUrl)(standardFontDataUrl, document.baseURI);
+  const canvasFactory = src.canvasFactory || new DefaultCanvasFactory({
+    ownerDocument
+  });
+  const filterFactory = src.filterFactory || new _display_utils.FilterFactory({
+    ownerDocument
+  });
   const styleElement = null;
   (0, _util.setVerbosityLevel)(verbosity);
-  const transportFactory = useWorkerFetch ? null : {
-    cMapReaderFactory: new CMapReaderFactory({
+  const transportFactory = {
+    canvasFactory,
+    filterFactory
+  };
+  if (!useWorkerFetch) {
+    transportFactory.cMapReaderFactory = new CMapReaderFactory({
       baseUrl: cMapUrl,
       isCompressed: cMapPacked
-    }),
-    standardFontDataFactory: new StandardFontDataFactory({
+    });
+    transportFactory.standardFontDataFactory = new StandardFontDataFactory({
       baseUrl: standardFontDataUrl
-    })
-  };
+    });
+  }
   if (!worker) {
     const workerParams = {
       verbosity,
@@ -988,7 +992,7 @@ function getDocument(src) {
   const docId = task.docId;
   const fetchDocParams = {
     docId,
-    apiVersion: '3.4.0',
+    apiVersion: '3.5.0',
     data,
     password,
     disableAutoFetch,
@@ -1295,10 +1299,9 @@ class PDFDocumentProxy {
 }
 exports.PDFDocumentProxy = PDFDocumentProxy;
 class PDFPageProxy {
-  constructor(pageIndex, pageInfo, transport, ownerDocument, pdfBug = false) {
+  constructor(pageIndex, pageInfo, transport, pdfBug = false) {
     this._pageIndex = pageIndex;
     this._pageInfo = pageInfo;
-    this._ownerDocument = ownerDocument;
     this._transport = transport;
     this._stats = pdfBug ? new _display_utils.StatTimer() : null;
     this._pdfBug = pdfBug;
@@ -1368,6 +1371,9 @@ class PDFPageProxy {
     pageColors = null,
     printAnnotationStorage = null
   }) {
+    if (canvasFactory) {
+      (0, _display_utils.deprecated)("render no longer accepts the `canvasFactory`-option, " + "please pass it to the `getDocument`-function instead.");
+    }
     this._stats?.time("Overall");
     const intentArgs = this._transport.getRenderingIntent(intent, annotationMode, printAnnotationStorage);
     this.pendingCleanup = false;
@@ -1383,9 +1389,6 @@ class PDFPageProxy {
       clearTimeout(intentState.streamReaderCancelTimeout);
       intentState.streamReaderCancelTimeout = null;
     }
-    const canvasFactoryInstance = canvasFactory || new DefaultCanvasFactory({
-      ownerDocument: this._ownerDocument
-    });
     const intentPrint = !!(intentArgs.renderingIntent & _util.RenderingIntentFlag.PRINT);
     if (!intentState.displayReadyCapability) {
       intentState.displayReadyCapability = (0, _util.createPromiseCapability)();
@@ -1429,14 +1432,18 @@ class PDFPageProxy {
       annotationCanvasMap,
       operatorList: intentState.operatorList,
       pageIndex: this._pageIndex,
-      canvasFactory: canvasFactoryInstance,
+      canvasFactory: canvasFactory || this._transport.canvasFactory,
+      filterFactory: this._transport.filterFactory,
       useRequestAnimationFrame: !intentPrint,
       pdfBug: this._pdfBug,
       pageColors
     });
     (intentState.renderTasks ||= new Set()).add(internalRenderTask);
     const renderTask = internalRenderTask.task;
-    Promise.all([intentState.displayReadyCapability.promise, optionalContentConfigPromise]).then(([transparency, optionalContentConfig]) => {
+    Promise.all([intentState.displayReadyCapability.promise, optionalContentConfigPromise]).then(([{
+      transparency,
+      isOffscreenCanvasSupported
+    }, optionalContentConfig]) => {
       if (this.pendingCleanup) {
         complete();
         return;
@@ -1444,6 +1451,7 @@ class PDFPageProxy {
       this._stats?.time("Rendering");
       internalRenderTask.initializeGraphics({
         transparency,
+        isOffscreenCanvasSupported,
         optionalContentConfig
       });
       internalRenderTask.operatorListChanged();
@@ -1578,13 +1586,16 @@ class PDFPageProxy {
     this.pendingCleanup = false;
     return true;
   }
-  _startRenderPage(transparency, cacheKey) {
+  _startRenderPage(transparency, isOffscreenCanvasSupported, cacheKey) {
     const intentState = this._intentStates.get(cacheKey);
     if (!intentState) {
       return;
     }
     this._stats?.timeEnd("Page Request");
-    intentState.displayReadyCapability?.resolve(transparency);
+    intentState.displayReadyCapability?.resolve({
+      transparency,
+      isOffscreenCanvasSupported
+    });
   }
   _renderPageChunk(operatorListChunk, intentState) {
     for (let i = 0, ii = operatorListChunk.length; i < ii; i++) {
@@ -1969,8 +1980,10 @@ class WorkerTransport {
       styleElement: params.styleElement
     });
     this._params = params;
-    this.cMapReaderFactory = factory?.cMapReaderFactory;
-    this.standardFontDataFactory = factory?.standardFontDataFactory;
+    this.canvasFactory = factory.canvasFactory;
+    this.filterFactory = factory.filterFactory;
+    this.cMapReaderFactory = factory.cMapReaderFactory;
+    this.standardFontDataFactory = factory.standardFontDataFactory;
     this.destroyed = false;
     this.destroyCapability = null;
     this._passwordCapability = null;
@@ -2057,6 +2070,7 @@ class WorkerTransport {
       this.commonObjs.clear();
       this.fontLoader.clear();
       this.#methodPromises.clear();
+      this.filterFactory.destroy();
       if (this._networkStream) {
         this._networkStream.cancelAllRequests(new _util.AbortException("Worker was terminated."));
       }
@@ -2227,7 +2241,7 @@ class WorkerTransport {
         return;
       }
       const page = this.#pageCache.get(data.pageIndex);
-      page._startRenderPage(data.transparency, data.cacheKey);
+      page._startRenderPage(data.transparency, data.isOffscreenCanvasSupported, data.cacheKey);
     });
     messageHandler.on("commonobj", ([id, type, exportedData]) => {
       if (this.destroyed) {
@@ -2382,7 +2396,7 @@ class WorkerTransport {
       if (this.destroyed) {
         throw new Error("Transport destroyed");
       }
-      const page = new PDFPageProxy(pageIndex, pageInfo, this, this._params.ownerDocument, this._params.pdfBug);
+      const page = new PDFPageProxy(pageIndex, pageInfo, this, this._params.pdfBug);
       this.#pageCache.set(pageIndex, page);
       return page;
     });
@@ -2505,6 +2519,7 @@ class WorkerTransport {
       this.fontLoader.clear();
     }
     this.#methodPromises.clear();
+    this.filterFactory.destroy();
   }
   get loadingParams() {
     const {
@@ -2597,6 +2612,7 @@ class InternalRenderTask {
     operatorList,
     pageIndex,
     canvasFactory,
+    filterFactory,
     useRequestAnimationFrame = false,
     pdfBug = false,
     pageColors = null
@@ -2610,6 +2626,7 @@ class InternalRenderTask {
     this.operatorList = operatorList;
     this._pageIndex = pageIndex;
     this.canvasFactory = canvasFactory;
+    this.filterFactory = filterFactory;
     this._pdfBug = pdfBug;
     this.pageColors = pageColors;
     this.running = false;
@@ -2630,6 +2647,7 @@ class InternalRenderTask {
   }
   initializeGraphics({
     transparency = false,
+    isOffscreenCanvasSupported = false,
     optionalContentConfig
   }) {
     if (this.cancelled) {
@@ -2652,7 +2670,7 @@ class InternalRenderTask {
       transform,
       background
     } = this.params;
-    this.gfx = new _canvas.CanvasGraphics(canvasContext, this.commonObjs, this.objs, this.canvasFactory, {
+    this.gfx = new _canvas.CanvasGraphics(canvasContext, this.commonObjs, this.objs, this.canvasFactory, isOffscreenCanvasSupported ? this.filterFactory : null, {
       optionalContentConfig
     }, this.annotationCanvasMap, this.pageColors);
     this.gfx.beginDrawing({
@@ -2724,9 +2742,9 @@ class InternalRenderTask {
     }
   }
 }
-const version = '3.4.0';
+const version = '3.5.0';
 exports.version = version;
-const build = 'af64149';
+const build = 'd7e4be9';
 exports.build = build;
 
 /***/ }),
@@ -3885,7 +3903,7 @@ exports.AnnotationEditorUIManager = AnnotationEditorUIManager;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.StatTimer = exports.RenderingCancelledException = exports.PixelsPerInch = exports.PageViewport = exports.PDFDateString = exports.DOMStandardFontDataFactory = exports.DOMSVGFactory = exports.DOMCanvasFactory = exports.DOMCMapReaderFactory = exports.AnnotationPrefix = void 0;
+exports.StatTimer = exports.RenderingCancelledException = exports.PixelsPerInch = exports.PageViewport = exports.PDFDateString = exports.FilterFactory = exports.DOMStandardFontDataFactory = exports.DOMSVGFactory = exports.DOMCanvasFactory = exports.DOMCMapReaderFactory = exports.AnnotationPrefix = void 0;
 exports.deprecated = deprecated;
 exports.getColorValues = getColorValues;
 exports.getCurrentTransform = getCurrentTransform;
@@ -3910,6 +3928,106 @@ class PixelsPerInch {
   static PDF_TO_CSS_UNITS = this.CSS / this.PDF;
 }
 exports.PixelsPerInch = PixelsPerInch;
+class FilterFactory {
+  #_cache;
+  #_defs;
+  #document;
+  #id = 0;
+  constructor({
+    ownerDocument = globalThis.document
+  } = {}) {
+    this.#document = ownerDocument;
+  }
+  get #cache() {
+    return this.#_cache ||= new Map();
+  }
+  get #defs() {
+    if (!this.#_defs) {
+      const svg = this.#document.createElementNS(SVG_NS, "svg");
+      svg.setAttribute("width", 0);
+      svg.setAttribute("height", 0);
+      svg.style.visibility = "hidden";
+      svg.style.contain = "strict";
+      this.#_defs = this.#document.createElementNS(SVG_NS, "defs");
+      svg.append(this.#_defs);
+      this.#document.body.append(svg);
+    }
+    return this.#_defs;
+  }
+  addFilter(maps) {
+    if (!maps) {
+      return "";
+    }
+    let value = this.#cache.get(maps);
+    if (value) {
+      return value;
+    }
+    let tableR, tableG, tableB, key;
+    if (maps.length === 1) {
+      const mapR = maps[0];
+      const buffer = new Array(256);
+      for (let i = 0; i < 256; i++) {
+        buffer[i] = mapR[i] / 255;
+      }
+      key = tableR = tableG = tableB = buffer.join(",");
+    } else {
+      const [mapR, mapG, mapB] = maps;
+      const bufferR = new Array(256);
+      const bufferG = new Array(256);
+      const bufferB = new Array(256);
+      for (let i = 0; i < 256; i++) {
+        bufferR[i] = mapR[i] / 255;
+        bufferG[i] = mapG[i] / 255;
+        bufferB[i] = mapB[i] / 255;
+      }
+      tableR = bufferR.join(",");
+      tableG = bufferG.join(",");
+      tableB = bufferB.join(",");
+      key = `${tableR}${tableG}${tableB}`;
+    }
+    value = this.#cache.get(key);
+    if (value) {
+      this.#cache.set(maps, value);
+      return value;
+    }
+    const id = `transfer_map_${this.#id++}`;
+    const url = `url(#${id})`;
+    this.#cache.set(maps, url);
+    this.#cache.set(key, url);
+    const filter = this.#document.createElementNS(SVG_NS, "filter", SVG_NS);
+    filter.setAttribute("id", id);
+    filter.setAttribute("color-interpolation-filters", "sRGB");
+    const feComponentTransfer = this.#document.createElementNS(SVG_NS, "feComponentTransfer");
+    filter.append(feComponentTransfer);
+    const type = "discrete";
+    const feFuncR = this.#document.createElementNS(SVG_NS, "feFuncR");
+    feFuncR.setAttribute("type", type);
+    feFuncR.setAttribute("tableValues", tableR);
+    feComponentTransfer.append(feFuncR);
+    const feFuncG = this.#document.createElementNS(SVG_NS, "feFuncG");
+    feFuncG.setAttribute("type", type);
+    feFuncG.setAttribute("tableValues", tableG);
+    feComponentTransfer.append(feFuncG);
+    const feFuncB = this.#document.createElementNS(SVG_NS, "feFuncB");
+    feFuncB.setAttribute("type", type);
+    feFuncB.setAttribute("tableValues", tableB);
+    feComponentTransfer.append(feFuncB);
+    this.#defs.append(filter);
+    return url;
+  }
+  destroy() {
+    if (this.#_defs) {
+      this.#_defs.parentNode.remove();
+      this.#_defs = null;
+    }
+    if (this.#_cache) {
+      this.#_cache.clear();
+      this.#_cache = null;
+    }
+    this.#id = 0;
+  }
+}
+exports.FilterFactory = FilterFactory;
 class DOMCanvasFactory extends _base_factory.BaseCanvasFactory {
   constructor({
     ownerDocument = globalThis.document
@@ -5459,12 +5577,13 @@ function putBinaryImageMask(ctx, imgData) {
     const thisChunkHeight = i < fullChunks ? FULL_CHUNK_HEIGHT : partialChunkHeight;
     ({
       srcPos
-    } = (0, _image_utils.applyMaskImageData)({
+    } = (0, _image_utils.convertBlackAndWhiteToRGBA)({
       src,
       srcPos,
       dest,
       width,
-      height: thisChunkHeight
+      height: thisChunkHeight,
+      nonBlackColor: 0
     }));
     ctx.putImageData(chunkImgData, 0, i * FULL_CHUNK_HEIGHT);
   }
@@ -5584,7 +5703,7 @@ const LINE_JOIN_STYLES = ["miter", "round", "bevel"];
 const NORMAL_CLIP = {};
 const EO_CLIP = {};
 class CanvasGraphics {
-  constructor(canvasCtx, commonObjs, objs, canvasFactory, {
+  constructor(canvasCtx, commonObjs, objs, canvasFactory, filterFactory, {
     optionalContentConfig,
     markedContentStack = null
   }, annotationCanvasMap, pageColors) {
@@ -5598,6 +5717,7 @@ class CanvasGraphics {
     this.commonObjs = commonObjs;
     this.objs = objs;
     this.canvasFactory = canvasFactory;
+    this.filterFactory = filterFactory;
     this.groupStack = [];
     this.processingType3 = null;
     this.baseTransform = null;
@@ -5930,7 +6050,8 @@ class CanvasGraphics {
           this.checkSMaskState();
           break;
         case "TR":
-          this.current.transferMaps = value;
+          this.current.transferMaps = this.filterFactory ? this.filterFactory.addFilter(value) : value;
+          break;
       }
     }
   }
@@ -6554,7 +6675,7 @@ class CanvasGraphics {
       const baseTransform = this.baseTransform || (0, _display_utils.getCurrentTransform)(this.ctx);
       const canvasGraphicsFactory = {
         createCanvasGraphics: ctx => {
-          return new CanvasGraphics(ctx, this.commonObjs, this.objs, this.canvasFactory, {
+          return new CanvasGraphics(ctx, this.commonObjs, this.objs, this.canvasFactory, this.filterFactory, {
             optionalContentConfig: this.optionalContentConfig,
             markedContentStack: this.markedContentStack
           });
@@ -6919,6 +7040,22 @@ class CanvasGraphics {
     }
     this.paintInlineImageXObjectGroup(imgData, map);
   }
+  applyTransferMapsToBitmap(imgData) {
+    if (!this.current.transferMaps) {
+      return imgData.bitmap;
+    }
+    const {
+      bitmap,
+      width,
+      height
+    } = imgData;
+    const tmpCanvas = this.cachedCanvases.getCanvas("inlineImage", width, height);
+    const tmpCtx = tmpCanvas.context;
+    tmpCtx.filter = this.current.transferMaps;
+    tmpCtx.drawImage(bitmap, 0, 0);
+    tmpCtx.filter = "";
+    return tmpCanvas.canvas;
+  }
   paintInlineImageXObject(imgData) {
     if (!this.contentVisible) {
       return;
@@ -6929,7 +7066,9 @@ class CanvasGraphics {
     this.save();
     ctx.scale(1 / width, -1 / height);
     let imgToPaint;
-    if (typeof HTMLElement === "function" && imgData instanceof HTMLElement || !imgData.data) {
+    if (imgData.bitmap) {
+      imgToPaint = this.applyTransferMapsToBitmap(imgData);
+    } else if (typeof HTMLElement === "function" && imgData instanceof HTMLElement || !imgData.data) {
       imgToPaint = imgData;
     } else {
       const tmpCanvas = this.cachedCanvases.getCanvas("inlineImage", width, height);
@@ -6948,16 +7087,22 @@ class CanvasGraphics {
       return;
     }
     const ctx = this.ctx;
-    const w = imgData.width;
-    const h = imgData.height;
-    const tmpCanvas = this.cachedCanvases.getCanvas("inlineImage", w, h);
-    const tmpCtx = tmpCanvas.context;
-    putBinaryImageData(tmpCtx, imgData, this.current.transferMaps);
+    let imgToPaint;
+    if (imgData.bitmap) {
+      imgToPaint = this.applyTransferMapsToBitmap(imgData);
+    } else {
+      const w = imgData.width;
+      const h = imgData.height;
+      const tmpCanvas = this.cachedCanvases.getCanvas("inlineImage", w, h);
+      const tmpCtx = tmpCanvas.context;
+      putBinaryImageData(tmpCtx, imgData, this.current.transferMaps);
+      imgToPaint = tmpCanvas.canvas;
+    }
     for (const entry of map) {
       ctx.save();
       ctx.transform(...entry.transform);
       ctx.scale(1, -1);
-      drawImageAtIntegerCoords(ctx, tmpCanvas.canvas, entry.x, entry.y, entry.w, entry.h, 0, -1, 1, 1);
+      drawImageAtIntegerCoords(ctx, imgToPaint, entry.x, entry.y, entry.w, entry.h, 0, -1, 1, 1);
       ctx.restore();
     }
     this.compose();
@@ -7580,23 +7725,35 @@ exports.TilingPattern = TilingPattern;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.applyMaskImageData = applyMaskImageData;
+exports.convertBlackAndWhiteToRGBA = convertBlackAndWhiteToRGBA;
+exports.convertToRGBA = convertToRGBA;
+exports.grayToRGBA = grayToRGBA;
 var _util = __w_pdfjs_require__(1);
-function applyMaskImageData({
+function convertToRGBA(params) {
+  switch (params.kind) {
+    case _util.ImageKind.GRAYSCALE_1BPP:
+      return convertBlackAndWhiteToRGBA(params);
+    case _util.ImageKind.RGB_24BPP:
+      return convertRGBToRGBA(params);
+  }
+  return null;
+}
+function convertBlackAndWhiteToRGBA({
   src,
   srcPos = 0,
   dest,
-  destPos = 0,
   width,
   height,
+  nonBlackColor = 0xffffffff,
   inverseDecode = false
 }) {
-  const opaque = _util.FeatureTest.isLittleEndian ? 0xff000000 : 0x000000ff;
-  const [zeroMapping, oneMapping] = !inverseDecode ? [opaque, 0] : [0, opaque];
+  const black = _util.FeatureTest.isLittleEndian ? 0xff000000 : 0x000000ff;
+  const [zeroMapping, oneMapping] = inverseDecode ? [nonBlackColor, black] : [black, nonBlackColor];
   const widthInSource = width >> 3;
   const widthRemainder = width & 7;
   const srcLength = src.length;
   dest = new Uint32Array(dest.buffer);
+  let destPos = 0;
   for (let i = 0; i < height; i++) {
     for (const max = srcPos + widthInSource; srcPos < max; srcPos++) {
       const elem = srcPos < srcLength ? src[srcPos] : 255;
@@ -7621,6 +7778,60 @@ function applyMaskImageData({
     srcPos,
     destPos
   };
+}
+function convertRGBToRGBA({
+  src,
+  srcPos = 0,
+  dest,
+  destPos = 0,
+  width,
+  height
+}) {
+  let i = 0;
+  const len32 = src.length >> 2;
+  const src32 = new Uint32Array(src.buffer, srcPos, len32);
+  if (_util.FeatureTest.isLittleEndian) {
+    for (; i < len32 - 2; i += 3, destPos += 4) {
+      const s1 = src32[i];
+      const s2 = src32[i + 1];
+      const s3 = src32[i + 2];
+      dest[destPos] = s1 | 0xff000000;
+      dest[destPos + 1] = s1 >>> 24 | s2 << 8 | 0xff000000;
+      dest[destPos + 2] = s2 >>> 16 | s3 << 16 | 0xff000000;
+      dest[destPos + 3] = s3 >>> 8 | 0xff000000;
+    }
+    for (let j = i * 4, jj = src.length; j < jj; j += 3) {
+      dest[destPos++] = src[j] | src[j + 1] << 8 | src[j + 2] << 16 | 0xff000000;
+    }
+  } else {
+    for (; i < len32 - 2; i += 3, destPos += 4) {
+      const s1 = src32[i];
+      const s2 = src32[i + 1];
+      const s3 = src32[i + 2];
+      dest[destPos] = s1 | 0xff;
+      dest[destPos + 1] = s1 << 24 | s2 >>> 8 | 0xff;
+      dest[destPos + 2] = s2 << 16 | s3 >>> 16 | 0xff;
+      dest[destPos + 3] = s3 << 8 | 0xff;
+    }
+    for (let j = i * 4, jj = src.length; j < jj; j += 3) {
+      dest[destPos++] = src[j] << 24 | src[j + 1] << 16 | src[j + 2] << 8 | 0xff;
+    }
+  }
+  return {
+    srcPos,
+    destPos
+  };
+}
+function grayToRGBA(src, dest) {
+  if (_util.FeatureTest.isLittleEndian) {
+    for (let i = 0, ii = src.length; i < ii; i++) {
+      dest[i] = src[i] * 0x10101 | 0xff000000;
+    }
+  } else {
+    for (let i = 0, ii = src.length; i < ii; i++) {
+      dest[i] = src[i] * 0x1010100 | 0x000000ff;
+    }
+  }
 }
 
 /***/ }),
@@ -15579,6 +15790,12 @@ Object.defineProperty(exports, "FeatureTest", ({
     return _util.FeatureTest;
   }
 }));
+Object.defineProperty(exports, "FilterFactory", ({
+  enumerable: true,
+  get: function () {
+    return _display_utils.FilterFactory;
+  }
+}));
 Object.defineProperty(exports, "GlobalWorkerOptions", ({
   enumerable: true,
   get: function () {
@@ -15781,8 +15998,8 @@ var _annotation_layer = __w_pdfjs_require__(32);
 var _worker_options = __w_pdfjs_require__(14);
 var _svg = __w_pdfjs_require__(35);
 var _xfa_layer = __w_pdfjs_require__(34);
-const pdfjsVersion = '3.4.0';
-const pdfjsBuild = 'af64149';
+const pdfjsVersion = '3.5.0';
+const pdfjsBuild = 'd7e4be9';
 })();
 
 /******/ 	return __webpack_exports__;
