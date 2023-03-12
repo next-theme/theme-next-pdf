@@ -158,6 +158,9 @@ class DefaultExternalServices {
   static updateEditorStates(data) {
     throw new Error("Not implemented: updateEditorStates");
   }
+  static get canvasMaxAreaInBytes() {
+    return (0, _pdfjsLib.shadow)(this, "canvasMaxAreaInBytes", -1);
+  }
 }
 exports.DefaultExternalServices = DefaultExternalServices;
 const PDFViewerApplication = {
@@ -694,6 +697,7 @@ const PDFViewerApplication = {
     }
     const apiParams = _app_options.AppOptions.getAll(_app_options.OptionKind.API);
     const params = {
+      canvasMaxAreaInBytes: this.externalServices.canvasMaxAreaInBytes,
       ...apiParams,
       ...args
     };
@@ -5074,17 +5078,19 @@ function normalize(text) {
       return p4;
     }
     if (p5) {
-      positions.push([i - shift + 1, 1 + shift]);
+      const len = p5.length - 2;
+      positions.push([i - shift + len, 1 + shift]);
       shift += 1;
       shiftOrigin += 1;
       eol += 1;
-      return p5.charAt(0);
+      return p5.slice(0, -2);
     }
     if (p6) {
-      positions.push([i - shift + 1, shift]);
+      const len = p6.length - 1;
+      positions.push([i - shift + len, shift]);
       shiftOrigin += 1;
       eol += 1;
-      return p6.charAt(0);
+      return p6.slice(0, -1);
     }
     if (p7) {
       positions.push([i - shift + 1, shift - 1]);
@@ -13756,7 +13762,7 @@ var _app_options = __webpack_require__(5);
 var _pdf_link_service = __webpack_require__(7);
 var _app = __webpack_require__(2);
 const pdfjsVersion = '3.5.0';
-const pdfjsBuild = 'd7e4be9';
+const pdfjsBuild = '9819f1c';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,

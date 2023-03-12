@@ -42,7 +42,7 @@ return /******/ (() => { // webpackBootstrap
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.VerbosityLevel = exports.Util = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.UNSUPPORTED_FEATURES = exports.TextRenderingMode = exports.RenderingIntentFlag = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.LINE_FACTOR = exports.LINE_DESCENT_FACTOR = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FeatureTest = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.BASELINE_FACTOR = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMode = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationEditorType = exports.AnnotationEditorPrefix = exports.AnnotationEditorParamsType = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
+exports.VerbosityLevel = exports.Util = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.TextRenderingMode = exports.RenderingIntentFlag = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.MAX_IMAGE_SIZE_TO_CACHE = exports.LINE_FACTOR = exports.LINE_DESCENT_FACTOR = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FeatureTest = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.BASELINE_FACTOR = exports.AnnotationType = exports.AnnotationStateModelType = exports.AnnotationReviewState = exports.AnnotationReplyType = exports.AnnotationMode = exports.AnnotationMarkedState = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationEditorType = exports.AnnotationEditorPrefix = exports.AnnotationEditorParamsType = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
 exports.assert = assert;
 exports.bytesToString = bytesToString;
 exports.createPromiseCapability = createPromiseCapability;
@@ -68,6 +68,8 @@ const IDENTITY_MATRIX = [1, 0, 0, 1, 0, 0];
 exports.IDENTITY_MATRIX = IDENTITY_MATRIX;
 const FONT_IDENTITY_MATRIX = [0.001, 0, 0, 0.001, 0, 0];
 exports.FONT_IDENTITY_MATRIX = FONT_IDENTITY_MATRIX;
+const MAX_IMAGE_SIZE_TO_CACHE = 10e6;
+exports.MAX_IMAGE_SIZE_TO_CACHE = MAX_IMAGE_SIZE_TO_CACHE;
 const LINE_FACTOR = 1.35;
 exports.LINE_FACTOR = LINE_FACTOR;
 const LINE_DESCENT_FACTOR = 0.35;
@@ -367,29 +369,6 @@ const OPS = {
   constructPath: 91
 };
 exports.OPS = OPS;
-const UNSUPPORTED_FEATURES = {
-  forms: "forms",
-  javaScript: "javaScript",
-  signatures: "signatures",
-  smask: "smask",
-  shadingPattern: "shadingPattern",
-  errorTilingPattern: "errorTilingPattern",
-  errorExtGState: "errorExtGState",
-  errorXObject: "errorXObject",
-  errorFontLoadType3: "errorFontLoadType3",
-  errorFontState: "errorFontState",
-  errorFontMissing: "errorFontMissing",
-  errorFontTranslate: "errorFontTranslate",
-  errorColorSpace: "errorColorSpace",
-  errorOperatorList: "errorOperatorList",
-  errorFontToUnicode: "errorFontToUnicode",
-  errorFontLoadNative: "errorFontLoadNative",
-  errorFontBuildPath: "errorFontBuildPath",
-  errorFontGetPath: "errorFontGetPath",
-  errorMarkedContent: "errorMarkedContent",
-  errorContentSubStream: "errorContentSubStream"
-};
-exports.UNSUPPORTED_FEATURES = UNSUPPORTED_FEATURES;
 const PasswordResponses = {
   NEED_PASSWORD: 1,
   INCORRECT_PASSWORD: 2
@@ -876,6 +855,7 @@ var _transport_stream = __w_pdfjs_require__(18);
 var _xfa_text = __w_pdfjs_require__(19);
 const DEFAULT_RANGE_CHUNK_SIZE = 65536;
 const RENDERING_CANCELLED_TIMEOUT = 100;
+const DELAYED_CLEANUP_TIMEOUT = 5000;
 let DefaultCanvasFactory = _display_utils.DOMCanvasFactory;
 exports.DefaultCanvasFactory = DefaultCanvasFactory;
 let DefaultCMapReaderFactory = _display_utils.DOMCMapReaderFactory;
@@ -930,6 +910,9 @@ function getDocument(src) {
     throw new Error("Invalid parameter object: need either .data, .range or .url");
   }
   const task = new PDFDocumentLoadingTask();
+  const {
+    docId
+  } = task;
   const url = src.url ? getUrlProp(src.url) : null;
   const data = src.data ? getDataProp(src.data) : null;
   const httpHeaders = src.httpHeaders || null;
@@ -949,6 +932,7 @@ function getDocument(src) {
   const maxImageSize = Number.isInteger(src.maxImageSize) && src.maxImageSize > -1 ? src.maxImageSize : -1;
   const isEvalSupported = src.isEvalSupported !== false;
   const isOffscreenCanvasSupported = typeof src.isOffscreenCanvasSupported === "boolean" ? src.isOffscreenCanvasSupported : !_is_node.isNodeJS;
+  const canvasMaxAreaInBytes = Number.isInteger(src.canvasMaxAreaInBytes) ? src.canvasMaxAreaInBytes : -1;
   const disableFontFace = typeof src.disableFontFace === "boolean" ? src.disableFontFace : _is_node.isNodeJS;
   const fontExtraProperties = src.fontExtraProperties === true;
   const enableXfa = src.enableXfa === true;
@@ -964,6 +948,7 @@ function getDocument(src) {
     ownerDocument
   });
   const filterFactory = src.filterFactory || new _display_utils.FilterFactory({
+    docId,
     ownerDocument
   });
   const styleElement = null;
@@ -989,7 +974,6 @@ function getDocument(src) {
     worker = workerParams.port ? PDFWorker.fromPort(workerParams) : new PDFWorker(workerParams);
     task._worker = worker;
   }
-  const docId = task.docId;
   const fetchDocParams = {
     docId,
     apiVersion: '3.5.0',
@@ -1006,6 +990,7 @@ function getDocument(src) {
       ignoreErrors,
       isEvalSupported,
       isOffscreenCanvasSupported,
+      canvasMaxAreaInBytes,
       fontExtraProperties,
       useSystemFonts,
       cMapUrl: useWorkerFetch ? cMapUrl : null,
@@ -1105,7 +1090,6 @@ function getDataProp(val) {
 }
 class PDFDocumentLoadingTask {
   static #docId = 0;
-  #onUnsupportedFeature = null;
   constructor() {
     this._capability = (0, _util.createPromiseCapability)();
     this._transport = null;
@@ -1114,13 +1098,6 @@ class PDFDocumentLoadingTask {
     this.destroyed = false;
     this.onPassword = null;
     this.onProgress = null;
-  }
-  get onUnsupportedFeature() {
-    return this.#onUnsupportedFeature;
-  }
-  set onUnsupportedFeature(callback) {
-    (0, _display_utils.deprecated)("The PDFDocumentLoadingTask onUnsupportedFeature property will be removed in the future.");
-    this.#onUnsupportedFeature = callback;
   }
   get promise() {
     return this._capability.promise;
@@ -1299,6 +1276,8 @@ class PDFDocumentProxy {
 }
 exports.PDFDocumentProxy = PDFDocumentProxy;
 class PDFPageProxy {
+  #delayedCleanupTimeout = null;
+  #pendingCleanup = false;
   constructor(pageIndex, pageInfo, transport, pdfBug = false) {
     this._pageIndex = pageIndex;
     this._pageInfo = pageInfo;
@@ -1307,8 +1286,7 @@ class PDFPageProxy {
     this._pdfBug = pdfBug;
     this.commonObjs = transport.commonObjs;
     this.objs = new PDFObjects();
-    this.cleanupAfterRender = false;
-    this.pendingCleanup = false;
+    this._maybeCleanupAfterRender = false;
     this._intentStates = new Map();
     this.destroyed = false;
   }
@@ -1376,7 +1354,8 @@ class PDFPageProxy {
     }
     this._stats?.time("Overall");
     const intentArgs = this._transport.getRenderingIntent(intent, annotationMode, printAnnotationStorage);
-    this.pendingCleanup = false;
+    this.#pendingCleanup = false;
+    this.#abortDelayedCleanup();
     if (!optionalContentConfigPromise) {
       optionalContentConfigPromise = this._transport.getOptionalContentConfig();
     }
@@ -1403,10 +1382,10 @@ class PDFPageProxy {
     }
     const complete = error => {
       intentState.renderTasks.delete(internalRenderTask);
-      if (this.cleanupAfterRender || intentPrint) {
-        this.pendingCleanup = true;
+      if (this._maybeCleanupAfterRender || intentPrint) {
+        this.#pendingCleanup = true;
       }
-      this._tryCleanup();
+      this.#tryCleanup(!intentPrint);
       if (error) {
         internalRenderTask.capability.reject(error);
         this._abortOperatorList({
@@ -1444,7 +1423,7 @@ class PDFPageProxy {
       transparency,
       isOffscreenCanvasSupported
     }, optionalContentConfig]) => {
-      if (this.pendingCleanup) {
+      if (this.#pendingCleanup) {
         complete();
         return;
       }
@@ -1559,15 +1538,28 @@ class PDFPageProxy {
       }
     }
     this.objs.clear();
-    this.pendingCleanup = false;
+    this.#pendingCleanup = false;
+    this.#abortDelayedCleanup();
     return Promise.all(waitOn);
   }
   cleanup(resetStats = false) {
-    this.pendingCleanup = true;
-    return this._tryCleanup(resetStats);
+    this.#pendingCleanup = true;
+    const success = this.#tryCleanup(false);
+    if (resetStats && success) {
+      this._stats &&= new _display_utils.StatTimer();
+    }
+    return success;
   }
-  _tryCleanup(resetStats = false) {
-    if (!this.pendingCleanup) {
+  #tryCleanup(delayed = false) {
+    this.#abortDelayedCleanup();
+    if (!this.#pendingCleanup) {
+      return false;
+    }
+    if (delayed) {
+      this.#delayedCleanupTimeout = setTimeout(() => {
+        this.#delayedCleanupTimeout = null;
+        this.#tryCleanup(false);
+      }, DELAYED_CLEANUP_TIMEOUT);
       return false;
     }
     for (const {
@@ -1580,11 +1572,14 @@ class PDFPageProxy {
     }
     this._intentStates.clear();
     this.objs.clear();
-    if (resetStats && this._stats) {
-      this._stats = new _display_utils.StatTimer();
-    }
-    this.pendingCleanup = false;
+    this.#pendingCleanup = false;
     return true;
+  }
+  #abortDelayedCleanup() {
+    if (this.#delayedCleanupTimeout) {
+      clearTimeout(this.#delayedCleanupTimeout);
+      this.#delayedCleanupTimeout = null;
+    }
   }
   _startRenderPage(transparency, isOffscreenCanvasSupported, cacheKey) {
     const intentState = this._intentStates.get(cacheKey);
@@ -1608,7 +1603,7 @@ class PDFPageProxy {
       internalRenderTask.operatorListChanged();
     }
     if (operatorListChunk.lastChunk) {
-      this._tryCleanup();
+      this.#tryCleanup(true);
     }
   }
   _pumpOperatorList({
@@ -1649,7 +1644,7 @@ class PDFPageProxy {
           for (const internalRenderTask of intentState.renderTasks) {
             internalRenderTask.operatorListChanged();
           }
-          this._tryCleanup();
+          this.#tryCleanup(true);
         }
         if (intentState.displayReadyCapability) {
           intentState.displayReadyCapability.reject(reason);
@@ -1975,7 +1970,6 @@ class WorkerTransport {
     this.loadingTask = loadingTask;
     this.commonObjs = new PDFObjects();
     this.fontLoader = new _font_loader.FontLoader({
-      onUnsupportedFeature: this._onUnsupportedFeature.bind(this),
       ownerDocument: params.ownerDocument,
       styleElement: params.styleElement
     });
@@ -2271,7 +2265,6 @@ class WorkerTransport {
             isEvalSupported: params.isEvalSupported,
             disableFontFace: params.disableFontFace,
             ignoreErrors: params.ignoreErrors,
-            onUnsupportedFeature: this._onUnsupportedFeature.bind(this),
             fontRegistry
           });
           this.fontLoader.bind(font).catch(reason => {
@@ -2287,6 +2280,7 @@ class WorkerTransport {
           break;
         case "FontPath":
         case "Image":
+        case "Pattern":
           this.commonObjs.resolve(id, exportedData);
           break;
         default:
@@ -2304,7 +2298,6 @@ class WorkerTransport {
       switch (type) {
         case "Image":
           pageProxy.objs.resolve(id, imageData);
-          const MAX_IMAGE_SIZE_TO_STORE = 8000000;
           if (imageData) {
             let length;
             if (imageData.bitmap) {
@@ -2316,8 +2309,8 @@ class WorkerTransport {
             } else {
               length = imageData.data?.length || 0;
             }
-            if (length > MAX_IMAGE_SIZE_TO_STORE) {
-              pageProxy.cleanupAfterRender = true;
+            if (length > _util.MAX_IMAGE_SIZE_TO_CACHE) {
+              pageProxy._maybeCleanupAfterRender = true;
             }
           }
           break;
@@ -2337,7 +2330,6 @@ class WorkerTransport {
         total: data.total
       });
     });
-    messageHandler.on("UnsupportedFeature", this._onUnsupportedFeature.bind(this));
     messageHandler.on("FetchBuiltInCMap", data => {
       if (this.destroyed) {
         return Promise.reject(new Error("Worker was destroyed."));
@@ -2356,14 +2348,6 @@ class WorkerTransport {
       }
       return this.standardFontDataFactory.fetch(data);
     });
-  }
-  _onUnsupportedFeature({
-    featureId
-  }) {
-    if (this.destroyed) {
-      return;
-    }
-    this.loadingTask.onUnsupportedFeature?.(featureId);
   }
   getData() {
     return this.messageHandler.sendWithPromise("GetData", null);
@@ -2744,7 +2728,7 @@ class InternalRenderTask {
 }
 const version = '3.5.0';
 exports.version = version;
-const build = 'd7e4be9';
+const build = '9819f1c';
 exports.build = build;
 
 /***/ }),
@@ -3931,11 +3915,14 @@ exports.PixelsPerInch = PixelsPerInch;
 class FilterFactory {
   #_cache;
   #_defs;
+  #docId;
   #document;
   #id = 0;
   constructor({
+    docId,
     ownerDocument = globalThis.document
   } = {}) {
+    this.#docId = docId;
     this.#document = ownerDocument;
   }
   get #cache() {
@@ -3943,20 +3930,29 @@ class FilterFactory {
   }
   get #defs() {
     if (!this.#_defs) {
+      const div = this.#document.createElement("div");
+      const {
+        style
+      } = div;
+      style.visibility = "hidden";
+      style.contain = "strict";
+      style.width = style.height = 0;
+      style.position = "absolute";
+      style.top = style.left = 0;
+      style.zIndex = -1;
       const svg = this.#document.createElementNS(SVG_NS, "svg");
       svg.setAttribute("width", 0);
       svg.setAttribute("height", 0);
-      svg.style.visibility = "hidden";
-      svg.style.contain = "strict";
       this.#_defs = this.#document.createElementNS(SVG_NS, "defs");
+      div.append(svg);
       svg.append(this.#_defs);
-      this.#document.body.append(svg);
+      this.#document.body.append(div);
     }
     return this.#_defs;
   }
   addFilter(maps) {
     if (!maps) {
-      return "";
+      return "none";
     }
     let value = this.#cache.get(maps);
     if (value) {
@@ -3990,7 +3986,7 @@ class FilterFactory {
       this.#cache.set(maps, value);
       return value;
     }
-    const id = `transfer_map_${this.#id++}`;
+    const id = `g_${this.#docId}_transfer_map_${this.#id++}`;
     const url = `url(#${id})`;
     this.#cache.set(maps, url);
     this.#cache.set(key, url);
@@ -4017,7 +4013,7 @@ class FilterFactory {
   }
   destroy() {
     if (this.#_defs) {
-      this.#_defs.parentNode.remove();
+      this.#_defs.parentNode.parentNode.remove();
       this.#_defs = null;
     }
     if (this.#_cache) {
@@ -4712,11 +4708,9 @@ var _util = __w_pdfjs_require__(1);
 var _is_node = __w_pdfjs_require__(10);
 class FontLoader {
   constructor({
-    onUnsupportedFeature,
     ownerDocument = globalThis.document,
     styleElement = null
   }) {
-    this._onUnsupportedFeature = onUnsupportedFeature;
     this._document = ownerDocument;
     this.nativeFontFaces = [];
     this.styleElement = null;
@@ -4757,9 +4751,6 @@ class FontLoader {
         try {
           await nativeFontFace.loaded;
         } catch (ex) {
-          this._onUnsupportedFeature({
-            featureId: _util.UNSUPPORTED_FEATURES.errorFontLoadNative
-          });
           (0, _util.warn)(`Failed to load font '${nativeFontFace.family}': '${ex}'.`);
           font.disableFontFace = true;
           throw ex;
@@ -4887,7 +4878,6 @@ class FontFaceObject {
     isEvalSupported = true,
     disableFontFace = false,
     ignoreErrors = false,
-    onUnsupportedFeature,
     fontRegistry = null
   }) {
     this.compiledGlyphs = Object.create(null);
@@ -4897,7 +4887,6 @@ class FontFaceObject {
     this.isEvalSupported = isEvalSupported !== false;
     this.disableFontFace = disableFontFace === true;
     this.ignoreErrors = ignoreErrors === true;
-    this._onUnsupportedFeature = onUnsupportedFeature;
     this.fontRegistry = fontRegistry;
   }
   createNativeFontFace() {
@@ -4949,9 +4938,6 @@ class FontFaceObject {
       if (!this.ignoreErrors) {
         throw ex;
       }
-      this._onUnsupportedFeature({
-        featureId: _util.UNSUPPORTED_FEATURES.errorFontGetPath
-      });
       (0, _util.warn)(`getPathGenerator - ignoring character: "${ex}".`);
       return this.compiledGlyphs[character] = function (c, size) {};
     }
@@ -5002,6 +4988,7 @@ var _util = __w_pdfjs_require__(1);
 var _display_utils = __w_pdfjs_require__(6);
 var _pattern_helper = __w_pdfjs_require__(12);
 var _image_utils = __w_pdfjs_require__(13);
+var _is_node = __w_pdfjs_require__(10);
 const MIN_FONT_SIZE = 16;
 const MAX_FONT_SIZE = 100;
 const MAX_GROUP_SIZE = 4096;
@@ -5589,7 +5576,7 @@ function putBinaryImageMask(ctx, imgData) {
   }
 }
 function copyCtxState(sourceCtx, destCtx) {
-  const properties = ["strokeStyle", "fillStyle", "fillRule", "globalAlpha", "lineWidth", "lineCap", "lineJoin", "miterLimit", "globalCompositeOperation", "font"];
+  const properties = ["strokeStyle", "fillStyle", "fillRule", "globalAlpha", "lineWidth", "lineCap", "lineJoin", "miterLimit", "globalCompositeOperation", "font", "filter"];
   for (const property of properties) {
     if (sourceCtx[property] !== undefined) {
       destCtx[property] = sourceCtx[property];
@@ -5613,6 +5600,9 @@ function resetCtxToDefault(ctx, foregroundColor) {
   if (ctx.setLineDash !== undefined) {
     ctx.setLineDash([]);
     ctx.lineDashOffset = 0;
+  }
+  if (!_is_node.isNodeJS) {
+    ctx.filter = "none";
   }
 }
 function composeSMaskBackdrop(bytes, r0, g0, b0) {
@@ -5890,11 +5880,11 @@ class CanvasGraphics {
       let newWidth = paintWidth,
         newHeight = paintHeight;
       if (widthScale > 2 && paintWidth > 1) {
-        newWidth = Math.ceil(paintWidth / 2);
+        newWidth = paintWidth >= 16384 ? Math.floor(paintWidth / 2) - 1 || 1 : Math.ceil(paintWidth / 2);
         widthScale /= paintWidth / newWidth;
       }
       if (heightScale > 2 && paintHeight > 1) {
-        newHeight = Math.ceil(paintHeight / 2);
+        newHeight = paintHeight >= 16384 ? Math.floor(paintHeight / 2) - 1 || 1 : Math.ceil(paintHeight) / 2;
         heightScale /= paintHeight / newHeight;
       }
       tmpCanvas = this.cachedCanvases.getCanvas(tmpCanvasId, newWidth, newHeight);
@@ -6050,7 +6040,11 @@ class CanvasGraphics {
           this.checkSMaskState();
           break;
         case "TR":
-          this.current.transferMaps = this.filterFactory ? this.filterFactory.addFilter(value) : value;
+          if (this.filterFactory) {
+            this.ctx.filter = this.current.transferMaps = this.filterFactory.addFilter(value);
+          } else {
+            this.current.transferMaps = value;
+          }
           break;
       }
     }
@@ -6710,7 +6704,7 @@ class CanvasGraphics {
     if (this.cachedPatterns.has(objId)) {
       pattern = this.cachedPatterns.get(objId);
     } else {
-      pattern = (0, _pattern_helper.getShadingPattern)(this.objs.get(objId));
+      pattern = (0, _pattern_helper.getShadingPattern)(this.getObject(objId));
       this.cachedPatterns.set(objId, pattern);
     }
     if (matrix) {
@@ -7041,7 +7035,7 @@ class CanvasGraphics {
     this.paintInlineImageXObjectGroup(imgData, map);
   }
   applyTransferMapsToBitmap(imgData) {
-    if (!this.current.transferMaps) {
+    if (!this.current.transferMaps || this.current.transferMaps === "none") {
       return imgData.bitmap;
     }
     const {
@@ -7053,7 +7047,7 @@ class CanvasGraphics {
     const tmpCtx = tmpCanvas.context;
     tmpCtx.filter = this.current.transferMaps;
     tmpCtx.drawImage(bitmap, 0, 0);
-    tmpCtx.filter = "";
+    tmpCtx.filter = "none";
     return tmpCanvas.canvas;
   }
   paintInlineImageXObject(imgData) {
@@ -7064,6 +7058,9 @@ class CanvasGraphics {
     const height = imgData.height;
     const ctx = this.ctx;
     this.save();
+    if (!_is_node.isNodeJS) {
+      ctx.filter = "none";
+    }
     ctx.scale(1 / width, -1 / height);
     let imgToPaint;
     if (imgData.bitmap) {
@@ -7089,7 +7086,7 @@ class CanvasGraphics {
     const ctx = this.ctx;
     let imgToPaint;
     if (imgData.bitmap) {
-      imgToPaint = this.applyTransferMapsToBitmap(imgData);
+      imgToPaint = imgData.bitmap;
     } else {
       const w = imgData.width;
       const h = imgData.height;
@@ -11147,7 +11144,6 @@ var _editor = __w_pdfjs_require__(4);
 var _pdfjsFitCurve = __w_pdfjs_require__(30);
 var _tools = __w_pdfjs_require__(5);
 const RESIZER_SIZE = 16;
-const TIME_TO_WAIT_BEFORE_FIXING_DIMS = 100;
 class InkEditor extends _editor.AnnotationEditor {
   #aspectRatio = 0;
   #baseHeight = 0;
@@ -11537,17 +11533,9 @@ class InkEditor extends _editor.AnnotationEditor {
     this.ctx = this.canvas.getContext("2d");
   }
   #createObserver() {
-    let timeoutId = null;
     this.#observer = new ResizeObserver(entries => {
       const rect = entries[0].contentRect;
       if (rect.width && rect.height) {
-        if (timeoutId !== null) {
-          clearTimeout(timeoutId);
-        }
-        timeoutId = setTimeout(() => {
-          this.fixDims();
-          timeoutId = null;
-        }, TIME_TO_WAIT_BEFORE_FIXING_DIMS);
         this.setDimensions(rect.width, rect.height);
       }
     });
@@ -11615,6 +11603,7 @@ class InkEditor extends _editor.AnnotationEditor {
     this.#setCanvasDims();
     this.#redraw();
     this.canvas.style.visibility = "visible";
+    this.fixDims();
   }
   #setScaleFactor(width, height) {
     const padding = this.#getPadding();
@@ -12251,6 +12240,9 @@ class AnnotationElement {
     } = this;
     const container = document.createElement("section");
     container.setAttribute("data-annotation-id", data.id);
+    if (data.noRotate) {
+      container.classList.add("norotate");
+    }
     const {
       pageWidth,
       pageHeight,
@@ -12454,7 +12446,7 @@ class AnnotationElement {
     }
     if (!trigger) {
       trigger = document.createElement("div");
-      trigger.className = "popupTriggerArea";
+      trigger.classList.add("popupTriggerArea");
       container.append(trigger);
     }
     const popupElement = new PopupElement({
@@ -12473,7 +12465,7 @@ class AnnotationElement {
   }
   _renderQuadrilaterals(className) {
     for (const quadrilateral of this.quadrilaterals) {
-      quadrilateral.className = className;
+      quadrilateral.classList.add(className);
     }
     return this.quadrilaterals;
   }
@@ -12583,7 +12575,7 @@ class LinkAnnotationElement extends AnnotationElement {
         return quadrilateral;
       });
     }
-    this.container.className = "linkAnnotation";
+    this.container.classList.add("linkAnnotation");
     if (isBound) {
       this.container.append(link);
     }
@@ -12763,7 +12755,7 @@ class TextAnnotationElement extends AnnotationElement {
     });
   }
   render() {
-    this.container.className = "textAnnotation";
+    this.container.classList.add("textAnnotation");
     const image = document.createElement("img");
     image.src = this.imageResourcesPath + "annotation-" + this.data.name.toLowerCase() + ".svg";
     image.alt = "[{{type}} Annotation]";
@@ -12885,7 +12877,7 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
   render() {
     const storage = this.annotationStorage;
     const id = this.data.id;
-    this.container.className = "textWidgetAnnotation";
+    this.container.classList.add("textWidgetAnnotation");
     let element = null;
     if (this.renderForms) {
       const storedData = storage.getValue(id, {
@@ -13179,7 +13171,7 @@ class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
         value
       });
     }
-    this.container.className = "buttonWidgetAnnotation checkBox";
+    this.container.classList.add("buttonWidgetAnnotation", "checkBox");
     const element = document.createElement("input");
     GetElementsByNameSet.add(element);
     element.setAttribute("data-element-id", id);
@@ -13241,7 +13233,7 @@ class RadioButtonWidgetAnnotationElement extends WidgetAnnotationElement {
     });
   }
   render() {
-    this.container.className = "buttonWidgetAnnotation radioButton";
+    this.container.classList.add("buttonWidgetAnnotation", "radioButton");
     const storage = this.annotationStorage;
     const data = this.data;
     const id = data.id;
@@ -13318,7 +13310,7 @@ class PushButtonWidgetAnnotationElement extends LinkAnnotationElement {
   }
   render() {
     const container = super.render();
-    container.className = "buttonWidgetAnnotation pushButton";
+    container.classList.add("buttonWidgetAnnotation", "pushButton");
     if (this.data.alternativeText) {
       container.title = this.data.alternativeText;
     }
@@ -13339,7 +13331,7 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
     });
   }
   render() {
-    this.container.className = "choiceWidgetAnnotation";
+    this.container.classList.add("choiceWidgetAnnotation");
     const storage = this.annotationStorage;
     const id = this.data.id;
     const storedData = storage.getValue(id, {
@@ -13566,7 +13558,7 @@ class PopupAnnotationElement extends AnnotationElement {
     });
   }
   render() {
-    this.container.className = "popupAnnotation";
+    this.container.classList.add("popupAnnotation");
     const parentElements = this.layer.querySelectorAll(`[data-annotation-id="${this.data.parentId}"]`);
     if (parentElements.length === 0) {
       return this.container;
@@ -13611,11 +13603,11 @@ class PopupElement {
   render() {
     const BACKGROUND_ENLIGHT = 0.7;
     const wrapper = document.createElement("div");
-    wrapper.className = "popupWrapper";
+    wrapper.classList.add("popupWrapper");
     this.hideElement = this.hideWrapper ? wrapper : this.container;
     this.hideElement.hidden = true;
     const popup = document.createElement("div");
-    popup.className = "popup";
+    popup.classList.add("popup");
     const color = this.color;
     if (color) {
       const r = BACKGROUND_ENLIGHT * (255 - color[0]) + color[0];
@@ -13630,7 +13622,7 @@ class PopupElement {
     const dateObject = _display_utils.PDFDateString.toDateObject(this.modificationDate);
     if (dateObject) {
       const modificationDate = document.createElement("span");
-      modificationDate.className = "popupDate";
+      modificationDate.classList.add("popupDate");
       modificationDate.textContent = "{{date}}, {{time}}";
       modificationDate.dataset.l10nId = "annotation_date_string";
       modificationDate.dataset.l10nArgs = JSON.stringify({
@@ -13645,7 +13637,7 @@ class PopupElement {
         intent: "richText",
         div: popup
       });
-      popup.lastChild.className = "richText popupContent";
+      popup.lastChild.classList.add("richText", "popupContent");
     } else {
       const contents = this._formatContents(this.contentsObj);
       popup.append(contents);
@@ -13667,7 +13659,7 @@ class PopupElement {
     dir
   }) {
     const p = document.createElement("p");
-    p.className = "popupContent";
+    p.classList.add("popupContent");
     p.dir = dir;
     const lines = str.split(/(?:\r\n?|\n)/);
     for (let i = 0, ii = lines.length; i < ii; ++i) {
@@ -13715,10 +13707,10 @@ class FreeTextAnnotationElement extends AnnotationElement {
     this.textContent = parameters.data.textContent;
   }
   render() {
-    this.container.className = "freeTextAnnotation";
+    this.container.classList.add("freeTextAnnotation");
     if (this.textContent) {
       const content = document.createElement("div");
-      content.className = "annotationTextContent";
+      content.classList.add("annotationTextContent");
       content.setAttribute("role", "comment");
       for (const line of this.textContent) {
         const lineSpan = document.createElement("span");
@@ -13742,7 +13734,7 @@ class LineAnnotationElement extends AnnotationElement {
     });
   }
   render() {
-    this.container.className = "lineAnnotation";
+    this.container.classList.add("lineAnnotation");
     const data = this.data;
     const {
       width,
@@ -13772,7 +13764,7 @@ class SquareAnnotationElement extends AnnotationElement {
     });
   }
   render() {
-    this.container.className = "squareAnnotation";
+    this.container.classList.add("squareAnnotation");
     const data = this.data;
     const {
       width,
@@ -13803,7 +13795,7 @@ class CircleAnnotationElement extends AnnotationElement {
     });
   }
   render() {
-    this.container.className = "circleAnnotation";
+    this.container.classList.add("circleAnnotation");
     const data = this.data;
     const {
       width,
@@ -13836,7 +13828,7 @@ class PolylineAnnotationElement extends AnnotationElement {
     this.svgElementName = "svg:polyline";
   }
   render() {
-    this.container.className = this.containerClassName;
+    this.container.classList.add(this.containerClassName);
     const data = this.data;
     const {
       width,
@@ -13877,7 +13869,7 @@ class CaretAnnotationElement extends AnnotationElement {
     });
   }
   render() {
-    this.container.className = "caretAnnotation";
+    this.container.classList.add("caretAnnotation");
     if (!this.data.hasPopup) {
       this._createPopup(null, this.data);
     }
@@ -13895,7 +13887,7 @@ class InkAnnotationElement extends AnnotationElement {
     this.svgElementName = "svg:polyline";
   }
   render() {
-    this.container.className = this.containerClassName;
+    this.container.classList.add(this.containerClassName);
     const data = this.data;
     const {
       width,
@@ -13938,7 +13930,7 @@ class HighlightAnnotationElement extends AnnotationElement {
     if (this.quadrilaterals) {
       return this._renderQuadrilaterals("highlightAnnotation");
     }
-    this.container.className = "highlightAnnotation";
+    this.container.classList.add("highlightAnnotation");
     return this.container;
   }
 }
@@ -13958,7 +13950,7 @@ class UnderlineAnnotationElement extends AnnotationElement {
     if (this.quadrilaterals) {
       return this._renderQuadrilaterals("underlineAnnotation");
     }
-    this.container.className = "underlineAnnotation";
+    this.container.classList.add("underlineAnnotation");
     return this.container;
   }
 }
@@ -13978,7 +13970,7 @@ class SquigglyAnnotationElement extends AnnotationElement {
     if (this.quadrilaterals) {
       return this._renderQuadrilaterals("squigglyAnnotation");
     }
-    this.container.className = "squigglyAnnotation";
+    this.container.classList.add("squigglyAnnotation");
     return this.container;
   }
 }
@@ -13998,7 +13990,7 @@ class StrikeOutAnnotationElement extends AnnotationElement {
     if (this.quadrilaterals) {
       return this._renderQuadrilaterals("strikeoutAnnotation");
     }
-    this.container.className = "strikeoutAnnotation";
+    this.container.classList.add("strikeoutAnnotation");
     return this.container;
   }
 }
@@ -14011,7 +14003,7 @@ class StampAnnotationElement extends AnnotationElement {
     });
   }
   render() {
-    this.container.className = "stampAnnotation";
+    this.container.classList.add("stampAnnotation");
     if (!this.data.hasPopup) {
       this._createPopup(null, this.data);
     }
@@ -14036,7 +14028,7 @@ class FileAttachmentAnnotationElement extends AnnotationElement {
     });
   }
   render() {
-    this.container.className = "fileAttachmentAnnotation";
+    this.container.classList.add("fileAttachmentAnnotation");
     let trigger;
     if (this.data.hasAppearance) {
       trigger = document.createElement("div");
@@ -14044,7 +14036,7 @@ class FileAttachmentAnnotationElement extends AnnotationElement {
       trigger = document.createElement("img");
       trigger.src = `${this.imageResourcesPath}annotation-${/paperclip/i.test(this.data.name) ? "paperclip" : "pushpin"}.svg`;
     }
-    trigger.className = "popupTriggerArea";
+    trigger.classList.add("popupTriggerArea");
     trigger.addEventListener("dblclick", this._download.bind(this));
     if (!this.data.hasPopup && (this.data.titleObj?.str || this.data.contentsObj?.str || this.data.richText)) {
       this._createPopup(trigger, this.data);
@@ -14088,6 +14080,9 @@ class AnnotationLayer {
     };
     let zIndex = 0;
     for (const data of annotations) {
+      if (data.noHTML) {
+        continue;
+      }
       if (data.annotationType !== _util.AnnotationType.POPUP) {
         const {
           width,
@@ -15868,12 +15863,6 @@ Object.defineProperty(exports, "SVGGraphics", ({
     return _svg.SVGGraphics;
   }
 }));
-Object.defineProperty(exports, "UNSUPPORTED_FEATURES", ({
-  enumerable: true,
-  get: function () {
-    return _util.UNSUPPORTED_FEATURES;
-  }
-}));
 Object.defineProperty(exports, "UnexpectedResponseException", ({
   enumerable: true,
   get: function () {
@@ -15999,7 +15988,7 @@ var _worker_options = __w_pdfjs_require__(14);
 var _svg = __w_pdfjs_require__(35);
 var _xfa_layer = __w_pdfjs_require__(34);
 const pdfjsVersion = '3.5.0';
-const pdfjsBuild = 'd7e4be9';
+const pdfjsBuild = '9819f1c';
 })();
 
 /******/ 	return __webpack_exports__;
