@@ -3209,7 +3209,6 @@ class Page {
       const opList = new _operator_list.OperatorList(intent, sink);
       handler.send("StartRenderPage", {
         transparency: partialEvaluator.hasBlendModes(this.resources, this.nonBlendModesSet),
-        isOffscreenCanvasSupported: this.evaluatorOptions.isOffscreenCanvasSupported,
         pageIndex: this.pageIndex,
         cacheKey
       });
@@ -65003,7 +65002,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.5.0';
-const pdfjsBuild = '9819f1c';
+const pdfjsBuild = '9db4509';
 })();
 
 /******/ 	return __webpack_exports__;
