@@ -1710,9 +1710,11 @@ exports.PDFPageProxy = PDFPageProxy;
 class LoopbackPort {
   #listeners = new Set();
   #deferred = Promise.resolve();
-  postMessage(obj, transfers) {
+  postMessage(obj, transfer) {
     const event = {
-      data: structuredClone(obj, transfers)
+      data: structuredClone(obj, transfer ? {
+        transfer
+      } : null)
     };
     this.#deferred.then(() => {
       for (const listener of this.#listeners) {
@@ -2253,19 +2255,12 @@ class WorkerTransport {
             this.commonObjs.resolve(id, exportedError);
             break;
           }
-          let fontRegistry = null;
-          if (params.pdfBug && globalThis.FontInspector?.enabled) {
-            fontRegistry = {
-              registerFont(font, url) {
-                globalThis.FontInspector.fontAdded(font, url);
-              }
-            };
-          }
+          const inspectFont = params.pdfBug && globalThis.FontInspector?.enabled ? (font, url) => globalThis.FontInspector.fontAdded(font, url) : null;
           const font = new _font_loader.FontFaceObject(exportedData, {
             isEvalSupported: params.isEvalSupported,
             disableFontFace: params.disableFontFace,
             ignoreErrors: params.ignoreErrors,
-            fontRegistry
+            inspectFont
           });
           this.fontLoader.bind(font).catch(reason => {
             return messageHandler.sendWithPromise("FontFallback", {
@@ -2503,7 +2498,7 @@ class WorkerTransport {
       this.fontLoader.clear();
     }
     this.#methodPromises.clear();
-    this.filterFactory.destroy();
+    this.filterFactory.destroy(true);
   }
   get loadingParams() {
     const {
@@ -2655,7 +2650,7 @@ class InternalRenderTask {
     } = this.params;
     this.gfx = new _canvas.CanvasGraphics(canvasContext, this.commonObjs, this.objs, this.canvasFactory, this.filterFactory, {
       optionalContentConfig
-    }, this.annotationCanvasMap, this.pageColors);
+    }, this.annotationCanvasMap);
     this.gfx.beginDrawing({
       transform,
       viewport,
@@ -2669,7 +2664,7 @@ class InternalRenderTask {
   cancel(error = null, extraDelay = 0) {
     this.running = false;
     this.cancelled = true;
-    this.gfx?.endDrawing();
+    this.gfx?.endDrawing(this.pageColors);
     if (this._canvas) {
       InternalRenderTask.#canvasInUse.delete(this._canvas);
     }
@@ -2716,7 +2711,7 @@ class InternalRenderTask {
     if (this.operatorListIdx === this.operatorList.argsArray.length) {
       this.running = false;
       if (this.operatorList.lastChunk) {
-        this.gfx.endDrawing();
+        this.gfx.endDrawing(this.pageColors);
         if (this._canvas) {
           InternalRenderTask.#canvasInUse.delete(this._canvas);
         }
@@ -2727,7 +2722,7 @@ class InternalRenderTask {
 }
 const version = '3.5.0';
 exports.version = version;
-const build = '9db4509';
+const build = '8a2dfdb';
 exports.build = build;
 
 /***/ }),
@@ -3916,6 +3911,9 @@ class DOMFilterFactory extends _base_factory.BaseFilterFactory {
   #_defs;
   #docId;
   #document;
+  #hcmFilter;
+  #hcmKey;
+  #hcmUrl;
   #id = 0;
   constructor({
     docId,
@@ -3949,6 +3947,12 @@ class DOMFilterFactory extends _base_factory.BaseFilterFactory {
       this.#document.body.append(div);
     }
     return this.#_defs;
+  }
+  #appendFeFunc(feComponentTransfer, func, table) {
+    const feFunc = this.#document.createElementNS(SVG_NS, func);
+    feFunc.setAttribute("type", "discrete");
+    feFunc.setAttribute("tableValues", table);
+    feComponentTransfer.append(feFunc);
   }
   addFilter(maps) {
     if (!maps) {
@@ -3995,23 +3999,76 @@ class DOMFilterFactory extends _base_factory.BaseFilterFactory {
     filter.setAttribute("color-interpolation-filters", "sRGB");
     const feComponentTransfer = this.#document.createElementNS(SVG_NS, "feComponentTransfer");
     filter.append(feComponentTransfer);
-    const type = "discrete";
-    const feFuncR = this.#document.createElementNS(SVG_NS, "feFuncR");
-    feFuncR.setAttribute("type", type);
-    feFuncR.setAttribute("tableValues", tableR);
-    feComponentTransfer.append(feFuncR);
-    const feFuncG = this.#document.createElementNS(SVG_NS, "feFuncG");
-    feFuncG.setAttribute("type", type);
-    feFuncG.setAttribute("tableValues", tableG);
-    feComponentTransfer.append(feFuncG);
-    const feFuncB = this.#document.createElementNS(SVG_NS, "feFuncB");
-    feFuncB.setAttribute("type", type);
-    feFuncB.setAttribute("tableValues", tableB);
-    feComponentTransfer.append(feFuncB);
+    this.#appendFeFunc(feComponentTransfer, "feFuncR", tableR);
+    this.#appendFeFunc(feComponentTransfer, "feFuncG", tableG);
+    this.#appendFeFunc(feComponentTransfer, "feFuncB", tableB);
     this.#defs.append(filter);
     return url;
   }
-  destroy() {
+  addHCMFilter(fgColor, bgColor) {
+    const key = `${fgColor}-${bgColor}`;
+    if (this.#hcmKey === key) {
+      return this.#hcmUrl;
+    }
+    this.#hcmKey = key;
+    this.#hcmUrl = "none";
+    this.#hcmFilter?.remove();
+    if (!fgColor || !bgColor) {
+      return this.#hcmUrl;
+    }
+    this.#defs.style.color = fgColor;
+    fgColor = getComputedStyle(this.#defs).getPropertyValue("color");
+    const fgRGB = getRGB(fgColor);
+    fgColor = _util.Util.makeHexColor(...fgRGB);
+    this.#defs.style.color = bgColor;
+    bgColor = getComputedStyle(this.#defs).getPropertyValue("color");
+    const bgRGB = getRGB(bgColor);
+    bgColor = _util.Util.makeHexColor(...bgRGB);
+    this.#defs.style.color = "";
+    if (fgColor === "#000000" && bgColor === "#ffffff" || fgColor === bgColor) {
+      return this.#hcmUrl;
+    }
+    const map = new Array(256);
+    for (let i = 0; i <= 255; i++) {
+      const x = i / 255;
+      map[i] = x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+    }
+    const table = map.join(",");
+    const id = `g_${this.#docId}_hcm_filter`;
+    const filter = this.#hcmFilter = this.#document.createElementNS(SVG_NS, "filter", SVG_NS);
+    filter.setAttribute("id", id);
+    filter.setAttribute("color-interpolation-filters", "sRGB");
+    let feComponentTransfer = this.#document.createElementNS(SVG_NS, "feComponentTransfer");
+    filter.append(feComponentTransfer);
+    this.#appendFeFunc(feComponentTransfer, "feFuncR", table);
+    this.#appendFeFunc(feComponentTransfer, "feFuncG", table);
+    this.#appendFeFunc(feComponentTransfer, "feFuncB", table);
+    const feColorMatrix = this.#document.createElementNS(SVG_NS, "feColorMatrix");
+    feColorMatrix.setAttribute("type", "matrix");
+    feColorMatrix.setAttribute("values", "0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0 0 0 1 0");
+    filter.append(feColorMatrix);
+    feComponentTransfer = this.#document.createElementNS(SVG_NS, "feComponentTransfer");
+    filter.append(feComponentTransfer);
+    const getSteps = (c, n) => {
+      const start = fgRGB[c] / 255;
+      const end = bgRGB[c] / 255;
+      const arr = new Array(n + 1);
+      for (let i = 0; i <= n; i++) {
+        arr[i] = start + i / n * (end - start);
+      }
+      return arr.join(",");
+    };
+    this.#appendFeFunc(feComponentTransfer, "feFuncR", getSteps(0, 5));
+    this.#appendFeFunc(feComponentTransfer, "feFuncG", getSteps(1, 5));
+    this.#appendFeFunc(feComponentTransfer, "feFuncB", getSteps(2, 5));
+    this.#defs.append(filter);
+    this.#hcmUrl = `url(#${id})`;
+    return this.#hcmUrl;
+  }
+  destroy(keepHCM = false) {
+    if (keepHCM && this.#hcmUrl) {
+      return;
+    }
     if (this.#_defs) {
       this.#_defs.parentNode.parentNode.remove();
       this.#_defs = null;
@@ -4468,7 +4525,10 @@ class BaseFilterFactory {
   addFilter(maps) {
     return "none";
   }
-  destroy() {}
+  addHCMFilter(fgColor, bgColor) {
+    return "none";
+  }
+  destroy(keepHCM = false) {}
 }
 exports.BaseFilterFactory = BaseFilterFactory;
 class BaseCanvasFactory {
@@ -4890,7 +4950,7 @@ class FontFaceObject {
     isEvalSupported = true,
     disableFontFace = false,
     ignoreErrors = false,
-    fontRegistry = null
+    inspectFont = null
   }) {
     this.compiledGlyphs = Object.create(null);
     for (const i in translatedData) {
@@ -4899,7 +4959,7 @@ class FontFaceObject {
     this.isEvalSupported = isEvalSupported !== false;
     this.disableFontFace = disableFontFace === true;
     this.ignoreErrors = ignoreErrors === true;
-    this.fontRegistry = fontRegistry;
+    this._inspectFont = inspectFont;
   }
   createNativeFontFace() {
     if (!this.data || this.disableFontFace) {
@@ -4917,7 +4977,7 @@ class FontFaceObject {
       }
       nativeFontFace = new FontFace(this.cssFontInfo.fontFamily, this.data, css);
     }
-    this.fontRegistry?.registerFont(this);
+    this._inspectFont?.(this);
     return nativeFontFace;
   }
   createFontFaceRule() {
@@ -4936,7 +4996,7 @@ class FontFaceObject {
       }
       rule = `@font-face {font-family:"${this.cssFontInfo.fontFamily}";${css}src:${url}}`;
     }
-    this.fontRegistry?.registerFont(this, url);
+    this._inspectFont?.(this, url);
     return rule;
   }
   getPathGenerator(objs, character) {
@@ -5536,8 +5596,8 @@ function copyCtxState(sourceCtx, destCtx) {
     destCtx.lineDashOffset = sourceCtx.lineDashOffset;
   }
 }
-function resetCtxToDefault(ctx, foregroundColor) {
-  ctx.strokeStyle = ctx.fillStyle = foregroundColor || "#000000";
+function resetCtxToDefault(ctx) {
+  ctx.strokeStyle = ctx.fillStyle = "#000000";
   ctx.fillRule = "nonzero";
   ctx.globalAlpha = 1;
   ctx.lineWidth = 1;
@@ -5645,7 +5705,7 @@ class CanvasGraphics {
   constructor(canvasCtx, commonObjs, objs, canvasFactory, filterFactory, {
     optionalContentConfig,
     markedContentStack = null
-  }, annotationCanvasMap, pageColors) {
+  }, annotationCanvasMap) {
     this.ctx = canvasCtx;
     this.current = new CanvasExtraState(this.ctx.canvas.width, this.ctx.canvas.height);
     this.stateStack = [];
@@ -5675,8 +5735,6 @@ class CanvasGraphics {
     this.viewportScale = 1;
     this.outputScaleX = 1;
     this.outputScaleY = 1;
-    this.backgroundColor = pageColors?.background || null;
-    this.foregroundColor = pageColors?.foreground || null;
     this._cachedScaleForStroking = null;
     this._cachedGetSinglePixelWidth = null;
     this._cachedBitmapsMap = new Map();
@@ -5695,36 +5753,10 @@ class CanvasGraphics {
   }) {
     const width = this.ctx.canvas.width;
     const height = this.ctx.canvas.height;
-    const defaultBackgroundColor = background || "#ffffff";
-    this.ctx.save();
-    if (this.foregroundColor && this.backgroundColor) {
-      this.ctx.fillStyle = this.foregroundColor;
-      const fg = this.foregroundColor = this.ctx.fillStyle;
-      this.ctx.fillStyle = this.backgroundColor;
-      const bg = this.backgroundColor = this.ctx.fillStyle;
-      let isValidDefaultBg = true;
-      let defaultBg = defaultBackgroundColor;
-      this.ctx.fillStyle = defaultBackgroundColor;
-      defaultBg = this.ctx.fillStyle;
-      isValidDefaultBg = typeof defaultBg === "string" && /^#[0-9A-Fa-f]{6}$/.test(defaultBg);
-      if (fg === "#000000" && bg === "#ffffff" || fg === bg || !isValidDefaultBg) {
-        this.foregroundColor = this.backgroundColor = null;
-      } else {
-        const [rB, gB, bB] = (0, _display_utils.getRGB)(defaultBg);
-        const newComp = x => {
-          x /= 255;
-          return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
-        };
-        const lumB = Math.round(0.2126 * newComp(rB) + 0.7152 * newComp(gB) + 0.0722 * newComp(bB));
-        this.selectColor = (r, g, b) => {
-          const lumC = 0.2126 * newComp(r) + 0.7152 * newComp(g) + 0.0722 * newComp(b);
-          return Math.round(lumC) === lumB ? bg : fg;
-        };
-      }
-    }
-    this.ctx.fillStyle = this.backgroundColor || defaultBackgroundColor;
+    const savedFillStyle = this.ctx.fillStyle;
+    this.ctx.fillStyle = background || "#ffffff";
     this.ctx.fillRect(0, 0, width, height);
-    this.ctx.restore();
+    this.ctx.fillStyle = savedFillStyle;
     if (transparency) {
       const transparentCanvas = this.cachedCanvases.getCanvas("transparent", width, height);
       this.compositeCtx = this.ctx;
@@ -5734,7 +5766,7 @@ class CanvasGraphics {
       this.ctx.transform(...(0, _display_utils.getCurrentTransform)(this.compositeCtx));
     }
     this.ctx.save();
-    resetCtxToDefault(this.ctx, this.foregroundColor);
+    resetCtxToDefault(this.ctx);
     if (transform) {
       this.ctx.transform(...transform);
       this.outputScaleX = transform[0];
@@ -5802,7 +5834,7 @@ class CanvasGraphics {
       this.transparentCanvas = null;
     }
   }
-  endDrawing() {
+  endDrawing(pageColors = null) {
     this.#restoreInitialState();
     this.cachedCanvases.clear();
     this.cachedPatterns.clear();
@@ -5815,6 +5847,15 @@ class CanvasGraphics {
       cache.clear();
     }
     this._cachedBitmapsMap.clear();
+    if (pageColors) {
+      const hcmFilterId = this.filterFactory.addHCMFilter(pageColors.foreground, pageColors.background);
+      if (hcmFilterId !== "none") {
+        const savedFilter = this.ctx.filter;
+        this.ctx.filter = hcmFilterId;
+        this.ctx.drawImage(this.ctx.canvas, 0, 0);
+        this.ctx.filter = savedFilter;
+      }
+    }
   }
   _scaleImage(img, inverseTransform) {
     const width = img.width;
@@ -6634,12 +6675,12 @@ class CanvasGraphics {
     this.current.patternFill = true;
   }
   setStrokeRGBColor(r, g, b) {
-    const color = this.selectColor?.(r, g, b) || _util.Util.makeHexColor(r, g, b);
+    const color = _util.Util.makeHexColor(r, g, b);
     this.ctx.strokeStyle = color;
     this.current.strokeColor = color;
   }
   setFillRGBColor(r, g, b) {
-    const color = this.selectColor?.(r, g, b) || _util.Util.makeHexColor(r, g, b);
+    const color = _util.Util.makeHexColor(r, g, b);
     this.ctx.fillStyle = color;
     this.current.fillColor = color;
     this.current.patternFill = false;
@@ -6818,7 +6859,7 @@ class CanvasGraphics {
   }
   beginAnnotation(id, rect, transform, matrix, hasOwnCanvas) {
     this.#restoreInitialState();
-    resetCtxToDefault(this.ctx, this.foregroundColor);
+    resetCtxToDefault(this.ctx);
     this.ctx.save();
     this.save();
     if (this.baseTransform) {
@@ -6850,9 +6891,9 @@ class CanvasGraphics {
         this.annotationCanvas.savedCtx = this.ctx;
         this.ctx = context;
         this.ctx.setTransform(scaleX, 0, 0, -scaleY, 0, height * scaleY);
-        resetCtxToDefault(this.ctx, this.foregroundColor);
+        resetCtxToDefault(this.ctx);
       } else {
-        resetCtxToDefault(this.ctx, this.foregroundColor);
+        resetCtxToDefault(this.ctx);
         this.ctx.rect(rect[0], rect[1], width, height);
         this.ctx.clip();
         this.endPath();
@@ -9356,7 +9397,7 @@ function getFilenameFromContentDispositionHeader(contentDisposition) {
           parts[i] = parts[i].slice(0, quotindex);
           parts.length = i + 1;
         }
-        parts[i] = parts[i].replace(/\\(.)/g, "$1");
+        parts[i] = parts[i].replaceAll(/\\(.)/g, "$1");
       }
       value = parts.join('"');
     }
@@ -9376,10 +9417,10 @@ function getFilenameFromContentDispositionHeader(contentDisposition) {
     if (!value.startsWith("=?") || /[\x00-\x19\x80-\xff]/.test(value)) {
       return value;
     }
-    return value.replace(/=\?([\w-]*)\?([QqBb])\?((?:[^?]|\?(?!=))*)\?=/g, function (matches, charset, encoding, text) {
+    return value.replaceAll(/=\?([\w-]*)\?([QqBb])\?((?:[^?]|\?(?!=))*)\?=/g, function (matches, charset, encoding, text) {
       if (encoding === "q" || encoding === "Q") {
-        text = text.replace(/_/g, " ");
-        text = text.replace(/=([0-9a-fA-F]{2})/g, function (match, hex) {
+        text = text.replaceAll("_", " ");
+        text = text.replaceAll(/=([0-9a-fA-F]{2})/g, function (match, hex) {
           return String.fromCharCode(parseInt(hex, 16));
         });
         return textdecode(charset, text);
@@ -10368,8 +10409,9 @@ function renderTextLayer(params) {
     viewport
   } = params;
   const style = getComputedStyle(container);
+  const visibility = style.getPropertyValue("visibility");
   const scaleFactor = parseFloat(style.getPropertyValue("--scale-factor"));
-  if (!scaleFactor || Math.abs(scaleFactor - viewport.scale) > 1e-15) {
+  if (visibility === "visible" && (!scaleFactor || Math.abs(scaleFactor - viewport.scale) > 1e-15)) {
     console.error("The `--scale-factor` CSS-variable must be set, " + "to the same value as `viewport.scale`, " + "either on the `container`-element itself or higher up in the DOM.");
   }
   const task = new TextLayerRenderTask(params);
@@ -15946,7 +15988,7 @@ var _worker_options = __w_pdfjs_require__(14);
 var _svg = __w_pdfjs_require__(35);
 var _xfa_layer = __w_pdfjs_require__(34);
 const pdfjsVersion = '3.5.0';
-const pdfjsBuild = '9db4509';
+const pdfjsBuild = '8a2dfdb';
 })();
 
 /******/ 	return __webpack_exports__;

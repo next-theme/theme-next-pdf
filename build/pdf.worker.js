@@ -496,6 +496,7 @@ class WorkerMessageHandler {
               }
             });
           }
+          const lastXRefStreamPos = xref.lastXRefStreamPos;
           newXrefInfo = {
             rootRef: xref.trailer.getRaw("Root") || null,
             encryptRef: xref.trailer.getRaw("Encrypt") || null,
@@ -503,7 +504,7 @@ class WorkerMessageHandler {
             infoRef: xref.trailer.getRaw("Info") || null,
             info: infoObj,
             fileIds: xref.trailer.get("ID") || null,
-            startXRef,
+            startXRef: lastXRefStreamPos === null ? startXRef : lastXRefStreamPos,
             filename
           };
         }
@@ -1643,7 +1644,7 @@ function escapePDFName(str) {
   return buffer.join("");
 }
 function escapeString(str) {
-  return str.replace(/([()\\\n\r])/g, match => {
+  return str.replaceAll(/([()\\\n\r])/g, match => {
     if (match === "\n") {
       return "\\n";
     } else if (match === "\r") {
@@ -1678,7 +1679,7 @@ function _collectJS(entry, xref, list, parents) {
       } else if (typeof js === "string") {
         code = js;
       }
-      code = code && (0, _util.stringToPDFString)(code).replace(/\u0000/g, "");
+      code = code && (0, _util.stringToPDFString)(code).replaceAll("\x00", "");
       if (code) {
         list.push(code);
       }
@@ -1778,12 +1779,12 @@ function validateCSSFont(cssFontInfo) {
     italicAngle
   } = cssFontInfo;
   if (/^".*"$/.test(fontFamily)) {
-    if (/[^\\]"/.test(fontFamily.slice(1, fontFamily.length - 1))) {
+    if (/[^\\]"/.test(fontFamily.slice(1, -1))) {
       (0, _util.warn)(`XFA - FontFamily contains some unescaped ": ${fontFamily}.`);
       return false;
     }
   } else if (/^'.*'$/.test(fontFamily)) {
-    if (/[^\\]'/.test(fontFamily.slice(1, fontFamily.length - 1))) {
+    if (/[^\\]'/.test(fontFamily.slice(1, -1))) {
       (0, _util.warn)(`XFA - FontFamily contains some unescaped ': ${fontFamily}.`);
       return false;
     }
@@ -1803,7 +1804,7 @@ function validateCSSFont(cssFontInfo) {
 }
 function recoverJsURL(str) {
   const URL_OPEN_METHODS = ["app.launchURL", "window.open", "xfa.host.gotoURL"];
-  const regex = new RegExp("^\\s*(" + URL_OPEN_METHODS.join("|").split(".").join("\\.") + ")\\((?:'|\")([^'\"]*)(?:'|\")(?:,\\s*(\\w+)\\)|\\))", "i");
+  const regex = new RegExp("^\\s*(" + URL_OPEN_METHODS.join("|").replaceAll(".", "\\.") + ")\\((?:'|\")([^'\"]*)(?:'|\")(?:,\\s*(\\w+)\\)|\\))", "i");
   const jsUrl = regex.exec(str);
   if (jsUrl && jsUrl[2]) {
     const url = jsUrl[2];
@@ -3754,7 +3755,7 @@ class PDFDocument {
         continue;
       }
       let fontFamily = descriptor.get("FontFamily");
-      fontFamily = fontFamily.replace(/[ ]+(\d)/g, "$1");
+      fontFamily = fontFamily.replaceAll(/[ ]+(\d)/g, "$1");
       const fontWeight = descriptor.get("FontWeight");
       const italicAngle = -descriptor.get("ItalicAngle");
       const cssFontInfo = {
@@ -10777,6 +10778,15 @@ class PartialEvaluator {
             code = unicode;
           }
           break;
+        default:
+          switch (glyphName) {
+            case "f_h":
+            case "f_t":
+            case "T_h":
+              toUnicode[charcode] = glyphName.replaceAll("_", "");
+              continue;
+          }
+          break;
       }
       if (code > 0 && code <= 0x10ffff && Number.isInteger(code)) {
         if (baseEncodingName && code === +charcode) {
@@ -10813,14 +10823,19 @@ class PartialEvaluator {
         fetchBuiltInCMap: this._fetchBuiltInCMapBound,
         useCMap: null
       });
-      const toUnicode = [];
+      const toUnicode = [],
+        buf = [];
       properties.cMap.forEach(function (charcode, cid) {
         if (cid > 0xffff) {
           throw new _util.FormatError("Max size of CID is 65,535");
         }
         const ucs2 = ucs2CMap.lookup(cid);
         if (ucs2) {
-          toUnicode[charcode] = String.fromCharCode((ucs2.charCodeAt(0) << 8) + ucs2.charCodeAt(1));
+          buf.length = 0;
+          for (let i = 0, ii = ucs2.length; i < ii; i += 2) {
+            buf.push((ucs2.charCodeAt(i) << 8) + ucs2.charCodeAt(i + 1));
+          }
+          toUnicode[charcode] = String.fromCharCode(...buf);
         }
       });
       return new _to_unicode_map.ToUnicodeMap(toUnicode);
@@ -11170,7 +11185,7 @@ class PartialEvaluator {
         if (!(baseFontName instanceof _primitives.Name)) {
           throw new _util.FormatError("Base font is not specified");
         }
-        baseFontName = baseFontName.name.replace(/[,_]/g, "-");
+        baseFontName = baseFontName.name.replaceAll(/[,_]/g, "-");
         const metrics = this.getBaseFontMetrics(baseFontName);
         const fontNameWoStyle = baseFontName.split("-")[0];
         const flags = (this.isSerifFont(fontNameWoStyle) ? _fonts_utils.FontFlags.Serif : 0) | (metrics.monospace ? _fonts_utils.FontFlags.FixedPitch : 0) | ((0, _standard_fonts.getSymbolsFonts)()[fontNameWoStyle] ? _fonts_utils.FontFlags.Symbolic : _fonts_utils.FontFlags.Nonsymbolic);
@@ -21341,7 +21356,7 @@ function createPostTable(properties) {
   return "\x00\x03\x00\x00" + (0, _util.string32)(angle) + "\x00\x00" + "\x00\x00" + (0, _util.string32)(properties.fixedPitch ? 1 : 0) + "\x00\x00\x00\x00" + "\x00\x00\x00\x00" + "\x00\x00\x00\x00" + "\x00\x00\x00\x00";
 }
 function createPostscriptName(name) {
-  return name.replace(/[^\x21-\x7E]|[[\](){}<>/%]/g, "").slice(0, 63);
+  return name.replaceAll(/[^\x21-\x7E]|[[\](){}<>/%]/g, "").slice(0, 63);
 }
 function createNameTable(name, proto) {
   if (!proto) {
@@ -21391,7 +21406,7 @@ class Font {
     this._glyphCache = Object.create(null);
     let isSerifFont = !!(properties.flags & _fonts_utils.FontFlags.Serif);
     if (!isSerifFont && !properties.isSimulatedFlags) {
-      const baseName = name.replace(/[,_]/g, "-").split("-")[0],
+      const baseName = name.replaceAll(/[,_]/g, "-").split("-")[0],
         serifFonts = (0, _standard_fonts.getSerifFonts)();
       for (const namePart of baseName.split("+")) {
         if (serifFonts[namePart]) {
@@ -21713,7 +21728,7 @@ class Font {
         const [nameTable] = readNameTable(potentialTables.name);
         for (let j = 0, jj = nameTable.length; j < jj; j++) {
           for (let k = 0, kk = nameTable[j].length; k < kk; k++) {
-            const nameEntry = nameTable[j][k] && nameTable[j][k].replace(/\s/g, "");
+            const nameEntry = nameTable[j][k] && nameTable[j][k].replaceAll(/\s/g, "");
             if (!nameEntry) {
               continue;
             }
@@ -24875,7 +24890,7 @@ function type1FontGlyphMapping(properties, builtInEncoding, glyphNames) {
   return charCodeToGlyphId;
 }
 function normalizeFontName(name) {
-  return name.replace(/[,_]/g, "-").replace(/\s/g, "");
+  return name.replaceAll(/[,_]/g, "-").replaceAll(/\s/g, "");
 }
 
 /***/ }),
@@ -43392,7 +43407,7 @@ class Type1CharString {
             subrNumber = this.stack.pop();
             const numArgs = this.stack.pop();
             if (subrNumber === 0 && numArgs === 3) {
-              const flexArgs = this.stack.splice(this.stack.length - 17, 17);
+              const flexArgs = this.stack.splice(-17, 17);
               this.stack.push(flexArgs[2] + flexArgs[0], flexArgs[3] + flexArgs[1], flexArgs[4], flexArgs[5], flexArgs[6], flexArgs[7], flexArgs[8], flexArgs[9], flexArgs[10], flexArgs[11], flexArgs[12], flexArgs[13], flexArgs[14]);
               error = this.executeCommand(13, COMMAND_MAP.flex, true);
               this.flexing = false;
@@ -48693,7 +48708,7 @@ function isWhitespaceString(s) {
 }
 class XMLParserBase {
   _resolveEntities(s) {
-    return s.replace(/&([^;]+);/g, (all, entity) => {
+    return s.replaceAll(/&([^;]+);/g, (all, entity) => {
       if (entity.substring(0, 2) === "#x") {
         return String.fromCodePoint(parseInt(entity.substring(2), 16));
       } else if (entity.substring(0, 1) === "#") {
@@ -51248,7 +51263,7 @@ class Catalog {
       if (javaScript === null) {
         javaScript = new Map();
       }
-      js = (0, _util.stringToPDFString)(js).replace(/\u0000/g, "");
+      js = (0, _util.stringToPDFString)(js).replaceAll("\x00", "");
       javaScript.set(name, js);
     }
     if (obj instanceof _primitives.Dict && obj.has("JavaScript")) {
@@ -51970,7 +51985,7 @@ class FileSpec {
   get filename() {
     if (!this._filename && this.root) {
       const filename = pickPlatformItem(this.root) || "unnamed";
-      this._filename = (0, _util.stringToPDFString)(filename).replace(/\\\\/g, "\\").replace(/\\\//g, "/").replace(/\\/g, "/");
+      this._filename = (0, _util.stringToPDFString)(filename).replaceAll("\\\\", "\\").replaceAll("\\/", "/").replaceAll("\\", "/");
     }
     return this._filename;
   }
@@ -52028,10 +52043,10 @@ class MetadataParser {
     }
   }
   _repair(data) {
-    return data.replace(/^[^<]+/, "").replace(/>\\376\\377([^<]+)/g, function (all, codes) {
-      const bytes = codes.replace(/\\([0-3])([0-7])([0-7])/g, function (code, d1, d2, d3) {
+    return data.replace(/^[^<]+/, "").replaceAll(/>\\376\\377([^<]+)/g, function (all, codes) {
+      const bytes = codes.replaceAll(/\\([0-3])([0-7])([0-7])/g, function (code, d1, d2, d3) {
         return String.fromCharCode(d1 * 64 + d2 * 8 + d3 * 1);
-      }).replace(/&(amp|apos|gt|lt|quot);/g, function (str, name) {
+      }).replaceAll(/&(amp|apos|gt|lt|quot);/g, function (str, name) {
         switch (name) {
           case "amp":
             return "&";
@@ -53116,9 +53131,9 @@ class XFAObject {
     if (usehref) {
       ref = usehref;
       if (usehref.startsWith("#som(") && usehref.endsWith(")")) {
-        somExpression = usehref.slice("#som(".length, usehref.length - 1);
+        somExpression = usehref.slice("#som(".length, -1);
       } else if (usehref.startsWith(".#som(") && usehref.endsWith(")")) {
-        somExpression = usehref.slice(".#som(".length, usehref.length - 1);
+        somExpression = usehref.slice(".#som(".length, -1);
       } else if (usehref.startsWith("#")) {
         id = usehref.slice(1);
       } else if (usehref.startsWith(".#")) {
@@ -53637,7 +53652,7 @@ const dimConverters = {
 const measurementPattern = /([+-]?\d+\.?\d*)(.*)/;
 function stripQuotes(str) {
   if (str.startsWith("'") || str.startsWith('"')) {
-    return str.slice(1, str.length - 1);
+    return str.slice(1, -1);
   }
   return str;
 }
@@ -58805,7 +58820,7 @@ class Text extends _xfa_object.ContentObject {
   }
   [_xfa_object.$finalize]() {
     if (typeof this[_xfa_object.$content] === "string") {
-      this[_xfa_object.$content] = this[_xfa_object.$content].replace(/\r\n/g, "\n");
+      this[_xfa_object.$content] = this[_xfa_object.$content].replaceAll("\r\n", "\n");
     }
   }
   [_xfa_object.$getExtra]() {
@@ -60411,7 +60426,7 @@ class FontFinder {
       return font;
     }
     const pattern = /,|-|_| |bolditalic|bold|italic|regular|it/gi;
-    let name = fontName.replace(pattern, "");
+    let name = fontName.replaceAll(pattern, "");
     font = this.fonts.get(name);
     if (font) {
       this.cache.set(fontName, font);
@@ -60420,28 +60435,28 @@ class FontFinder {
     name = name.toLowerCase();
     const maybe = [];
     for (const [family, pdfFont] of this.fonts.entries()) {
-      if (family.replace(pattern, "").toLowerCase().startsWith(name)) {
+      if (family.replaceAll(pattern, "").toLowerCase().startsWith(name)) {
         maybe.push(pdfFont);
       }
     }
     if (maybe.length === 0) {
       for (const [, pdfFont] of this.fonts.entries()) {
-        if (pdfFont.regular.name && pdfFont.regular.name.replace(pattern, "").toLowerCase().startsWith(name)) {
+        if (pdfFont.regular.name && pdfFont.regular.name.replaceAll(pattern, "").toLowerCase().startsWith(name)) {
           maybe.push(pdfFont);
         }
       }
     }
     if (maybe.length === 0) {
-      name = name.replace(/psmt|mt/gi, "");
+      name = name.replaceAll(/psmt|mt/gi, "");
       for (const [family, pdfFont] of this.fonts.entries()) {
-        if (family.replace(pattern, "").toLowerCase().startsWith(name)) {
+        if (family.replaceAll(pattern, "").toLowerCase().startsWith(name)) {
           maybe.push(pdfFont);
         }
       }
     }
     if (maybe.length === 0) {
       for (const pdfFont of this.fonts.values()) {
-        if (pdfFont.regular.name && pdfFont.regular.name.replace(pattern, "").toLowerCase().startsWith(name)) {
+        if (pdfFont.regular.name && pdfFont.regular.name.replaceAll(pattern, "").toLowerCase().startsWith(name)) {
           maybe.push(pdfFont);
         }
       }
@@ -63251,9 +63266,9 @@ class XhtmlObject extends _xfa_object.XmlObject {
   }
   [_xfa_object.$onText](str, richText = false) {
     if (!richText) {
-      str = str.replace(crlfRegExp, "");
+      str = str.replaceAll(crlfRegExp, "");
       if (!this.style.includes("xfa-spacerun:yes")) {
-        str = str.replace(spacesRegExp, " ");
+        str = str.replaceAll(spacesRegExp, " ");
       }
     } else {
       this[$richText] = true;
@@ -63355,7 +63370,7 @@ class XhtmlObject extends _xfa_object.XmlObject {
     }
     let value;
     if (this[$richText]) {
-      value = this[_xfa_object.$content] ? this[_xfa_object.$content].replace(crlfForRichTextRegExp, "\n") : undefined;
+      value = this[_xfa_object.$content] ? this[_xfa_object.$content].replaceAll(crlfForRichTextRegExp, "\n") : undefined;
     } else {
       value = this[_xfa_object.$content] || undefined;
     }
@@ -63676,7 +63691,7 @@ class XRef {
     this.stream = stream;
     this.pdfManager = pdfManager;
     this.entries = [];
-    this.xrefstms = Object.create(null);
+    this._xrefStms = new Set();
     this._cacheMap = new Map();
     this._pendingRefs = new _primitives.RefSet();
     this._newPersistentRefNum = null;
@@ -64045,7 +64060,7 @@ class XRef {
         const xrefTagOffset = skipUntil(content, 0, xrefBytes);
         if (xrefTagOffset < contentLength && content[xrefTagOffset + 5] < 64) {
           xrefStms.push(position - stream.start);
-          this.xrefstms[position - stream.start] = 1;
+          this._xrefStms.add(position - stream.start);
         }
         position += contentLength;
       } else if (token.startsWith("trailer") && (token.length === 7 || /\s/.test(token[7]))) {
@@ -64162,12 +64177,9 @@ class XRef {
             this.topDict = dict;
           }
           obj = dict.get("XRefStm");
-          if (Number.isInteger(obj)) {
-            const pos = obj;
-            if (!(pos in this.xrefstms)) {
-              this.xrefstms[pos] = 1;
-              this.startXRefQueue.push(pos);
-            }
+          if (Number.isInteger(obj) && !this._xrefStms.has(obj)) {
+            this._xrefStms.add(obj);
+            this.startXRefQueue.push(obj);
           }
         } else if (Number.isInteger(obj)) {
           if (!Number.isInteger(parser.getObj()) || !(0, _primitives.isCmd)(parser.getObj(), "obj") || !((obj = parser.getObj()) instanceof _base_stream.BaseStream)) {
@@ -64204,6 +64216,9 @@ class XRef {
       return undefined;
     }
     throw new _core_utils.XRefParseException();
+  }
+  get lastXRefStreamPos() {
+    return this._xrefStms.size > 0 ? Math.max(...this._xrefStms) : null;
   }
   getEntry(i) {
     const xrefEntry = this.entries[i];
@@ -65002,7 +65017,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.5.0';
-const pdfjsBuild = '9db4509';
+const pdfjsBuild = '8a2dfdb';
 })();
 
 /******/ 	return __webpack_exports__;
