@@ -112,8 +112,8 @@ class WorkerMessageHandler {
     if (enumerableProperties.length) {
       throw new Error("The `Array.prototype` contains unexpected enumerable properties: " + enumerableProperties.join(", ") + "; thus breaking e.g. `for...in` iteration of `Array`s.");
     }
-    if (typeof ReadableStream === "undefined") {
-      const partialMsg = "The browser/environment lacks native support for critical " + "functionality used by the PDF.js library (e.g. `ReadableStream`); ";
+    if (typeof Path2D === "undefined" || typeof ReadableStream === "undefined") {
+      const partialMsg = "The browser/environment lacks native support for critical " + "functionality used by the PDF.js library " + "(e.g. `Path2D` and/or `ReadableStream`); ";
       if (_is_node.isNodeJS) {
         throw new Error(partialMsg + "please use a `legacy`-build instead.");
       }
@@ -556,7 +556,10 @@ class WorkerMessageHandler {
       });
     });
     handler.on("GetTextContent", function (data, sink) {
-      const pageIndex = data.pageIndex;
+      const {
+        pageIndex,
+        includeMarkedContent
+      } = data;
       pdfManager.getPage(pageIndex).then(function (page) {
         const task = new WorkerTask("GetTextContent: page " + pageIndex);
         startWorkerTask(task);
@@ -565,8 +568,7 @@ class WorkerMessageHandler {
           handler,
           task,
           sink,
-          includeMarkedContent: data.includeMarkedContent,
-          combineTextItems: data.combineTextItems
+          includeMarkedContent
         }).then(function () {
           finishWorkerTask(task);
           if (start) {
@@ -1778,20 +1780,17 @@ function validateCSSFont(cssFontInfo) {
     fontWeight,
     italicAngle
   } = cssFontInfo;
-  if (/^".*"$/.test(fontFamily)) {
-    if (/[^\\]"/.test(fontFamily.slice(1, -1))) {
-      (0, _util.warn)(`XFA - FontFamily contains some unescaped ": ${fontFamily}.`);
-      return false;
-    }
-  } else if (/^'.*'$/.test(fontFamily)) {
-    if (/[^\\]'/.test(fontFamily.slice(1, -1))) {
-      (0, _util.warn)(`XFA - FontFamily contains some unescaped ': ${fontFamily}.`);
+  const m = /^("|').*("|')$/.exec(fontFamily);
+  if (m && m[1] === m[2]) {
+    const re = new RegExp(`[^\\\\]${m[1]}`);
+    if (re.test(fontFamily.slice(1, -1))) {
+      (0, _util.warn)(`XFA - FontFamily contains unescaped ${m[1]}: ${fontFamily}.`);
       return false;
     }
   } else {
     for (const ident of fontFamily.split(/[ \t]+/)) {
       if (/^(\d|(-(\d|-)))/.test(ident) || !/^[\w-\\]+$/.test(ident)) {
-        (0, _util.warn)(`XFA - FontFamily contains some invalid <custom-ident>: ${fontFamily}.`);
+        (0, _util.warn)(`XFA - FontFamily contains invalid <custom-ident>: ${fontFamily}.`);
         return false;
       }
     }
@@ -3279,8 +3278,7 @@ class Page {
     handler,
     task,
     includeMarkedContent,
-    sink,
-    combineTextItems
+    sink
   }) {
     const contentStreamPromise = this.getContentStream();
     const resourcesPromise = this.loadResources(["ExtGState", "Font", "Properties", "XObject"]);
@@ -3302,7 +3300,6 @@ class Page {
         task,
         resources: this.resources,
         includeMarkedContent,
-        combineTextItems,
         sink,
         viewBox: this.view
       });
@@ -4804,7 +4801,6 @@ class Annotation {
       task,
       resources,
       includeMarkedContent: true,
-      combineTextItems: true,
       sink,
       viewBox
     });
@@ -9864,7 +9860,6 @@ class PartialEvaluator {
     task,
     resources,
     stateManager = null,
-    combineTextItems = false,
     includeMarkedContent = false,
     sink,
     seenStyles = new Set(),
@@ -9919,6 +9914,7 @@ class PartialEvaluator {
     const NEGATIVE_SPACE_FACTOR = -0.2;
     const SPACE_IN_FLOW_MIN_FACTOR = 0.102;
     const SPACE_IN_FLOW_MAX_FACTOR = 0.6;
+    const VERTICAL_SHIFT_RATIO = 0.25;
     const self = this;
     const xref = this.xref;
     const showSpacedTextBuffer = [];
@@ -10040,7 +10036,7 @@ class PartialEvaluator {
       if (shiftedX < 0 || shiftedX > viewBox[2] || shiftedY < 0 || shiftedY > viewBox[3]) {
         return false;
       }
-      if (!combineTextItems || !textState.font || !textContentItem.prevTransform) {
+      if (!textState.font || !textContentItem.prevTransform) {
         return true;
       }
       let lastPosX = textContentItem.prevTransform[4];
@@ -10110,6 +10106,9 @@ class PartialEvaluator {
             textContentItem.height += advanceY;
           }
         }
+        if (Math.abs(advanceX) > textContentItem.width * VERTICAL_SHIFT_RATIO) {
+          flushTextContentItem();
+        }
         return true;
       }
       const advanceX = (posX - lastPosX) / textContentItem.textAdvanceScale;
@@ -10148,6 +10147,9 @@ class PartialEvaluator {
         } else {
           textContentItem.width += advanceX;
         }
+      }
+      if (Math.abs(advanceY) > textContentItem.height * VERTICAL_SHIFT_RATIO) {
+        flushTextContentItem();
       }
       return true;
     }
@@ -10501,7 +10503,6 @@ class PartialEvaluator {
                 task,
                 resources: xobj.dict.get("Resources") || resources,
                 stateManager: xObjStateManager,
-                combineTextItems,
                 includeMarkedContent,
                 sink: sinkWrapper,
                 seenStyles,
@@ -45398,9 +45399,7 @@ class PDFFunction {
 }
 function isPDFFunction(v) {
   let fnDict;
-  if (typeof v !== "object") {
-    return false;
-  } else if (v instanceof _primitives.Dict) {
+  if (v instanceof _primitives.Dict) {
     fnDict = v;
   } else if (v instanceof _base_stream.BaseStream) {
     fnDict = v.dict;
@@ -65017,7 +65016,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.5.0';
-const pdfjsBuild = '8a2dfdb';
+const pdfjsBuild = '8b7e446';
 })();
 
 /******/ 	return __webpack_exports__;

@@ -1475,13 +1475,11 @@ class PDFPageProxy {
     return intentState.opListReadCapability.promise;
   }
   streamTextContent({
-    disableCombineTextItems = false,
     includeMarkedContent = false
   } = {}) {
     const TEXT_CONTENT_CHUNK_SIZE = 100;
     return this._transport.messageHandler.sendWithStream("GetTextContent", {
       pageIndex: this._pageIndex,
-      combineTextItems: disableCombineTextItems !== true,
       includeMarkedContent: includeMarkedContent === true
     }, {
       highWaterMark: TEXT_CONTENT_CHUNK_SIZE,
@@ -2722,7 +2720,7 @@ class InternalRenderTask {
 }
 const version = '3.5.0';
 exports.version = version;
-const build = '8a2dfdb';
+const build = '8b7e446';
 exports.build = build;
 
 /***/ }),
@@ -15988,7 +15986,7 @@ var _worker_options = __w_pdfjs_require__(14);
 var _svg = __w_pdfjs_require__(35);
 var _xfa_layer = __w_pdfjs_require__(34);
 const pdfjsVersion = '3.5.0';
-const pdfjsBuild = '8a2dfdb';
+const pdfjsBuild = '8b7e446';
 })();
 
 /******/ 	return __webpack_exports__;
