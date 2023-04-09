@@ -980,7 +980,7 @@ function getDocument(src) {
   }
   const fetchDocParams = {
     docId,
-    apiVersion: '3.5.0',
+    apiVersion: '3.6.0',
     data,
     password,
     disableAutoFetch,
@@ -1349,15 +1349,14 @@ class PDFPageProxy {
     intent = "display",
     annotationMode = _util.AnnotationMode.ENABLE,
     transform = null,
-    canvasFactory = null,
     background = null,
     optionalContentConfigPromise = null,
     annotationCanvasMap = null,
     pageColors = null,
     printAnnotationStorage = null
   }) {
-    if (canvasFactory) {
-      (0, _display_utils.deprecated)("render no longer accepts the `canvasFactory`-option, " + "please pass it to the `getDocument`-function instead.");
+    if (arguments[0]?.canvasFactory) {
+      throw new Error("render no longer accepts the `canvasFactory`-option, " + "please pass it to the `getDocument`-function instead.");
     }
     this._stats?.time("Overall");
     const intentArgs = this._transport.getRenderingIntent(intent, annotationMode, printAnnotationStorage);
@@ -1418,7 +1417,7 @@ class PDFPageProxy {
       annotationCanvasMap,
       operatorList: intentState.operatorList,
       pageIndex: this._pageIndex,
-      canvasFactory: canvasFactory || this._transport.canvasFactory,
+      canvasFactory: this._transport.canvasFactory,
       filterFactory: this._transport.filterFactory,
       useRequestAnimationFrame: !intentPrint,
       pdfBug: this._pdfBug,
@@ -2718,9 +2717,9 @@ class InternalRenderTask {
     }
   }
 }
-const version = '3.5.0';
+const version = '3.6.0';
 exports.version = version;
-const build = '8b7e446';
+const build = '195db2c';
 exports.build = build;
 
 /***/ }),
@@ -10409,7 +10408,7 @@ function renderTextLayer(params) {
   const style = getComputedStyle(container);
   const visibility = style.getPropertyValue("visibility");
   const scaleFactor = parseFloat(style.getPropertyValue("--scale-factor"));
-  if (visibility === "visible" && (!scaleFactor || Math.abs(scaleFactor - viewport.scale) > 1e-15)) {
+  if (visibility === "visible" && (!scaleFactor || Math.abs(scaleFactor - viewport.scale) > 1e-5)) {
     console.error("The `--scale-factor` CSS-variable must be set, " + "to the same value as `viewport.scale`, " + "either on the `container`-element itself or higher up in the DOM.");
   }
   const task = new TextLayerRenderTask(params);
@@ -15985,8 +15984,8 @@ var _annotation_layer = __w_pdfjs_require__(32);
 var _worker_options = __w_pdfjs_require__(14);
 var _svg = __w_pdfjs_require__(35);
 var _xfa_layer = __w_pdfjs_require__(34);
-const pdfjsVersion = '3.5.0';
-const pdfjsBuild = '8b7e446';
+const pdfjsVersion = '3.6.0';
+const pdfjsBuild = '195db2c';
 })();
 
 /******/ 	return __webpack_exports__;
