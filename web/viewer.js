@@ -402,6 +402,7 @@ const PDFViewerApplication = {
     this.pdfViewer = new _pdf_viewer.PDFViewer({
       container,
       viewer,
+      hiddenCopyElement: appConfig.hiddenCopyElement,
       eventBus,
       renderingQueue: pdfRenderingQueue,
       linkService: pdfLinkService,
@@ -2455,6 +2456,7 @@ exports.parseQueryString = parseQueryString;
 exports.removeNullCharacters = removeNullCharacters;
 exports.roundToDivide = roundToDivide;
 exports.scrollIntoView = scrollIntoView;
+exports.toggleCheckedBtn = toggleCheckedBtn;
 exports.watchScroll = watchScroll;
 const DEFAULT_SCALE_VALUE = "auto";
 exports.DEFAULT_SCALE_VALUE = DEFAULT_SCALE_VALUE;
@@ -2945,6 +2947,11 @@ function apiPageModeToSidebarView(mode) {
   }
   return SidebarView.NONE;
 }
+function toggleCheckedBtn(button, toggle, view = null) {
+  button.classList.toggle("toggled", toggle);
+  button.setAttribute("aria-checked", toggle);
+  view?.classList.toggle("hidden", !toggle);
+}
 
 /***/ }),
 /* 4 */
@@ -3017,6 +3024,10 @@ const defaultOptions = {
     kind: OptionKind.VIEWER
   },
   disablePageLabels: {
+    value: false,
+    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+  },
+  enableFloatingToolbar: {
     value: false,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE
   },
@@ -5089,7 +5100,7 @@ function getOriginalIndex(diffs, pos, len) {
     return [pos, len];
   }
   const start = pos;
-  const end = pos + len;
+  const end = pos + len - 1;
   let i = (0, _ui_utils.binarySearchFirstItem)(diffs, x => x[0] >= start);
   if (diffs[i][0] > start) {
     --i;
@@ -5098,7 +5109,10 @@ function getOriginalIndex(diffs, pos, len) {
   if (diffs[j][0] > end) {
     --j;
   }
-  return [start + diffs[i][1], len + diffs[j][1] - diffs[i][1]];
+  const oldStart = start + diffs[i][1];
+  const oldEnd = end + diffs[j][1];
+  const oldLen = oldEnd + 1 - oldStart;
+  return [oldStart, oldLen];
 }
 class PDFFindController {
   #updateMatchesCountOnProgress = true;
@@ -7502,23 +7516,11 @@ class PDFSidebar {
         return;
     }
     this.active = view;
-    const isThumbs = view === _ui_utils.SidebarView.THUMBS,
-      isOutline = view === _ui_utils.SidebarView.OUTLINE,
-      isAttachments = view === _ui_utils.SidebarView.ATTACHMENTS,
-      isLayers = view === _ui_utils.SidebarView.LAYERS;
-    this.thumbnailButton.classList.toggle("toggled", isThumbs);
-    this.outlineButton.classList.toggle("toggled", isOutline);
-    this.attachmentsButton.classList.toggle("toggled", isAttachments);
-    this.layersButton.classList.toggle("toggled", isLayers);
-    this.thumbnailButton.setAttribute("aria-checked", isThumbs);
-    this.outlineButton.setAttribute("aria-checked", isOutline);
-    this.attachmentsButton.setAttribute("aria-checked", isAttachments);
-    this.layersButton.setAttribute("aria-checked", isLayers);
-    this.thumbnailView.classList.toggle("hidden", !isThumbs);
-    this.outlineView.classList.toggle("hidden", !isOutline);
-    this.attachmentsView.classList.toggle("hidden", !isAttachments);
-    this.layersView.classList.toggle("hidden", !isLayers);
-    this._outlineOptionsContainer.classList.toggle("hidden", !isOutline);
+    (0, _ui_utils.toggleCheckedBtn)(this.thumbnailButton, view === _ui_utils.SidebarView.THUMBS, this.thumbnailView);
+    (0, _ui_utils.toggleCheckedBtn)(this.outlineButton, view === _ui_utils.SidebarView.OUTLINE, this.outlineView);
+    (0, _ui_utils.toggleCheckedBtn)(this.attachmentsButton, view === _ui_utils.SidebarView.ATTACHMENTS, this.attachmentsView);
+    (0, _ui_utils.toggleCheckedBtn)(this.layersButton, view === _ui_utils.SidebarView.LAYERS, this.layersView);
+    this._outlineOptionsContainer.classList.toggle("hidden", view !== _ui_utils.SidebarView.OUTLINE);
     if (forceOpen && !this.isOpen) {
       this.open();
       return;
@@ -8411,7 +8413,11 @@ class PDFViewer {
   #annotationEditorUIManager = null;
   #annotationMode = _pdfjsLib.AnnotationMode.ENABLE_FORMS;
   #containerTopLeft = null;
+  #copyCallbackBound = this.#copyCallback.bind(this);
   #enablePermissions = false;
+  #getAllTextInProgress = false;
+  #hiddenCopyElement = null;
+  #interruptCopyCondition = false;
   #previousContainerHeight = 0;
   #resizeObserver = new ResizeObserver(this.#resizeObserverCallback.bind(this));
   #scrollModePageState = null;
@@ -8424,6 +8430,7 @@ class PDFViewer {
     }
     this.container = options.container;
     this.viewer = options.viewer || options.container.firstElementChild;
+    this.#hiddenCopyElement = options.hiddenCopyElement;
     if (this.container?.tagName !== "DIV" || this.viewer?.tagName !== "DIV") {
       throw new Error("Invalid `container` and/or `viewer` option.");
     }
@@ -8681,6 +8688,61 @@ class PDFViewer {
     });
     return Promise.race([this._onePageRenderedCapability.promise, visibilityChangePromise]);
   }
+  async getAllText() {
+    const texts = [];
+    const buffer = [];
+    for (let pageNum = 1, pagesCount = this.pdfDocument.numPages; pageNum <= pagesCount; ++pageNum) {
+      if (this.#interruptCopyCondition) {
+        return null;
+      }
+      buffer.length = 0;
+      const page = await this.pdfDocument.getPage(pageNum);
+      const {
+        items
+      } = await page.getTextContent();
+      for (const item of items) {
+        if (item.str) {
+          buffer.push(item.str);
+        }
+        if (item.hasEOL) {
+          buffer.push("\n");
+        }
+      }
+      texts.push(buffer.join(""));
+    }
+    return texts.join("\n");
+  }
+  #copyCallback(event) {
+    const selection = document.getSelection();
+    const {
+      focusNode,
+      anchorNode
+    } = selection;
+    if (anchorNode && focusNode && selection.containsNode(this.#hiddenCopyElement)) {
+      if (this.#getAllTextInProgress) {
+        return;
+      }
+      this.#getAllTextInProgress = true;
+      const savedCursor = this.container.style.cursor;
+      this.container.style.cursor = "wait";
+      const interruptCopy = ev => this.#interruptCopyCondition = ev.key === "Escape";
+      window.addEventListener("keydown", interruptCopy);
+      this.getAllText().then(async text => {
+        if (text !== null) {
+          await navigator.clipboard.writeText(text);
+        }
+      }).catch(reason => {
+        console.warn(`Something goes wrong when extracting the text: ${reason.message}`);
+      }).finally(() => {
+        this.#getAllTextInProgress = false;
+        this.#interruptCopyCondition = false;
+        window.removeEventListener("keydown", interruptCopy);
+        this.container.style.cursor = savedCursor;
+      });
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }
   setDocument(pdfDocument) {
     if (this.pdfDocument) {
       this.eventBus.dispatch("pagesdestroy", {
@@ -8805,6 +8867,9 @@ class PDFViewer {
       this.#onePageRenderedOrForceFetch().then(async () => {
         this.findController?.setDocument(pdfDocument);
         this._scriptingManager?.setDocument(pdfDocument);
+        if (this.#hiddenCopyElement) {
+          document.addEventListener("copy", this.#copyCallbackBound);
+        }
         if (this.#annotationEditorUIManager) {
           this.eventBus.dispatch("annotationeditormodechanged", {
             source: this,
@@ -8915,6 +8980,7 @@ class PDFViewer {
     this._updateScrollMode();
     this.viewer.removeAttribute("lang");
     this.viewer.classList.remove(ENABLE_PERMISSIONS_CLASS);
+    document.removeEventListener("copy", this.#copyCallbackBound);
   }
   #ensurePageViewVisible() {
     if (this._scrollMode !== _ui_utils.ScrollMode.PAGE) {
@@ -11785,15 +11851,11 @@ class SecondaryToolbar {
     cursorSelectToolButton,
     cursorHandToolButton
   }) {
-    this.eventBus._on("cursortoolchanged", function ({
+    this.eventBus._on("cursortoolchanged", ({
       tool
-    }) {
-      const isSelect = tool === _ui_utils.CursorTool.SELECT,
-        isHand = tool === _ui_utils.CursorTool.HAND;
-      cursorSelectToolButton.classList.toggle("toggled", isSelect);
-      cursorHandToolButton.classList.toggle("toggled", isHand);
-      cursorSelectToolButton.setAttribute("aria-checked", isSelect);
-      cursorHandToolButton.setAttribute("aria-checked", isHand);
+    }) => {
+      (0, _ui_utils.toggleCheckedBtn)(cursorSelectToolButton, tool === _ui_utils.CursorTool.SELECT);
+      (0, _ui_utils.toggleCheckedBtn)(cursorHandToolButton, tool === _ui_utils.CursorTool.HAND);
     });
   }
   #bindScrollModeListener({
@@ -11808,23 +11870,16 @@ class SecondaryToolbar {
     const scrollModeChanged = ({
       mode
     }) => {
-      const isPage = mode === _ui_utils.ScrollMode.PAGE,
-        isVertical = mode === _ui_utils.ScrollMode.VERTICAL,
-        isHorizontal = mode === _ui_utils.ScrollMode.HORIZONTAL,
-        isWrapped = mode === _ui_utils.ScrollMode.WRAPPED;
-      scrollPageButton.classList.toggle("toggled", isPage);
-      scrollVerticalButton.classList.toggle("toggled", isVertical);
-      scrollHorizontalButton.classList.toggle("toggled", isHorizontal);
-      scrollWrappedButton.classList.toggle("toggled", isWrapped);
-      scrollPageButton.setAttribute("aria-checked", isPage);
-      scrollVerticalButton.setAttribute("aria-checked", isVertical);
-      scrollHorizontalButton.setAttribute("aria-checked", isHorizontal);
-      scrollWrappedButton.setAttribute("aria-checked", isWrapped);
+      (0, _ui_utils.toggleCheckedBtn)(scrollPageButton, mode === _ui_utils.ScrollMode.PAGE);
+      (0, _ui_utils.toggleCheckedBtn)(scrollVerticalButton, mode === _ui_utils.ScrollMode.VERTICAL);
+      (0, _ui_utils.toggleCheckedBtn)(scrollHorizontalButton, mode === _ui_utils.ScrollMode.HORIZONTAL);
+      (0, _ui_utils.toggleCheckedBtn)(scrollWrappedButton, mode === _ui_utils.ScrollMode.WRAPPED);
       const forceScrollModePage = this.pagesCount > _pdf_viewer.PagesCountLimit.FORCE_SCROLL_MODE_PAGE;
       scrollPageButton.disabled = forceScrollModePage;
       scrollVerticalButton.disabled = forceScrollModePage;
       scrollHorizontalButton.disabled = forceScrollModePage;
       scrollWrappedButton.disabled = forceScrollModePage;
+      const isHorizontal = mode === _ui_utils.ScrollMode.HORIZONTAL;
       spreadNoneButton.disabled = isHorizontal;
       spreadOddButton.disabled = isHorizontal;
       spreadEvenButton.disabled = isHorizontal;
@@ -11843,19 +11898,13 @@ class SecondaryToolbar {
     spreadOddButton,
     spreadEvenButton
   }) {
-    function spreadModeChanged({
+    const spreadModeChanged = ({
       mode
-    }) {
-      const isNone = mode === _ui_utils.SpreadMode.NONE,
-        isOdd = mode === _ui_utils.SpreadMode.ODD,
-        isEven = mode === _ui_utils.SpreadMode.EVEN;
-      spreadNoneButton.classList.toggle("toggled", isNone);
-      spreadOddButton.classList.toggle("toggled", isOdd);
-      spreadEvenButton.classList.toggle("toggled", isEven);
-      spreadNoneButton.setAttribute("aria-checked", isNone);
-      spreadOddButton.setAttribute("aria-checked", isOdd);
-      spreadEvenButton.setAttribute("aria-checked", isEven);
-    }
+    }) => {
+      (0, _ui_utils.toggleCheckedBtn)(spreadNoneButton, mode === _ui_utils.SpreadMode.NONE);
+      (0, _ui_utils.toggleCheckedBtn)(spreadOddButton, mode === _ui_utils.SpreadMode.ODD);
+      (0, _ui_utils.toggleCheckedBtn)(spreadEvenButton, mode === _ui_utils.SpreadMode.EVEN);
+    };
     this.eventBus._on("spreadmodechanged", spreadModeChanged);
     this.eventBus._on("secondarytoolbarreset", evt => {
       if (evt.source === this) {
@@ -12056,34 +12105,21 @@ class Toolbar {
     editorInkButton,
     editorInkParamsToolbar
   }) {
-    const editorModeChanged = (evt, disableButtons = false) => {
-      const editorButtons = [{
-        mode: _pdfjsLib.AnnotationEditorType.FREETEXT,
-        button: editorFreeTextButton,
-        toolbar: editorFreeTextParamsToolbar
-      }, {
-        mode: _pdfjsLib.AnnotationEditorType.INK,
-        button: editorInkButton,
-        toolbar: editorInkParamsToolbar
-      }];
-      for (const {
-        mode,
-        button,
-        toolbar
-      } of editorButtons) {
-        const checked = mode === evt.mode;
-        button.classList.toggle("toggled", checked);
-        button.setAttribute("aria-checked", checked);
-        button.disabled = disableButtons;
-        toolbar?.classList.toggle("hidden", !checked);
-      }
+    const editorModeChanged = ({
+      mode
+    }) => {
+      (0, _ui_utils.toggleCheckedBtn)(editorFreeTextButton, mode === _pdfjsLib.AnnotationEditorType.FREETEXT, editorFreeTextParamsToolbar);
+      (0, _ui_utils.toggleCheckedBtn)(editorInkButton, mode === _pdfjsLib.AnnotationEditorType.INK, editorInkParamsToolbar);
+      const isDisable = mode === _pdfjsLib.AnnotationEditorType.DISABLE;
+      editorFreeTextButton.disabled = isDisable;
+      editorInkButton.disabled = isDisable;
     };
     this.eventBus._on("annotationeditormodechanged", editorModeChanged);
     this.eventBus._on("toolbarreset", evt => {
       if (evt.source === this) {
         editorModeChanged({
-          mode: _pdfjsLib.AnnotationEditorType.NONE
-        }, true);
+          mode: _pdfjsLib.AnnotationEditorType.DISABLE
+        });
       }
     });
   }
@@ -12280,6 +12316,7 @@ class BasePreferences {
     "defaultZoomDelay": 400,
     "defaultZoomValue": "",
     "disablePageLabels": false,
+    "enableFloatingToolbar": false,
     "enablePermissions": false,
     "enablePrintAutoRotate": true,
     "enableScripting": true,
@@ -13287,7 +13324,7 @@ exports.GenericScripting = GenericScripting;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.PDFPrintService = PDFPrintService;
+exports.PDFPrintService = void 0;
 var _pdfjsLib = __webpack_require__(4);
 var _app = __webpack_require__(2);
 var _print_utils = __webpack_require__(48);
@@ -13320,33 +13357,34 @@ function renderPage(activeServiceOnEntry, pdfDocument, pageNumber, size, printRe
     return pdfPage.render(renderContext).promise;
   });
 }
-function PDFPrintService(pdfDocument, pagesOverview, printContainer, printResolution, optionalContentConfigPromise = null, printAnnotationStoragePromise = null, l10n) {
-  this.pdfDocument = pdfDocument;
-  this.pagesOverview = pagesOverview;
-  this.printContainer = printContainer;
-  this._printResolution = printResolution || 150;
-  this._optionalContentConfigPromise = optionalContentConfigPromise || pdfDocument.getOptionalContentConfig();
-  this._printAnnotationStoragePromise = printAnnotationStoragePromise || Promise.resolve();
-  this.l10n = l10n;
-  this.currentPage = -1;
-  this.scratchCanvas = document.createElement("canvas");
-}
-PDFPrintService.prototype = {
+class PDFPrintService {
+  constructor(pdfDocument, pagesOverview, printContainer, printResolution, optionalContentConfigPromise = null, printAnnotationStoragePromise = null, l10n) {
+    this.pdfDocument = pdfDocument;
+    this.pagesOverview = pagesOverview;
+    this.printContainer = printContainer;
+    this._printResolution = printResolution || 150;
+    this._optionalContentConfigPromise = optionalContentConfigPromise || pdfDocument.getOptionalContentConfig();
+    this._printAnnotationStoragePromise = printAnnotationStoragePromise || Promise.resolve();
+    this.l10n = l10n;
+    this.currentPage = -1;
+    this.scratchCanvas = document.createElement("canvas");
+  }
   layout() {
     this.throwIfInactive();
     const body = document.querySelector("body");
     body.setAttribute("data-pdfjsprinting", true);
-    const hasEqualPageSizes = this.pagesOverview.every(function (size) {
-      return size.width === this.pagesOverview[0].width && size.height === this.pagesOverview[0].height;
-    }, this);
+    const {
+      width,
+      height
+    } = this.pagesOverview[0];
+    const hasEqualPageSizes = this.pagesOverview.every(size => size.width === width && size.height === height);
     if (!hasEqualPageSizes) {
-      console.warn("Not all pages have the same size. The printed " + "result may be incorrect!");
+      console.warn("Not all pages have the same size. The printed result may be incorrect!");
     }
     this.pageStyleSheet = document.createElement("style");
-    const pageSize = this.pagesOverview[0];
-    this.pageStyleSheet.textContent = "@page { size: " + pageSize.width + "pt " + pageSize.height + "pt;}";
+    this.pageStyleSheet.textContent = `@page { size: ${width}pt ${height}pt;}`;
     body.append(this.pageStyleSheet);
-  },
+  }
   destroy() {
     if (activeService !== this) {
       return;
@@ -13366,7 +13404,7 @@ PDFPrintService.prototype = {
         overlayManager.close(dialog);
       }
     });
-  },
+  }
   renderPages() {
     if (this.pdfDocument.isPureXfa) {
       (0, _print_utils.getXfaHtmlForPrinting)(this.printContainer, this.pdfDocument);
@@ -13387,7 +13425,7 @@ PDFPrintService.prototype = {
       }, reject);
     };
     return new Promise(renderNextPage);
-  },
+  }
   useRenderedPage() {
     this.throwIfInactive();
     const img = document.createElement("img");
@@ -13407,7 +13445,7 @@ PDFPrintService.prototype = {
       img.onload = resolve;
       img.onerror = reject;
     });
-  },
+  }
   performPrint() {
     this.throwIfInactive();
     return new Promise(resolve => {
@@ -13420,16 +13458,17 @@ PDFPrintService.prototype = {
         setTimeout(resolve, 20);
       }, 0);
     });
-  },
+  }
   get active() {
     return this === activeService;
-  },
+  }
   throwIfInactive() {
     if (!this.active) {
       throw new Error("This print request was cancelled or completed.");
     }
   }
-};
+}
+exports.PDFPrintService = PDFPrintService;
 const print = window.print;
 window.print = function () {
   if (activeService) {
@@ -13619,7 +13658,7 @@ var _app_options = __webpack_require__(5);
 var _pdf_link_service = __webpack_require__(7);
 var _app = __webpack_require__(2);
 const pdfjsVersion = '3.6.0';
-const pdfjsBuild = '195db2c';
+const pdfjsBuild = '92baf14';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,
@@ -13635,6 +13674,7 @@ function getViewerConfiguration() {
     appContainer: document.body,
     mainContainer: document.getElementById("viewerContainer"),
     viewerContainer: document.getElementById("viewer"),
+    hiddenCopyElement: document.getElementById("hiddenCopyElement"),
     toolbar: {
       container: document.getElementById("toolbarViewer"),
       numPages: document.getElementById("numPages"),

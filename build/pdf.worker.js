@@ -112,7 +112,7 @@ class WorkerMessageHandler {
     if (enumerableProperties.length) {
       throw new Error("The `Array.prototype` contains unexpected enumerable properties: " + enumerableProperties.join(", ") + "; thus breaking e.g. `for...in` iteration of `Array`s.");
     }
-    if (typeof Path2D === "undefined" || typeof ReadableStream === "undefined") {
+    if (_is_node.isNodeJS && typeof Path2D === "undefined" || typeof ReadableStream === "undefined") {
       const partialMsg = "The browser/environment lacks native support for critical " + "functionality used by the PDF.js library " + "(e.g. `Path2D` and/or `ReadableStream`); ";
       if (_is_node.isNodeJS) {
         throw new Error(partialMsg + "please use a `legacy`-build instead.");
@@ -8439,6 +8439,7 @@ class PartialEvaluator {
     this.globalImageCache = globalImageCache;
     this.options = options || DefaultPartialEvaluatorOptions;
     this.parsingType3Font = false;
+    this._regionalImageCache = new _image_utils.RegionalImageCache();
     this._fetchBuiltInCMapBound = this.fetchBuiltInCMap.bind(this);
     _image_resizer.ImageResizer.setMaxArea(this.options.canvasMaxAreaInBytes);
   }
@@ -8732,11 +8733,15 @@ class PartialEvaluator {
         args = [imgData];
         operatorList.addImageOps(_util.OPS.paintImageMaskXObject, args, optionalContent);
         if (cacheKey) {
-          localImageCache.set(cacheKey, imageRef, {
+          const cacheData = {
             fn: _util.OPS.paintImageMaskXObject,
             args,
             optionalContent
-          });
+          };
+          localImageCache.set(cacheKey, imageRef, cacheData);
+          if (imageRef) {
+            this._regionalImageCache.set(null, imageRef, cacheData);
+          }
         }
         return;
       }
@@ -8752,11 +8757,15 @@ class PartialEvaluator {
       if (imgData.isSingleOpaquePixel) {
         operatorList.addImageOps(_util.OPS.paintSolidColorImageMask, [], optionalContent);
         if (cacheKey) {
-          localImageCache.set(cacheKey, imageRef, {
+          const cacheData = {
             fn: _util.OPS.paintSolidColorImageMask,
             args: [],
             optionalContent
-          });
+          };
+          localImageCache.set(cacheKey, imageRef, cacheData);
+          if (imageRef) {
+            this._regionalImageCache.set(null, imageRef, cacheData);
+          }
         }
         return;
       }
@@ -8772,11 +8781,15 @@ class PartialEvaluator {
       }];
       operatorList.addImageOps(_util.OPS.paintImageMaskXObject, args, optionalContent);
       if (cacheKey) {
-        localImageCache.set(cacheKey, imageRef, {
+        const cacheData = {
           fn: _util.OPS.paintImageMaskXObject,
           args,
           optionalContent
-        });
+        };
+        localImageCache.set(cacheKey, imageRef, cacheData);
+        if (imageRef) {
+          this._regionalImageCache.set(null, imageRef, cacheData);
+        }
       }
       return;
     }
@@ -8834,12 +8847,14 @@ class PartialEvaluator {
     });
     operatorList.addImageOps(_util.OPS.paintImageXObject, args, optionalContent);
     if (cacheKey) {
-      localImageCache.set(cacheKey, imageRef, {
+      const cacheData = {
         fn: _util.OPS.paintImageXObject,
         args,
         optionalContent
-      });
+      };
+      localImageCache.set(cacheKey, imageRef, cacheData);
       if (imageRef) {
+        this._regionalImageCache.set(null, imageRef, cacheData);
         (0, _util.assert)(!isInline, "Cannot cache an inline image globally.");
         this.globalImageCache.addPageIndex(imageRef, this.pageIndex);
         if (cacheGlobally) {
@@ -9490,7 +9505,7 @@ class PartialEvaluator {
               }
               let xobj = xobjs.getRaw(name);
               if (xobj instanceof _primitives.Ref) {
-                const localImage = localImageCache.getByRef(xobj);
+                const localImage = localImageCache.getByRef(xobj) || self._regionalImageCache.getByRef(xobj);
                 if (localImage) {
                   operatorList.addImageOps(localImage.fn, localImage.args, localImage.optionalContent);
                   incrementCachedImageMaskCount(localImage);
@@ -9905,6 +9920,9 @@ class PartialEvaluator {
       twoLastCharsPos = nextPos;
       return ret;
     }
+    function shouldAddWhitepsace() {
+      return twoLastChars[twoLastCharsPos] !== " " && twoLastChars[(twoLastCharsPos + 1) % 2] === " ";
+    }
     function resetLastChars() {
       twoLastChars[0] = twoLastChars[1] = " ";
       twoLastCharsPos = 0;
@@ -9923,6 +9941,22 @@ class PartialEvaluator {
     const emptyGStateCache = new _image_utils.LocalGStateCache();
     const preprocessor = new EvaluatorPreprocessor(stream, xref, stateManager);
     let textState;
+    function pushWhitespace({
+      width = 0,
+      height = 0,
+      transform = textContentItem.prevTransform,
+      fontName = textContentItem.fontName
+    }) {
+      textContent.items.push({
+        str: " ",
+        dir: "ltr",
+        width,
+        height,
+        transform,
+        fontName,
+        hasEOL: false
+      });
+    }
     function getCurrentTextTransform() {
       const font = textState.font;
       const tsm = [textState.fontSize * textState.textHScale, 0, 0, textState.fontSize, 0, textState.textRise];
@@ -10089,18 +10123,20 @@ class PartialEvaluator {
           resetLastChars();
         }
         if (advanceY <= textOrientation * textContentItem.trackingSpaceMin) {
-          textContentItem.height += advanceY;
+          if (shouldAddWhitepsace()) {
+            resetLastChars();
+            flushTextContentItem();
+            pushWhitespace({
+              height: Math.abs(advanceY)
+            });
+          } else {
+            textContentItem.height += advanceY;
+          }
         } else if (!addFakeSpaces(advanceY, textContentItem.prevTransform, textOrientation)) {
           if (textContentItem.str.length === 0) {
             resetLastChars();
-            textContent.items.push({
-              str: " ",
-              dir: "ltr",
-              width: 0,
-              height: Math.abs(advanceY),
-              transform: textContentItem.prevTransform,
-              fontName: textContentItem.fontName,
-              hasEOL: false
+            pushWhitespace({
+              height: Math.abs(advanceY)
             });
           } else {
             textContentItem.height += advanceY;
@@ -10131,18 +10167,20 @@ class PartialEvaluator {
         resetLastChars();
       }
       if (advanceX <= textOrientation * textContentItem.trackingSpaceMin) {
-        textContentItem.width += advanceX;
+        if (shouldAddWhitepsace()) {
+          resetLastChars();
+          flushTextContentItem();
+          pushWhitespace({
+            width: Math.abs(advanceX)
+          });
+        } else {
+          textContentItem.width += advanceX;
+        }
       } else if (!addFakeSpaces(advanceX, textContentItem.prevTransform, textOrientation)) {
         if (textContentItem.str.length === 0) {
           resetLastChars();
-          textContent.items.push({
-            str: " ",
-            dir: "ltr",
-            width: Math.abs(advanceX),
-            height: 0,
-            transform: textContentItem.prevTransform,
-            fontName: textContentItem.fontName,
-            hasEOL: false
+          pushWhitespace({
+            width: Math.abs(advanceX)
           });
         } else {
           textContentItem.width += advanceX;
@@ -10262,14 +10300,11 @@ class PartialEvaluator {
       }
       flushTextContentItem();
       resetLastChars();
-      textContent.items.push({
-        str: " ",
-        dir: "ltr",
+      pushWhitespace({
         width: Math.abs(width),
         height: Math.abs(height),
         transform: transf || getCurrentTextTransform(),
-        fontName,
-        hasEOL: false
+        fontName
       });
       return true;
     }
@@ -24341,7 +24376,11 @@ class CFFCompiler {
       data: [],
       length: 0,
       add(data) {
-        this.data = this.data.concat(data);
+        if (data.length <= 65536) {
+          this.data.push(...data);
+        } else {
+          this.data = this.data.concat(data);
+        }
         this.length = this.data.length;
       }
     };
@@ -24580,10 +24619,6 @@ class CFFCompiler {
     }
     return this.compileIndex(stringIndex);
   }
-  compileGlobalSubrIndex() {
-    const globalSubrIndex = this.cff.globalSubrIndex;
-    this.out.writeByteArray(this.compileIndex(globalSubrIndex));
-  }
   compileCharStrings(charStrings) {
     const charStringsIndex = new CFFIndex();
     for (let i = 0; i < charStrings.count; i++) {
@@ -24662,11 +24697,7 @@ class CFFCompiler {
     return this.compileTypedArray(out);
   }
   compileTypedArray(data) {
-    const out = [];
-    for (let i = 0, ii = data.length; i < ii; ++i) {
-      out[i] = data[i];
-    }
-    return out;
+    return Array.from(data);
   }
   compileIndex(index, trackers = []) {
     const objects = index.objects;
@@ -46233,7 +46264,7 @@ exports.PostScriptLexer = PostScriptLexer;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.LocalTilingPatternCache = exports.LocalImageCache = exports.LocalGStateCache = exports.LocalFunctionCache = exports.LocalColorSpaceCache = exports.GlobalImageCache = void 0;
+exports.RegionalImageCache = exports.LocalTilingPatternCache = exports.LocalImageCache = exports.LocalGStateCache = exports.LocalFunctionCache = exports.LocalColorSpaceCache = exports.GlobalImageCache = void 0;
 var _util = __w_pdfjs_require__(2);
 var _primitives = __w_pdfjs_require__(4);
 class BaseLocalCache {
@@ -46361,6 +46392,23 @@ class LocalTilingPatternCache extends BaseLocalCache {
   }
 }
 exports.LocalTilingPatternCache = LocalTilingPatternCache;
+class RegionalImageCache extends BaseLocalCache {
+  constructor(options) {
+    super({
+      onlyRefs: true
+    });
+  }
+  set(name = null, ref, data) {
+    if (!ref) {
+      throw new Error('RegionalImageCache.set - expected "ref" argument.');
+    }
+    if (this._imageCache.has(ref)) {
+      return;
+    }
+    this._imageCache.put(ref, data);
+  }
+}
+exports.RegionalImageCache = RegionalImageCache;
 class GlobalImageCache {
   static get NUM_PAGES_THRESHOLD() {
     return (0, _util.shadow)(this, "NUM_PAGES_THRESHOLD", 2);
@@ -65016,7 +65064,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.6.0';
-const pdfjsBuild = '195db2c';
+const pdfjsBuild = '92baf14';
 })();
 
 /******/ 	return __webpack_exports__;
