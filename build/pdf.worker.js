@@ -47380,8 +47380,8 @@ class PDF17 {
   }
 }
 exports.PDF17 = PDF17;
-const PDF20 = function PDF20Closure() {
-  function calculatePDF20Hash(password, input, userBytes) {
+class PDF20 {
+  _hash(password, input, userBytes) {
     let k = calculateSHA256(input, 0, input.length).subarray(0, 32);
     let e = [0];
     let i = 0;
@@ -47412,45 +47412,39 @@ const PDF20 = function PDF20Closure() {
     }
     return k.subarray(0, 32);
   }
-  class PDF20 {
-    hash(password, concatBytes, userBytes) {
-      return calculatePDF20Hash(password, concatBytes, userBytes);
-    }
-    checkOwnerPassword(password, ownerValidationSalt, userBytes, ownerPassword) {
-      const hashData = new Uint8Array(password.length + 56);
-      hashData.set(password, 0);
-      hashData.set(ownerValidationSalt, password.length);
-      hashData.set(userBytes, password.length + ownerValidationSalt.length);
-      const result = calculatePDF20Hash(password, hashData, userBytes);
-      return (0, _util.isArrayEqual)(result, ownerPassword);
-    }
-    checkUserPassword(password, userValidationSalt, userPassword) {
-      const hashData = new Uint8Array(password.length + 8);
-      hashData.set(password, 0);
-      hashData.set(userValidationSalt, password.length);
-      const result = calculatePDF20Hash(password, hashData, []);
-      return (0, _util.isArrayEqual)(result, userPassword);
-    }
-    getOwnerKey(password, ownerKeySalt, userBytes, ownerEncryption) {
-      const hashData = new Uint8Array(password.length + 56);
-      hashData.set(password, 0);
-      hashData.set(ownerKeySalt, password.length);
-      hashData.set(userBytes, password.length + ownerKeySalt.length);
-      const key = calculatePDF20Hash(password, hashData, userBytes);
-      const cipher = new AES256Cipher(key);
-      return cipher.decryptBlock(ownerEncryption, false, new Uint8Array(16));
-    }
-    getUserKey(password, userKeySalt, userEncryption) {
-      const hashData = new Uint8Array(password.length + 8);
-      hashData.set(password, 0);
-      hashData.set(userKeySalt, password.length);
-      const key = calculatePDF20Hash(password, hashData, []);
-      const cipher = new AES256Cipher(key);
-      return cipher.decryptBlock(userEncryption, false, new Uint8Array(16));
-    }
+  checkOwnerPassword(password, ownerValidationSalt, userBytes, ownerPassword) {
+    const hashData = new Uint8Array(password.length + 56);
+    hashData.set(password, 0);
+    hashData.set(ownerValidationSalt, password.length);
+    hashData.set(userBytes, password.length + ownerValidationSalt.length);
+    const result = this._hash(password, hashData, userBytes);
+    return (0, _util.isArrayEqual)(result, ownerPassword);
   }
-  return PDF20;
-}();
+  checkUserPassword(password, userValidationSalt, userPassword) {
+    const hashData = new Uint8Array(password.length + 8);
+    hashData.set(password, 0);
+    hashData.set(userValidationSalt, password.length);
+    const result = this._hash(password, hashData, []);
+    return (0, _util.isArrayEqual)(result, userPassword);
+  }
+  getOwnerKey(password, ownerKeySalt, userBytes, ownerEncryption) {
+    const hashData = new Uint8Array(password.length + 56);
+    hashData.set(password, 0);
+    hashData.set(ownerKeySalt, password.length);
+    hashData.set(userBytes, password.length + ownerKeySalt.length);
+    const key = this._hash(password, hashData, userBytes);
+    const cipher = new AES256Cipher(key);
+    return cipher.decryptBlock(ownerEncryption, false, new Uint8Array(16));
+  }
+  getUserKey(password, userKeySalt, userEncryption) {
+    const hashData = new Uint8Array(password.length + 8);
+    hashData.set(password, 0);
+    hashData.set(userKeySalt, password.length);
+    const key = this._hash(password, hashData, []);
+    const cipher = new AES256Cipher(key);
+    return cipher.decryptBlock(userEncryption, false, new Uint8Array(16));
+  }
+}
 exports.PDF20 = PDF20;
 class CipherTransform {
   constructor(stringCipherConstructor, streamCipherConstructor) {
@@ -47713,8 +47707,10 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
       if (!Number.isInteger(keyLength) || keyLength < 40 || keyLength % 8 !== 0) {
         throw new _util.FormatError("invalid key length");
       }
-      const ownerPassword = (0, _util.stringToBytes)(dict.get("O")).subarray(0, 32);
-      const userPassword = (0, _util.stringToBytes)(dict.get("U")).subarray(0, 32);
+      const ownerBytes = (0, _util.stringToBytes)(dict.get("O")),
+        userBytes = (0, _util.stringToBytes)(dict.get("U"));
+      const ownerPassword = ownerBytes.subarray(0, 32);
+      const userPassword = userBytes.subarray(0, 32);
       const flags = dict.get("P");
       const revision = dict.get("R");
       const encryptMetadata = (algorithm === 4 || algorithm === 5) && dict.get("EncryptMetadata") !== false;
@@ -47726,7 +47722,7 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
           try {
             password = (0, _util.utf8StringToString)(password);
           } catch (ex) {
-            (0, _util.warn)("CipherTransformFactory: " + "Unable to convert UTF8 encoded password.");
+            (0, _util.warn)("CipherTransformFactory: Unable to convert UTF8 encoded password.");
           }
         }
         passwordBytes = (0, _util.stringToBytes)(password);
@@ -47735,11 +47731,11 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
       if (algorithm !== 5) {
         encryptionKey = prepareKeyData(fileIdBytes, passwordBytes, ownerPassword, userPassword, flags, revision, keyLength, encryptMetadata);
       } else {
-        const ownerValidationSalt = (0, _util.stringToBytes)(dict.get("O")).subarray(32, 40);
-        const ownerKeySalt = (0, _util.stringToBytes)(dict.get("O")).subarray(40, 48);
-        const uBytes = (0, _util.stringToBytes)(dict.get("U")).subarray(0, 48);
-        const userValidationSalt = (0, _util.stringToBytes)(dict.get("U")).subarray(32, 40);
-        const userKeySalt = (0, _util.stringToBytes)(dict.get("U")).subarray(40, 48);
+        const ownerValidationSalt = ownerBytes.subarray(32, 40);
+        const ownerKeySalt = ownerBytes.subarray(40, 48);
+        const uBytes = userBytes.subarray(0, 48);
+        const userValidationSalt = userBytes.subarray(32, 40);
+        const userKeySalt = userBytes.subarray(40, 48);
         const ownerEncryption = (0, _util.stringToBytes)(dict.get("OE"));
         const userEncryption = (0, _util.stringToBytes)(dict.get("UE"));
         const perms = (0, _util.stringToBytes)(dict.get("Perms"));
@@ -62392,7 +62388,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.6.0';
-const pdfjsBuild = '6e1b234';
+const pdfjsBuild = '797f8d3';
 })();
 
 /******/ 	return __webpack_exports__;

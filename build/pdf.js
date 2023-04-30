@@ -2733,7 +2733,7 @@ class InternalRenderTask {
 }
 const version = '3.6.0';
 exports.version = version;
-const build = '6e1b234';
+const build = '797f8d3';
 exports.build = build;
 
 /***/ }),
@@ -9474,9 +9474,6 @@ class NetworkManager {
     this.isHttp = /^https?:/i.test(url);
     this.httpHeaders = this.isHttp && args.httpHeaders || Object.create(null);
     this.withCredentials = args.withCredentials || false;
-    this.getXhr = args.getXhr || function NetworkManager_getXhr() {
-      return new XMLHttpRequest();
-    };
     this.currXhrId = 0;
     this.pendingRequests = Object.create(null);
   }
@@ -9494,7 +9491,7 @@ class NetworkManager {
     return this.request(listeners);
   }
   request(args) {
-    const xhr = this.getXhr();
+    const xhr = new XMLHttpRequest();
     const xhrId = this.currXhrId++;
     const pendingRequest = this.pendingRequests[xhrId] = {
       xhr
@@ -16006,7 +16003,7 @@ var _worker_options = __w_pdfjs_require__(14);
 var _svg = __w_pdfjs_require__(35);
 var _xfa_layer = __w_pdfjs_require__(34);
 const pdfjsVersion = '3.6.0';
-const pdfjsBuild = '6e1b234';
+const pdfjsBuild = '797f8d3';
 })();
 
 /******/ 	return __webpack_exports__;
