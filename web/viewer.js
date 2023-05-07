@@ -165,7 +165,7 @@ class DefaultExternalServices {
 exports.DefaultExternalServices = DefaultExternalServices;
 const PDFViewerApplication = {
   initialBookmark: document.location.hash.substring(1),
-  _initializedCapability: (0, _pdfjsLib.createPromiseCapability)(),
+  _initializedCapability: new _pdfjsLib.PromiseCapability(),
   appConfig: null,
   pdfDocument: null,
   pdfLoadingTask: null,
@@ -744,7 +744,7 @@ const PDFViewerApplication = {
     }
     throw new Error("PDF document not downloaded.");
   },
-  async download() {
+  async download(options = {}) {
     const url = this._downloadUrl,
       filename = this._docFilename;
     try {
@@ -753,12 +753,12 @@ const PDFViewerApplication = {
       const blob = new Blob([data], {
         type: "application/pdf"
       });
-      await this.downloadManager.download(blob, url, filename);
+      await this.downloadManager.download(blob, url, filename, options);
     } catch (reason) {
-      await this.downloadManager.downloadUrl(url, filename);
+      await this.downloadManager.downloadUrl(url, filename, options);
     }
   },
-  async save() {
+  async save(options = {}) {
     if (this._saveInProgress) {
       return;
     }
@@ -772,10 +772,10 @@ const PDFViewerApplication = {
       const blob = new Blob([data], {
         type: "application/pdf"
       });
-      await this.downloadManager.download(blob, url, filename);
+      await this.downloadManager.download(blob, url, filename, options);
     } catch (reason) {
       console.error(`Error when saving the document: ${reason.message}`);
-      await this.download();
+      await this.download(options);
     } finally {
       await this.pdfScriptingManager.dispatchDidSave();
       this._saveInProgress = false;
@@ -789,12 +789,17 @@ const PDFViewerApplication = {
       });
     }
   },
-  downloadOrSave() {
+  downloadOrSave(options = {}) {
     if (this.pdfDocument?.annotationStorage.size > 0) {
-      this.save();
+      this.save(options);
     } else {
-      this.download();
+      this.download(options);
     }
+  },
+  openInExternalApp() {
+    this.downloadOrSave({
+      openInExternalApp: true
+    });
   },
   _documentError(message, moreInfo = null) {
     this._unblockDocumentLoadEvent();
@@ -1326,6 +1331,7 @@ const PDFViewerApplication = {
     eventBus._on("switchannotationeditorparams", webViewerSwitchAnnotationEditorParams);
     eventBus._on("print", webViewerPrint);
     eventBus._on("download", webViewerDownload);
+    eventBus._on("openinexternalapp", webViewerOpenInExternalApp);
     eventBus._on("firstpage", webViewerFirstPage);
     eventBus._on("lastpage", webViewerLastPage);
     eventBus._on("nextpage", webViewerNextPage);
@@ -1444,6 +1450,7 @@ const PDFViewerApplication = {
     eventBus._off("presentationmode", webViewerPresentationMode);
     eventBus._off("print", webViewerPrint);
     eventBus._off("download", webViewerDownload);
+    eventBus._off("openinexternalapp", webViewerOpenInExternalApp);
     eventBus._off("firstpage", webViewerFirstPage);
     eventBus._off("lastpage", webViewerLastPage);
     eventBus._off("nextpage", webViewerNextPage);
@@ -1841,6 +1848,9 @@ function webViewerPrint() {
 }
 function webViewerDownload() {
   PDFViewerApplication.downloadOrSave();
+}
+function webViewerOpenInExternalApp() {
+  PDFViewerApplication.openInExternalApp();
 }
 function webViewerFirstPage() {
   PDFViewerApplication.page = 1;
@@ -4011,7 +4021,7 @@ class PasswordPrompt {
     if (this.#activeCapability) {
       await this.#activeCapability.promise;
     }
-    this.#activeCapability = (0, _pdfjsLib.createPromiseCapability)();
+    this.#activeCapability = new _pdfjsLib.PromiseCapability();
     try {
       await this.overlayManager.open(this.dialog);
     } catch (ex) {
@@ -4081,7 +4091,7 @@ class PDFAttachmentViewer extends _base_tree_viewer.BaseTreeViewer {
     super.reset();
     this._attachments = null;
     if (!keepRenderedCapability) {
-      this._renderedCapability = (0, _pdfjsLib.createPromiseCapability)();
+      this._renderedCapability = new _pdfjsLib.PromiseCapability();
     }
     this._pendingDispatchEvent = false;
   }
@@ -4523,8 +4533,8 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.PDFDocumentProperties = void 0;
-var _pdfjsLib = __webpack_require__(4);
 var _ui_utils = __webpack_require__(3);
+var _pdfjsLib = __webpack_require__(4);
 const DEFAULT_FIELD_CONTENT = "-";
 const NON_METRIC_LOCALES = ["en-us", "en-lr", "my"];
 const US_PAGE_NAMES = {
@@ -4628,7 +4638,7 @@ class PDFDocumentProperties {
   #reset() {
     this.pdfDocument = null;
     this.#fieldData = null;
-    this._dataAvailableCapability = (0, _pdfjsLib.createPromiseCapability)();
+    this._dataAvailableCapability = new _pdfjsLib.PromiseCapability();
     this._currentPageNumber = 1;
     this._pagesRotation = 0;
   }
@@ -5259,7 +5269,7 @@ class PDFFindController {
     this._dirtyMatch = false;
     clearTimeout(this._findTimeout);
     this._findTimeout = null;
-    this._firstPageCapability = (0, _pdfjsLib.createPromiseCapability)();
+    this._firstPageCapability = new _pdfjsLib.PromiseCapability();
   }
   get #query() {
     const {
@@ -5432,7 +5442,7 @@ class PDFFindController {
       disableNormalization: true
     };
     for (let i = 0, ii = this._linkService.pagesCount; i < ii; i++) {
-      const extractTextCapability = (0, _pdfjsLib.createPromiseCapability)();
+      const extractTextCapability = new _pdfjsLib.PromiseCapability();
       this._extractTextPromises[i] = extractTextCapability.promise;
       promise = promise.then(() => {
         return this._pdfDocument.getPage(i + 1).then(pdfPage => {
@@ -6421,7 +6431,7 @@ class PDFOutlineViewer extends _base_tree_viewer.BaseTreeViewer {
     this._currentOutlineItemCapability = null;
   }
   _dispatchEvent(outlineCount) {
-    this._currentOutlineItemCapability = (0, _pdfjsLib.createPromiseCapability)();
+    this._currentOutlineItemCapability = new _pdfjsLib.PromiseCapability();
     if (outlineCount === 0 || this._pdfDocument?.loadingParams.disableAutoFetch) {
       this._currentOutlineItemCapability.resolve(false);
     } else if (this._isPagesLoaded !== null) {
@@ -6603,7 +6613,7 @@ class PDFOutlineViewer extends _base_tree_viewer.BaseTreeViewer {
     if (this._pageNumberToDestHashCapability) {
       return this._pageNumberToDestHashCapability.promise;
     }
-    this._pageNumberToDestHashCapability = (0, _pdfjsLib.createPromiseCapability)();
+    this._pageNumberToDestHashCapability = new _pdfjsLib.PromiseCapability();
     const pageNumberToDestHash = new Map(),
       pageNumberNesting = new Map();
     const queue = [{
@@ -7347,7 +7357,7 @@ class PDFScriptingManager {
     const pdfDocument = this._pdfDocument,
       visitedPages = this._visitedPages;
     if (initialize) {
-      this._closeCapability = (0, _pdfjsLib.createPromiseCapability)();
+      this._closeCapability = new _pdfjsLib.PromiseCapability();
     }
     if (!this._closeCapability) {
       return;
@@ -7403,7 +7413,7 @@ class PDFScriptingManager {
     throw new Error("_getDocProperties: Unable to lookup properties.");
   }
   _createScripting() {
-    this._destroyCapability = (0, _pdfjsLib.createPromiseCapability)();
+    this._destroyCapability = new _pdfjsLib.PromiseCapability();
     if (this._scripting) {
       throw new Error("_createScripting: Scripting already exists.");
     }
@@ -7516,7 +7526,7 @@ class PDFSidebar {
   }
   switchView(view, forceOpen = false) {
     const isViewChanged = view !== this.active;
-    let shouldForceRendering = false;
+    let forceRendering = false;
     switch (view) {
       case _ui_utils.SidebarView.NONE:
         if (this.isOpen) {
@@ -7525,7 +7535,7 @@ class PDFSidebar {
         return;
       case _ui_utils.SidebarView.THUMBS:
         if (this.isOpen && isViewChanged) {
-          shouldForceRendering = true;
+          forceRendering = true;
         }
         break;
       case _ui_utils.SidebarView.OUTLINE:
@@ -7557,9 +7567,9 @@ class PDFSidebar {
       this.open();
       return;
     }
-    if (shouldForceRendering) {
+    if (forceRendering) {
       this.#updateThumbnailViewer();
-      this.#forceRendering();
+      this.onToggled();
     }
     if (isViewChanged) {
       this.#dispatchEvent();
@@ -7576,7 +7586,7 @@ class PDFSidebar {
     if (this.active === _ui_utils.SidebarView.THUMBS) {
       this.#updateThumbnailViewer();
     }
-    this.#forceRendering();
+    this.onToggled();
     this.#dispatchEvent();
     this.#hideUINotification();
   }
@@ -7589,7 +7599,7 @@ class PDFSidebar {
     this.toggleButton.setAttribute("aria-expanded", "false");
     this.outerContainer.classList.add("sidebarMoving");
     this.outerContainer.classList.remove("sidebarOpen");
-    this.#forceRendering();
+    this.onToggled();
     this.#dispatchEvent();
   }
   toggle() {
@@ -7607,14 +7617,6 @@ class PDFSidebar {
       source: this,
       view: this.visibleView
     });
-  }
-  #forceRendering() {
-    if (this.onToggled) {
-      this.onToggled();
-    } else {
-      this.pdfViewer.forceRendering();
-      this.pdfThumbnailViewer.forceRendering();
-    }
   }
   #updateThumbnailViewer() {
     const {
@@ -8056,7 +8058,6 @@ var _ui_utils = __webpack_require__(3);
 var _pdfjsLib = __webpack_require__(4);
 const DRAW_UPSCALE_FACTOR = 2;
 const MAX_NUM_SCALING_STEPS = 3;
-const THUMBNAIL_CANVAS_BORDER_WIDTH = 1;
 const THUMBNAIL_WIDTH = 98;
 class TempImageFactory {
   static #tempCanvas = null;
@@ -8108,12 +8109,6 @@ class PDFThumbnailView {
     this.renderTask = null;
     this.renderingState = _ui_utils.RenderingStates.INITIAL;
     this.resume = null;
-    const pageWidth = this.viewport.width,
-      pageHeight = this.viewport.height,
-      pageRatio = pageWidth / pageHeight;
-    this.canvasWidth = THUMBNAIL_WIDTH;
-    this.canvasHeight = this.canvasWidth / pageRatio | 0;
-    this.scale = this.canvasWidth / pageWidth;
     this.l10n = l10n;
     const anchor = document.createElement("a");
     anchor.href = linkService.getAnchorUrl("#page=" + id);
@@ -8129,15 +8124,28 @@ class PDFThumbnailView {
     div.className = "thumbnail";
     div.setAttribute("data-page-number", this.id);
     this.div = div;
-    const ring = document.createElement("div");
-    ring.className = "thumbnailSelectionRing";
-    const borderAdjustment = 2 * THUMBNAIL_CANVAS_BORDER_WIDTH;
-    ring.style.width = this.canvasWidth + borderAdjustment + "px";
-    ring.style.height = this.canvasHeight + borderAdjustment + "px";
-    this.ring = ring;
-    div.append(ring);
+    this.#updateDims();
+    const img = document.createElement("div");
+    img.className = "thumbnailImage";
+    this._placeholderImg = img;
+    div.append(img);
     anchor.append(div);
     container.append(anchor);
+  }
+  #updateDims() {
+    const {
+      width,
+      height
+    } = this.viewport;
+    const ratio = width / height;
+    this.canvasWidth = THUMBNAIL_WIDTH;
+    this.canvasHeight = this.canvasWidth / ratio | 0;
+    this.scale = this.canvasWidth / width;
+    const {
+      style
+    } = this.div;
+    style.setProperty("--thumbnail-width", `${this.canvasWidth}px`);
+    style.setProperty("--thumbnail-height", `${this.canvasHeight}px`);
   }
   setPdfPage(pdfPage) {
     this.pdfPage = pdfPage;
@@ -8152,22 +8160,9 @@ class PDFThumbnailView {
   reset() {
     this.cancelRendering();
     this.renderingState = _ui_utils.RenderingStates.INITIAL;
-    const pageWidth = this.viewport.width,
-      pageHeight = this.viewport.height,
-      pageRatio = pageWidth / pageHeight;
-    this.canvasHeight = this.canvasWidth / pageRatio | 0;
-    this.scale = this.canvasWidth / pageWidth;
     this.div.removeAttribute("data-loaded");
-    const ring = this.ring;
-    ring.textContent = "";
-    const borderAdjustment = 2 * THUMBNAIL_CANVAS_BORDER_WIDTH;
-    ring.style.width = this.canvasWidth + borderAdjustment + "px";
-    ring.style.height = this.canvasHeight + borderAdjustment + "px";
-    if (this.canvas) {
-      this.canvas.width = 0;
-      this.canvas.height = 0;
-      delete this.canvas;
-    }
+    this.image?.replaceWith(this._placeholderImg);
+    this.#updateDims();
     if (this.image) {
       this.image.removeAttribute("src");
       delete this.image;
@@ -8218,12 +8213,10 @@ class PDFThumbnailView {
     this._thumbPageCanvas.then(msg => {
       image.setAttribute("aria-label", msg);
     });
-    image.style.width = this.canvasWidth + "px";
-    image.style.height = this.canvasHeight + "px";
     image.src = reducedCanvas.toDataURL();
     this.image = image;
     this.div.setAttribute("data-loaded", true);
-    this.ring.append(image);
+    this._placeholderImg.replaceWith(image);
     reducedCanvas.width = 0;
     reducedCanvas.height = 0;
   }
@@ -8515,12 +8508,7 @@ class PDFViewer {
     return this._pages[index];
   }
   get pageViewsReady() {
-    if (!this._pagesCapability.settled) {
-      return false;
-    }
-    return this._pages.every(function (pageView) {
-      return pageView?.pdfPage;
-    });
+    return this._pagesCapability.settled && this._pages.every(pageView => pageView?.pdfPage);
   }
   get renderForms() {
     return this.#annotationMode === _pdfjsLib.AnnotationMode.ENABLE_FORMS;
@@ -8992,9 +8980,9 @@ class PDFViewer {
     this._location = null;
     this._pagesRotation = 0;
     this._optionalContentConfigPromise = null;
-    this._firstPageCapability = (0, _pdfjsLib.createPromiseCapability)();
-    this._onePageRenderedCapability = (0, _pdfjsLib.createPromiseCapability)();
-    this._pagesCapability = (0, _pdfjsLib.createPromiseCapability)();
+    this._firstPageCapability = new _pdfjsLib.PromiseCapability();
+    this._onePageRenderedCapability = new _pdfjsLib.PromiseCapability();
+    this._pagesCapability = new _pdfjsLib.PromiseCapability();
     this._scrollMode = _ui_utils.ScrollMode.VERTICAL;
     this._previousScrollMode = _ui_utils.ScrollMode.UNKNOWN;
     this._spreadMode = _ui_utils.SpreadMode.NONE;
@@ -12510,7 +12498,7 @@ function download(blobUrl, filename) {
 }
 class DownloadManager {
   #openBlobUrls = new WeakMap();
-  downloadUrl(url, filename) {
+  downloadUrl(url, filename, _options) {
     if (!(0, _pdfjsLib.createValidAbsoluteUrl)(url, "http://example.com")) {
       console.error(`downloadUrl - not a valid URL: ${url}`);
       return;
@@ -12548,7 +12536,7 @@ class DownloadManager {
     this.downloadData(data, filename, contentType);
     return false;
   }
-  download(blob, url, filename) {
+  download(blob, url, filename, _options) {
     const blobUrl = URL.createObjectURL(blob);
     download(blobUrl, filename);
   }
@@ -13726,7 +13714,7 @@ var _app_options = __webpack_require__(5);
 var _pdf_link_service = __webpack_require__(7);
 var _app = __webpack_require__(2);
 const pdfjsVersion = '3.6.0';
-const pdfjsBuild = '797f8d3';
+const pdfjsBuild = '4d3dfe2';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,
