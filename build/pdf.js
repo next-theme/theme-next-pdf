@@ -987,7 +987,7 @@ function getDocument(src) {
   }
   const fetchDocParams = {
     docId,
-    apiVersion: '3.6.0',
+    apiVersion: '3.7.0',
     data,
     password,
     disableAutoFetch,
@@ -2724,9 +2724,9 @@ class InternalRenderTask {
     }
   }
 }
-const version = '3.6.0';
+const version = '3.7.0';
 exports.version = version;
-const build = '4d3dfe2';
+const build = 'e738e15';
 exports.build = build;
 
 /***/ }),
@@ -4784,19 +4784,24 @@ exports.FontLoader = exports.FontFaceObject = void 0;
 var _util = __w_pdfjs_require__(1);
 var _is_node = __w_pdfjs_require__(10);
 class FontLoader {
+  #systemFonts = new Set();
   constructor({
     ownerDocument = globalThis.document,
     styleElement = null
   }) {
     this._document = ownerDocument;
-    this.nativeFontFaces = [];
+    this.nativeFontFaces = new Set();
     this.styleElement = null;
     this.loadingRequests = [];
     this.loadTestFontId = 0;
   }
   addNativeFontFace(nativeFontFace) {
-    this.nativeFontFaces.push(nativeFontFace);
+    this.nativeFontFaces.add(nativeFontFace);
     this._document.fonts.add(nativeFontFace);
+  }
+  removeNativeFontFace(nativeFontFace) {
+    this.nativeFontFaces.delete(nativeFontFace);
+    this._document.fonts.delete(nativeFontFace);
   }
   insertRule(rule) {
     if (!this.styleElement) {
@@ -4810,17 +4815,46 @@ class FontLoader {
     for (const nativeFontFace of this.nativeFontFaces) {
       this._document.fonts.delete(nativeFontFace);
     }
-    this.nativeFontFaces.length = 0;
+    this.nativeFontFaces.clear();
+    this.#systemFonts.clear();
     if (this.styleElement) {
       this.styleElement.remove();
       this.styleElement = null;
     }
   }
+  async loadSystemFont(info) {
+    if (!info || this.#systemFonts.has(info.loadedName)) {
+      return;
+    }
+    (0, _util.assert)(!this.disableFontFace, "loadSystemFont shouldn't be called when `disableFontFace` is set.");
+    if (this.isFontLoadingAPISupported) {
+      const {
+        loadedName,
+        src,
+        style
+      } = info;
+      const fontFace = new FontFace(loadedName, src, style);
+      this.addNativeFontFace(fontFace);
+      try {
+        await fontFace.load();
+        this.#systemFonts.add(loadedName);
+      } catch {
+        (0, _util.warn)(`Cannot load system font: ${loadedName} for style ${style.style} and weight ${style.weight}.`);
+        this.removeNativeFontFace(fontFace);
+      }
+      return;
+    }
+    (0, _util.unreachable)("Not implemented: loadSystemFont without the Font Loading API.");
+  }
   async bind(font) {
-    if (font.attached || font.missingFile) {
+    if (font.attached || font.missingFile && !font.systemFontInfo) {
       return;
     }
     font.attached = true;
+    if (font.systemFontInfo) {
+      await this.loadSystemFont(font.systemFontInfo);
+      return;
+    }
     if (this.isFontLoadingAPISupported) {
       const nativeFontFace = font.createNativeFontFace();
       if (nativeFontFace) {
@@ -6360,6 +6394,7 @@ class CanvasGraphics {
       return;
     }
     const name = fontObj.loadedName || "sans-serif";
+    const typeface = fontObj.systemFontInfo?.css || `"${name}", ${fontObj.fallbackName}`;
     let bold = "normal";
     if (fontObj.black) {
       bold = "900";
@@ -6367,7 +6402,6 @@ class CanvasGraphics {
       bold = "bold";
     }
     const italic = fontObj.italic ? "italic" : "normal";
-    const typeface = `"${name}", ${fontObj.fallbackName}`;
     let browserFontSize = size;
     if (size < MIN_FONT_SIZE) {
       browserFontSize = MIN_FONT_SIZE;
@@ -16012,8 +16046,8 @@ var _annotation_layer = __w_pdfjs_require__(32);
 var _worker_options = __w_pdfjs_require__(14);
 var _svg = __w_pdfjs_require__(35);
 var _xfa_layer = __w_pdfjs_require__(34);
-const pdfjsVersion = '3.6.0';
-const pdfjsBuild = '4d3dfe2';
+const pdfjsVersion = '3.7.0';
+const pdfjsBuild = 'e738e15';
 })();
 
 /******/ 	return __webpack_exports__;
