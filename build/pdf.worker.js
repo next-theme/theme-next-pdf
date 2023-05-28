@@ -3326,7 +3326,7 @@ class Page {
           systemFontCache: this.systemFontCache,
           options: this.evaluatorOptions
         });
-        textContentPromises.push(annotation.extractTextContent(partialEvaluator, task, this.view).catch(function (reason) {
+        textContentPromises.push(annotation.extractTextContent(partialEvaluator, task, [-Infinity, -Infinity, Infinity, Infinity]).catch(function (reason) {
           (0, _util.warn)(`getAnnotationsData - ignoring textContent during "${task.name}" task: "${reason}".`);
         }));
       }
@@ -10388,7 +10388,7 @@ class PartialEvaluator {
             }
             const spaceFactor = (textState.font.vertical ? 1 : -1) * textState.fontSize / 1000;
             const elements = args[0];
-            for (let i = 0, ii = elements.length; i < ii - 1; i++) {
+            for (let i = 0, ii = elements.length; i < ii; i++) {
               const item = elements[i];
               if (typeof item === "string") {
                 showSpacedTextBuffer.push(item);
@@ -10400,10 +10400,6 @@ class PartialEvaluator {
                   extraSpacing: item * spaceFactor
                 });
               }
-            }
-            const item = elements.at(-1);
-            if (typeof item === "string") {
-              showSpacedTextBuffer.push(item);
             }
             if (showSpacedTextBuffer.length > 0) {
               const str = showSpacedTextBuffer.join("");
@@ -10702,6 +10698,10 @@ class PartialEvaluator {
         baseEncodingName = null;
       }
     }
+    const nonEmbeddedFont = !properties.file || properties.isInternalFont;
+    if (baseEncodingName && nonEmbeddedFont && (0, _standard_fonts.getSymbolsFonts)()[properties.name]) {
+      baseEncodingName = null;
+    }
     if (baseEncodingName) {
       properties.defaultEncoding = (0, _encodings.getEncoding)(baseEncodingName);
     } else {
@@ -10713,11 +10713,13 @@ class PartialEvaluator {
       }
       if (isSymbolicFont) {
         encoding = _encodings.MacRomanEncoding;
-        if (!properties.file || properties.isInternalFont) {
+        if (nonEmbeddedFont) {
           if (/Symbol/i.test(properties.name)) {
             encoding = _encodings.SymbolSetEncoding;
-          } else if (/Dingbats|Wingdings/i.test(properties.name)) {
+          } else if (/Dingbats/i.test(properties.name)) {
             encoding = _encodings.ZapfDingbatsEncoding;
+          } else if (/Wingdings/i.test(properties.name)) {
+            encoding = _encodings.WinAnsiEncoding;
           }
         }
       }
@@ -12857,6 +12859,7 @@ exports.Parser = exports.Linearization = exports.Lexer = void 0;
 var _util = __w_pdfjs_require__(2);
 var _primitives = __w_pdfjs_require__(4);
 var _core_utils = __w_pdfjs_require__(3);
+var _stream = __w_pdfjs_require__(8);
 var _ascii_85_stream = __w_pdfjs_require__(17);
 var _ascii_hex_stream = __w_pdfjs_require__(19);
 var _ccitt_stream = __w_pdfjs_require__(20);
@@ -12865,7 +12868,6 @@ var _jbig2_stream = __w_pdfjs_require__(23);
 var _jpeg_stream = __w_pdfjs_require__(26);
 var _jpx_stream = __w_pdfjs_require__(29);
 var _lzw_stream = __w_pdfjs_require__(31);
-var _stream = __w_pdfjs_require__(8);
 var _predictor_stream = __w_pdfjs_require__(32);
 var _run_length_stream = __w_pdfjs_require__(33);
 const MAX_LENGTH_TO_CACHE = 1000;
@@ -12994,9 +12996,11 @@ class Parser {
       LF = 0xa,
       CR = 0xd,
       NUL = 0x0;
-    const lexer = this.lexer,
+    const {
+        knownCommands
+      } = this.lexer,
       startPos = stream.pos,
-      n = 10;
+      n = 15;
     let state = 0,
       ch,
       maybeEIPos;
@@ -13009,7 +13013,11 @@ class Parser {
         if (ch === SPACE || ch === LF || ch === CR) {
           maybeEIPos = stream.pos;
           const followingBytes = stream.peekBytes(n);
-          for (let i = 0, ii = followingBytes.length; i < ii; i++) {
+          const ii = followingBytes.length;
+          if (ii === 0) {
+            break;
+          }
+          for (let i = 0; i < ii; i++) {
             ch = followingBytes[i];
             if (ch === NUL && followingBytes[i + 1] !== NUL) {
               continue;
@@ -13022,13 +13030,31 @@ class Parser {
           if (state !== 2) {
             continue;
           }
-          if (lexer.knownCommands) {
-            const nextObj = lexer.peekObj();
-            if (nextObj instanceof _primitives.Cmd && !lexer.knownCommands[nextObj.cmd]) {
-              state = 0;
-            }
-          } else {
+          if (!knownCommands) {
             (0, _util.warn)("findDefaultInlineStreamEnd - `lexer.knownCommands` is undefined.");
+            continue;
+          }
+          const tmpLexer = new Lexer(new _stream.Stream(followingBytes.slice()), knownCommands);
+          tmpLexer._hexStringWarn = () => {};
+          let numArgs = 0;
+          while (true) {
+            const nextObj = tmpLexer.getObj();
+            if (nextObj === _primitives.EOF) {
+              state = 0;
+              break;
+            }
+            if (nextObj instanceof _primitives.Cmd) {
+              const knownCommand = knownCommands[nextObj.cmd];
+              if (!knownCommand) {
+                state = 0;
+                break;
+              } else if (knownCommand.variableArgs ? numArgs <= knownCommand.numArgs : numArgs === knownCommand.numArgs) {
+                break;
+              }
+              numArgs = 0;
+              continue;
+            }
+            numArgs++;
           }
           if (state === 2) {
             break;
@@ -13831,24 +13857,6 @@ class Lexer {
       this.beginInlineImagePos = this.stream.pos;
     }
     return _primitives.Cmd.get(str);
-  }
-  peekObj() {
-    const streamPos = this.stream.pos,
-      currentChar = this.currentChar,
-      beginInlineImagePos = this.beginInlineImagePos;
-    let nextObj;
-    try {
-      nextObj = this.getObj();
-    } catch (ex) {
-      if (ex instanceof _core_utils.MissingDataException) {
-        throw ex;
-      }
-      (0, _util.warn)(`peekObj: ${ex}`);
-    }
-    this.stream.pos = streamPos;
-    this.currentChar = currentChar;
-    this.beginInlineImagePos = beginInlineImagePos;
-    return nextObj;
   }
   skipToNextLine() {
     let ch = this.currentChar;
@@ -21618,9 +21626,6 @@ class Font {
     } else if (/Symbol/i.test(fontName)) {
       this.toFontChar = buildToFontChar(_encodings.SymbolSetEncoding, (0, _glyphlist.getGlyphsUnicode)(), this.differences);
     } else if (/Dingbats/i.test(fontName)) {
-      if (/Wingdings/i.test(name)) {
-        (0, _util.warn)("Non-embedded Wingdings font, falling back to ZapfDingbats.");
-      }
       this.toFontChar = buildToFontChar(_encodings.ZapfDingbatsEncoding, (0, _glyphlist.getDingbatsGlyphsUnicode)(), this.differences);
     } else if (isStandardFont) {
       const map = buildToFontChar(this.defaultEncoding, (0, _glyphlist.getGlyphsUnicode)(), this.differences);
@@ -22073,14 +22078,27 @@ class Font {
         length: 0,
         sizeOfInstructions: 0
       };
-      if (sourceEnd - sourceStart <= 12) {
+      if (sourceStart < 0 || sourceStart >= source.length || sourceEnd > source.length || sourceEnd - sourceStart <= 12) {
         return glyphProfile;
       }
       const glyf = source.subarray(sourceStart, sourceEnd);
-      let contoursCount = signedInt16(glyf[0], glyf[1]);
+      const xMin = signedInt16(glyf[2], glyf[3]);
+      const yMin = signedInt16(glyf[4], glyf[5]);
+      const xMax = signedInt16(glyf[6], glyf[7]);
+      const yMax = signedInt16(glyf[8], glyf[9]);
+      if (xMin > xMax) {
+        writeSignedInt16(glyf, 2, xMax);
+        writeSignedInt16(glyf, 6, xMin);
+      }
+      if (yMin > yMax) {
+        writeSignedInt16(glyf, 4, yMax);
+        writeSignedInt16(glyf, 8, yMin);
+      }
+      const contoursCount = signedInt16(glyf[0], glyf[1]);
       if (contoursCount < 0) {
-        contoursCount = -1;
-        writeSignedInt16(glyf, 0, contoursCount);
+        if (contoursCount < -1) {
+          return glyphProfile;
+        }
         dest.set(glyf, destStart);
         glyphProfile.length = glyf.length;
         return glyphProfile;
@@ -22120,6 +22138,9 @@ class Font {
         coordinatesLength += xyLength;
         if (flag & 8) {
           const repeat = glyf[j++];
+          if (repeat === 0) {
+            glyf[j - 1] ^= 8;
+          }
           i += repeat;
           coordinatesLength += repeat * xyLength;
         }
@@ -22775,7 +22796,7 @@ class Font {
     }
     const metricsOverride = {
       unitsPerEm: int16(tables.head.data[18], tables.head.data[19]),
-      yMax: int16(tables.head.data[42], tables.head.data[43]),
+      yMax: signedInt16(tables.head.data[42], tables.head.data[43]),
       yMin: signedInt16(tables.head.data[38], tables.head.data[39]),
       ascent: signedInt16(tables.hhea.data[4], tables.hhea.data[5]),
       descent: signedInt16(tables.hhea.data[6], tables.hhea.data[7]),
@@ -30303,8 +30324,6 @@ const getNonStdFontMap = (0, _core_utils.getLookupTableFactory)(function (t) {
   t["MS-PMincho-Italic"] = "MS PMincho-Italic";
   t.NuptialScript = "Times-Italic";
   t.SegoeUISymbol = "Helvetica";
-  t.Wingdings = "ZapfDingbats";
-  t["Wingdings-Regular"] = "ZapfDingbats";
 });
 exports.getNonStdFontMap = getNonStdFontMap;
 const getSerifFonts = (0, _core_utils.getLookupTableFactory)(function (t) {
@@ -39661,6 +39680,13 @@ const substitutionMap = new Map([["Times-Roman", {
   alias: "Calibri",
   style: BOLDITALIC,
   fallback: "Helvetica-BoldOblique"
+}], ["Wingdings", {
+  local: ["Wingdings", "URW Dingbats"],
+  style: NORMAL
+}], ["Wingdings-Regular", {
+  alias: "Wingdings"
+}], ["Wingdings-Bold", {
+  alias: "Wingdings"
 }]]);
 const fontAliases = new Map([["Arial-Black", "ArialBlack"]]);
 function getStyleToAppend(style) {
@@ -39772,9 +39798,11 @@ function getFontSubstitution(systemFontCache, idFactory, localFontPath, baseFont
     style,
     ultimate
   } = generateFont(substitution, src, localFontPath);
+  const guessFallback = ultimate === null;
+  const fallback = guessFallback ? "" : `,${ultimate}`;
   substitutionInfo = {
-    css: `${loadedName},${ultimate}`,
-    guessFallback: false,
+    css: `${loadedName}${fallback}`,
+    guessFallback,
     loadedName,
     baseFontName,
     src: src.join(","),
@@ -58114,7 +58142,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.7.0';
-const pdfjsBuild = '65e2343';
+const pdfjsBuild = '6d8810b';
 })();
 
 /******/ 	return __webpack_exports__;

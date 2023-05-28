@@ -3750,9 +3750,6 @@ class PDFLinkService {
     const refStr = pageRef.gen === 0 ? `${pageRef.num}R` : `${pageRef.num}R${pageRef.gen}`;
     return this.#pagesRefCache.get(refStr) || null;
   }
-  isPageVisible(pageNumber) {
-    return this.pdfViewer.isPageVisible(pageNumber);
-  }
   isPageCached(pageNumber) {
     return this.pdfViewer.isPageCached(pageNumber);
   }
@@ -3845,9 +3842,6 @@ class SimpleLinkService {
   executeNamedAction(action) {}
   executeSetOCGState(action) {}
   cachePageRef(pageNum, pageRef) {}
-  isPageVisible(pageNumber) {
-    return true;
-  }
   isPageCached(pageNumber) {
     return true;
   }
@@ -4142,12 +4136,9 @@ class PDFAttachmentViewer extends _base_tree_viewer.BaseTreeViewer {
       this._dispatchEvent(0);
       return;
     }
-    const names = Object.keys(attachments).sort(function (a, b) {
-      return a.toLowerCase().localeCompare(b.toLowerCase());
-    });
     const fragment = document.createDocumentFragment();
     let attachmentsCount = 0;
-    for (const name of names) {
+    for (const name in attachments) {
       const item = attachments[name];
       const content = item.content,
         filename = (0, _pdfjsLib.getFilenameFromUrl)(item.filename, true);
@@ -5140,6 +5131,7 @@ class PDFFindController {
     this._linkService = linkService;
     this._eventBus = eventBus;
     this.#updateMatchesCountOnProgress = updateMatchesCountOnProgress;
+    this.onIsPageVisible = null;
     this.#reset();
     eventBus._on("find", this.#onFind.bind(this));
     eventBus._on("findbarclose", this.#onFindBarClose.bind(this));
@@ -5309,10 +5301,7 @@ class PDFFindController {
       case "again":
         const pageNumber = this._selected.pageIdx + 1;
         const linkService = this._linkService;
-        if (pageNumber >= 1 && pageNumber <= linkService.pagesCount && pageNumber !== linkService.page && !linkService.isPageVisible(pageNumber)) {
-          return true;
-        }
-        return false;
+        return pageNumber >= 1 && pageNumber <= linkService.pagesCount && pageNumber !== linkService.page && !(this.onIsPageVisible?.(pageNumber) ?? true);
       case "highlightallchange":
         return false;
     }
@@ -8439,6 +8428,9 @@ class PDFViewer {
     this.linkService = options.linkService || new _pdf_link_service.SimpleLinkService();
     this.downloadManager = options.downloadManager || null;
     this.findController = options.findController || null;
+    if (this.findController) {
+      this.findController.onIsPageVisible = pageNumber => this._getVisiblePages().ids.has(pageNumber);
+    }
     this._scriptingManager = options.scriptingManager || null;
     this.#textLayerMode = options.textLayerMode ?? _ui_utils.TextLayerMode.ENABLE;
     this.#annotationMode = options.annotationMode ?? _pdfjsLib.AnnotationMode.ENABLE_FORMS;
@@ -9381,16 +9373,6 @@ class PDFViewer {
       horizontal,
       rtl
     });
-  }
-  isPageVisible(pageNumber) {
-    if (!this.pdfDocument) {
-      return false;
-    }
-    if (!(Number.isInteger(pageNumber) && pageNumber > 0 && pageNumber <= this.pagesCount)) {
-      console.error(`isPageVisible: "${pageNumber}" is not a valid page.`);
-      return false;
-    }
-    return this._getVisiblePages().ids.has(pageNumber);
   }
   isPageCached(pageNumber) {
     if (!this.pdfDocument) {
@@ -13683,7 +13665,7 @@ var _app_options = __webpack_require__(5);
 var _pdf_link_service = __webpack_require__(7);
 var _app = __webpack_require__(2);
 const pdfjsVersion = '3.7.0';
-const pdfjsBuild = '65e2343';
+const pdfjsBuild = '6d8810b';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,
