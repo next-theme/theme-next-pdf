@@ -648,10 +648,10 @@ class Util {
     return [xt, yt];
   }
   static getAxialAlignedBoundingBox(r, m) {
-    const p1 = Util.applyTransform(r, m);
-    const p2 = Util.applyTransform(r.slice(2, 4), m);
-    const p3 = Util.applyTransform([r[0], r[3]], m);
-    const p4 = Util.applyTransform([r[2], r[1]], m);
+    const p1 = this.applyTransform(r, m);
+    const p2 = this.applyTransform(r.slice(2, 4), m);
+    const p3 = this.applyTransform([r[0], r[3]], m);
+    const p4 = this.applyTransform([r[2], r[1]], m);
     return [Math.min(p1[0], p2[0], p3[0], p4[0]), Math.min(p1[1], p2[1], p3[1], p4[1]), Math.max(p1[0], p2[0], p3[0], p4[0]), Math.max(p1[1], p2[1], p3[1], p4[1])];
   }
   static inverseTransform(m) {
@@ -987,7 +987,7 @@ function getDocument(src) {
   }
   const fetchDocParams = {
     docId,
-    apiVersion: '3.7.0',
+    apiVersion: '3.8.0',
     data,
     password,
     disableAutoFetch,
@@ -2724,9 +2724,9 @@ class InternalRenderTask {
     }
   }
 }
-const version = '3.7.0';
+const version = '3.8.0';
 exports.version = version;
-const build = '6d8810b';
+const build = 'bb5d38a';
 exports.build = build;
 
 /***/ }),
@@ -3418,7 +3418,9 @@ class AnnotationEditorUIManager {
     hasSelectedEditor: false
   };
   #container = null;
-  static _keyboardManager = new KeyboardManager([[["ctrl+a", "mac+meta+a"], AnnotationEditorUIManager.prototype.selectAll], [["ctrl+z", "mac+meta+z"], AnnotationEditorUIManager.prototype.undo], [["ctrl+y", "ctrl+shift+Z", "mac+meta+shift+Z"], AnnotationEditorUIManager.prototype.redo], [["Backspace", "alt+Backspace", "ctrl+Backspace", "shift+Backspace", "mac+Backspace", "mac+alt+Backspace", "mac+ctrl+Backspace", "Delete", "ctrl+Delete", "shift+Delete"], AnnotationEditorUIManager.prototype.delete], [["Escape", "mac+Escape"], AnnotationEditorUIManager.prototype.unselectAll]]);
+  static get _keyboardManager() {
+    return (0, _util.shadow)(this, "_keyboardManager", new KeyboardManager([[["ctrl+a", "mac+meta+a"], AnnotationEditorUIManager.prototype.selectAll], [["ctrl+z", "mac+meta+z"], AnnotationEditorUIManager.prototype.undo], [["ctrl+y", "ctrl+shift+Z", "mac+meta+shift+Z"], AnnotationEditorUIManager.prototype.redo], [["Backspace", "alt+Backspace", "ctrl+Backspace", "shift+Backspace", "mac+Backspace", "mac+alt+Backspace", "mac+ctrl+Backspace", "Delete", "ctrl+Delete", "shift+Delete"], AnnotationEditorUIManager.prototype.delete], [["Escape", "mac+Escape"], AnnotationEditorUIManager.prototype.unselectAll]]));
+  }
   constructor(container, eventBus, annotationStorage) {
     this.#container = container;
     this.#eventBus = eventBus;
@@ -6749,17 +6751,11 @@ class CanvasGraphics {
     ctx.fillStyle = pattern.getPattern(ctx, this, (0, _display_utils.getCurrentTransformInverse)(ctx), _pattern_helper.PathType.SHADING);
     const inv = (0, _display_utils.getCurrentTransformInverse)(ctx);
     if (inv) {
-      const canvas = ctx.canvas;
-      const width = canvas.width;
-      const height = canvas.height;
-      const bl = _util.Util.applyTransform([0, 0], inv);
-      const br = _util.Util.applyTransform([0, height], inv);
-      const ul = _util.Util.applyTransform([width, 0], inv);
-      const ur = _util.Util.applyTransform([width, height], inv);
-      const x0 = Math.min(bl[0], br[0], ul[0], ur[0]);
-      const y0 = Math.min(bl[1], br[1], ul[1], ur[1]);
-      const x1 = Math.max(bl[0], br[0], ul[0], ur[0]);
-      const y1 = Math.max(bl[1], br[1], ul[1], ur[1]);
+      const {
+        width,
+        height
+      } = ctx.canvas;
+      const [x0, y0, x1, y1] = _util.Util.getAxialAlignedBoundingBox([0, 0, width, height], inv);
       this.ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
     } else {
       this.ctx.fillRect(-1e10, -1e10, 2e10, 2e10);
@@ -10881,7 +10877,9 @@ class FreeTextEditor extends _editor.AnnotationEditor {
   static _internalPadding = 0;
   static _defaultColor = null;
   static _defaultFontSize = 10;
-  static _keyboardManager = new _tools.KeyboardManager([[["ctrl+Enter", "mac+meta+Enter", "Escape", "mac+Escape"], FreeTextEditor.prototype.commitOrRemove]]);
+  static get _keyboardManager() {
+    return (0, _util.shadow)(this, "_keyboardManager", new _tools.KeyboardManager([[["ctrl+Enter", "mac+meta+Enter", "Escape", "mac+Escape"], FreeTextEditor.prototype.commitOrRemove]]));
+  }
   static _type = "freetext";
   constructor(params) {
     super({
@@ -11744,69 +11742,108 @@ class InkEditor extends _editor.AnnotationEditor {
     }
     return path2D;
   }
-  #serializePaths(s, tx, ty, h) {
-    const NUMBER_OF_POINTS_ON_BEZIER_CURVE = 4;
+  static #toPDFCoordinates(points, rect, rotation) {
+    const [blX, blY, trX, trY] = rect;
+    switch (rotation) {
+      case 0:
+        for (let i = 0, ii = points.length; i < ii; i += 2) {
+          points[i] += blX;
+          points[i + 1] = trY - points[i + 1];
+        }
+        break;
+      case 90:
+        for (let i = 0, ii = points.length; i < ii; i += 2) {
+          const x = points[i];
+          points[i] = points[i + 1] + blX;
+          points[i + 1] = x + blY;
+        }
+        break;
+      case 180:
+        for (let i = 0, ii = points.length; i < ii; i += 2) {
+          points[i] = trX - points[i];
+          points[i + 1] += blY;
+        }
+        break;
+      case 270:
+        for (let i = 0, ii = points.length; i < ii; i += 2) {
+          const x = points[i];
+          points[i] = trX - points[i + 1];
+          points[i + 1] = trY - x;
+        }
+        break;
+      default:
+        throw new Error("Invalid rotation");
+    }
+    return points;
+  }
+  static #fromPDFCoordinates(points, rect, rotation) {
+    const [blX, blY, trX, trY] = rect;
+    switch (rotation) {
+      case 0:
+        for (let i = 0, ii = points.length; i < ii; i += 2) {
+          points[i] -= blX;
+          points[i + 1] = trY - points[i + 1];
+        }
+        break;
+      case 90:
+        for (let i = 0, ii = points.length; i < ii; i += 2) {
+          const x = points[i];
+          points[i] = points[i + 1] - blY;
+          points[i + 1] = x - blX;
+        }
+        break;
+      case 180:
+        for (let i = 0, ii = points.length; i < ii; i += 2) {
+          points[i] = trX - points[i];
+          points[i + 1] -= blY;
+        }
+        break;
+      case 270:
+        for (let i = 0, ii = points.length; i < ii; i += 2) {
+          const x = points[i];
+          points[i] = trY - points[i + 1];
+          points[i + 1] = trX - x;
+        }
+        break;
+      default:
+        throw new Error("Invalid rotation");
+    }
+    return points;
+  }
+  #serializePaths(s, tx, ty, rect) {
     const paths = [];
     const padding = this.thickness / 2;
-    let buffer, points;
+    const shiftX = s * tx + padding;
+    const shiftY = s * ty + padding;
     for (const bezier of this.paths) {
-      buffer = [];
-      points = [];
-      for (let i = 0, ii = bezier.length; i < ii; i++) {
-        const [first, control1, control2, second] = bezier[i];
-        const p10 = s * (first[0] + tx) + padding;
-        const p11 = h - s * (first[1] + ty) - padding;
-        const p20 = s * (control1[0] + tx) + padding;
-        const p21 = h - s * (control1[1] + ty) - padding;
-        const p30 = s * (control2[0] + tx) + padding;
-        const p31 = h - s * (control2[1] + ty) - padding;
-        const p40 = s * (second[0] + tx) + padding;
-        const p41 = h - s * (second[1] + ty) - padding;
-        if (i === 0) {
+      const buffer = [];
+      const points = [];
+      for (let j = 0, jj = bezier.length; j < jj; j++) {
+        const [first, control1, control2, second] = bezier[j];
+        const p10 = s * first[0] + shiftX;
+        const p11 = s * first[1] + shiftY;
+        const p20 = s * control1[0] + shiftX;
+        const p21 = s * control1[1] + shiftY;
+        const p30 = s * control2[0] + shiftX;
+        const p31 = s * control2[1] + shiftY;
+        const p40 = s * second[0] + shiftX;
+        const p41 = s * second[1] + shiftY;
+        if (j === 0) {
           buffer.push(p10, p11);
           points.push(p10, p11);
         }
         buffer.push(p20, p21, p30, p31, p40, p41);
-        this.#extractPointsOnBezier(p10, p11, p20, p21, p30, p31, p40, p41, NUMBER_OF_POINTS_ON_BEZIER_CURVE, points);
+        points.push(p20, p21);
+        if (j === jj - 1) {
+          points.push(p40, p41);
+        }
       }
       paths.push({
-        bezier: buffer,
-        points
+        bezier: InkEditor.#toPDFCoordinates(buffer, rect, this.rotation),
+        points: InkEditor.#toPDFCoordinates(points, rect, this.rotation)
       });
     }
     return paths;
-  }
-  #extractPointsOnBezier(p10, p11, p20, p21, p30, p31, p40, p41, n, points) {
-    if (this.#isAlmostFlat(p10, p11, p20, p21, p30, p31, p40, p41)) {
-      points.push(p40, p41);
-      return;
-    }
-    for (let i = 1; i < n - 1; i++) {
-      const t = i / n;
-      const mt = 1 - t;
-      let q10 = t * p10 + mt * p20;
-      let q11 = t * p11 + mt * p21;
-      let q20 = t * p20 + mt * p30;
-      let q21 = t * p21 + mt * p31;
-      const q30 = t * p30 + mt * p40;
-      const q31 = t * p31 + mt * p41;
-      q10 = t * q10 + mt * q20;
-      q11 = t * q11 + mt * q21;
-      q20 = t * q20 + mt * q30;
-      q21 = t * q21 + mt * q31;
-      q10 = t * q10 + mt * q20;
-      q11 = t * q11 + mt * q21;
-      points.push(q10, q11);
-    }
-    points.push(p40, p41);
-  }
-  #isAlmostFlat(p10, p11, p20, p21, p30, p31, p40, p41) {
-    const tol = 10;
-    const ax = (3 * p20 - 2 * p10 - p40) ** 2;
-    const ay = (3 * p21 - 2 * p11 - p41) ** 2;
-    const bx = (3 * p30 - p10 - 2 * p40) ** 2;
-    const by = (3 * p31 - p11 - 2 * p41) ** 2;
-    return Math.max(ax, bx) + Math.max(ay, by) <= tol;
   }
   #getBbox() {
     let xMin = Infinity;
@@ -11884,20 +11921,26 @@ class InkEditor extends _editor.AnnotationEditor {
     editor.#disableEditing = true;
     editor.#realWidth = Math.round(width);
     editor.#realHeight = Math.round(height);
-    for (const {
+    const {
+      paths,
+      rect,
+      rotation
+    } = data;
+    for (let {
       bezier
-    } of data.paths) {
+    } of paths) {
+      bezier = InkEditor.#fromPDFCoordinates(bezier, rect, rotation);
       const path = [];
       editor.paths.push(path);
       let p0 = scaleFactor * (bezier[0] - padding);
-      let p1 = scaleFactor * (height - bezier[1] - padding);
+      let p1 = scaleFactor * (bezier[1] - padding);
       for (let i = 2, ii = bezier.length; i < ii; i += 6) {
         const p10 = scaleFactor * (bezier[i] - padding);
-        const p11 = scaleFactor * (height - bezier[i + 1] - padding);
+        const p11 = scaleFactor * (bezier[i + 1] - padding);
         const p20 = scaleFactor * (bezier[i + 2] - padding);
-        const p21 = scaleFactor * (height - bezier[i + 3] - padding);
+        const p21 = scaleFactor * (bezier[i + 3] - padding);
         const p30 = scaleFactor * (bezier[i + 4] - padding);
-        const p31 = scaleFactor * (height - bezier[i + 5] - padding);
+        const p31 = scaleFactor * (bezier[i + 5] - padding);
         path.push([[p0, p1], [p10, p11], [p20, p21], [p30, p31]]);
         p0 = p30;
         p1 = p31;
@@ -11916,14 +11959,13 @@ class InkEditor extends _editor.AnnotationEditor {
       return null;
     }
     const rect = this.getRect(0, 0);
-    const height = this.rotation % 180 === 0 ? rect[3] - rect[1] : rect[2] - rect[0];
     const color = _editor.AnnotationEditor._colorManager.convert(this.ctx.strokeStyle);
     return {
       annotationType: _util.AnnotationEditorType.INK,
       color,
       thickness: this.thickness,
       opacity: this.opacity,
-      paths: this.#serializePaths(this.scaleFactor / this.parentScale, this.translationX, this.translationY, height),
+      paths: this.#serializePaths(this.scaleFactor / this.parentScale, this.translationX, this.translationY, rect),
       pageIndex: this.pageIndex,
       rect,
       rotation: this.rotation
@@ -13876,23 +13918,34 @@ class FileAttachmentAnnotationElement extends AnnotationElement {
   }
 }
 class AnnotationLayer {
-  static #appendElement(element, id, div, accessibilityManager) {
+  #accessibilityManager = null;
+  #annotationCanvasMap = null;
+  #div = null;
+  constructor({
+    div,
+    accessibilityManager,
+    annotationCanvasMap
+  }) {
+    this.#div = div;
+    this.#accessibilityManager = accessibilityManager;
+    this.#annotationCanvasMap = annotationCanvasMap;
+  }
+  #appendElement(element, id) {
     const contentElement = element.firstChild || element;
     contentElement.id = `${_display_utils.AnnotationPrefix}${id}`;
-    div.append(element);
-    accessibilityManager?.moveElementInDOM(div, element, contentElement, false);
+    this.#div.append(element);
+    this.#accessibilityManager?.moveElementInDOM(this.#div, element, contentElement, false);
   }
-  static render(params) {
+  render(params) {
     const {
       annotations,
-      div,
-      viewport,
-      accessibilityManager
+      viewport
     } = params;
-    (0, _display_utils.setLayerDimensions)(div, viewport);
+    const layer = this.#div;
+    (0, _display_utils.setLayerDimensions)(layer, viewport);
     const elementParams = {
       data: null,
-      layer: div,
+      layer,
       page: params.page,
       viewport,
       linkService: params.linkService,
@@ -13931,37 +13984,36 @@ class AnnotationLayer {
       if (Array.isArray(rendered)) {
         for (const renderedElement of rendered) {
           renderedElement.style.zIndex = zIndex++;
-          AnnotationLayer.#appendElement(renderedElement, data.id, div, accessibilityManager);
+          this.#appendElement(renderedElement, data.id);
         }
       } else {
         rendered.style.zIndex = zIndex++;
         if (element instanceof PopupAnnotationElement) {
-          div.prepend(rendered);
+          layer.prepend(rendered);
         } else {
-          AnnotationLayer.#appendElement(rendered, data.id, div, accessibilityManager);
+          this.#appendElement(rendered, data.id);
         }
       }
     }
-    this.#setAnnotationCanvasMap(div, params.annotationCanvasMap);
+    this.#setAnnotationCanvasMap();
   }
-  static update(params) {
-    const {
-      annotationCanvasMap,
-      div,
-      viewport
-    } = params;
-    (0, _display_utils.setLayerDimensions)(div, {
+  update({
+    viewport
+  }) {
+    const layer = this.#div;
+    (0, _display_utils.setLayerDimensions)(layer, {
       rotation: viewport.rotation
     });
-    this.#setAnnotationCanvasMap(div, annotationCanvasMap);
-    div.hidden = false;
+    this.#setAnnotationCanvasMap();
+    layer.hidden = false;
   }
-  static #setAnnotationCanvasMap(div, annotationCanvasMap) {
-    if (!annotationCanvasMap) {
+  #setAnnotationCanvasMap() {
+    if (!this.#annotationCanvasMap) {
       return;
     }
-    for (const [id, canvas] of annotationCanvasMap) {
-      const element = div.querySelector(`[data-annotation-id="${id}"]`);
+    const layer = this.#div;
+    for (const [id, canvas] of this.#annotationCanvasMap) {
+      const element = layer.querySelector(`[data-annotation-id="${id}"]`);
       if (!element) {
         continue;
       }
@@ -13976,7 +14028,7 @@ class AnnotationLayer {
         firstChild.before(canvas);
       }
     }
-    annotationCanvasMap.clear();
+    this.#annotationCanvasMap.clear();
   }
 }
 exports.AnnotationLayer = AnnotationLayer;
@@ -15059,17 +15111,12 @@ exports.SVGGraphics = SVGGraphics;
       this.current.fillColor = this._makeColorN_Pattern(args);
     }
     shadingFill(args) {
-      const width = this.viewport.width;
-      const height = this.viewport.height;
+      const {
+        width,
+        height
+      } = this.viewport;
       const inv = _util.Util.inverseTransform(this.transformMatrix);
-      const bl = _util.Util.applyTransform([0, 0], inv);
-      const br = _util.Util.applyTransform([0, height], inv);
-      const ul = _util.Util.applyTransform([width, 0], inv);
-      const ur = _util.Util.applyTransform([width, height], inv);
-      const x0 = Math.min(bl[0], br[0], ul[0], ur[0]);
-      const y0 = Math.min(bl[1], br[1], ul[1], ur[1]);
-      const x1 = Math.max(bl[0], br[0], ul[0], ur[0]);
-      const y1 = Math.max(bl[1], br[1], ul[1], ur[1]);
+      const [x0, y0, x1, y1] = _util.Util.getAxialAlignedBoundingBox([0, 0, width, height], inv);
       const rect = this.svgFactory.createElement("svg:rect");
       rect.setAttributeNS(null, "x", x0);
       rect.setAttributeNS(null, "y", y0);
@@ -15618,6 +15665,12 @@ Object.defineProperty(exports, "GlobalWorkerOptions", ({
     return _worker_options.GlobalWorkerOptions;
   }
 }));
+Object.defineProperty(exports, "ImageKind", ({
+  enumerable: true,
+  get: function () {
+    return _util.ImageKind;
+  }
+}));
 Object.defineProperty(exports, "InvalidPDFException", ({
   enumerable: true,
   get: function () {
@@ -15814,8 +15867,8 @@ var _annotation_layer = __w_pdfjs_require__(30);
 var _worker_options = __w_pdfjs_require__(14);
 var _svg = __w_pdfjs_require__(33);
 var _xfa_layer = __w_pdfjs_require__(32);
-const pdfjsVersion = '3.7.0';
-const pdfjsBuild = '6d8810b';
+const pdfjsVersion = '3.8.0';
+const pdfjsBuild = 'bb5d38a';
 })();
 
 /******/ 	return __webpack_exports__;

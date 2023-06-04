@@ -101,7 +101,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = '3.7.0';
+    const workerVersion = '3.8.0';
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }
@@ -1247,10 +1247,10 @@ class Util {
     return [xt, yt];
   }
   static getAxialAlignedBoundingBox(r, m) {
-    const p1 = Util.applyTransform(r, m);
-    const p2 = Util.applyTransform(r.slice(2, 4), m);
-    const p3 = Util.applyTransform([r[0], r[3]], m);
-    const p4 = Util.applyTransform([r[2], r[1]], m);
+    const p1 = this.applyTransform(r, m);
+    const p2 = this.applyTransform(r.slice(2, 4), m);
+    const p3 = this.applyTransform([r[0], r[3]], m);
+    const p4 = this.applyTransform([r[2], r[1]], m);
     return [Math.min(p1[0], p2[0], p3[0], p4[0]), Math.min(p1[1], p2[1], p3[1], p4[1]), Math.max(p1[0], p2[0], p3[0], p4[0]), Math.max(p1[1], p2[1], p3[1], p4[1])];
   }
   static inverseTransform(m) {
@@ -6303,13 +6303,14 @@ class ChoiceWidgetAnnotation extends WidgetAnnotation {
     const lineHeight = fontSize * _util.LINE_FACTOR;
     const vPadding = (lineHeight - fontSize) / 2;
     const numberOfVisibleLines = Math.floor(totalHeight / lineHeight);
-    let firstIndex;
-    if (valueIndices.length === 1) {
-      const valuePosition = valueIndices[0];
-      const indexInPage = valuePosition % numberOfVisibleLines;
-      firstIndex = valuePosition - indexInPage;
-    } else {
-      firstIndex = valueIndices.length ? valueIndices[0] : 0;
+    let firstIndex = 0;
+    if (valueIndices.length > 0) {
+      const minIndex = Math.min(...valueIndices);
+      const maxIndex = Math.max(...valueIndices);
+      firstIndex = Math.max(0, maxIndex - numberOfVisibleLines + 1);
+      if (firstIndex > minIndex) {
+        firstIndex = minIndex;
+      }
     }
     const end = Math.min(firstIndex + numberOfVisibleLines + 1, lineCount);
     const buf = ["/Tx BMC q", `1 1 ${totalWidth} ${totalHeight} re W n`];
@@ -6854,9 +6855,12 @@ class InkAnnotation extends MarkupAnnotation {
     ap
   }) {
     const {
+      color,
+      opacity,
       paths,
       rect,
-      rotation
+      rotation,
+      thickness
     } = annotation;
     const ink = new _primitives.Dict(xref);
     ink.set("Type", _primitives.Name.get("Annot"));
@@ -6865,8 +6869,12 @@ class InkAnnotation extends MarkupAnnotation {
     ink.set("Rect", rect);
     ink.set("InkList", paths.map(p => p.points));
     ink.set("F", 4);
-    ink.set("Border", [0, 0, 0]);
     ink.set("Rotate", rotation);
+    const bs = new _primitives.Dict(xref);
+    ink.set("BS", bs);
+    bs.set("W", thickness);
+    ink.set("C", Array.from(color, c => c / 255));
+    ink.set("CA", opacity);
     const n = new _primitives.Dict(xref);
     ink.set("AP", n);
     if (apRef) {
@@ -6913,12 +6921,8 @@ class InkAnnotation extends MarkupAnnotation {
     appearanceStreamDict.set("FormType", 1);
     appearanceStreamDict.set("Subtype", _primitives.Name.get("Form"));
     appearanceStreamDict.set("Type", _primitives.Name.get("XObject"));
-    appearanceStreamDict.set("BBox", [0, 0, w, h]);
+    appearanceStreamDict.set("BBox", rect);
     appearanceStreamDict.set("Length", appearance.length);
-    if (rotation) {
-      const matrix = (0, _core_utils.getRotationMatrix)(rotation, w, h);
-      appearanceStreamDict.set("Matrix", matrix);
-    }
     if (opacity !== 1) {
       const resources = new _primitives.Dict(xref);
       const extGState = new _primitives.Dict(xref);
@@ -10698,8 +10702,9 @@ class PartialEvaluator {
         baseEncodingName = null;
       }
     }
-    const nonEmbeddedFont = !properties.file || properties.isInternalFont;
-    if (baseEncodingName && nonEmbeddedFont && (0, _standard_fonts.getSymbolsFonts)()[properties.name]) {
+    const nonEmbeddedFont = !properties.file || properties.isInternalFont,
+      isSymbolsFontName = (0, _standard_fonts.getSymbolsFonts)()[properties.name];
+    if (baseEncodingName && nonEmbeddedFont && isSymbolsFontName) {
       baseEncodingName = null;
     }
     if (baseEncodingName) {
@@ -10711,7 +10716,7 @@ class PartialEvaluator {
       if (properties.type === "TrueType" && !isNonsymbolicFont) {
         encoding = _encodings.WinAnsiEncoding;
       }
-      if (isSymbolicFont) {
+      if (isSymbolicFont || isSymbolsFontName) {
         encoding = _encodings.MacRomanEncoding;
         if (nonEmbeddedFont) {
           if (/Symbol/i.test(properties.name)) {
@@ -11259,14 +11264,12 @@ class PartialEvaluator {
     if (typeof baseFont === "string") {
       baseFont = _primitives.Name.get(baseFont);
     }
-    if (!isType3Font) {
-      const fontNameStr = fontName?.name;
-      const baseFontStr = baseFont?.name;
-      if (fontNameStr !== baseFontStr) {
-        (0, _util.info)(`The FontDescriptor's FontName is "${fontNameStr}" but ` + `should be the same as the Font's BaseFont "${baseFontStr}".`);
-        if (fontNameStr && baseFontStr?.startsWith(fontNameStr)) {
-          fontName = baseFont;
-        }
+    const fontNameStr = fontName?.name;
+    const baseFontStr = baseFont?.name;
+    if (!isType3Font && fontNameStr !== baseFontStr) {
+      (0, _util.info)(`The FontDescriptor's FontName is "${fontNameStr}" but ` + `should be the same as the Font's BaseFont "${baseFontStr}".`);
+      if (fontNameStr && baseFontStr && (baseFontStr.startsWith(fontNameStr) || !(0, _standard_fonts.isKnownFontName)(fontNameStr) && (0, _standard_fonts.isKnownFontName)(baseFontStr))) {
+        fontName = null;
       }
     }
     fontName ||= baseFont;
@@ -23747,6 +23750,12 @@ class CFFParser {
         stackSize++;
       } else if (value === 19 || value === 20) {
         state.hints += stackSize >> 1;
+        if (state.hints === 0) {
+          data.copyWithin(j - 1, j, -1);
+          j -= 1;
+          length -= 1;
+          continue;
+        }
         j += state.hints + 7 >> 3;
         stackSize %= 2;
         validationCommand = CharstringValidationData[value];
@@ -24937,8 +24946,8 @@ function normalizeFontName(name) {
 
 __w_pdfjs_require__.r(__webpack_exports__);
 /* harmony export */ __w_pdfjs_require__.d(__webpack_exports__, {
-/* harmony export */   "getDingbatsGlyphsUnicode": () => (/* binding */ getDingbatsGlyphsUnicode),
-/* harmony export */   "getGlyphsUnicode": () => (/* binding */ getGlyphsUnicode)
+/* harmony export */   getDingbatsGlyphsUnicode: () => (/* binding */ getDingbatsGlyphsUnicode),
+/* harmony export */   getGlyphsUnicode: () => (/* binding */ getGlyphsUnicode)
 /* harmony export */ });
 /* harmony import */ var _core_utils_js__WEBPACK_IMPORTED_MODULE_0__ = __w_pdfjs_require__(3);
 
@@ -29483,11 +29492,11 @@ const getDingbatsGlyphsUnicode = (0,_core_utils_js__WEBPACK_IMPORTED_MODULE_0__.
 
 __w_pdfjs_require__.r(__webpack_exports__);
 /* harmony export */ __w_pdfjs_require__.d(__webpack_exports__, {
-/* harmony export */   "clearUnicodeCaches": () => (/* binding */ clearUnicodeCaches),
-/* harmony export */   "getCharUnicodeCategory": () => (/* binding */ getCharUnicodeCategory),
-/* harmony export */   "getUnicodeForGlyph": () => (/* binding */ getUnicodeForGlyph),
-/* harmony export */   "getUnicodeRangeFor": () => (/* binding */ getUnicodeRangeFor),
-/* harmony export */   "mapSpecialUnicodeValues": () => (/* binding */ mapSpecialUnicodeValues)
+/* harmony export */   clearUnicodeCaches: () => (/* binding */ clearUnicodeCaches),
+/* harmony export */   getCharUnicodeCategory: () => (/* binding */ getCharUnicodeCategory),
+/* harmony export */   getUnicodeForGlyph: () => (/* binding */ getUnicodeForGlyph),
+/* harmony export */   getUnicodeRangeFor: () => (/* binding */ getUnicodeRangeFor),
+/* harmony export */   mapSpecialUnicodeValues: () => (/* binding */ mapSpecialUnicodeValues)
 /* harmony export */ });
 /* harmony import */ var _core_utils_js__WEBPACK_IMPORTED_MODULE_0__ = __w_pdfjs_require__(3);
 
@@ -30184,6 +30193,7 @@ Object.defineProperty(exports, "__esModule", ({
 exports.getSerifFonts = exports.getNonStdFontMap = exports.getGlyphMapForStandardFonts = exports.getFontNameToFileMap = void 0;
 exports.getStandardFontName = getStandardFontName;
 exports.getSymbolsFonts = exports.getSupplementalGlyphMapForCalibri = exports.getSupplementalGlyphMapForArialBlack = exports.getStdFontMap = void 0;
+exports.isKnownFontName = isKnownFontName;
 var _core_utils = __w_pdfjs_require__(3);
 var _fonts_utils = __w_pdfjs_require__(38);
 const getStdFontMap = (0, _core_utils.getLookupTableFactory)(function (t) {
@@ -30467,6 +30477,9 @@ const getSymbolsFonts = (0, _core_utils.getLookupTableFactory)(function (t) {
   t.Dingbats = true;
   t.Symbol = true;
   t.ZapfDingbats = true;
+  t.Wingdings = true;
+  t["Wingdings-Bold"] = true;
+  t["Wingdings-Regular"] = true;
 });
 exports.getSymbolsFonts = getSymbolsFonts;
 const getGlyphMapForStandardFonts = (0, _core_utils.getLookupTableFactory)(function (t) {
@@ -31033,6 +31046,10 @@ function getStandardFontName(name) {
   const fontName = (0, _fonts_utils.normalizeFontName)(name);
   const stdFontMap = getStdFontMap();
   return stdFontMap[fontName];
+}
+function isKnownFontName(name) {
+  const fontName = (0, _fonts_utils.normalizeFontName)(name);
+  return !!(getStdFontMap()[fontName] || getNonStdFontMap()[fontName] || getSerifFonts()[fontName] || getSymbolsFonts()[fontName]);
 }
 
 /***/ }),
@@ -58141,8 +58158,8 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
   }
 }));
 var _worker = __w_pdfjs_require__(1);
-const pdfjsVersion = '3.7.0';
-const pdfjsBuild = '6d8810b';
+const pdfjsVersion = '3.8.0';
+const pdfjsBuild = 'bb5d38a';
 })();
 
 /******/ 	return __webpack_exports__;
