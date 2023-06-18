@@ -1027,14 +1027,14 @@ function createValidAbsoluteUrl(url, baseUrl = null, options = null) {
       if (options.tryConvertEncoding) {
         try {
           url = stringToUTF8String(url);
-        } catch (ex) {}
+        } catch {}
       }
     }
     const absoluteUrl = baseUrl ? new URL(url, baseUrl) : new URL(url);
     if (_isValidProtocol(absoluteUrl)) {
       return absoluteUrl;
     }
-  } catch (ex) {}
+  } catch {}
   return null;
 }
 function shadow(obj, prop, value, nonSerializable = false) {
@@ -1155,7 +1155,7 @@ function isEvalSupported() {
   try {
     new Function("");
     return true;
-  } catch (e) {
+  } catch {
     return false;
   }
 }
@@ -3085,7 +3085,7 @@ class Page {
       bbox: this.xfaFactory.getBoundingBox(this.pageIndex)
     } : null);
   }
-  #replaceIdByRef(annotations, deletedAnnotations) {
+  #replaceIdByRef(annotations, deletedAnnotations, existingAnnotations) {
     for (const annotation of annotations) {
       if (annotation.id) {
         const ref = _primitives.Ref.fromString(annotation.id);
@@ -3097,6 +3097,7 @@ class Page {
           deletedAnnotations.put(ref);
           continue;
         }
+        existingAnnotations?.put(ref);
         annotation.ref = ref;
         delete annotation.id;
       }
@@ -3119,14 +3120,17 @@ class Page {
       options: this.evaluatorOptions
     });
     const deletedAnnotations = new _primitives.RefSet();
-    this.#replaceIdByRef(annotations, deletedAnnotations);
+    const existingAnnotations = new _primitives.RefSet();
+    this.#replaceIdByRef(annotations, deletedAnnotations, existingAnnotations);
     const pageDict = this.pageDict;
     const annotationsArray = this.annotations.filter(a => !(a instanceof _primitives.Ref && deletedAnnotations.has(a)));
     const newData = await _annotation.AnnotationFactory.saveNewAnnotations(partialEvaluator, task, annotations);
     for (const {
       ref
     } of newData.annotations) {
-      annotationsArray.push(ref);
+      if (ref instanceof _primitives.Ref && !existingAnnotations.has(ref)) {
+        annotationsArray.push(ref);
+      }
     }
     const savedDict = pageDict.get("Annots");
     pageDict.set("Annots", annotationsArray);
@@ -3213,7 +3217,7 @@ class Page {
       const newAnnotations = newAnnotationsByPage.get(this.pageIndex);
       if (newAnnotations) {
         deletedAnnotations = new _primitives.RefSet();
-        this.#replaceIdByRef(newAnnotations, deletedAnnotations);
+        this.#replaceIdByRef(newAnnotations, deletedAnnotations, null);
         newAnnotationsPromise = _annotation.AnnotationFactory.printNewAnnotations(partialEvaluator, task, newAnnotations);
       }
     }
@@ -3665,7 +3669,7 @@ class PDFDocument {
           [key]: str
         };
         return (0, _util.shadow)(this, "xfaDatasets", new _dataset_reader.DatasetReader(data));
-      } catch (_) {
+      } catch {
         (0, _util.warn)("XFA - Invalid utf-8 string.");
         break;
       }
@@ -3684,7 +3688,7 @@ class PDFDocument {
       }
       try {
         data[key] = (0, _util.stringToUTF8String)(stream.getString());
-      } catch (_) {
+      } catch {
         (0, _util.warn)("XFA - Invalid utf-8 string.");
         return null;
       }
@@ -4139,6 +4143,9 @@ class PDFDocument {
       } else {
         name = `${name}.${partName}`;
       }
+    }
+    if (!field.has("Kids") && /\[\d+\]$/.test(name)) {
+      name = name.substring(0, name.lastIndexOf("["));
     }
     if (!promises.has(name)) {
       promises.set(name, []);
@@ -5170,6 +5177,9 @@ class WidgetAnnotation extends Annotation {
     data.annotationType = _util.AnnotationType.WIDGET;
     if (data.fieldName === undefined) {
       data.fieldName = this._constructFieldName(dict);
+    }
+    if (data.fieldName && /\[\d+\]$/.test(data.fieldName) && !dict.has("Kids")) {
+      data.baseFieldName = data.fieldName.substring(0, data.fieldName.lastIndexOf("["));
     }
     if (data.actions === undefined) {
       data.actions = (0, _core_utils.collectActions)(xref, dict, _util.AnnotationActionEventType);
@@ -6507,7 +6517,7 @@ exports.PopupAnnotation = PopupAnnotation;
 class FreeTextAnnotation extends MarkupAnnotation {
   constructor(params) {
     super(params);
-    this.data.hasOwnCanvas = this.data.noRotate;
+    this.data.hasOwnCanvas = true;
     const {
       xref
     } = params;
@@ -8914,10 +8924,8 @@ class PartialEvaluator {
       }
       return;
     }
-    const softMask = dict.get("SM", "SMask") || false;
-    const mask = dict.get("Mask") || false;
     const SMALL_IMAGE_DIMENSIONS = 200;
-    if (isInline && !softMask && !mask && w + h < SMALL_IMAGE_DIMENSIONS) {
+    if (isInline && !dict.has("SMask") && !dict.has("Mask") && w + h < SMALL_IMAGE_DIMENSIONS) {
       const imageObj = new _image.PDFImage({
         xref: this.xref,
         res: resources,
@@ -9427,7 +9435,7 @@ class PartialEvaluator {
           const tilingPatternIR = (0, _pattern.getTilingPatternIR)(localTilingPattern.operatorListIR, localTilingPattern.dict, color);
           operatorList.addOp(fn, tilingPatternIR);
           return undefined;
-        } catch (ex) {}
+        } catch {}
       }
       const pattern = this.xref.fetchIfRef(rawPattern);
       if (pattern) {
@@ -23094,7 +23102,7 @@ class Font {
         cff.duplicateFirstGlyph();
         const compiler = new _cff_parser.CFFCompiler(cff);
         tables["CFF "].data = compiler.compile();
-      } catch (e) {
+      } catch {
         (0, _util.warn)("Failed to compile font " + properties.loadedName);
       }
     }
@@ -31294,7 +31302,7 @@ class CFFFont {
     this.seacs = this.cff.seacs;
     try {
       this.data = compiler.compile();
-    } catch (e) {
+    } catch {
       (0, _util.warn)("Failed to compile font " + properties.loadedName);
       this.data = file;
     }
@@ -35948,7 +35956,7 @@ function getHeaderBlock(stream, suggestedLength) {
   try {
     headerBytes = stream.getBytes(suggestedLength);
     headerBytesLength = headerBytes.length;
-  } catch (ex) {}
+  } catch {}
   if (headerBytesLength === suggestedLength) {
     block = findBlock(headerBytes, EEXEC_SIGNATURE, suggestedLength - 2 * EEXEC_SIGNATURE.length);
     if (block.found && block.length === suggestedLength) {
@@ -40039,7 +40047,7 @@ class ImageResizer {
       const opacity = ctx.getImageData(0, 0, 1, 1).data[3];
       canvas.width = canvas.height = 1;
       return opacity !== 0;
-    } catch (e) {
+    } catch {
       return false;
     }
   }
@@ -41653,16 +41661,21 @@ async function writeStream(stream, buffer, transform) {
   if (transform !== null) {
     string = transform.encryptString(string);
   }
+  const {
+    dict
+  } = stream;
   if (typeof CompressionStream === "undefined") {
-    stream.dict.set("Length", string.length);
-    await writeDict(stream.dict, buffer, transform);
+    dict.set("Length", string.length);
+    await writeDict(dict, buffer, transform);
     buffer.push(" stream\n", string, "\nendstream");
     return;
   }
-  const filter = await stream.dict.getAsync("Filter");
-  const flateDecode = _primitives.Name.get("FlateDecode");
+  const filter = await dict.getAsync("Filter");
+  const params = await dict.getAsync("DecodeParms");
+  const filterZero = Array.isArray(filter) ? await dict.xref.fetchIfRefAsync(filter[0]) : filter;
+  const isFilterZeroFlateDecode = (0, _primitives.isName)(filterZero, "FlateDecode");
   const MIN_LENGTH_FOR_COMPRESSING = 256;
-  if (string.length >= MIN_LENGTH_FOR_COMPRESSING || Array.isArray(filter) && filter.includes(flateDecode) || filter instanceof _primitives.Name && filter.name === flateDecode.name) {
+  if (string.length >= MIN_LENGTH_FOR_COMPRESSING || isFilterZeroFlateDecode) {
     try {
       const byteArray = (0, _util.stringToBytes)(string);
       const cs = new CompressionStream("deflate");
@@ -41671,21 +41684,27 @@ async function writeStream(stream, buffer, transform) {
       writer.close();
       const buf = await new Response(cs.readable).arrayBuffer();
       string = (0, _util.bytesToString)(new Uint8Array(buf));
-      if (Array.isArray(filter)) {
-        if (!filter.includes(flateDecode)) {
-          filter.push(flateDecode);
+      let newFilter, newParams;
+      if (!filter) {
+        newFilter = _primitives.Name.get("FlateDecode");
+      } else if (!isFilterZeroFlateDecode) {
+        newFilter = Array.isArray(filter) ? [_primitives.Name.get("FlateDecode"), ...filter] : [_primitives.Name.get("FlateDecode"), filter];
+        if (params) {
+          newParams = Array.isArray(params) ? [null, ...params] : [null, params];
         }
-      } else if (!filter) {
-        stream.dict.set("Filter", flateDecode);
-      } else if (!(filter instanceof _primitives.Name) || filter.name !== flateDecode.name) {
-        stream.dict.set("Filter", [filter, flateDecode]);
+      }
+      if (newFilter) {
+        dict.set("Filter", newFilter);
+      }
+      if (newParams) {
+        dict.set("DecodeParms", newParams);
       }
     } catch (ex) {
       (0, _util.info)(`writeStream - cannot compress data: "${ex}".`);
     }
   }
-  stream.dict.set("Length", string.length);
-  await writeDict(stream.dict, buffer, transform);
+  dict.set("Length", string.length);
+  await writeDict(dict, buffer, transform);
   buffer.push(" stream\n", string, "\nendstream");
 }
 async function writeArray(array, buffer, transform) {
@@ -43637,7 +43656,7 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
         if (revision === 6) {
           try {
             password = (0, _util.utf8StringToString)(password);
-          } catch (ex) {
+          } catch {
             (0, _util.warn)("CipherTransformFactory: Unable to convert UTF8 encoded password.");
           }
         }
@@ -53403,7 +53422,7 @@ class XFAObject {
     for (const $symbol of Object.getOwnPropertySymbols(this)) {
       try {
         clone[$symbol] = this[$symbol];
-      } catch (_) {
+      } catch {
         (0, _util.shadow)(clone, $symbol, this[$symbol]);
       }
     }
@@ -56963,7 +56982,7 @@ class DatasetReader {
       });
       try {
         parser.parseFromString(data["xdp:xdp"]);
-      } catch (_) {}
+      } catch {}
       this.node = parser.node;
     }
   }
@@ -58331,7 +58350,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.8.0';
-const pdfjsBuild = 'b8447eb';
+const pdfjsBuild = 'a5c10b6';
 })();
 
 /******/ 	return __webpack_exports__;

@@ -428,14 +428,14 @@ function createValidAbsoluteUrl(url, baseUrl = null, options = null) {
       if (options.tryConvertEncoding) {
         try {
           url = stringToUTF8String(url);
-        } catch (ex) {}
+        } catch {}
       }
     }
     const absoluteUrl = baseUrl ? new URL(url, baseUrl) : new URL(url);
     if (_isValidProtocol(absoluteUrl)) {
       return absoluteUrl;
     }
-  } catch (ex) {}
+  } catch {}
   return null;
 }
 function shadow(obj, prop, value, nonSerializable = false) {
@@ -556,7 +556,7 @@ function isEvalSupported() {
   try {
     new Function("");
     return true;
-  } catch (e) {
+  } catch {
     return false;
   }
 }
@@ -1064,7 +1064,7 @@ function getUrlProp(val) {
   }
   try {
     return new URL(val, window.location).href;
-  } catch (ex) {
+  } catch {
     if (_is_node.isNodeJS && typeof val === "string") {
       return val;
     }
@@ -1421,7 +1421,7 @@ class PDFPageProxy {
     (intentState.renderTasks ||= new Set()).add(internalRenderTask);
     const renderTask = internalRenderTask.task;
     Promise.all([intentState.displayReadyCapability.promise, optionalContentConfigPromise]).then(([transparency, optionalContentConfig]) => {
-      if (this.#pendingCleanup) {
+      if (this.destroyed) {
         complete();
         return;
       }
@@ -1549,7 +1549,7 @@ class PDFPageProxy {
   }
   #tryCleanup(delayed = false) {
     this.#abortDelayedCleanup();
-    if (!this.#pendingCleanup) {
+    if (!this.#pendingCleanup || this.destroyed) {
       return false;
     }
     if (delayed) {
@@ -1750,7 +1750,7 @@ exports.PDFWorkerUtil = PDFWorkerUtil;
       if (!base.origin || base.origin === "null") {
         return false;
       }
-    } catch (e) {
+    } catch {
       return false;
     }
     const other = new URL(otherUrl, base);
@@ -1858,7 +1858,7 @@ class PDFWorker {
           }
           try {
             sendTest();
-          } catch (e) {
+          } catch {
             this._setupFakeWorker();
           }
         });
@@ -1868,7 +1868,7 @@ class PDFWorker {
         };
         sendTest();
         return;
-      } catch (e) {
+      } catch {
         (0, _util.info)("The worker has been disabled.");
       }
     }
@@ -1936,7 +1936,7 @@ class PDFWorker {
   static get _mainThreadWorkerMessageHandler() {
     try {
       return globalThis.pdfjsWorker?.WorkerMessageHandler || null;
-    } catch (ex) {
+    } catch {
       return null;
     }
   }
@@ -2662,7 +2662,7 @@ class InternalRenderTask {
     if (this._canvas) {
       InternalRenderTask.#canvasInUse.delete(this._canvas);
     }
-    this.callback(error || new _display_utils.RenderingCancelledException(`Rendering cancelled, page ${this._pageIndex + 1}`, "canvas", extraDelay));
+    this.callback(error || new _display_utils.RenderingCancelledException(`Rendering cancelled, page ${this._pageIndex + 1}`, extraDelay));
   }
   operatorListChanged() {
     if (!this.graphicsReady) {
@@ -2714,7 +2714,7 @@ class InternalRenderTask {
 }
 const version = '3.8.0';
 exports.version = version;
-const build = 'b8447eb';
+const build = 'a5c10b6';
 exports.build = build;
 
 /***/ }),
@@ -2889,7 +2889,7 @@ class AnnotationEditor {
     this.name = parameters.name;
     this.div = null;
     this._uiManager = parameters.uiManager;
-    this.annotationElement = null;
+    this.annotationElementId = null;
     const {
       rotation,
       rawDims: {
@@ -2907,9 +2907,20 @@ class AnnotationEditor {
     this.x = parameters.x / width;
     this.y = parameters.y / height;
     this.isAttachedToDOM = false;
+    this.deleted = false;
   }
   static get _defaultLineColor() {
     return (0, _util.shadow)(this, "_defaultLineColor", this._colorManager.getHexCode("CanvasText"));
+  }
+  static deleteAnnotationElement(editor) {
+    const fakeEditor = new FakeEditor({
+      id: editor.parent.getNextId(),
+      parent: editor.parent,
+      uiManager: editor._uiManager
+    });
+    fakeEditor.annotationElementId = editor.annotationElementId;
+    fakeEditor.deleted = true;
+    fakeEditor._uiManager.addToAnnotationStorage(fakeEditor);
   }
   addCommands(params) {
     this._uiManager.addCommands(params);
@@ -3132,7 +3143,7 @@ class AnnotationEditor {
     this.div?.addEventListener("focusin", this.#boundFocusin);
     this.div?.addEventListener("focusout", this.#boundFocusout);
   }
-  serialize() {
+  serialize(_isForCopying = false) {
     (0, _util.unreachable)("An editor must be serializable");
   }
   static deserialize(data, parent, uiManager) {
@@ -3185,11 +3196,22 @@ class AnnotationEditor {
       this.parent.setActiveEditor(null);
     }
   }
-  hasElementChanged(serialized = null) {
-    return false;
-  }
 }
 exports.AnnotationEditor = AnnotationEditor;
+class FakeEditor extends AnnotationEditor {
+  constructor(params) {
+    super(params);
+    this.annotationElementId = params.annotationElementId;
+    this.deleted = true;
+  }
+  serialize() {
+    return {
+      id: this.annotationElementId,
+      deleted: true,
+      pageIndex: this.pageIndex
+    };
+  }
+}
 
 /***/ }),
 /* 5 */
@@ -3400,6 +3422,7 @@ class AnnotationEditorUIManager {
   #annotationStorage = null;
   #commandManager = new CommandManager();
   #currentPageIndex = 0;
+  #deletedAnnotationsElementIds = new Set();
   #editorTypes = null;
   #editorsToRescale = new Set();
   #eventBus = null;
@@ -3515,8 +3538,9 @@ class AnnotationEditorUIManager {
     }
     const editors = [];
     for (const editor of this.#selectedEditors) {
-      if (!editor.isEmpty()) {
-        editors.push(editor.serialize());
+      const serialized = editor.serialize(true);
+      if (serialized) {
+        editors.push(serialized);
       }
     }
     if (editors.length === 0) {
@@ -3715,7 +3739,20 @@ class AnnotationEditorUIManager {
   removeEditor(editor) {
     this.#allEditors.delete(editor.id);
     this.unselect(editor);
-    this.#annotationStorage?.remove(editor.id);
+    if (!editor.annotationElementId || !this.#deletedAnnotationsElementIds.has(editor.annotationElementId)) {
+      this.#annotationStorage?.remove(editor.id);
+    }
+  }
+  addDeletedAnnotationElement(editor) {
+    this.#deletedAnnotationsElementIds.add(editor.annotationElementId);
+    editor.deleted = true;
+  }
+  isDeletedAnnotationElement(annotationElementId) {
+    return this.#deletedAnnotationsElementIds.has(annotationElementId);
+  }
+  removeDeletedAnnotationElement(editor) {
+    this.#deletedAnnotationsElementIds.delete(editor.annotationElementId);
+    editor.deleted = false;
   }
   #addEditorToLayer(editor) {
     const layer = this.#allLayers.get(editor.pageIndex);
@@ -4277,9 +4314,8 @@ class PageViewport {
 }
 exports.PageViewport = PageViewport;
 class RenderingCancelledException extends _util.BaseException {
-  constructor(msg, type, extraDelay = 0) {
+  constructor(msg, extraDelay = 0) {
     super(msg, "RenderingCancelledException");
-    this.type = type;
     this.extraDelay = extraDelay;
   }
 }
@@ -4318,7 +4354,7 @@ function getPdfFilenameFromUrl(url, defaultFilename = "document.pdf") {
     if (suggestedFilename.includes("%")) {
       try {
         suggestedFilename = reFilename.exec(decodeURIComponent(suggestedFilename))[0];
-      } catch (ex) {}
+      } catch {}
     }
   }
   return suggestedFilename || defaultFilename;
@@ -4368,7 +4404,7 @@ function isValidFetchUrl(url, baseUrl) {
       protocol
     } = baseUrl ? new URL(url, baseUrl) : new URL(url);
     return protocol === "http:" || protocol === "https:";
-  } catch (ex) {
+  } catch {
     return false;
   }
 }
@@ -9330,7 +9366,7 @@ function extractFilenameFromHeader(getResponseHeader) {
     if (filename.includes("%")) {
       try {
         filename = decodeURIComponent(filename);
-      } catch (ex) {}
+      } catch {}
     }
     if ((0, _display_utils.isPdfFile)(filename)) {
       return filename;
@@ -9397,7 +9433,7 @@ function getFilenameFromContentDispositionHeader(contentDisposition) {
         const buffer = (0, _util.stringToBytes)(value);
         value = decoder.decode(buffer);
         needsEncodingFixup = false;
-      } catch (e) {}
+      } catch {}
     }
     return value;
   }
@@ -9481,7 +9517,7 @@ function getFilenameFromContentDispositionHeader(contentDisposition) {
       }
       try {
         text = atob(text);
-      } catch (e) {}
+      } catch {}
       return textdecode(charset, text);
     });
   }
@@ -10513,6 +10549,7 @@ Object.defineProperty(exports, "__esModule", ({
 }));
 exports.AnnotationEditorLayer = void 0;
 var _util = __w_pdfjs_require__(1);
+var _editor = __w_pdfjs_require__(4);
 var _tools = __w_pdfjs_require__(5);
 var _freetext = __w_pdfjs_require__(28);
 var _ink = __w_pdfjs_require__(32);
@@ -10526,6 +10563,7 @@ class AnnotationEditorLayer {
   #editors = new Map();
   #hadPointerDown = false;
   #isCleaningUp = false;
+  #isDisabling = false;
   #uiManager;
   static _initialized = false;
   constructor(options) {
@@ -10540,6 +10578,7 @@ class AnnotationEditorLayer {
     this.div = options.div;
     this.#accessibilityManager = options.accessibilityManager;
     this.#annotationLayer = options.annotationLayer;
+    this.viewport = options.viewport;
     this.#uiManager.addLayer(this);
   }
   get isEmpty() {
@@ -10589,34 +10628,52 @@ class AnnotationEditorLayer {
   }
   enable() {
     this.div.style.pointerEvents = "auto";
-    if (this.#annotationLayer) {
-      const editables = this.#annotationLayer.getEditableAnnotations();
-      for (const editable of editables) {
-        const editor = this.deserialize(editable);
-        if (!editor) {
-          continue;
-        }
-        editable.hide();
-        this.addOrRebuild(editor);
+    const annotationElementIds = new Set();
+    for (const editor of this.#editors.values()) {
+      editor.enableEditing();
+      if (editor.annotationElementId) {
+        annotationElementIds.add(editor.annotationElementId);
       }
     }
-    for (const editor of this.#editors.values()) {
+    if (!this.#annotationLayer) {
+      return;
+    }
+    const editables = this.#annotationLayer.getEditableAnnotations();
+    for (const editable of editables) {
+      editable.hide();
+      if (this.#uiManager.isDeletedAnnotationElement(editable.data.id)) {
+        continue;
+      }
+      if (annotationElementIds.has(editable.data.id)) {
+        continue;
+      }
+      const editor = this.deserialize(editable);
+      if (!editor) {
+        continue;
+      }
+      this.addOrRebuild(editor);
       editor.enableEditing();
     }
   }
   disable() {
+    this.#isDisabling = true;
     this.div.style.pointerEvents = "none";
     for (const editor of this.#editors.values()) {
       editor.disableEditing();
-      if (!editor.hasElementChanged()) {
-        editor.annotationElement.show();
-        editor.remove();
+      if (!editor.annotationElementId || editor.serialize() !== null) {
+        continue;
       }
+      this.getEditableAnnotation(editor.annotationElementId)?.show();
+      editor.remove();
     }
     this.#cleanup();
     if (this.isEmpty) {
       this.div.hidden = true;
     }
+    this.#isDisabling = false;
+  }
+  getEditableAnnotation(id) {
+    return this.#annotationLayer?.getEditableAnnotation(id) || null;
   }
   setActiveEditor(editor) {
     const currentActive = this.#uiManager.getActive();
@@ -10635,14 +10692,23 @@ class AnnotationEditorLayer {
   }
   attach(editor) {
     this.#editors.set(editor.id, editor);
+    const {
+      annotationElementId
+    } = editor;
+    if (annotationElementId && this.#uiManager.isDeletedAnnotationElement(annotationElementId)) {
+      this.#uiManager.removeDeletedAnnotationElement(editor);
+    }
   }
   detach(editor) {
     this.#editors.delete(editor.id);
     this.#accessibilityManager?.removePointerInTextLayer(editor.contentDiv);
+    if (!this.#isDisabling && editor.annotationElementId) {
+      this.#uiManager.addDeletedAnnotationElement(editor);
+    }
   }
   remove(editor) {
-    this.#uiManager.removeEditor(editor);
     this.detach(editor);
+    this.#uiManager.removeEditor(editor);
     editor.div.style.display = "none";
     setTimeout(() => {
       editor.div.style.display = "";
@@ -10659,6 +10725,11 @@ class AnnotationEditorLayer {
   #changeParent(editor) {
     if (editor.parent === this) {
       return;
+    }
+    if (editor.annotationElementId) {
+      this.#uiManager.addDeletedAnnotationElement(editor.annotationElementId);
+      _editor.AnnotationEditor.deleteAnnotationElement(editor);
+      editor.annotationElementId = null;
     }
     this.attach(editor);
     editor.parent?.detach(editor);
@@ -10868,6 +10939,7 @@ class FreeTextEditor extends _editor.AnnotationEditor {
   #content = "";
   #editorDivId = `${this.id}-editor`;
   #fontSize;
+  #initialData = null;
   static _freeTextDefaultContent = "";
   static _l10nPromise;
   static _internalPadding = 0;
@@ -11009,6 +11081,7 @@ class FreeTextEditor extends _editor.AnnotationEditor {
   }
   onceAdded() {
     if (this.width) {
+      this.#cheatInitialRect();
       return;
     }
     this.enableEditMode();
@@ -11148,7 +11221,12 @@ class FreeTextEditor extends _editor.AnnotationEditor {
     (0, _tools.bindEvents)(this, this.div, ["dblclick", "keydown"]);
     if (this.width) {
       const [parentWidth, parentHeight] = this.parentDimensions;
-      this.setAt(baseX * parentWidth, baseY * parentHeight, this.width * parentWidth, this.height * parentHeight);
+      if (this.annotationElementId) {
+        const [tx] = this.getInitialTranslation();
+        this.setAt(baseX * parentWidth, baseY * parentHeight, tx, tx);
+      } else {
+        this.setAt(baseX * parentWidth, baseY * parentHeight, this.width * parentWidth, this.height * parentHeight);
+      }
       this.#setContent();
       this.div.draggable = true;
       this.editorDiv.contentEditable = false;
@@ -11173,23 +11251,61 @@ class FreeTextEditor extends _editor.AnnotationEditor {
     return this.editorDiv;
   }
   static deserialize(data, parent, uiManager) {
+    let initialData = null;
     if (data instanceof _annotation_layer.FreeTextAnnotationElement) {
-      return null;
+      const {
+        data: {
+          defaultAppearanceData: {
+            fontSize,
+            fontColor
+          },
+          rect,
+          rotation,
+          id
+        },
+        textContent,
+        page: {
+          pageNumber
+        }
+      } = data;
+      if (!textContent || textContent.length === 0) {
+        return null;
+      }
+      initialData = data = {
+        annotationType: _util.AnnotationEditorType.FREETEXT,
+        color: Array.from(fontColor),
+        fontSize,
+        value: textContent.join("\n"),
+        pageIndex: pageNumber - 1,
+        rect,
+        rotation,
+        id,
+        deleted: false
+      };
     }
     const editor = super.deserialize(data, parent, uiManager);
     editor.#fontSize = data.fontSize;
     editor.#color = _util.Util.makeHexColor(...data.color);
     editor.#content = data.value;
+    editor.annotationElementId = data.id || null;
+    editor.#initialData = initialData;
     return editor;
   }
-  serialize() {
+  serialize(isForCopying = false) {
     if (this.isEmpty()) {
       return null;
+    }
+    if (this.deleted) {
+      return {
+        pageIndex: this.pageIndex,
+        id: this.annotationElementId,
+        deleted: true
+      };
     }
     const padding = FreeTextEditor._internalPadding * this.parentScale;
     const rect = this.getRect(padding, padding);
     const color = _editor.AnnotationEditor._colorManager.convert(this.isAttachedToDOM ? getComputedStyle(this.editorDiv).color : this.#color);
-    return {
+    const serialized = {
       annotationType: _util.AnnotationEditorType.FREETEXT,
       color,
       fontSize: this.#fontSize,
@@ -11198,6 +11314,36 @@ class FreeTextEditor extends _editor.AnnotationEditor {
       rect,
       rotation: this.rotation
     };
+    if (isForCopying) {
+      return serialized;
+    }
+    if (this.annotationElementId && !this.#hasElementChanged(serialized)) {
+      return null;
+    }
+    serialized.id = this.annotationElementId;
+    return serialized;
+  }
+  #hasElementChanged(serialized) {
+    const {
+      value,
+      fontSize,
+      color,
+      rect,
+      pageIndex
+    } = this.#initialData;
+    return serialized.value !== value || serialized.fontSize !== fontSize || serialized.rect.some((x, i) => Math.abs(x - rect[i]) >= 1) || serialized.color.some((c, i) => c !== color[i]) || serialized.pageIndex !== pageIndex;
+  }
+  #cheatInitialRect(delayed = false) {
+    if (!this.annotationElementId) {
+      return;
+    }
+    this.#setEditorDimensions();
+    if (!delayed && (this.width === 0 || this.height === 0)) {
+      setTimeout(() => this.#cheatInitialRect(true), 0);
+      return;
+    }
+    const padding = FreeTextEditor._internalPadding * this.parentScale;
+    this.#initialData.rect = this.getRect(padding, padding);
   }
 }
 exports.FreeTextEditor = FreeTextEditor;
@@ -11248,6 +11394,8 @@ class AnnotationElementFactory {
             return new PushButtonWidgetAnnotationElement(parameters);
           case "Ch":
             return new ChoiceWidgetAnnotationElement(parameters);
+          case "Sig":
+            return new SignatureWidgetAnnotationElement(parameters);
         }
         return new WidgetAnnotationElement(parameters);
       case _util.AnnotationType.POPUP:
@@ -12018,7 +12166,7 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
       GetElementsByNameSet.add(element);
       element.setAttribute("data-element-id", id);
       element.disabled = this.data.readOnly;
-      element.name = this.data.fieldName;
+      element.name = this.data.baseFieldName || this.data.fieldName;
       element.tabIndex = DEFAULT_TAB_INDEX;
       this._setRequired(element, this.data.required);
       if (maxLen) {
@@ -12259,6 +12407,13 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
     return this.container;
   }
 }
+class SignatureWidgetAnnotationElement extends WidgetAnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: !!parameters.data.hasOwnCanvas
+    });
+  }
+}
 class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
   constructor(parameters) {
     super(parameters, {
@@ -12285,7 +12440,7 @@ class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
     element.disabled = data.readOnly;
     this._setRequired(element, this.data.required);
     element.type = "checkbox";
-    element.name = data.fieldName;
+    element.name = data.baseFieldName || data.fieldName;
     if (value) {
       element.setAttribute("checked", true);
     }
@@ -12359,7 +12514,7 @@ class RadioButtonWidgetAnnotationElement extends WidgetAnnotationElement {
     element.disabled = data.readOnly;
     this._setRequired(element, this.data.required);
     element.type = "radio";
-    element.name = data.fieldName;
+    element.name = data.baseFieldName || data.fieldName;
     if (value) {
       element.setAttribute("checked", true);
     }
@@ -12449,7 +12604,7 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
     selectElement.setAttribute("data-element-id", id);
     selectElement.disabled = this.data.readOnly;
     this._setRequired(selectElement, this.data.required);
-    selectElement.name = this.data.fieldName;
+    selectElement.name = this.data.baseFieldName || this.data.fieldName;
     selectElement.tabIndex = DEFAULT_TAB_INDEX;
     let addAnEmptyEntry = this.data.combo && this.data.options.length > 0;
     if (!this.data.combo) {
@@ -13163,7 +13318,7 @@ class AnnotationLayer {
   #accessibilityManager = null;
   #annotationCanvasMap = null;
   #div = null;
-  #editableAnnotations = new Set();
+  #editableAnnotations = new Map();
   constructor({
     div,
     accessibilityManager,
@@ -13221,7 +13376,7 @@ class AnnotationLayer {
         continue;
       }
       if (element.annotationEditorType > 0) {
-        this.#editableAnnotations.add(element);
+        this.#editableAnnotations.set(element.data.id, element);
       }
       const rendered = element.render();
       if (data.hidden) {
@@ -13277,7 +13432,10 @@ class AnnotationLayer {
     this.#annotationCanvasMap.clear();
   }
   getEditableAnnotations() {
-    return this.#editableAnnotations;
+    return Array.from(this.#editableAnnotations.values());
+  }
+  getEditableAnnotation(id) {
+    return this.#editableAnnotations.get(id);
   }
 }
 exports.AnnotationLayer = AnnotationLayer;
@@ -14362,1261 +14520,1255 @@ exports.SVGGraphics = void 0;
 var _display_utils = __w_pdfjs_require__(6);
 var _util = __w_pdfjs_require__(1);
 var _is_node = __w_pdfjs_require__(10);
-let SVGGraphics = class {
-  constructor() {
-    (0, _util.unreachable)("Not implemented: SVGGraphics");
-  }
+;
+const SVG_DEFAULTS = {
+  fontStyle: "normal",
+  fontWeight: "normal",
+  fillColor: "#000000"
 };
-exports.SVGGraphics = SVGGraphics;
-{
-  const SVG_DEFAULTS = {
-    fontStyle: "normal",
-    fontWeight: "normal",
-    fillColor: "#000000"
-  };
-  const XML_NS = "http://www.w3.org/XML/1998/namespace";
-  const XLINK_NS = "http://www.w3.org/1999/xlink";
-  const LINE_CAP_STYLES = ["butt", "round", "square"];
-  const LINE_JOIN_STYLES = ["miter", "round", "bevel"];
-  const createObjectURL = function (data, contentType = "", forceDataSchema = false) {
-    if (URL.createObjectURL && typeof Blob !== "undefined" && !forceDataSchema) {
-      return URL.createObjectURL(new Blob([data], {
-        type: contentType
-      }));
-    }
-    const digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-    let buffer = `data:${contentType};base64,`;
-    for (let i = 0, ii = data.length; i < ii; i += 3) {
-      const b1 = data[i] & 0xff;
-      const b2 = data[i + 1] & 0xff;
-      const b3 = data[i + 2] & 0xff;
-      const d1 = b1 >> 2,
-        d2 = (b1 & 3) << 4 | b2 >> 4;
-      const d3 = i + 1 < ii ? (b2 & 0xf) << 2 | b3 >> 6 : 64;
-      const d4 = i + 2 < ii ? b3 & 0x3f : 64;
-      buffer += digits[d1] + digits[d2] + digits[d3] + digits[d4];
-    }
-    return buffer;
-  };
-  const convertImgDataToPng = function () {
-    const PNG_HEADER = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-    const CHUNK_WRAPPER_SIZE = 12;
-    const crcTable = new Int32Array(256);
-    for (let i = 0; i < 256; i++) {
-      let c = i;
-      for (let h = 0; h < 8; h++) {
-        if (c & 1) {
-          c = 0xedb88320 ^ c >> 1 & 0x7fffffff;
-        } else {
-          c = c >> 1 & 0x7fffffff;
-        }
+const XML_NS = "http://www.w3.org/XML/1998/namespace";
+const XLINK_NS = "http://www.w3.org/1999/xlink";
+const LINE_CAP_STYLES = ["butt", "round", "square"];
+const LINE_JOIN_STYLES = ["miter", "round", "bevel"];
+const createObjectURL = function (data, contentType = "", forceDataSchema = false) {
+  if (URL.createObjectURL && typeof Blob !== "undefined" && !forceDataSchema) {
+    return URL.createObjectURL(new Blob([data], {
+      type: contentType
+    }));
+  }
+  const digits = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+  let buffer = `data:${contentType};base64,`;
+  for (let i = 0, ii = data.length; i < ii; i += 3) {
+    const b1 = data[i] & 0xff;
+    const b2 = data[i + 1] & 0xff;
+    const b3 = data[i + 2] & 0xff;
+    const d1 = b1 >> 2,
+      d2 = (b1 & 3) << 4 | b2 >> 4;
+    const d3 = i + 1 < ii ? (b2 & 0xf) << 2 | b3 >> 6 : 64;
+    const d4 = i + 2 < ii ? b3 & 0x3f : 64;
+    buffer += digits[d1] + digits[d2] + digits[d3] + digits[d4];
+  }
+  return buffer;
+};
+const convertImgDataToPng = function () {
+  const PNG_HEADER = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const CHUNK_WRAPPER_SIZE = 12;
+  const crcTable = new Int32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let h = 0; h < 8; h++) {
+      if (c & 1) {
+        c = 0xedb88320 ^ c >> 1 & 0x7fffffff;
+      } else {
+        c = c >> 1 & 0x7fffffff;
       }
-      crcTable[i] = c;
     }
-    function crc32(data, start, end) {
-      let crc = -1;
-      for (let i = start; i < end; i++) {
-        const a = (crc ^ data[i]) & 0xff;
-        const b = crcTable[a];
-        crc = crc >>> 8 ^ b;
-      }
-      return crc ^ -1;
+    crcTable[i] = c;
+  }
+  function crc32(data, start, end) {
+    let crc = -1;
+    for (let i = start; i < end; i++) {
+      const a = (crc ^ data[i]) & 0xff;
+      const b = crcTable[a];
+      crc = crc >>> 8 ^ b;
     }
-    function writePngChunk(type, body, data, offset) {
-      let p = offset;
-      const len = body.length;
-      data[p] = len >> 24 & 0xff;
-      data[p + 1] = len >> 16 & 0xff;
-      data[p + 2] = len >> 8 & 0xff;
-      data[p + 3] = len & 0xff;
-      p += 4;
-      data[p] = type.charCodeAt(0) & 0xff;
-      data[p + 1] = type.charCodeAt(1) & 0xff;
-      data[p + 2] = type.charCodeAt(2) & 0xff;
-      data[p + 3] = type.charCodeAt(3) & 0xff;
-      p += 4;
-      data.set(body, p);
-      p += body.length;
-      const crc = crc32(data, offset + 4, p);
-      data[p] = crc >> 24 & 0xff;
-      data[p + 1] = crc >> 16 & 0xff;
-      data[p + 2] = crc >> 8 & 0xff;
-      data[p + 3] = crc & 0xff;
+    return crc ^ -1;
+  }
+  function writePngChunk(type, body, data, offset) {
+    let p = offset;
+    const len = body.length;
+    data[p] = len >> 24 & 0xff;
+    data[p + 1] = len >> 16 & 0xff;
+    data[p + 2] = len >> 8 & 0xff;
+    data[p + 3] = len & 0xff;
+    p += 4;
+    data[p] = type.charCodeAt(0) & 0xff;
+    data[p + 1] = type.charCodeAt(1) & 0xff;
+    data[p + 2] = type.charCodeAt(2) & 0xff;
+    data[p + 3] = type.charCodeAt(3) & 0xff;
+    p += 4;
+    data.set(body, p);
+    p += body.length;
+    const crc = crc32(data, offset + 4, p);
+    data[p] = crc >> 24 & 0xff;
+    data[p + 1] = crc >> 16 & 0xff;
+    data[p + 2] = crc >> 8 & 0xff;
+    data[p + 3] = crc & 0xff;
+  }
+  function adler32(data, start, end) {
+    let a = 1;
+    let b = 0;
+    for (let i = start; i < end; ++i) {
+      a = (a + (data[i] & 0xff)) % 65521;
+      b = (b + a) % 65521;
     }
-    function adler32(data, start, end) {
-      let a = 1;
-      let b = 0;
-      for (let i = start; i < end; ++i) {
-        a = (a + (data[i] & 0xff)) % 65521;
-        b = (b + a) % 65521;
-      }
-      return b << 16 | a;
-    }
-    function deflateSync(literals) {
-      if (!_is_node.isNodeJS) {
-        return deflateSyncUncompressed(literals);
-      }
-      try {
-        let input;
-        if (parseInt(process.versions.node) >= 8) {
-          input = literals;
-        } else {
-          input = Buffer.from(literals);
-        }
-        const output = require("zlib").deflateSync(input, {
-          level: 9
-        });
-        return output instanceof Uint8Array ? output : new Uint8Array(output);
-      } catch (e) {
-        (0, _util.warn)("Not compressing PNG because zlib.deflateSync is unavailable: " + e);
-      }
+    return b << 16 | a;
+  }
+  function deflateSync(literals) {
+    if (!_is_node.isNodeJS) {
       return deflateSyncUncompressed(literals);
     }
-    function deflateSyncUncompressed(literals) {
-      let len = literals.length;
-      const maxBlockLength = 0xffff;
-      const deflateBlocks = Math.ceil(len / maxBlockLength);
-      const idat = new Uint8Array(2 + len + deflateBlocks * 5 + 4);
-      let pi = 0;
-      idat[pi++] = 0x78;
-      idat[pi++] = 0x9c;
-      let pos = 0;
-      while (len > maxBlockLength) {
-        idat[pi++] = 0x00;
-        idat[pi++] = 0xff;
-        idat[pi++] = 0xff;
-        idat[pi++] = 0x00;
-        idat[pi++] = 0x00;
-        idat.set(literals.subarray(pos, pos + maxBlockLength), pi);
-        pi += maxBlockLength;
-        pos += maxBlockLength;
-        len -= maxBlockLength;
+    try {
+      let input;
+      if (parseInt(process.versions.node) >= 8) {
+        input = literals;
+      } else {
+        input = Buffer.from(literals);
       }
-      idat[pi++] = 0x01;
-      idat[pi++] = len & 0xff;
-      idat[pi++] = len >> 8 & 0xff;
-      idat[pi++] = ~len & 0xffff & 0xff;
-      idat[pi++] = (~len & 0xffff) >> 8 & 0xff;
-      idat.set(literals.subarray(pos), pi);
-      pi += literals.length - pos;
-      const adler = adler32(literals, 0, literals.length);
-      idat[pi++] = adler >> 24 & 0xff;
-      idat[pi++] = adler >> 16 & 0xff;
-      idat[pi++] = adler >> 8 & 0xff;
-      idat[pi++] = adler & 0xff;
-      return idat;
+      const output = require("zlib").deflateSync(input, {
+        level: 9
+      });
+      return output instanceof Uint8Array ? output : new Uint8Array(output);
+    } catch (e) {
+      (0, _util.warn)("Not compressing PNG because zlib.deflateSync is unavailable: " + e);
     }
-    function encode(imgData, kind, forceDataSchema, isMask) {
-      const width = imgData.width;
-      const height = imgData.height;
-      let bitDepth, colorType, lineSize;
-      const bytes = imgData.data;
-      switch (kind) {
-        case _util.ImageKind.GRAYSCALE_1BPP:
-          colorType = 0;
-          bitDepth = 1;
-          lineSize = width + 7 >> 3;
-          break;
-        case _util.ImageKind.RGB_24BPP:
-          colorType = 2;
-          bitDepth = 8;
-          lineSize = width * 3;
-          break;
-        case _util.ImageKind.RGBA_32BPP:
-          colorType = 6;
-          bitDepth = 8;
-          lineSize = width * 4;
-          break;
-        default:
-          throw new Error("invalid format");
-      }
-      const literals = new Uint8Array((1 + lineSize) * height);
-      let offsetLiterals = 0,
-        offsetBytes = 0;
-      for (let y = 0; y < height; ++y) {
-        literals[offsetLiterals++] = 0;
-        literals.set(bytes.subarray(offsetBytes, offsetBytes + lineSize), offsetLiterals);
-        offsetBytes += lineSize;
-        offsetLiterals += lineSize;
-      }
-      if (kind === _util.ImageKind.GRAYSCALE_1BPP && isMask) {
-        offsetLiterals = 0;
-        for (let y = 0; y < height; y++) {
-          offsetLiterals++;
-          for (let i = 0; i < lineSize; i++) {
-            literals[offsetLiterals++] ^= 0xff;
-          }
+    return deflateSyncUncompressed(literals);
+  }
+  function deflateSyncUncompressed(literals) {
+    let len = literals.length;
+    const maxBlockLength = 0xffff;
+    const deflateBlocks = Math.ceil(len / maxBlockLength);
+    const idat = new Uint8Array(2 + len + deflateBlocks * 5 + 4);
+    let pi = 0;
+    idat[pi++] = 0x78;
+    idat[pi++] = 0x9c;
+    let pos = 0;
+    while (len > maxBlockLength) {
+      idat[pi++] = 0x00;
+      idat[pi++] = 0xff;
+      idat[pi++] = 0xff;
+      idat[pi++] = 0x00;
+      idat[pi++] = 0x00;
+      idat.set(literals.subarray(pos, pos + maxBlockLength), pi);
+      pi += maxBlockLength;
+      pos += maxBlockLength;
+      len -= maxBlockLength;
+    }
+    idat[pi++] = 0x01;
+    idat[pi++] = len & 0xff;
+    idat[pi++] = len >> 8 & 0xff;
+    idat[pi++] = ~len & 0xffff & 0xff;
+    idat[pi++] = (~len & 0xffff) >> 8 & 0xff;
+    idat.set(literals.subarray(pos), pi);
+    pi += literals.length - pos;
+    const adler = adler32(literals, 0, literals.length);
+    idat[pi++] = adler >> 24 & 0xff;
+    idat[pi++] = adler >> 16 & 0xff;
+    idat[pi++] = adler >> 8 & 0xff;
+    idat[pi++] = adler & 0xff;
+    return idat;
+  }
+  function encode(imgData, kind, forceDataSchema, isMask) {
+    const width = imgData.width;
+    const height = imgData.height;
+    let bitDepth, colorType, lineSize;
+    const bytes = imgData.data;
+    switch (kind) {
+      case _util.ImageKind.GRAYSCALE_1BPP:
+        colorType = 0;
+        bitDepth = 1;
+        lineSize = width + 7 >> 3;
+        break;
+      case _util.ImageKind.RGB_24BPP:
+        colorType = 2;
+        bitDepth = 8;
+        lineSize = width * 3;
+        break;
+      case _util.ImageKind.RGBA_32BPP:
+        colorType = 6;
+        bitDepth = 8;
+        lineSize = width * 4;
+        break;
+      default:
+        throw new Error("invalid format");
+    }
+    const literals = new Uint8Array((1 + lineSize) * height);
+    let offsetLiterals = 0,
+      offsetBytes = 0;
+    for (let y = 0; y < height; ++y) {
+      literals[offsetLiterals++] = 0;
+      literals.set(bytes.subarray(offsetBytes, offsetBytes + lineSize), offsetLiterals);
+      offsetBytes += lineSize;
+      offsetLiterals += lineSize;
+    }
+    if (kind === _util.ImageKind.GRAYSCALE_1BPP && isMask) {
+      offsetLiterals = 0;
+      for (let y = 0; y < height; y++) {
+        offsetLiterals++;
+        for (let i = 0; i < lineSize; i++) {
+          literals[offsetLiterals++] ^= 0xff;
         }
       }
-      const ihdr = new Uint8Array([width >> 24 & 0xff, width >> 16 & 0xff, width >> 8 & 0xff, width & 0xff, height >> 24 & 0xff, height >> 16 & 0xff, height >> 8 & 0xff, height & 0xff, bitDepth, colorType, 0x00, 0x00, 0x00]);
-      const idat = deflateSync(literals);
-      const pngLength = PNG_HEADER.length + CHUNK_WRAPPER_SIZE * 3 + ihdr.length + idat.length;
-      const data = new Uint8Array(pngLength);
-      let offset = 0;
-      data.set(PNG_HEADER, offset);
-      offset += PNG_HEADER.length;
-      writePngChunk("IHDR", ihdr, data, offset);
-      offset += CHUNK_WRAPPER_SIZE + ihdr.length;
-      writePngChunk("IDATA", idat, data, offset);
-      offset += CHUNK_WRAPPER_SIZE + idat.length;
-      writePngChunk("IEND", new Uint8Array(0), data, offset);
-      return createObjectURL(data, "image/png", forceDataSchema);
     }
-    return function convertImgDataToPng(imgData, forceDataSchema, isMask) {
-      const kind = imgData.kind === undefined ? _util.ImageKind.GRAYSCALE_1BPP : imgData.kind;
-      return encode(imgData, kind, forceDataSchema, isMask);
-    };
-  }();
-  class SVGExtraState {
-    constructor() {
-      this.fontSizeScale = 1;
-      this.fontWeight = SVG_DEFAULTS.fontWeight;
-      this.fontSize = 0;
-      this.textMatrix = _util.IDENTITY_MATRIX;
-      this.fontMatrix = _util.FONT_IDENTITY_MATRIX;
-      this.leading = 0;
-      this.textRenderingMode = _util.TextRenderingMode.FILL;
-      this.textMatrixScale = 1;
-      this.x = 0;
-      this.y = 0;
-      this.lineX = 0;
-      this.lineY = 0;
-      this.charSpacing = 0;
-      this.wordSpacing = 0;
-      this.textHScale = 1;
-      this.textRise = 0;
-      this.fillColor = SVG_DEFAULTS.fillColor;
-      this.strokeColor = "#000000";
-      this.fillAlpha = 1;
-      this.strokeAlpha = 1;
-      this.lineWidth = 1;
-      this.lineJoin = "";
-      this.lineCap = "";
-      this.miterLimit = 0;
-      this.dashArray = [];
-      this.dashPhase = 0;
-      this.dependencies = [];
-      this.activeClipUrl = null;
-      this.clipGroup = null;
-      this.maskId = "";
+    const ihdr = new Uint8Array([width >> 24 & 0xff, width >> 16 & 0xff, width >> 8 & 0xff, width & 0xff, height >> 24 & 0xff, height >> 16 & 0xff, height >> 8 & 0xff, height & 0xff, bitDepth, colorType, 0x00, 0x00, 0x00]);
+    const idat = deflateSync(literals);
+    const pngLength = PNG_HEADER.length + CHUNK_WRAPPER_SIZE * 3 + ihdr.length + idat.length;
+    const data = new Uint8Array(pngLength);
+    let offset = 0;
+    data.set(PNG_HEADER, offset);
+    offset += PNG_HEADER.length;
+    writePngChunk("IHDR", ihdr, data, offset);
+    offset += CHUNK_WRAPPER_SIZE + ihdr.length;
+    writePngChunk("IDATA", idat, data, offset);
+    offset += CHUNK_WRAPPER_SIZE + idat.length;
+    writePngChunk("IEND", new Uint8Array(0), data, offset);
+    return createObjectURL(data, "image/png", forceDataSchema);
+  }
+  return function convertImgDataToPng(imgData, forceDataSchema, isMask) {
+    const kind = imgData.kind === undefined ? _util.ImageKind.GRAYSCALE_1BPP : imgData.kind;
+    return encode(imgData, kind, forceDataSchema, isMask);
+  };
+}();
+class SVGExtraState {
+  constructor() {
+    this.fontSizeScale = 1;
+    this.fontWeight = SVG_DEFAULTS.fontWeight;
+    this.fontSize = 0;
+    this.textMatrix = _util.IDENTITY_MATRIX;
+    this.fontMatrix = _util.FONT_IDENTITY_MATRIX;
+    this.leading = 0;
+    this.textRenderingMode = _util.TextRenderingMode.FILL;
+    this.textMatrixScale = 1;
+    this.x = 0;
+    this.y = 0;
+    this.lineX = 0;
+    this.lineY = 0;
+    this.charSpacing = 0;
+    this.wordSpacing = 0;
+    this.textHScale = 1;
+    this.textRise = 0;
+    this.fillColor = SVG_DEFAULTS.fillColor;
+    this.strokeColor = "#000000";
+    this.fillAlpha = 1;
+    this.strokeAlpha = 1;
+    this.lineWidth = 1;
+    this.lineJoin = "";
+    this.lineCap = "";
+    this.miterLimit = 0;
+    this.dashArray = [];
+    this.dashPhase = 0;
+    this.dependencies = [];
+    this.activeClipUrl = null;
+    this.clipGroup = null;
+    this.maskId = "";
+  }
+  clone() {
+    return Object.create(this);
+  }
+  setCurrentPoint(x, y) {
+    this.x = x;
+    this.y = y;
+  }
+}
+function opListToTree(opList) {
+  let opTree = [];
+  const tmp = [];
+  for (const opListElement of opList) {
+    if (opListElement.fn === "save") {
+      opTree.push({
+        fnId: 92,
+        fn: "group",
+        items: []
+      });
+      tmp.push(opTree);
+      opTree = opTree.at(-1).items;
+      continue;
     }
-    clone() {
-      return Object.create(this);
-    }
-    setCurrentPoint(x, y) {
-      this.x = x;
-      this.y = y;
+    if (opListElement.fn === "restore") {
+      opTree = tmp.pop();
+    } else {
+      opTree.push(opListElement);
     }
   }
-  function opListToTree(opList) {
-    let opTree = [];
-    const tmp = [];
-    for (const opListElement of opList) {
-      if (opListElement.fn === "save") {
-        opTree.push({
-          fnId: 92,
-          fn: "group",
-          items: []
-        });
-        tmp.push(opTree);
-        opTree = opTree.at(-1).items;
+  return opTree;
+}
+function pf(value) {
+  if (Number.isInteger(value)) {
+    return value.toString();
+  }
+  const s = value.toFixed(10);
+  let i = s.length - 1;
+  if (s[i] !== "0") {
+    return s;
+  }
+  do {
+    i--;
+  } while (s[i] === "0");
+  return s.substring(0, s[i] === "." ? i : i + 1);
+}
+function pm(m) {
+  if (m[4] === 0 && m[5] === 0) {
+    if (m[1] === 0 && m[2] === 0) {
+      if (m[0] === 1 && m[3] === 1) {
+        return "";
+      }
+      return `scale(${pf(m[0])} ${pf(m[3])})`;
+    }
+    if (m[0] === m[3] && m[1] === -m[2]) {
+      const a = Math.acos(m[0]) * 180 / Math.PI;
+      return `rotate(${pf(a)})`;
+    }
+  } else {
+    if (m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1) {
+      return `translate(${pf(m[4])} ${pf(m[5])})`;
+    }
+  }
+  return `matrix(${pf(m[0])} ${pf(m[1])} ${pf(m[2])} ${pf(m[3])} ${pf(m[4])} ` + `${pf(m[5])})`;
+}
+let clipCount = 0;
+let maskCount = 0;
+let shadingCount = 0;
+class SVGGraphics {
+  constructor(commonObjs, objs, forceDataSchema = false) {
+    (0, _display_utils.deprecated)("The SVG back-end is no longer maintained and *may* be removed in the future.");
+    this.svgFactory = new _display_utils.DOMSVGFactory();
+    this.current = new SVGExtraState();
+    this.transformMatrix = _util.IDENTITY_MATRIX;
+    this.transformStack = [];
+    this.extraStack = [];
+    this.commonObjs = commonObjs;
+    this.objs = objs;
+    this.pendingClip = null;
+    this.pendingEOFill = false;
+    this.embedFonts = false;
+    this.embeddedFonts = Object.create(null);
+    this.cssStyle = null;
+    this.forceDataSchema = !!forceDataSchema;
+    this._operatorIdMapping = [];
+    for (const op in _util.OPS) {
+      this._operatorIdMapping[_util.OPS[op]] = op;
+    }
+  }
+  getObject(data, fallback = null) {
+    if (typeof data === "string") {
+      return data.startsWith("g_") ? this.commonObjs.get(data) : this.objs.get(data);
+    }
+    return fallback;
+  }
+  save() {
+    this.transformStack.push(this.transformMatrix);
+    const old = this.current;
+    this.extraStack.push(old);
+    this.current = old.clone();
+  }
+  restore() {
+    this.transformMatrix = this.transformStack.pop();
+    this.current = this.extraStack.pop();
+    this.pendingClip = null;
+    this.tgrp = null;
+  }
+  group(items) {
+    this.save();
+    this.executeOpTree(items);
+    this.restore();
+  }
+  loadDependencies(operatorList) {
+    const fnArray = operatorList.fnArray;
+    const argsArray = operatorList.argsArray;
+    for (let i = 0, ii = fnArray.length; i < ii; i++) {
+      if (fnArray[i] !== _util.OPS.dependency) {
         continue;
       }
-      if (opListElement.fn === "restore") {
-        opTree = tmp.pop();
-      } else {
-        opTree.push(opListElement);
+      for (const obj of argsArray[i]) {
+        const objsPool = obj.startsWith("g_") ? this.commonObjs : this.objs;
+        const promise = new Promise(resolve => {
+          objsPool.get(obj, resolve);
+        });
+        this.current.dependencies.push(promise);
       }
     }
-    return opTree;
+    return Promise.all(this.current.dependencies);
   }
-  function pf(value) {
-    if (Number.isInteger(value)) {
-      return value.toString();
-    }
-    const s = value.toFixed(10);
-    let i = s.length - 1;
-    if (s[i] !== "0") {
-      return s;
-    }
-    do {
-      i--;
-    } while (s[i] === "0");
-    return s.substring(0, s[i] === "." ? i : i + 1);
+  transform(a, b, c, d, e, f) {
+    const transformMatrix = [a, b, c, d, e, f];
+    this.transformMatrix = _util.Util.transform(this.transformMatrix, transformMatrix);
+    this.tgrp = null;
   }
-  function pm(m) {
-    if (m[4] === 0 && m[5] === 0) {
-      if (m[1] === 0 && m[2] === 0) {
-        if (m[0] === 1 && m[3] === 1) {
-          return "";
-        }
-        return `scale(${pf(m[0])} ${pf(m[3])})`;
-      }
-      if (m[0] === m[3] && m[1] === -m[2]) {
-        const a = Math.acos(m[0]) * 180 / Math.PI;
-        return `rotate(${pf(a)})`;
-      }
-    } else {
-      if (m[0] === 1 && m[1] === 0 && m[2] === 0 && m[3] === 1) {
-        return `translate(${pf(m[4])} ${pf(m[5])})`;
-      }
-    }
-    return `matrix(${pf(m[0])} ${pf(m[1])} ${pf(m[2])} ${pf(m[3])} ${pf(m[4])} ` + `${pf(m[5])})`;
-  }
-  let clipCount = 0;
-  let maskCount = 0;
-  let shadingCount = 0;
-  exports.SVGGraphics = SVGGraphics = class {
-    constructor(commonObjs, objs, forceDataSchema = false) {
-      (0, _display_utils.deprecated)("The SVG back-end is no longer maintained and *may* be removed in the future.");
-      this.svgFactory = new _display_utils.DOMSVGFactory();
-      this.current = new SVGExtraState();
+  getSVG(operatorList, viewport) {
+    this.viewport = viewport;
+    const svgElement = this._initialize(viewport);
+    return this.loadDependencies(operatorList).then(() => {
       this.transformMatrix = _util.IDENTITY_MATRIX;
-      this.transformStack = [];
-      this.extraStack = [];
-      this.commonObjs = commonObjs;
-      this.objs = objs;
-      this.pendingClip = null;
-      this.pendingEOFill = false;
-      this.embedFonts = false;
-      this.embeddedFonts = Object.create(null);
-      this.cssStyle = null;
-      this.forceDataSchema = !!forceDataSchema;
-      this._operatorIdMapping = [];
-      for (const op in _util.OPS) {
-        this._operatorIdMapping[_util.OPS[op]] = op;
-      }
-    }
-    getObject(data, fallback = null) {
-      if (typeof data === "string") {
-        return data.startsWith("g_") ? this.commonObjs.get(data) : this.objs.get(data);
-      }
-      return fallback;
-    }
-    save() {
-      this.transformStack.push(this.transformMatrix);
-      const old = this.current;
-      this.extraStack.push(old);
-      this.current = old.clone();
-    }
-    restore() {
-      this.transformMatrix = this.transformStack.pop();
-      this.current = this.extraStack.pop();
-      this.pendingClip = null;
-      this.tgrp = null;
-    }
-    group(items) {
-      this.save();
-      this.executeOpTree(items);
-      this.restore();
-    }
-    loadDependencies(operatorList) {
-      const fnArray = operatorList.fnArray;
-      const argsArray = operatorList.argsArray;
-      for (let i = 0, ii = fnArray.length; i < ii; i++) {
-        if (fnArray[i] !== _util.OPS.dependency) {
-          continue;
-        }
-        for (const obj of argsArray[i]) {
-          const objsPool = obj.startsWith("g_") ? this.commonObjs : this.objs;
-          const promise = new Promise(resolve => {
-            objsPool.get(obj, resolve);
-          });
-          this.current.dependencies.push(promise);
-        }
-      }
-      return Promise.all(this.current.dependencies);
-    }
-    transform(a, b, c, d, e, f) {
-      const transformMatrix = [a, b, c, d, e, f];
-      this.transformMatrix = _util.Util.transform(this.transformMatrix, transformMatrix);
-      this.tgrp = null;
-    }
-    getSVG(operatorList, viewport) {
-      this.viewport = viewport;
-      const svgElement = this._initialize(viewport);
-      return this.loadDependencies(operatorList).then(() => {
-        this.transformMatrix = _util.IDENTITY_MATRIX;
-        this.executeOpTree(this.convertOpList(operatorList));
-        return svgElement;
+      this.executeOpTree(this.convertOpList(operatorList));
+      return svgElement;
+    });
+  }
+  convertOpList(operatorList) {
+    const operatorIdMapping = this._operatorIdMapping;
+    const argsArray = operatorList.argsArray;
+    const fnArray = operatorList.fnArray;
+    const opList = [];
+    for (let i = 0, ii = fnArray.length; i < ii; i++) {
+      const fnId = fnArray[i];
+      opList.push({
+        fnId,
+        fn: operatorIdMapping[fnId],
+        args: argsArray[i]
       });
     }
-    convertOpList(operatorList) {
-      const operatorIdMapping = this._operatorIdMapping;
-      const argsArray = operatorList.argsArray;
-      const fnArray = operatorList.fnArray;
-      const opList = [];
-      for (let i = 0, ii = fnArray.length; i < ii; i++) {
-        const fnId = fnArray[i];
-        opList.push({
-          fnId,
-          fn: operatorIdMapping[fnId],
-          args: argsArray[i]
-        });
-      }
-      return opListToTree(opList);
-    }
-    executeOpTree(opTree) {
-      for (const opTreeElement of opTree) {
-        const fn = opTreeElement.fn;
-        const fnId = opTreeElement.fnId;
-        const args = opTreeElement.args;
-        switch (fnId | 0) {
-          case _util.OPS.beginText:
-            this.beginText();
-            break;
-          case _util.OPS.dependency:
-            break;
-          case _util.OPS.setLeading:
-            this.setLeading(args);
-            break;
-          case _util.OPS.setLeadingMoveText:
-            this.setLeadingMoveText(args[0], args[1]);
-            break;
-          case _util.OPS.setFont:
-            this.setFont(args);
-            break;
-          case _util.OPS.showText:
-            this.showText(args[0]);
-            break;
-          case _util.OPS.showSpacedText:
-            this.showText(args[0]);
-            break;
-          case _util.OPS.endText:
-            this.endText();
-            break;
-          case _util.OPS.moveText:
-            this.moveText(args[0], args[1]);
-            break;
-          case _util.OPS.setCharSpacing:
-            this.setCharSpacing(args[0]);
-            break;
-          case _util.OPS.setWordSpacing:
-            this.setWordSpacing(args[0]);
-            break;
-          case _util.OPS.setHScale:
-            this.setHScale(args[0]);
-            break;
-          case _util.OPS.setTextMatrix:
-            this.setTextMatrix(args[0], args[1], args[2], args[3], args[4], args[5]);
-            break;
-          case _util.OPS.setTextRise:
-            this.setTextRise(args[0]);
-            break;
-          case _util.OPS.setTextRenderingMode:
-            this.setTextRenderingMode(args[0]);
-            break;
-          case _util.OPS.setLineWidth:
-            this.setLineWidth(args[0]);
-            break;
-          case _util.OPS.setLineJoin:
-            this.setLineJoin(args[0]);
-            break;
-          case _util.OPS.setLineCap:
-            this.setLineCap(args[0]);
-            break;
-          case _util.OPS.setMiterLimit:
-            this.setMiterLimit(args[0]);
-            break;
-          case _util.OPS.setFillRGBColor:
-            this.setFillRGBColor(args[0], args[1], args[2]);
-            break;
-          case _util.OPS.setStrokeRGBColor:
-            this.setStrokeRGBColor(args[0], args[1], args[2]);
-            break;
-          case _util.OPS.setStrokeColorN:
-            this.setStrokeColorN(args);
-            break;
-          case _util.OPS.setFillColorN:
-            this.setFillColorN(args);
-            break;
-          case _util.OPS.shadingFill:
-            this.shadingFill(args[0]);
-            break;
-          case _util.OPS.setDash:
-            this.setDash(args[0], args[1]);
-            break;
-          case _util.OPS.setRenderingIntent:
-            this.setRenderingIntent(args[0]);
-            break;
-          case _util.OPS.setFlatness:
-            this.setFlatness(args[0]);
-            break;
-          case _util.OPS.setGState:
-            this.setGState(args[0]);
-            break;
-          case _util.OPS.fill:
-            this.fill();
-            break;
-          case _util.OPS.eoFill:
-            this.eoFill();
-            break;
-          case _util.OPS.stroke:
-            this.stroke();
-            break;
-          case _util.OPS.fillStroke:
-            this.fillStroke();
-            break;
-          case _util.OPS.eoFillStroke:
-            this.eoFillStroke();
-            break;
-          case _util.OPS.clip:
-            this.clip("nonzero");
-            break;
-          case _util.OPS.eoClip:
-            this.clip("evenodd");
-            break;
-          case _util.OPS.paintSolidColorImageMask:
-            this.paintSolidColorImageMask();
-            break;
-          case _util.OPS.paintImageXObject:
-            this.paintImageXObject(args[0]);
-            break;
-          case _util.OPS.paintInlineImageXObject:
-            this.paintInlineImageXObject(args[0]);
-            break;
-          case _util.OPS.paintImageMaskXObject:
-            this.paintImageMaskXObject(args[0]);
-            break;
-          case _util.OPS.paintFormXObjectBegin:
-            this.paintFormXObjectBegin(args[0], args[1]);
-            break;
-          case _util.OPS.paintFormXObjectEnd:
-            this.paintFormXObjectEnd();
-            break;
-          case _util.OPS.closePath:
-            this.closePath();
-            break;
-          case _util.OPS.closeStroke:
-            this.closeStroke();
-            break;
-          case _util.OPS.closeFillStroke:
-            this.closeFillStroke();
-            break;
-          case _util.OPS.closeEOFillStroke:
-            this.closeEOFillStroke();
-            break;
-          case _util.OPS.nextLine:
-            this.nextLine();
-            break;
-          case _util.OPS.transform:
-            this.transform(args[0], args[1], args[2], args[3], args[4], args[5]);
-            break;
-          case _util.OPS.constructPath:
-            this.constructPath(args[0], args[1]);
-            break;
-          case _util.OPS.endPath:
-            this.endPath();
-            break;
-          case 92:
-            this.group(opTreeElement.items);
-            break;
-          default:
-            (0, _util.warn)(`Unimplemented operator ${fn}`);
-            break;
-        }
-      }
-    }
-    setWordSpacing(wordSpacing) {
-      this.current.wordSpacing = wordSpacing;
-    }
-    setCharSpacing(charSpacing) {
-      this.current.charSpacing = charSpacing;
-    }
-    nextLine() {
-      this.moveText(0, this.current.leading);
-    }
-    setTextMatrix(a, b, c, d, e, f) {
-      const current = this.current;
-      current.textMatrix = current.lineMatrix = [a, b, c, d, e, f];
-      current.textMatrixScale = Math.hypot(a, b);
-      current.x = current.lineX = 0;
-      current.y = current.lineY = 0;
-      current.xcoords = [];
-      current.ycoords = [];
-      current.tspan = this.svgFactory.createElement("svg:tspan");
-      current.tspan.setAttributeNS(null, "font-family", current.fontFamily);
-      current.tspan.setAttributeNS(null, "font-size", `${pf(current.fontSize)}px`);
-      current.tspan.setAttributeNS(null, "y", pf(-current.y));
-      current.txtElement = this.svgFactory.createElement("svg:text");
-      current.txtElement.append(current.tspan);
-    }
-    beginText() {
-      const current = this.current;
-      current.x = current.lineX = 0;
-      current.y = current.lineY = 0;
-      current.textMatrix = _util.IDENTITY_MATRIX;
-      current.lineMatrix = _util.IDENTITY_MATRIX;
-      current.textMatrixScale = 1;
-      current.tspan = this.svgFactory.createElement("svg:tspan");
-      current.txtElement = this.svgFactory.createElement("svg:text");
-      current.txtgrp = this.svgFactory.createElement("svg:g");
-      current.xcoords = [];
-      current.ycoords = [];
-    }
-    moveText(x, y) {
-      const current = this.current;
-      current.x = current.lineX += x;
-      current.y = current.lineY += y;
-      current.xcoords = [];
-      current.ycoords = [];
-      current.tspan = this.svgFactory.createElement("svg:tspan");
-      current.tspan.setAttributeNS(null, "font-family", current.fontFamily);
-      current.tspan.setAttributeNS(null, "font-size", `${pf(current.fontSize)}px`);
-      current.tspan.setAttributeNS(null, "y", pf(-current.y));
-    }
-    showText(glyphs) {
-      const current = this.current;
-      const font = current.font;
-      const fontSize = current.fontSize;
-      if (fontSize === 0) {
-        return;
-      }
-      const fontSizeScale = current.fontSizeScale;
-      const charSpacing = current.charSpacing;
-      const wordSpacing = current.wordSpacing;
-      const fontDirection = current.fontDirection;
-      const textHScale = current.textHScale * fontDirection;
-      const vertical = font.vertical;
-      const spacingDir = vertical ? 1 : -1;
-      const defaultVMetrics = font.defaultVMetrics;
-      const widthAdvanceScale = fontSize * current.fontMatrix[0];
-      let x = 0;
-      for (const glyph of glyphs) {
-        if (glyph === null) {
-          x += fontDirection * wordSpacing;
-          continue;
-        } else if (typeof glyph === "number") {
-          x += spacingDir * glyph * fontSize / 1000;
-          continue;
-        }
-        const spacing = (glyph.isSpace ? wordSpacing : 0) + charSpacing;
-        const character = glyph.fontChar;
-        let scaledX, scaledY;
-        let width = glyph.width;
-        if (vertical) {
-          let vx;
-          const vmetric = glyph.vmetric || defaultVMetrics;
-          vx = glyph.vmetric ? vmetric[1] : width * 0.5;
-          vx = -vx * widthAdvanceScale;
-          const vy = vmetric[2] * widthAdvanceScale;
-          width = vmetric ? -vmetric[0] : width;
-          scaledX = vx / fontSizeScale;
-          scaledY = (x + vy) / fontSizeScale;
-        } else {
-          scaledX = x / fontSizeScale;
-          scaledY = 0;
-        }
-        if (glyph.isInFont || font.missingFile) {
-          current.xcoords.push(current.x + scaledX);
-          if (vertical) {
-            current.ycoords.push(-current.y + scaledY);
-          }
-          current.tspan.textContent += character;
-        } else {}
-        let charWidth;
-        if (vertical) {
-          charWidth = width * widthAdvanceScale - spacing * fontDirection;
-        } else {
-          charWidth = width * widthAdvanceScale + spacing * fontDirection;
-        }
-        x += charWidth;
-      }
-      current.tspan.setAttributeNS(null, "x", current.xcoords.map(pf).join(" "));
-      if (vertical) {
-        current.tspan.setAttributeNS(null, "y", current.ycoords.map(pf).join(" "));
-      } else {
-        current.tspan.setAttributeNS(null, "y", pf(-current.y));
-      }
-      if (vertical) {
-        current.y -= x;
-      } else {
-        current.x += x * textHScale;
-      }
-      current.tspan.setAttributeNS(null, "font-family", current.fontFamily);
-      current.tspan.setAttributeNS(null, "font-size", `${pf(current.fontSize)}px`);
-      if (current.fontStyle !== SVG_DEFAULTS.fontStyle) {
-        current.tspan.setAttributeNS(null, "font-style", current.fontStyle);
-      }
-      if (current.fontWeight !== SVG_DEFAULTS.fontWeight) {
-        current.tspan.setAttributeNS(null, "font-weight", current.fontWeight);
-      }
-      const fillStrokeMode = current.textRenderingMode & _util.TextRenderingMode.FILL_STROKE_MASK;
-      if (fillStrokeMode === _util.TextRenderingMode.FILL || fillStrokeMode === _util.TextRenderingMode.FILL_STROKE) {
-        if (current.fillColor !== SVG_DEFAULTS.fillColor) {
-          current.tspan.setAttributeNS(null, "fill", current.fillColor);
-        }
-        if (current.fillAlpha < 1) {
-          current.tspan.setAttributeNS(null, "fill-opacity", current.fillAlpha);
-        }
-      } else if (current.textRenderingMode === _util.TextRenderingMode.ADD_TO_PATH) {
-        current.tspan.setAttributeNS(null, "fill", "transparent");
-      } else {
-        current.tspan.setAttributeNS(null, "fill", "none");
-      }
-      if (fillStrokeMode === _util.TextRenderingMode.STROKE || fillStrokeMode === _util.TextRenderingMode.FILL_STROKE) {
-        const lineWidthScale = 1 / (current.textMatrixScale || 1);
-        this._setStrokeAttributes(current.tspan, lineWidthScale);
-      }
-      let textMatrix = current.textMatrix;
-      if (current.textRise !== 0) {
-        textMatrix = textMatrix.slice();
-        textMatrix[5] += current.textRise;
-      }
-      current.txtElement.setAttributeNS(null, "transform", `${pm(textMatrix)} scale(${pf(textHScale)}, -1)`);
-      current.txtElement.setAttributeNS(XML_NS, "xml:space", "preserve");
-      current.txtElement.append(current.tspan);
-      current.txtgrp.append(current.txtElement);
-      this._ensureTransformGroup().append(current.txtElement);
-    }
-    setLeadingMoveText(x, y) {
-      this.setLeading(-y);
-      this.moveText(x, y);
-    }
-    addFontStyle(fontObj) {
-      if (!fontObj.data) {
-        throw new Error("addFontStyle: No font data available, " + 'ensure that the "fontExtraProperties" API parameter is set.');
-      }
-      if (!this.cssStyle) {
-        this.cssStyle = this.svgFactory.createElement("svg:style");
-        this.cssStyle.setAttributeNS(null, "type", "text/css");
-        this.defs.append(this.cssStyle);
-      }
-      const url = createObjectURL(fontObj.data, fontObj.mimetype, this.forceDataSchema);
-      this.cssStyle.textContent += `@font-face { font-family: "${fontObj.loadedName}";` + ` src: url(${url}); }\n`;
-    }
-    setFont(details) {
-      const current = this.current;
-      const fontObj = this.commonObjs.get(details[0]);
-      let size = details[1];
-      current.font = fontObj;
-      if (this.embedFonts && !fontObj.missingFile && !this.embeddedFonts[fontObj.loadedName]) {
-        this.addFontStyle(fontObj);
-        this.embeddedFonts[fontObj.loadedName] = fontObj;
-      }
-      current.fontMatrix = fontObj.fontMatrix || _util.FONT_IDENTITY_MATRIX;
-      let bold = "normal";
-      if (fontObj.black) {
-        bold = "900";
-      } else if (fontObj.bold) {
-        bold = "bold";
-      }
-      const italic = fontObj.italic ? "italic" : "normal";
-      if (size < 0) {
-        size = -size;
-        current.fontDirection = -1;
-      } else {
-        current.fontDirection = 1;
-      }
-      current.fontSize = size;
-      current.fontFamily = fontObj.loadedName;
-      current.fontWeight = bold;
-      current.fontStyle = italic;
-      current.tspan = this.svgFactory.createElement("svg:tspan");
-      current.tspan.setAttributeNS(null, "y", pf(-current.y));
-      current.xcoords = [];
-      current.ycoords = [];
-    }
-    endText() {
-      const current = this.current;
-      if (current.textRenderingMode & _util.TextRenderingMode.ADD_TO_PATH_FLAG && current.txtElement?.hasChildNodes()) {
-        current.element = current.txtElement;
-        this.clip("nonzero");
-        this.endPath();
-      }
-    }
-    setLineWidth(width) {
-      if (width > 0) {
-        this.current.lineWidth = width;
-      }
-    }
-    setLineCap(style) {
-      this.current.lineCap = LINE_CAP_STYLES[style];
-    }
-    setLineJoin(style) {
-      this.current.lineJoin = LINE_JOIN_STYLES[style];
-    }
-    setMiterLimit(limit) {
-      this.current.miterLimit = limit;
-    }
-    setStrokeAlpha(strokeAlpha) {
-      this.current.strokeAlpha = strokeAlpha;
-    }
-    setStrokeRGBColor(r, g, b) {
-      this.current.strokeColor = _util.Util.makeHexColor(r, g, b);
-    }
-    setFillAlpha(fillAlpha) {
-      this.current.fillAlpha = fillAlpha;
-    }
-    setFillRGBColor(r, g, b) {
-      this.current.fillColor = _util.Util.makeHexColor(r, g, b);
-      this.current.tspan = this.svgFactory.createElement("svg:tspan");
-      this.current.xcoords = [];
-      this.current.ycoords = [];
-    }
-    setStrokeColorN(args) {
-      this.current.strokeColor = this._makeColorN_Pattern(args);
-    }
-    setFillColorN(args) {
-      this.current.fillColor = this._makeColorN_Pattern(args);
-    }
-    shadingFill(args) {
-      const {
-        width,
-        height
-      } = this.viewport;
-      const inv = _util.Util.inverseTransform(this.transformMatrix);
-      const [x0, y0, x1, y1] = _util.Util.getAxialAlignedBoundingBox([0, 0, width, height], inv);
-      const rect = this.svgFactory.createElement("svg:rect");
-      rect.setAttributeNS(null, "x", x0);
-      rect.setAttributeNS(null, "y", y0);
-      rect.setAttributeNS(null, "width", x1 - x0);
-      rect.setAttributeNS(null, "height", y1 - y0);
-      rect.setAttributeNS(null, "fill", this._makeShadingPattern(args));
-      if (this.current.fillAlpha < 1) {
-        rect.setAttributeNS(null, "fill-opacity", this.current.fillAlpha);
-      }
-      this._ensureTransformGroup().append(rect);
-    }
-    _makeColorN_Pattern(args) {
-      if (args[0] === "TilingPattern") {
-        return this._makeTilingPattern(args);
-      }
-      return this._makeShadingPattern(args);
-    }
-    _makeTilingPattern(args) {
-      const color = args[1];
-      const operatorList = args[2];
-      const matrix = args[3] || _util.IDENTITY_MATRIX;
-      const [x0, y0, x1, y1] = args[4];
-      const xstep = args[5];
-      const ystep = args[6];
-      const paintType = args[7];
-      const tilingId = `shading${shadingCount++}`;
-      const [tx0, ty0, tx1, ty1] = _util.Util.normalizeRect([..._util.Util.applyTransform([x0, y0], matrix), ..._util.Util.applyTransform([x1, y1], matrix)]);
-      const [xscale, yscale] = _util.Util.singularValueDecompose2dScale(matrix);
-      const txstep = xstep * xscale;
-      const tystep = ystep * yscale;
-      const tiling = this.svgFactory.createElement("svg:pattern");
-      tiling.setAttributeNS(null, "id", tilingId);
-      tiling.setAttributeNS(null, "patternUnits", "userSpaceOnUse");
-      tiling.setAttributeNS(null, "width", txstep);
-      tiling.setAttributeNS(null, "height", tystep);
-      tiling.setAttributeNS(null, "x", `${tx0}`);
-      tiling.setAttributeNS(null, "y", `${ty0}`);
-      const svg = this.svg;
-      const transformMatrix = this.transformMatrix;
-      const fillColor = this.current.fillColor;
-      const strokeColor = this.current.strokeColor;
-      const bbox = this.svgFactory.create(tx1 - tx0, ty1 - ty0);
-      this.svg = bbox;
-      this.transformMatrix = matrix;
-      if (paintType === 2) {
-        const cssColor = _util.Util.makeHexColor(...color);
-        this.current.fillColor = cssColor;
-        this.current.strokeColor = cssColor;
-      }
-      this.executeOpTree(this.convertOpList(operatorList));
-      this.svg = svg;
-      this.transformMatrix = transformMatrix;
-      this.current.fillColor = fillColor;
-      this.current.strokeColor = strokeColor;
-      tiling.append(bbox.childNodes[0]);
-      this.defs.append(tiling);
-      return `url(#${tilingId})`;
-    }
-    _makeShadingPattern(args) {
-      if (typeof args === "string") {
-        args = this.objs.get(args);
-      }
-      switch (args[0]) {
-        case "RadialAxial":
-          const shadingId = `shading${shadingCount++}`;
-          const colorStops = args[3];
-          let gradient;
-          switch (args[1]) {
-            case "axial":
-              const point0 = args[4];
-              const point1 = args[5];
-              gradient = this.svgFactory.createElement("svg:linearGradient");
-              gradient.setAttributeNS(null, "id", shadingId);
-              gradient.setAttributeNS(null, "gradientUnits", "userSpaceOnUse");
-              gradient.setAttributeNS(null, "x1", point0[0]);
-              gradient.setAttributeNS(null, "y1", point0[1]);
-              gradient.setAttributeNS(null, "x2", point1[0]);
-              gradient.setAttributeNS(null, "y2", point1[1]);
-              break;
-            case "radial":
-              const focalPoint = args[4];
-              const circlePoint = args[5];
-              const focalRadius = args[6];
-              const circleRadius = args[7];
-              gradient = this.svgFactory.createElement("svg:radialGradient");
-              gradient.setAttributeNS(null, "id", shadingId);
-              gradient.setAttributeNS(null, "gradientUnits", "userSpaceOnUse");
-              gradient.setAttributeNS(null, "cx", circlePoint[0]);
-              gradient.setAttributeNS(null, "cy", circlePoint[1]);
-              gradient.setAttributeNS(null, "r", circleRadius);
-              gradient.setAttributeNS(null, "fx", focalPoint[0]);
-              gradient.setAttributeNS(null, "fy", focalPoint[1]);
-              gradient.setAttributeNS(null, "fr", focalRadius);
-              break;
-            default:
-              throw new Error(`Unknown RadialAxial type: ${args[1]}`);
-          }
-          for (const colorStop of colorStops) {
-            const stop = this.svgFactory.createElement("svg:stop");
-            stop.setAttributeNS(null, "offset", colorStop[0]);
-            stop.setAttributeNS(null, "stop-color", colorStop[1]);
-            gradient.append(stop);
-          }
-          this.defs.append(gradient);
-          return `url(#${shadingId})`;
-        case "Mesh":
-          (0, _util.warn)("Unimplemented pattern Mesh");
-          return null;
-        case "Dummy":
-          return "hotpink";
+    return opListToTree(opList);
+  }
+  executeOpTree(opTree) {
+    for (const opTreeElement of opTree) {
+      const fn = opTreeElement.fn;
+      const fnId = opTreeElement.fnId;
+      const args = opTreeElement.args;
+      switch (fnId | 0) {
+        case _util.OPS.beginText:
+          this.beginText();
+          break;
+        case _util.OPS.dependency:
+          break;
+        case _util.OPS.setLeading:
+          this.setLeading(args);
+          break;
+        case _util.OPS.setLeadingMoveText:
+          this.setLeadingMoveText(args[0], args[1]);
+          break;
+        case _util.OPS.setFont:
+          this.setFont(args);
+          break;
+        case _util.OPS.showText:
+          this.showText(args[0]);
+          break;
+        case _util.OPS.showSpacedText:
+          this.showText(args[0]);
+          break;
+        case _util.OPS.endText:
+          this.endText();
+          break;
+        case _util.OPS.moveText:
+          this.moveText(args[0], args[1]);
+          break;
+        case _util.OPS.setCharSpacing:
+          this.setCharSpacing(args[0]);
+          break;
+        case _util.OPS.setWordSpacing:
+          this.setWordSpacing(args[0]);
+          break;
+        case _util.OPS.setHScale:
+          this.setHScale(args[0]);
+          break;
+        case _util.OPS.setTextMatrix:
+          this.setTextMatrix(args[0], args[1], args[2], args[3], args[4], args[5]);
+          break;
+        case _util.OPS.setTextRise:
+          this.setTextRise(args[0]);
+          break;
+        case _util.OPS.setTextRenderingMode:
+          this.setTextRenderingMode(args[0]);
+          break;
+        case _util.OPS.setLineWidth:
+          this.setLineWidth(args[0]);
+          break;
+        case _util.OPS.setLineJoin:
+          this.setLineJoin(args[0]);
+          break;
+        case _util.OPS.setLineCap:
+          this.setLineCap(args[0]);
+          break;
+        case _util.OPS.setMiterLimit:
+          this.setMiterLimit(args[0]);
+          break;
+        case _util.OPS.setFillRGBColor:
+          this.setFillRGBColor(args[0], args[1], args[2]);
+          break;
+        case _util.OPS.setStrokeRGBColor:
+          this.setStrokeRGBColor(args[0], args[1], args[2]);
+          break;
+        case _util.OPS.setStrokeColorN:
+          this.setStrokeColorN(args);
+          break;
+        case _util.OPS.setFillColorN:
+          this.setFillColorN(args);
+          break;
+        case _util.OPS.shadingFill:
+          this.shadingFill(args[0]);
+          break;
+        case _util.OPS.setDash:
+          this.setDash(args[0], args[1]);
+          break;
+        case _util.OPS.setRenderingIntent:
+          this.setRenderingIntent(args[0]);
+          break;
+        case _util.OPS.setFlatness:
+          this.setFlatness(args[0]);
+          break;
+        case _util.OPS.setGState:
+          this.setGState(args[0]);
+          break;
+        case _util.OPS.fill:
+          this.fill();
+          break;
+        case _util.OPS.eoFill:
+          this.eoFill();
+          break;
+        case _util.OPS.stroke:
+          this.stroke();
+          break;
+        case _util.OPS.fillStroke:
+          this.fillStroke();
+          break;
+        case _util.OPS.eoFillStroke:
+          this.eoFillStroke();
+          break;
+        case _util.OPS.clip:
+          this.clip("nonzero");
+          break;
+        case _util.OPS.eoClip:
+          this.clip("evenodd");
+          break;
+        case _util.OPS.paintSolidColorImageMask:
+          this.paintSolidColorImageMask();
+          break;
+        case _util.OPS.paintImageXObject:
+          this.paintImageXObject(args[0]);
+          break;
+        case _util.OPS.paintInlineImageXObject:
+          this.paintInlineImageXObject(args[0]);
+          break;
+        case _util.OPS.paintImageMaskXObject:
+          this.paintImageMaskXObject(args[0]);
+          break;
+        case _util.OPS.paintFormXObjectBegin:
+          this.paintFormXObjectBegin(args[0], args[1]);
+          break;
+        case _util.OPS.paintFormXObjectEnd:
+          this.paintFormXObjectEnd();
+          break;
+        case _util.OPS.closePath:
+          this.closePath();
+          break;
+        case _util.OPS.closeStroke:
+          this.closeStroke();
+          break;
+        case _util.OPS.closeFillStroke:
+          this.closeFillStroke();
+          break;
+        case _util.OPS.closeEOFillStroke:
+          this.closeEOFillStroke();
+          break;
+        case _util.OPS.nextLine:
+          this.nextLine();
+          break;
+        case _util.OPS.transform:
+          this.transform(args[0], args[1], args[2], args[3], args[4], args[5]);
+          break;
+        case _util.OPS.constructPath:
+          this.constructPath(args[0], args[1]);
+          break;
+        case _util.OPS.endPath:
+          this.endPath();
+          break;
+        case 92:
+          this.group(opTreeElement.items);
+          break;
         default:
-          throw new Error(`Unknown IR type: ${args[0]}`);
+          (0, _util.warn)(`Unimplemented operator ${fn}`);
+          break;
       }
     }
-    setDash(dashArray, dashPhase) {
-      this.current.dashArray = dashArray;
-      this.current.dashPhase = dashPhase;
+  }
+  setWordSpacing(wordSpacing) {
+    this.current.wordSpacing = wordSpacing;
+  }
+  setCharSpacing(charSpacing) {
+    this.current.charSpacing = charSpacing;
+  }
+  nextLine() {
+    this.moveText(0, this.current.leading);
+  }
+  setTextMatrix(a, b, c, d, e, f) {
+    const current = this.current;
+    current.textMatrix = current.lineMatrix = [a, b, c, d, e, f];
+    current.textMatrixScale = Math.hypot(a, b);
+    current.x = current.lineX = 0;
+    current.y = current.lineY = 0;
+    current.xcoords = [];
+    current.ycoords = [];
+    current.tspan = this.svgFactory.createElement("svg:tspan");
+    current.tspan.setAttributeNS(null, "font-family", current.fontFamily);
+    current.tspan.setAttributeNS(null, "font-size", `${pf(current.fontSize)}px`);
+    current.tspan.setAttributeNS(null, "y", pf(-current.y));
+    current.txtElement = this.svgFactory.createElement("svg:text");
+    current.txtElement.append(current.tspan);
+  }
+  beginText() {
+    const current = this.current;
+    current.x = current.lineX = 0;
+    current.y = current.lineY = 0;
+    current.textMatrix = _util.IDENTITY_MATRIX;
+    current.lineMatrix = _util.IDENTITY_MATRIX;
+    current.textMatrixScale = 1;
+    current.tspan = this.svgFactory.createElement("svg:tspan");
+    current.txtElement = this.svgFactory.createElement("svg:text");
+    current.txtgrp = this.svgFactory.createElement("svg:g");
+    current.xcoords = [];
+    current.ycoords = [];
+  }
+  moveText(x, y) {
+    const current = this.current;
+    current.x = current.lineX += x;
+    current.y = current.lineY += y;
+    current.xcoords = [];
+    current.ycoords = [];
+    current.tspan = this.svgFactory.createElement("svg:tspan");
+    current.tspan.setAttributeNS(null, "font-family", current.fontFamily);
+    current.tspan.setAttributeNS(null, "font-size", `${pf(current.fontSize)}px`);
+    current.tspan.setAttributeNS(null, "y", pf(-current.y));
+  }
+  showText(glyphs) {
+    const current = this.current;
+    const font = current.font;
+    const fontSize = current.fontSize;
+    if (fontSize === 0) {
+      return;
     }
-    constructPath(ops, args) {
-      const current = this.current;
-      let x = current.x,
-        y = current.y;
-      let d = [];
-      let j = 0;
-      for (const op of ops) {
-        switch (op | 0) {
-          case _util.OPS.rectangle:
-            x = args[j++];
-            y = args[j++];
-            const width = args[j++];
-            const height = args[j++];
-            const xw = x + width;
-            const yh = y + height;
-            d.push("M", pf(x), pf(y), "L", pf(xw), pf(y), "L", pf(xw), pf(yh), "L", pf(x), pf(yh), "Z");
-            break;
-          case _util.OPS.moveTo:
-            x = args[j++];
-            y = args[j++];
-            d.push("M", pf(x), pf(y));
-            break;
-          case _util.OPS.lineTo:
-            x = args[j++];
-            y = args[j++];
-            d.push("L", pf(x), pf(y));
-            break;
-          case _util.OPS.curveTo:
-            x = args[j + 4];
-            y = args[j + 5];
-            d.push("C", pf(args[j]), pf(args[j + 1]), pf(args[j + 2]), pf(args[j + 3]), pf(x), pf(y));
-            j += 6;
-            break;
-          case _util.OPS.curveTo2:
-            d.push("C", pf(x), pf(y), pf(args[j]), pf(args[j + 1]), pf(args[j + 2]), pf(args[j + 3]));
-            x = args[j + 2];
-            y = args[j + 3];
-            j += 4;
-            break;
-          case _util.OPS.curveTo3:
-            x = args[j + 2];
-            y = args[j + 3];
-            d.push("C", pf(args[j]), pf(args[j + 1]), pf(x), pf(y), pf(x), pf(y));
-            j += 4;
-            break;
-          case _util.OPS.closePath:
-            d.push("Z");
-            break;
-        }
+    const fontSizeScale = current.fontSizeScale;
+    const charSpacing = current.charSpacing;
+    const wordSpacing = current.wordSpacing;
+    const fontDirection = current.fontDirection;
+    const textHScale = current.textHScale * fontDirection;
+    const vertical = font.vertical;
+    const spacingDir = vertical ? 1 : -1;
+    const defaultVMetrics = font.defaultVMetrics;
+    const widthAdvanceScale = fontSize * current.fontMatrix[0];
+    let x = 0;
+    for (const glyph of glyphs) {
+      if (glyph === null) {
+        x += fontDirection * wordSpacing;
+        continue;
+      } else if (typeof glyph === "number") {
+        x += spacingDir * glyph * fontSize / 1000;
+        continue;
       }
-      d = d.join(" ");
-      if (current.path && ops.length > 0 && ops[0] !== _util.OPS.rectangle && ops[0] !== _util.OPS.moveTo) {
-        d = current.path.getAttributeNS(null, "d") + d;
+      const spacing = (glyph.isSpace ? wordSpacing : 0) + charSpacing;
+      const character = glyph.fontChar;
+      let scaledX, scaledY;
+      let width = glyph.width;
+      if (vertical) {
+        let vx;
+        const vmetric = glyph.vmetric || defaultVMetrics;
+        vx = glyph.vmetric ? vmetric[1] : width * 0.5;
+        vx = -vx * widthAdvanceScale;
+        const vy = vmetric[2] * widthAdvanceScale;
+        width = vmetric ? -vmetric[0] : width;
+        scaledX = vx / fontSizeScale;
+        scaledY = (x + vy) / fontSizeScale;
       } else {
-        current.path = this.svgFactory.createElement("svg:path");
-        this._ensureTransformGroup().append(current.path);
+        scaledX = x / fontSizeScale;
+        scaledY = 0;
       }
-      current.path.setAttributeNS(null, "d", d);
-      current.path.setAttributeNS(null, "fill", "none");
-      current.element = current.path;
-      current.setCurrentPoint(x, y);
-    }
-    endPath() {
-      const current = this.current;
-      current.path = null;
-      if (!this.pendingClip) {
-        return;
-      }
-      if (!current.element) {
-        this.pendingClip = null;
-        return;
-      }
-      const clipId = `clippath${clipCount++}`;
-      const clipPath = this.svgFactory.createElement("svg:clipPath");
-      clipPath.setAttributeNS(null, "id", clipId);
-      clipPath.setAttributeNS(null, "transform", pm(this.transformMatrix));
-      const clipElement = current.element.cloneNode(true);
-      if (this.pendingClip === "evenodd") {
-        clipElement.setAttributeNS(null, "clip-rule", "evenodd");
-      } else {
-        clipElement.setAttributeNS(null, "clip-rule", "nonzero");
-      }
-      this.pendingClip = null;
-      clipPath.append(clipElement);
-      this.defs.append(clipPath);
-      if (current.activeClipUrl) {
-        current.clipGroup = null;
-        for (const prev of this.extraStack) {
-          prev.clipGroup = null;
+      if (glyph.isInFont || font.missingFile) {
+        current.xcoords.push(current.x + scaledX);
+        if (vertical) {
+          current.ycoords.push(-current.y + scaledY);
         }
-        clipPath.setAttributeNS(null, "clip-path", current.activeClipUrl);
+        current.tspan.textContent += character;
+      } else {}
+      let charWidth;
+      if (vertical) {
+        charWidth = width * widthAdvanceScale - spacing * fontDirection;
+      } else {
+        charWidth = width * widthAdvanceScale + spacing * fontDirection;
       }
-      current.activeClipUrl = `url(#${clipId})`;
-      this.tgrp = null;
+      x += charWidth;
     }
-    clip(type) {
-      this.pendingClip = type;
+    current.tspan.setAttributeNS(null, "x", current.xcoords.map(pf).join(" "));
+    if (vertical) {
+      current.tspan.setAttributeNS(null, "y", current.ycoords.map(pf).join(" "));
+    } else {
+      current.tspan.setAttributeNS(null, "y", pf(-current.y));
     }
-    closePath() {
-      const current = this.current;
-      if (current.path) {
-        const d = `${current.path.getAttributeNS(null, "d")}Z`;
-        current.path.setAttributeNS(null, "d", d);
+    if (vertical) {
+      current.y -= x;
+    } else {
+      current.x += x * textHScale;
+    }
+    current.tspan.setAttributeNS(null, "font-family", current.fontFamily);
+    current.tspan.setAttributeNS(null, "font-size", `${pf(current.fontSize)}px`);
+    if (current.fontStyle !== SVG_DEFAULTS.fontStyle) {
+      current.tspan.setAttributeNS(null, "font-style", current.fontStyle);
+    }
+    if (current.fontWeight !== SVG_DEFAULTS.fontWeight) {
+      current.tspan.setAttributeNS(null, "font-weight", current.fontWeight);
+    }
+    const fillStrokeMode = current.textRenderingMode & _util.TextRenderingMode.FILL_STROKE_MASK;
+    if (fillStrokeMode === _util.TextRenderingMode.FILL || fillStrokeMode === _util.TextRenderingMode.FILL_STROKE) {
+      if (current.fillColor !== SVG_DEFAULTS.fillColor) {
+        current.tspan.setAttributeNS(null, "fill", current.fillColor);
       }
+      if (current.fillAlpha < 1) {
+        current.tspan.setAttributeNS(null, "fill-opacity", current.fillAlpha);
+      }
+    } else if (current.textRenderingMode === _util.TextRenderingMode.ADD_TO_PATH) {
+      current.tspan.setAttributeNS(null, "fill", "transparent");
+    } else {
+      current.tspan.setAttributeNS(null, "fill", "none");
     }
-    setLeading(leading) {
-      this.current.leading = -leading;
+    if (fillStrokeMode === _util.TextRenderingMode.STROKE || fillStrokeMode === _util.TextRenderingMode.FILL_STROKE) {
+      const lineWidthScale = 1 / (current.textMatrixScale || 1);
+      this._setStrokeAttributes(current.tspan, lineWidthScale);
     }
-    setTextRise(textRise) {
-      this.current.textRise = textRise;
+    let textMatrix = current.textMatrix;
+    if (current.textRise !== 0) {
+      textMatrix = textMatrix.slice();
+      textMatrix[5] += current.textRise;
     }
-    setTextRenderingMode(textRenderingMode) {
-      this.current.textRenderingMode = textRenderingMode;
+    current.txtElement.setAttributeNS(null, "transform", `${pm(textMatrix)} scale(${pf(textHScale)}, -1)`);
+    current.txtElement.setAttributeNS(XML_NS, "xml:space", "preserve");
+    current.txtElement.append(current.tspan);
+    current.txtgrp.append(current.txtElement);
+    this._ensureTransformGroup().append(current.txtElement);
+  }
+  setLeadingMoveText(x, y) {
+    this.setLeading(-y);
+    this.moveText(x, y);
+  }
+  addFontStyle(fontObj) {
+    if (!fontObj.data) {
+      throw new Error("addFontStyle: No font data available, " + 'ensure that the "fontExtraProperties" API parameter is set.');
     }
-    setHScale(scale) {
-      this.current.textHScale = scale / 100;
+    if (!this.cssStyle) {
+      this.cssStyle = this.svgFactory.createElement("svg:style");
+      this.cssStyle.setAttributeNS(null, "type", "text/css");
+      this.defs.append(this.cssStyle);
     }
-    setRenderingIntent(intent) {}
-    setFlatness(flatness) {}
-    setGState(states) {
-      for (const [key, value] of states) {
-        switch (key) {
-          case "LW":
-            this.setLineWidth(value);
+    const url = createObjectURL(fontObj.data, fontObj.mimetype, this.forceDataSchema);
+    this.cssStyle.textContent += `@font-face { font-family: "${fontObj.loadedName}";` + ` src: url(${url}); }\n`;
+  }
+  setFont(details) {
+    const current = this.current;
+    const fontObj = this.commonObjs.get(details[0]);
+    let size = details[1];
+    current.font = fontObj;
+    if (this.embedFonts && !fontObj.missingFile && !this.embeddedFonts[fontObj.loadedName]) {
+      this.addFontStyle(fontObj);
+      this.embeddedFonts[fontObj.loadedName] = fontObj;
+    }
+    current.fontMatrix = fontObj.fontMatrix || _util.FONT_IDENTITY_MATRIX;
+    let bold = "normal";
+    if (fontObj.black) {
+      bold = "900";
+    } else if (fontObj.bold) {
+      bold = "bold";
+    }
+    const italic = fontObj.italic ? "italic" : "normal";
+    if (size < 0) {
+      size = -size;
+      current.fontDirection = -1;
+    } else {
+      current.fontDirection = 1;
+    }
+    current.fontSize = size;
+    current.fontFamily = fontObj.loadedName;
+    current.fontWeight = bold;
+    current.fontStyle = italic;
+    current.tspan = this.svgFactory.createElement("svg:tspan");
+    current.tspan.setAttributeNS(null, "y", pf(-current.y));
+    current.xcoords = [];
+    current.ycoords = [];
+  }
+  endText() {
+    const current = this.current;
+    if (current.textRenderingMode & _util.TextRenderingMode.ADD_TO_PATH_FLAG && current.txtElement?.hasChildNodes()) {
+      current.element = current.txtElement;
+      this.clip("nonzero");
+      this.endPath();
+    }
+  }
+  setLineWidth(width) {
+    if (width > 0) {
+      this.current.lineWidth = width;
+    }
+  }
+  setLineCap(style) {
+    this.current.lineCap = LINE_CAP_STYLES[style];
+  }
+  setLineJoin(style) {
+    this.current.lineJoin = LINE_JOIN_STYLES[style];
+  }
+  setMiterLimit(limit) {
+    this.current.miterLimit = limit;
+  }
+  setStrokeAlpha(strokeAlpha) {
+    this.current.strokeAlpha = strokeAlpha;
+  }
+  setStrokeRGBColor(r, g, b) {
+    this.current.strokeColor = _util.Util.makeHexColor(r, g, b);
+  }
+  setFillAlpha(fillAlpha) {
+    this.current.fillAlpha = fillAlpha;
+  }
+  setFillRGBColor(r, g, b) {
+    this.current.fillColor = _util.Util.makeHexColor(r, g, b);
+    this.current.tspan = this.svgFactory.createElement("svg:tspan");
+    this.current.xcoords = [];
+    this.current.ycoords = [];
+  }
+  setStrokeColorN(args) {
+    this.current.strokeColor = this._makeColorN_Pattern(args);
+  }
+  setFillColorN(args) {
+    this.current.fillColor = this._makeColorN_Pattern(args);
+  }
+  shadingFill(args) {
+    const {
+      width,
+      height
+    } = this.viewport;
+    const inv = _util.Util.inverseTransform(this.transformMatrix);
+    const [x0, y0, x1, y1] = _util.Util.getAxialAlignedBoundingBox([0, 0, width, height], inv);
+    const rect = this.svgFactory.createElement("svg:rect");
+    rect.setAttributeNS(null, "x", x0);
+    rect.setAttributeNS(null, "y", y0);
+    rect.setAttributeNS(null, "width", x1 - x0);
+    rect.setAttributeNS(null, "height", y1 - y0);
+    rect.setAttributeNS(null, "fill", this._makeShadingPattern(args));
+    if (this.current.fillAlpha < 1) {
+      rect.setAttributeNS(null, "fill-opacity", this.current.fillAlpha);
+    }
+    this._ensureTransformGroup().append(rect);
+  }
+  _makeColorN_Pattern(args) {
+    if (args[0] === "TilingPattern") {
+      return this._makeTilingPattern(args);
+    }
+    return this._makeShadingPattern(args);
+  }
+  _makeTilingPattern(args) {
+    const color = args[1];
+    const operatorList = args[2];
+    const matrix = args[3] || _util.IDENTITY_MATRIX;
+    const [x0, y0, x1, y1] = args[4];
+    const xstep = args[5];
+    const ystep = args[6];
+    const paintType = args[7];
+    const tilingId = `shading${shadingCount++}`;
+    const [tx0, ty0, tx1, ty1] = _util.Util.normalizeRect([..._util.Util.applyTransform([x0, y0], matrix), ..._util.Util.applyTransform([x1, y1], matrix)]);
+    const [xscale, yscale] = _util.Util.singularValueDecompose2dScale(matrix);
+    const txstep = xstep * xscale;
+    const tystep = ystep * yscale;
+    const tiling = this.svgFactory.createElement("svg:pattern");
+    tiling.setAttributeNS(null, "id", tilingId);
+    tiling.setAttributeNS(null, "patternUnits", "userSpaceOnUse");
+    tiling.setAttributeNS(null, "width", txstep);
+    tiling.setAttributeNS(null, "height", tystep);
+    tiling.setAttributeNS(null, "x", `${tx0}`);
+    tiling.setAttributeNS(null, "y", `${ty0}`);
+    const svg = this.svg;
+    const transformMatrix = this.transformMatrix;
+    const fillColor = this.current.fillColor;
+    const strokeColor = this.current.strokeColor;
+    const bbox = this.svgFactory.create(tx1 - tx0, ty1 - ty0);
+    this.svg = bbox;
+    this.transformMatrix = matrix;
+    if (paintType === 2) {
+      const cssColor = _util.Util.makeHexColor(...color);
+      this.current.fillColor = cssColor;
+      this.current.strokeColor = cssColor;
+    }
+    this.executeOpTree(this.convertOpList(operatorList));
+    this.svg = svg;
+    this.transformMatrix = transformMatrix;
+    this.current.fillColor = fillColor;
+    this.current.strokeColor = strokeColor;
+    tiling.append(bbox.childNodes[0]);
+    this.defs.append(tiling);
+    return `url(#${tilingId})`;
+  }
+  _makeShadingPattern(args) {
+    if (typeof args === "string") {
+      args = this.objs.get(args);
+    }
+    switch (args[0]) {
+      case "RadialAxial":
+        const shadingId = `shading${shadingCount++}`;
+        const colorStops = args[3];
+        let gradient;
+        switch (args[1]) {
+          case "axial":
+            const point0 = args[4];
+            const point1 = args[5];
+            gradient = this.svgFactory.createElement("svg:linearGradient");
+            gradient.setAttributeNS(null, "id", shadingId);
+            gradient.setAttributeNS(null, "gradientUnits", "userSpaceOnUse");
+            gradient.setAttributeNS(null, "x1", point0[0]);
+            gradient.setAttributeNS(null, "y1", point0[1]);
+            gradient.setAttributeNS(null, "x2", point1[0]);
+            gradient.setAttributeNS(null, "y2", point1[1]);
             break;
-          case "LC":
-            this.setLineCap(value);
-            break;
-          case "LJ":
-            this.setLineJoin(value);
-            break;
-          case "ML":
-            this.setMiterLimit(value);
-            break;
-          case "D":
-            this.setDash(value[0], value[1]);
-            break;
-          case "RI":
-            this.setRenderingIntent(value);
-            break;
-          case "FL":
-            this.setFlatness(value);
-            break;
-          case "Font":
-            this.setFont(value);
-            break;
-          case "CA":
-            this.setStrokeAlpha(value);
-            break;
-          case "ca":
-            this.setFillAlpha(value);
+          case "radial":
+            const focalPoint = args[4];
+            const circlePoint = args[5];
+            const focalRadius = args[6];
+            const circleRadius = args[7];
+            gradient = this.svgFactory.createElement("svg:radialGradient");
+            gradient.setAttributeNS(null, "id", shadingId);
+            gradient.setAttributeNS(null, "gradientUnits", "userSpaceOnUse");
+            gradient.setAttributeNS(null, "cx", circlePoint[0]);
+            gradient.setAttributeNS(null, "cy", circlePoint[1]);
+            gradient.setAttributeNS(null, "r", circleRadius);
+            gradient.setAttributeNS(null, "fx", focalPoint[0]);
+            gradient.setAttributeNS(null, "fy", focalPoint[1]);
+            gradient.setAttributeNS(null, "fr", focalRadius);
             break;
           default:
-            (0, _util.warn)(`Unimplemented graphic state operator ${key}`);
-            break;
+            throw new Error(`Unknown RadialAxial type: ${args[1]}`);
         }
+        for (const colorStop of colorStops) {
+          const stop = this.svgFactory.createElement("svg:stop");
+          stop.setAttributeNS(null, "offset", colorStop[0]);
+          stop.setAttributeNS(null, "stop-color", colorStop[1]);
+          gradient.append(stop);
+        }
+        this.defs.append(gradient);
+        return `url(#${shadingId})`;
+      case "Mesh":
+        (0, _util.warn)("Unimplemented pattern Mesh");
+        return null;
+      case "Dummy":
+        return "hotpink";
+      default:
+        throw new Error(`Unknown IR type: ${args[0]}`);
+    }
+  }
+  setDash(dashArray, dashPhase) {
+    this.current.dashArray = dashArray;
+    this.current.dashPhase = dashPhase;
+  }
+  constructPath(ops, args) {
+    const current = this.current;
+    let x = current.x,
+      y = current.y;
+    let d = [];
+    let j = 0;
+    for (const op of ops) {
+      switch (op | 0) {
+        case _util.OPS.rectangle:
+          x = args[j++];
+          y = args[j++];
+          const width = args[j++];
+          const height = args[j++];
+          const xw = x + width;
+          const yh = y + height;
+          d.push("M", pf(x), pf(y), "L", pf(xw), pf(y), "L", pf(xw), pf(yh), "L", pf(x), pf(yh), "Z");
+          break;
+        case _util.OPS.moveTo:
+          x = args[j++];
+          y = args[j++];
+          d.push("M", pf(x), pf(y));
+          break;
+        case _util.OPS.lineTo:
+          x = args[j++];
+          y = args[j++];
+          d.push("L", pf(x), pf(y));
+          break;
+        case _util.OPS.curveTo:
+          x = args[j + 4];
+          y = args[j + 5];
+          d.push("C", pf(args[j]), pf(args[j + 1]), pf(args[j + 2]), pf(args[j + 3]), pf(x), pf(y));
+          j += 6;
+          break;
+        case _util.OPS.curveTo2:
+          d.push("C", pf(x), pf(y), pf(args[j]), pf(args[j + 1]), pf(args[j + 2]), pf(args[j + 3]));
+          x = args[j + 2];
+          y = args[j + 3];
+          j += 4;
+          break;
+        case _util.OPS.curveTo3:
+          x = args[j + 2];
+          y = args[j + 3];
+          d.push("C", pf(args[j]), pf(args[j + 1]), pf(x), pf(y), pf(x), pf(y));
+          j += 4;
+          break;
+        case _util.OPS.closePath:
+          d.push("Z");
+          break;
       }
     }
-    fill() {
-      const current = this.current;
-      if (current.element) {
-        current.element.setAttributeNS(null, "fill", current.fillColor);
-        current.element.setAttributeNS(null, "fill-opacity", current.fillAlpha);
-        this.endPath();
+    d = d.join(" ");
+    if (current.path && ops.length > 0 && ops[0] !== _util.OPS.rectangle && ops[0] !== _util.OPS.moveTo) {
+      d = current.path.getAttributeNS(null, "d") + d;
+    } else {
+      current.path = this.svgFactory.createElement("svg:path");
+      this._ensureTransformGroup().append(current.path);
+    }
+    current.path.setAttributeNS(null, "d", d);
+    current.path.setAttributeNS(null, "fill", "none");
+    current.element = current.path;
+    current.setCurrentPoint(x, y);
+  }
+  endPath() {
+    const current = this.current;
+    current.path = null;
+    if (!this.pendingClip) {
+      return;
+    }
+    if (!current.element) {
+      this.pendingClip = null;
+      return;
+    }
+    const clipId = `clippath${clipCount++}`;
+    const clipPath = this.svgFactory.createElement("svg:clipPath");
+    clipPath.setAttributeNS(null, "id", clipId);
+    clipPath.setAttributeNS(null, "transform", pm(this.transformMatrix));
+    const clipElement = current.element.cloneNode(true);
+    if (this.pendingClip === "evenodd") {
+      clipElement.setAttributeNS(null, "clip-rule", "evenodd");
+    } else {
+      clipElement.setAttributeNS(null, "clip-rule", "nonzero");
+    }
+    this.pendingClip = null;
+    clipPath.append(clipElement);
+    this.defs.append(clipPath);
+    if (current.activeClipUrl) {
+      current.clipGroup = null;
+      for (const prev of this.extraStack) {
+        prev.clipGroup = null;
+      }
+      clipPath.setAttributeNS(null, "clip-path", current.activeClipUrl);
+    }
+    current.activeClipUrl = `url(#${clipId})`;
+    this.tgrp = null;
+  }
+  clip(type) {
+    this.pendingClip = type;
+  }
+  closePath() {
+    const current = this.current;
+    if (current.path) {
+      const d = `${current.path.getAttributeNS(null, "d")}Z`;
+      current.path.setAttributeNS(null, "d", d);
+    }
+  }
+  setLeading(leading) {
+    this.current.leading = -leading;
+  }
+  setTextRise(textRise) {
+    this.current.textRise = textRise;
+  }
+  setTextRenderingMode(textRenderingMode) {
+    this.current.textRenderingMode = textRenderingMode;
+  }
+  setHScale(scale) {
+    this.current.textHScale = scale / 100;
+  }
+  setRenderingIntent(intent) {}
+  setFlatness(flatness) {}
+  setGState(states) {
+    for (const [key, value] of states) {
+      switch (key) {
+        case "LW":
+          this.setLineWidth(value);
+          break;
+        case "LC":
+          this.setLineCap(value);
+          break;
+        case "LJ":
+          this.setLineJoin(value);
+          break;
+        case "ML":
+          this.setMiterLimit(value);
+          break;
+        case "D":
+          this.setDash(value[0], value[1]);
+          break;
+        case "RI":
+          this.setRenderingIntent(value);
+          break;
+        case "FL":
+          this.setFlatness(value);
+          break;
+        case "Font":
+          this.setFont(value);
+          break;
+        case "CA":
+          this.setStrokeAlpha(value);
+          break;
+        case "ca":
+          this.setFillAlpha(value);
+          break;
+        default:
+          (0, _util.warn)(`Unimplemented graphic state operator ${key}`);
+          break;
       }
     }
-    stroke() {
-      const current = this.current;
-      if (current.element) {
-        this._setStrokeAttributes(current.element);
-        current.element.setAttributeNS(null, "fill", "none");
-        this.endPath();
-      }
+  }
+  fill() {
+    const current = this.current;
+    if (current.element) {
+      current.element.setAttributeNS(null, "fill", current.fillColor);
+      current.element.setAttributeNS(null, "fill-opacity", current.fillAlpha);
+      this.endPath();
     }
-    _setStrokeAttributes(element, lineWidthScale = 1) {
-      const current = this.current;
-      let dashArray = current.dashArray;
-      if (lineWidthScale !== 1 && dashArray.length > 0) {
-        dashArray = dashArray.map(function (value) {
-          return lineWidthScale * value;
-        });
-      }
-      element.setAttributeNS(null, "stroke", current.strokeColor);
-      element.setAttributeNS(null, "stroke-opacity", current.strokeAlpha);
-      element.setAttributeNS(null, "stroke-miterlimit", pf(current.miterLimit));
-      element.setAttributeNS(null, "stroke-linecap", current.lineCap);
-      element.setAttributeNS(null, "stroke-linejoin", current.lineJoin);
-      element.setAttributeNS(null, "stroke-width", pf(lineWidthScale * current.lineWidth) + "px");
-      element.setAttributeNS(null, "stroke-dasharray", dashArray.map(pf).join(" "));
-      element.setAttributeNS(null, "stroke-dashoffset", pf(lineWidthScale * current.dashPhase) + "px");
+  }
+  stroke() {
+    const current = this.current;
+    if (current.element) {
+      this._setStrokeAttributes(current.element);
+      current.element.setAttributeNS(null, "fill", "none");
+      this.endPath();
     }
-    eoFill() {
-      this.current.element?.setAttributeNS(null, "fill-rule", "evenodd");
-      this.fill();
+  }
+  _setStrokeAttributes(element, lineWidthScale = 1) {
+    const current = this.current;
+    let dashArray = current.dashArray;
+    if (lineWidthScale !== 1 && dashArray.length > 0) {
+      dashArray = dashArray.map(function (value) {
+        return lineWidthScale * value;
+      });
     }
-    fillStroke() {
-      this.stroke();
-      this.fill();
+    element.setAttributeNS(null, "stroke", current.strokeColor);
+    element.setAttributeNS(null, "stroke-opacity", current.strokeAlpha);
+    element.setAttributeNS(null, "stroke-miterlimit", pf(current.miterLimit));
+    element.setAttributeNS(null, "stroke-linecap", current.lineCap);
+    element.setAttributeNS(null, "stroke-linejoin", current.lineJoin);
+    element.setAttributeNS(null, "stroke-width", pf(lineWidthScale * current.lineWidth) + "px");
+    element.setAttributeNS(null, "stroke-dasharray", dashArray.map(pf).join(" "));
+    element.setAttributeNS(null, "stroke-dashoffset", pf(lineWidthScale * current.dashPhase) + "px");
+  }
+  eoFill() {
+    this.current.element?.setAttributeNS(null, "fill-rule", "evenodd");
+    this.fill();
+  }
+  fillStroke() {
+    this.stroke();
+    this.fill();
+  }
+  eoFillStroke() {
+    this.current.element?.setAttributeNS(null, "fill-rule", "evenodd");
+    this.fillStroke();
+  }
+  closeStroke() {
+    this.closePath();
+    this.stroke();
+  }
+  closeFillStroke() {
+    this.closePath();
+    this.fillStroke();
+  }
+  closeEOFillStroke() {
+    this.closePath();
+    this.eoFillStroke();
+  }
+  paintSolidColorImageMask() {
+    const rect = this.svgFactory.createElement("svg:rect");
+    rect.setAttributeNS(null, "x", "0");
+    rect.setAttributeNS(null, "y", "0");
+    rect.setAttributeNS(null, "width", "1px");
+    rect.setAttributeNS(null, "height", "1px");
+    rect.setAttributeNS(null, "fill", this.current.fillColor);
+    this._ensureTransformGroup().append(rect);
+  }
+  paintImageXObject(objId) {
+    const imgData = this.getObject(objId);
+    if (!imgData) {
+      (0, _util.warn)(`Dependent image with object ID ${objId} is not ready yet`);
+      return;
     }
-    eoFillStroke() {
-      this.current.element?.setAttributeNS(null, "fill-rule", "evenodd");
-      this.fillStroke();
+    this.paintInlineImageXObject(imgData);
+  }
+  paintInlineImageXObject(imgData, mask) {
+    const width = imgData.width;
+    const height = imgData.height;
+    const imgSrc = convertImgDataToPng(imgData, this.forceDataSchema, !!mask);
+    const cliprect = this.svgFactory.createElement("svg:rect");
+    cliprect.setAttributeNS(null, "x", "0");
+    cliprect.setAttributeNS(null, "y", "0");
+    cliprect.setAttributeNS(null, "width", pf(width));
+    cliprect.setAttributeNS(null, "height", pf(height));
+    this.current.element = cliprect;
+    this.clip("nonzero");
+    const imgEl = this.svgFactory.createElement("svg:image");
+    imgEl.setAttributeNS(XLINK_NS, "xlink:href", imgSrc);
+    imgEl.setAttributeNS(null, "x", "0");
+    imgEl.setAttributeNS(null, "y", pf(-height));
+    imgEl.setAttributeNS(null, "width", pf(width) + "px");
+    imgEl.setAttributeNS(null, "height", pf(height) + "px");
+    imgEl.setAttributeNS(null, "transform", `scale(${pf(1 / width)} ${pf(-1 / height)})`);
+    if (mask) {
+      mask.append(imgEl);
+    } else {
+      this._ensureTransformGroup().append(imgEl);
     }
-    closeStroke() {
-      this.closePath();
-      this.stroke();
+  }
+  paintImageMaskXObject(img) {
+    const imgData = this.getObject(img.data, img);
+    if (imgData.bitmap) {
+      (0, _util.warn)("paintImageMaskXObject: ImageBitmap support is not implemented, " + "ensure that the `isOffscreenCanvasSupported` API parameter is disabled.");
+      return;
     }
-    closeFillStroke() {
-      this.closePath();
-      this.fillStroke();
+    const current = this.current;
+    const width = imgData.width;
+    const height = imgData.height;
+    const fillColor = current.fillColor;
+    current.maskId = `mask${maskCount++}`;
+    const mask = this.svgFactory.createElement("svg:mask");
+    mask.setAttributeNS(null, "id", current.maskId);
+    const rect = this.svgFactory.createElement("svg:rect");
+    rect.setAttributeNS(null, "x", "0");
+    rect.setAttributeNS(null, "y", "0");
+    rect.setAttributeNS(null, "width", pf(width));
+    rect.setAttributeNS(null, "height", pf(height));
+    rect.setAttributeNS(null, "fill", fillColor);
+    rect.setAttributeNS(null, "mask", `url(#${current.maskId})`);
+    this.defs.append(mask);
+    this._ensureTransformGroup().append(rect);
+    this.paintInlineImageXObject(imgData, mask);
+  }
+  paintFormXObjectBegin(matrix, bbox) {
+    if (Array.isArray(matrix) && matrix.length === 6) {
+      this.transform(matrix[0], matrix[1], matrix[2], matrix[3], matrix[4], matrix[5]);
     }
-    closeEOFillStroke() {
-      this.closePath();
-      this.eoFillStroke();
-    }
-    paintSolidColorImageMask() {
-      const rect = this.svgFactory.createElement("svg:rect");
-      rect.setAttributeNS(null, "x", "0");
-      rect.setAttributeNS(null, "y", "0");
-      rect.setAttributeNS(null, "width", "1px");
-      rect.setAttributeNS(null, "height", "1px");
-      rect.setAttributeNS(null, "fill", this.current.fillColor);
-      this._ensureTransformGroup().append(rect);
-    }
-    paintImageXObject(objId) {
-      const imgData = this.getObject(objId);
-      if (!imgData) {
-        (0, _util.warn)(`Dependent image with object ID ${objId} is not ready yet`);
-        return;
-      }
-      this.paintInlineImageXObject(imgData);
-    }
-    paintInlineImageXObject(imgData, mask) {
-      const width = imgData.width;
-      const height = imgData.height;
-      const imgSrc = convertImgDataToPng(imgData, this.forceDataSchema, !!mask);
+    if (bbox) {
+      const width = bbox[2] - bbox[0];
+      const height = bbox[3] - bbox[1];
       const cliprect = this.svgFactory.createElement("svg:rect");
-      cliprect.setAttributeNS(null, "x", "0");
-      cliprect.setAttributeNS(null, "y", "0");
+      cliprect.setAttributeNS(null, "x", bbox[0]);
+      cliprect.setAttributeNS(null, "y", bbox[1]);
       cliprect.setAttributeNS(null, "width", pf(width));
       cliprect.setAttributeNS(null, "height", pf(height));
       this.current.element = cliprect;
       this.clip("nonzero");
-      const imgEl = this.svgFactory.createElement("svg:image");
-      imgEl.setAttributeNS(XLINK_NS, "xlink:href", imgSrc);
-      imgEl.setAttributeNS(null, "x", "0");
-      imgEl.setAttributeNS(null, "y", pf(-height));
-      imgEl.setAttributeNS(null, "width", pf(width) + "px");
-      imgEl.setAttributeNS(null, "height", pf(height) + "px");
-      imgEl.setAttributeNS(null, "transform", `scale(${pf(1 / width)} ${pf(-1 / height)})`);
-      if (mask) {
-        mask.append(imgEl);
+      this.endPath();
+    }
+  }
+  paintFormXObjectEnd() {}
+  _initialize(viewport) {
+    const svg = this.svgFactory.create(viewport.width, viewport.height);
+    const definitions = this.svgFactory.createElement("svg:defs");
+    svg.append(definitions);
+    this.defs = definitions;
+    const rootGroup = this.svgFactory.createElement("svg:g");
+    rootGroup.setAttributeNS(null, "transform", pm(viewport.transform));
+    svg.append(rootGroup);
+    this.svg = rootGroup;
+    return svg;
+  }
+  _ensureClipGroup() {
+    if (!this.current.clipGroup) {
+      const clipGroup = this.svgFactory.createElement("svg:g");
+      clipGroup.setAttributeNS(null, "clip-path", this.current.activeClipUrl);
+      this.svg.append(clipGroup);
+      this.current.clipGroup = clipGroup;
+    }
+    return this.current.clipGroup;
+  }
+  _ensureTransformGroup() {
+    if (!this.tgrp) {
+      this.tgrp = this.svgFactory.createElement("svg:g");
+      this.tgrp.setAttributeNS(null, "transform", pm(this.transformMatrix));
+      if (this.current.activeClipUrl) {
+        this._ensureClipGroup().append(this.tgrp);
       } else {
-        this._ensureTransformGroup().append(imgEl);
+        this.svg.append(this.tgrp);
       }
     }
-    paintImageMaskXObject(img) {
-      const imgData = this.getObject(img.data, img);
-      if (imgData.bitmap) {
-        (0, _util.warn)("paintImageMaskXObject: ImageBitmap support is not implemented, " + "ensure that the `isOffscreenCanvasSupported` API parameter is disabled.");
-        return;
-      }
-      const current = this.current;
-      const width = imgData.width;
-      const height = imgData.height;
-      const fillColor = current.fillColor;
-      current.maskId = `mask${maskCount++}`;
-      const mask = this.svgFactory.createElement("svg:mask");
-      mask.setAttributeNS(null, "id", current.maskId);
-      const rect = this.svgFactory.createElement("svg:rect");
-      rect.setAttributeNS(null, "x", "0");
-      rect.setAttributeNS(null, "y", "0");
-      rect.setAttributeNS(null, "width", pf(width));
-      rect.setAttributeNS(null, "height", pf(height));
-      rect.setAttributeNS(null, "fill", fillColor);
-      rect.setAttributeNS(null, "mask", `url(#${current.maskId})`);
-      this.defs.append(mask);
-      this._ensureTransformGroup().append(rect);
-      this.paintInlineImageXObject(imgData, mask);
-    }
-    paintFormXObjectBegin(matrix, bbox) {
-      if (Array.isArray(matrix) && matrix.length === 6) {
-        this.transform(matrix[0], matrix[1], matrix[2], matrix[3], matrix[4], matrix[5]);
-      }
-      if (bbox) {
-        const width = bbox[2] - bbox[0];
-        const height = bbox[3] - bbox[1];
-        const cliprect = this.svgFactory.createElement("svg:rect");
-        cliprect.setAttributeNS(null, "x", bbox[0]);
-        cliprect.setAttributeNS(null, "y", bbox[1]);
-        cliprect.setAttributeNS(null, "width", pf(width));
-        cliprect.setAttributeNS(null, "height", pf(height));
-        this.current.element = cliprect;
-        this.clip("nonzero");
-        this.endPath();
-      }
-    }
-    paintFormXObjectEnd() {}
-    _initialize(viewport) {
-      const svg = this.svgFactory.create(viewport.width, viewport.height);
-      const definitions = this.svgFactory.createElement("svg:defs");
-      svg.append(definitions);
-      this.defs = definitions;
-      const rootGroup = this.svgFactory.createElement("svg:g");
-      rootGroup.setAttributeNS(null, "transform", pm(viewport.transform));
-      svg.append(rootGroup);
-      this.svg = rootGroup;
-      return svg;
-    }
-    _ensureClipGroup() {
-      if (!this.current.clipGroup) {
-        const clipGroup = this.svgFactory.createElement("svg:g");
-        clipGroup.setAttributeNS(null, "clip-path", this.current.activeClipUrl);
-        this.svg.append(clipGroup);
-        this.current.clipGroup = clipGroup;
-      }
-      return this.current.clipGroup;
-    }
-    _ensureTransformGroup() {
-      if (!this.tgrp) {
-        this.tgrp = this.svgFactory.createElement("svg:g");
-        this.tgrp.setAttributeNS(null, "transform", pm(this.transformMatrix));
-        if (this.current.activeClipUrl) {
-          this._ensureClipGroup().append(this.tgrp);
-        } else {
-          this.svg.append(this.tgrp);
-        }
-      }
-      return this.tgrp;
-    }
-  };
+    return this.tgrp;
+  }
 }
+exports.SVGGraphics = SVGGraphics;
 
 /***/ })
 /******/ 	]);
@@ -15787,12 +15939,7 @@ Object.defineProperty(exports, "RenderingCancelledException", ({
     return _display_utils.RenderingCancelledException;
   }
 }));
-Object.defineProperty(exports, "SVGGraphics", ({
-  enumerable: true,
-  get: function () {
-    return _svg.SVGGraphics;
-  }
-}));
+exports.SVGGraphics = void 0;
 Object.defineProperty(exports, "UnexpectedResponseException", ({
   enumerable: true,
   get: function () {
@@ -15915,10 +16062,11 @@ var _annotation_editor_layer = __w_pdfjs_require__(27);
 var _tools = __w_pdfjs_require__(5);
 var _annotation_layer = __w_pdfjs_require__(29);
 var _worker_options = __w_pdfjs_require__(14);
-var _svg = __w_pdfjs_require__(33);
 var _xfa_layer = __w_pdfjs_require__(31);
 const pdfjsVersion = '3.8.0';
-const pdfjsBuild = 'b8447eb';
+const pdfjsBuild = 'a5c10b6';
+const SVGGraphics = (__w_pdfjs_require__(33).SVGGraphics);
+exports.SVGGraphics = SVGGraphics;
 })();
 
 /******/ 	return __webpack_exports__;

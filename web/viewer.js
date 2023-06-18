@@ -605,7 +605,7 @@ const PDFViewerApplication = {
     if (!title) {
       try {
         title = decodeURIComponent((0, _pdfjsLib.getFilenameFromUrl)(url)) || url;
-      } catch (ex) {
+      } catch {
         title = url;
       }
     }
@@ -640,7 +640,7 @@ const PDFViewerApplication = {
     if (this.pdfDocument?.annotationStorage.size > 0 && this._annotationStorageModified) {
       try {
         await this.save();
-      } catch (reason) {}
+      } catch {}
     }
     const promises = [];
     promises.push(this.pdfLoadingTask.destroy());
@@ -762,7 +762,7 @@ const PDFViewerApplication = {
         type: "application/pdf"
       });
       await this.downloadManager.download(blob, url, filename, options);
-    } catch (reason) {
+    } catch {
       await this.downloadManager.downloadUrl(url, filename, options);
     }
   },
@@ -3675,7 +3675,7 @@ class PDFLinkService {
         if (!Array.isArray(dest)) {
           dest = dest.toString();
         }
-      } catch (ex) {}
+      } catch {}
       if (typeof dest === "string" || PDFLinkService.#isValidExplicitDestination(dest)) {
         this.goToDestination(dest);
         return;
@@ -4471,7 +4471,7 @@ class GrabToPan {
     if (event.originalTarget) {
       try {
         event.originalTarget.tagName;
-      } catch (e) {
+      } catch {
         return;
       }
     }
@@ -6641,7 +6641,7 @@ class PDFOutlineViewer extends _base_tree_viewer.BaseTreeViewer {
                   return null;
                 }
                 this.linkService.cachePageRef(pageNumber, destRef);
-              } catch (ex) {}
+              } catch {}
             }
           } else if (Number.isInteger(destRef)) {
             pageNumber = destRef + 1;
@@ -6730,7 +6730,7 @@ class PDFPresentationMode {
       await promise;
       pdfViewer.focus();
       return true;
-    } catch (reason) {
+    } catch {
       this.#removeFullscreenChangeListeners();
       this.#notifyStateChange(_ui_utils.PresentationModeState.NORMAL);
     }
@@ -7433,7 +7433,7 @@ class PDFScriptingManager {
     this._pdfDocument = null;
     try {
       await this._scripting.destroySandbox();
-    } catch (ex) {}
+    } catch {}
     for (const [name, listener] of this._internalEvents) {
       this._eventBus._off(name, listener);
     }
@@ -13665,7 +13665,7 @@ var _app_options = __webpack_require__(5);
 var _pdf_link_service = __webpack_require__(7);
 var _app = __webpack_require__(2);
 const pdfjsVersion = '3.8.0';
-const pdfjsBuild = 'b8447eb';
+const pdfjsBuild = 'a5c10b6';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,
