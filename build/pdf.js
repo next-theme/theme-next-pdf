@@ -100,6 +100,7 @@ const AnnotationEditorType = {
   DISABLE: -1,
   NONE: 0,
   FREETEXT: 3,
+  STAMP: 13,
   INK: 15
 };
 exports.AnnotationEditorType = AnnotationEditorType;
@@ -1055,8 +1056,7 @@ function getUrlProp(val) {
 }
 function getDataProp(val) {
   if (_is_node.isNodeJS && typeof Buffer !== "undefined" && val instanceof Buffer) {
-    (0, _display_utils.deprecated)("Please provide binary data as `Uint8Array`, rather than `Buffer`.");
-    return new Uint8Array(val);
+    throw new Error("Please provide binary data as `Uint8Array`, rather than `Buffer`.");
   }
   if (val instanceof Uint8Array && val.byteLength === val.buffer.byteLength) {
     return val;
@@ -1314,6 +1314,9 @@ class PDFPageProxy {
   getJSActions() {
     return this._transport.getPageJSActions(this._pageIndex);
   }
+  get filterFactory() {
+    return this._transport.filterFactory;
+  }
   get isPureXfa() {
     return (0, _util.shadow)(this, "isPureXfa", !!this._transport._htmlForXfa);
   }
@@ -1332,9 +1335,6 @@ class PDFPageProxy {
     pageColors = null,
     printAnnotationStorage = null
   }) {
-    if (arguments[0]?.canvasFactory) {
-      throw new Error("render no longer accepts the `canvasFactory`-option, " + "please pass it to the `getDocument`-function instead.");
-    }
     this._stats?.time("Overall");
     const intentArgs = this._transport.getRenderingIntent(intent, annotationMode, printAnnotationStorage);
     this.#pendingCleanup = false;
@@ -1585,14 +1585,18 @@ class PDFPageProxy {
   _pumpOperatorList({
     renderingIntent,
     cacheKey,
-    annotationStorageMap
+    annotationStorageSerializable
   }) {
+    const {
+      map,
+      transfers
+    } = annotationStorageSerializable;
     const readableStream = this._transport.messageHandler.sendWithStream("GetOperatorList", {
       pageIndex: this._pageIndex,
       intent: renderingIntent,
       cacheKey,
-      annotationStorage: annotationStorageMap
-    });
+      annotationStorage: map
+    }, transfers);
     const reader = readableStream.getReader();
     const intentState = this._intentStates.get(cacheKey);
     intentState.streamReader = reader;
@@ -1979,7 +1983,7 @@ class WorkerTransport {
   }
   getRenderingIntent(intent, annotationMode = _util.AnnotationMode.ENABLE, printAnnotationStorage = null, isOpList = false) {
     let renderingIntent = _util.RenderingIntentFlag.DISPLAY;
-    let annotationMap = null;
+    let annotationStorageSerializable = _annotation_storage.SerializableEmpty;
     switch (intent) {
       case "any":
         renderingIntent = _util.RenderingIntentFlag.ANY;
@@ -2004,7 +2008,7 @@ class WorkerTransport {
       case _util.AnnotationMode.ENABLE_STORAGE:
         renderingIntent += _util.RenderingIntentFlag.ANNOTATIONS_STORAGE;
         const annotationStorage = renderingIntent & _util.RenderingIntentFlag.PRINT && printAnnotationStorage instanceof _annotation_storage.PrintAnnotationStorage ? printAnnotationStorage : this.annotationStorage;
-        annotationMap = annotationStorage.serializable;
+        annotationStorageSerializable = annotationStorage.serializable;
         break;
       default:
         (0, _util.warn)(`getRenderingIntent - invalid annotationMode: ${annotationMode}`);
@@ -2014,8 +2018,8 @@ class WorkerTransport {
     }
     return {
       renderingIntent,
-      cacheKey: `${renderingIntent}_${_annotation_storage.AnnotationStorage.getHash(annotationMap)}`,
-      annotationStorageMap: annotationMap
+      cacheKey: `${renderingIntent}_${annotationStorageSerializable.hash}`,
+      annotationStorageSerializable
     };
   }
   destroy() {
@@ -2327,12 +2331,16 @@ class WorkerTransport {
     if (this.annotationStorage.size <= 0) {
       (0, _util.warn)("saveDocument called while `annotationStorage` is empty, " + "please use the getData-method instead.");
     }
+    const {
+      map,
+      transfers
+    } = this.annotationStorage.serializable;
     return this.messageHandler.sendWithPromise("SaveDocument", {
       isPureXfa: !!this._htmlForXfa,
       numPages: this._numPages,
-      annotationStorage: this.annotationStorage.serializable,
+      annotationStorage: map,
       filename: this._fullReader?.filename ?? null
-    }).finally(() => {
+    }, transfers).finally(() => {
       this.annotationStorage.resetModified();
     });
   }
@@ -2696,7 +2704,7 @@ class InternalRenderTask {
 }
 const version = '3.8.0';
 exports.version = version;
-const build = 'fa95bbc';
+const build = '73b6ee5';
 exports.build = build;
 
 /***/ }),
@@ -2708,10 +2716,16 @@ exports.build = build;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.PrintAnnotationStorage = exports.AnnotationStorage = void 0;
+exports.SerializableEmpty = exports.PrintAnnotationStorage = exports.AnnotationStorage = void 0;
 var _util = __w_pdfjs_require__(1);
 var _editor = __w_pdfjs_require__(4);
 var _murmurhash = __w_pdfjs_require__(8);
+const SerializableEmpty = Object.freeze({
+  map: null,
+  hash: "",
+  transfers: undefined
+});
+exports.SerializableEmpty = SerializableEmpty;
 class AnnotationStorage {
   #modified = false;
   #storage = new Map();
@@ -2800,34 +2814,46 @@ class AnnotationStorage {
   }
   get serializable() {
     if (this.#storage.size === 0) {
-      return null;
+      return SerializableEmpty;
     }
-    const clone = new Map();
+    const map = new Map(),
+      hash = new _murmurhash.MurmurHash3_64(),
+      transfers = [];
     for (const [key, val] of this.#storage) {
       const serialized = val instanceof _editor.AnnotationEditor ? val.serialize() : val;
       if (serialized) {
-        clone.set(key, serialized);
+        map.set(key, serialized);
+        hash.update(`${key}:${JSON.stringify(serialized)}`);
+        if (serialized.bitmap) {
+          transfers.push(serialized.bitmap);
+        }
       }
     }
-    return clone;
-  }
-  static getHash(map) {
-    if (!map) {
-      return "";
-    }
-    const hash = new _murmurhash.MurmurHash3_64();
-    for (const [key, val] of map) {
-      hash.update(`${key}:${JSON.stringify(val)}`);
-    }
-    return hash.hexdigest();
+    return map.size > 0 ? {
+      map,
+      hash: hash.hexdigest(),
+      transfers
+    } : SerializableEmpty;
   }
 }
 exports.AnnotationStorage = AnnotationStorage;
 class PrintAnnotationStorage extends AnnotationStorage {
-  #serializable = null;
+  #serializable;
   constructor(parent) {
     super();
-    this.#serializable = structuredClone(parent.serializable);
+    const {
+      map,
+      hash,
+      transfers
+    } = parent.serializable;
+    const clone = structuredClone(map, transfers ? {
+      transfer: transfers
+    } : null);
+    this.#serializable = {
+      map: clone,
+      hash,
+      transfers
+    };
   }
   get print() {
     (0, _util.unreachable)("Should not call PrintAnnotationStorage.print");
@@ -3945,6 +3971,9 @@ class DOMFilterFactory extends _base_factory.BaseFilterFactory {
   #hcmFilter;
   #hcmKey;
   #hcmUrl;
+  #hcmHighlightFilter;
+  #hcmHighlightKey;
+  #hcmHighlightUrl;
   #id = 0;
   constructor({
     docId,
@@ -3978,12 +4007,6 @@ class DOMFilterFactory extends _base_factory.BaseFilterFactory {
       this.#document.body.append(div);
     }
     return this.#_defs;
-  }
-  #appendFeFunc(feComponentTransfer, func, table) {
-    const feFunc = this.#document.createElementNS(SVG_NS, func);
-    feFunc.setAttribute("type", "discrete");
-    feFunc.setAttribute("tableValues", table);
-    feComponentTransfer.append(feFunc);
   }
   addFilter(maps) {
     if (!maps) {
@@ -4025,15 +4048,8 @@ class DOMFilterFactory extends _base_factory.BaseFilterFactory {
     const url = `url(#${id})`;
     this.#cache.set(maps, url);
     this.#cache.set(key, url);
-    const filter = this.#document.createElementNS(SVG_NS, "filter", SVG_NS);
-    filter.setAttribute("id", id);
-    filter.setAttribute("color-interpolation-filters", "sRGB");
-    const feComponentTransfer = this.#document.createElementNS(SVG_NS, "feComponentTransfer");
-    filter.append(feComponentTransfer);
-    this.#appendFeFunc(feComponentTransfer, "feFuncR", tableR);
-    this.#appendFeFunc(feComponentTransfer, "feFuncG", tableG);
-    this.#appendFeFunc(feComponentTransfer, "feFuncB", tableB);
-    this.#defs.append(filter);
+    const filter = this.#createFilter(id);
+    this.#addTransferMapConversion(tableR, tableG, tableB, filter);
     return url;
   }
   addHCMFilter(fgColor, bgColor) {
@@ -4047,13 +4063,9 @@ class DOMFilterFactory extends _base_factory.BaseFilterFactory {
     if (!fgColor || !bgColor) {
       return this.#hcmUrl;
     }
-    this.#defs.style.color = fgColor;
-    fgColor = getComputedStyle(this.#defs).getPropertyValue("color");
-    const fgRGB = getRGB(fgColor);
+    const fgRGB = this.#getRGB(fgColor);
     fgColor = _util.Util.makeHexColor(...fgRGB);
-    this.#defs.style.color = bgColor;
-    bgColor = getComputedStyle(this.#defs).getPropertyValue("color");
-    const bgRGB = getRGB(bgColor);
+    const bgRGB = this.#getRGB(bgColor);
     bgColor = _util.Util.makeHexColor(...bgRGB);
     this.#defs.style.color = "";
     if (fgColor === "#000000" && bgColor === "#ffffff" || fgColor === bgColor) {
@@ -4066,20 +4078,9 @@ class DOMFilterFactory extends _base_factory.BaseFilterFactory {
     }
     const table = map.join(",");
     const id = `g_${this.#docId}_hcm_filter`;
-    const filter = this.#hcmFilter = this.#document.createElementNS(SVG_NS, "filter", SVG_NS);
-    filter.setAttribute("id", id);
-    filter.setAttribute("color-interpolation-filters", "sRGB");
-    let feComponentTransfer = this.#document.createElementNS(SVG_NS, "feComponentTransfer");
-    filter.append(feComponentTransfer);
-    this.#appendFeFunc(feComponentTransfer, "feFuncR", table);
-    this.#appendFeFunc(feComponentTransfer, "feFuncG", table);
-    this.#appendFeFunc(feComponentTransfer, "feFuncB", table);
-    const feColorMatrix = this.#document.createElementNS(SVG_NS, "feColorMatrix");
-    feColorMatrix.setAttribute("type", "matrix");
-    feColorMatrix.setAttribute("values", "0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0 0 0 1 0");
-    filter.append(feColorMatrix);
-    feComponentTransfer = this.#document.createElementNS(SVG_NS, "feComponentTransfer");
-    filter.append(feComponentTransfer);
+    const filter = this.#hcmHighlightFilter = this.#createFilter(id);
+    this.#addTransferMapConversion(table, table, table, filter);
+    this.#addGrayConversion(filter);
     const getSteps = (c, n) => {
       const start = fgRGB[c] / 255;
       const end = bgRGB[c] / 255;
@@ -4089,15 +4090,57 @@ class DOMFilterFactory extends _base_factory.BaseFilterFactory {
       }
       return arr.join(",");
     };
-    this.#appendFeFunc(feComponentTransfer, "feFuncR", getSteps(0, 5));
-    this.#appendFeFunc(feComponentTransfer, "feFuncG", getSteps(1, 5));
-    this.#appendFeFunc(feComponentTransfer, "feFuncB", getSteps(2, 5));
-    this.#defs.append(filter);
+    this.#addTransferMapConversion(getSteps(0, 5), getSteps(1, 5), getSteps(2, 5), filter);
     this.#hcmUrl = `url(#${id})`;
     return this.#hcmUrl;
   }
+  addHighlightHCMFilter(fgColor, bgColor, newFgColor, newBgColor) {
+    const key = `${fgColor}-${bgColor}-${newFgColor}-${newBgColor}`;
+    if (this.#hcmHighlightKey === key) {
+      return this.#hcmHighlightUrl;
+    }
+    this.#hcmHighlightKey = key;
+    this.#hcmHighlightUrl = "none";
+    this.#hcmHighlightFilter?.remove();
+    if (!fgColor || !bgColor) {
+      return this.#hcmHighlightUrl;
+    }
+    const [fgRGB, bgRGB] = [fgColor, bgColor].map(this.#getRGB.bind(this));
+    let fgGray = Math.round(0.2126 * fgRGB[0] + 0.7152 * fgRGB[1] + 0.0722 * fgRGB[2]);
+    let bgGray = Math.round(0.2126 * bgRGB[0] + 0.7152 * bgRGB[1] + 0.0722 * bgRGB[2]);
+    let [newFgRGB, newBgRGB] = [newFgColor, newBgColor].map(this.#getRGB.bind(this));
+    if (bgGray < fgGray) {
+      [fgGray, bgGray, newFgRGB, newBgRGB] = [bgGray, fgGray, newBgRGB, newFgRGB];
+    }
+    this.#defs.style.color = "";
+    const getSteps = (fg, bg, n) => {
+      const arr = new Array(256);
+      const step = (bgGray - fgGray) / n;
+      const newStart = fg / 255;
+      const newStep = (bg - fg) / (255 * n);
+      let prev = 0;
+      for (let i = 0; i <= n; i++) {
+        const k = Math.round(fgGray + i * step);
+        const value = newStart + i * newStep;
+        for (let j = prev; j <= k; j++) {
+          arr[j] = value;
+        }
+        prev = k + 1;
+      }
+      for (let i = prev; i < 256; i++) {
+        arr[i] = arr[prev - 1];
+      }
+      return arr.join(",");
+    };
+    const id = `g_${this.#docId}_hcm_highlight_filter`;
+    const filter = this.#hcmHighlightFilter = this.#createFilter(id);
+    this.#addGrayConversion(filter);
+    this.#addTransferMapConversion(getSteps(newFgRGB[0], newBgRGB[0], 5), getSteps(newFgRGB[1], newBgRGB[1], 5), getSteps(newFgRGB[2], newBgRGB[2], 5), filter);
+    this.#hcmHighlightUrl = `url(#${id})`;
+    return this.#hcmHighlightUrl;
+  }
   destroy(keepHCM = false) {
-    if (keepHCM && this.#hcmUrl) {
+    if (keepHCM && (this.#hcmUrl || this.#hcmHighlightUrl)) {
       return;
     }
     if (this.#_defs) {
@@ -4109,6 +4152,36 @@ class DOMFilterFactory extends _base_factory.BaseFilterFactory {
       this.#_cache = null;
     }
     this.#id = 0;
+  }
+  #addGrayConversion(filter) {
+    const feColorMatrix = this.#document.createElementNS(SVG_NS, "feColorMatrix");
+    feColorMatrix.setAttribute("type", "matrix");
+    feColorMatrix.setAttribute("values", "0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0 0 0 1 0");
+    filter.append(feColorMatrix);
+  }
+  #createFilter(id) {
+    const filter = this.#document.createElementNS(SVG_NS, "filter");
+    filter.setAttribute("color-interpolation-filters", "sRGB");
+    filter.setAttribute("id", id);
+    this.#defs.append(filter);
+    return filter;
+  }
+  #appendFeFunc(feComponentTransfer, func, table) {
+    const feFunc = this.#document.createElementNS(SVG_NS, func);
+    feFunc.setAttribute("type", "discrete");
+    feFunc.setAttribute("tableValues", table);
+    feComponentTransfer.append(feFunc);
+  }
+  #addTransferMapConversion(rTable, gTable, bTable, filter) {
+    const feComponentTransfer = this.#document.createElementNS(SVG_NS, "feComponentTransfer");
+    filter.append(feComponentTransfer);
+    this.#appendFeFunc(feComponentTransfer, "feFuncR", rTable);
+    this.#appendFeFunc(feComponentTransfer, "feFuncG", gTable);
+    this.#appendFeFunc(feComponentTransfer, "feFuncB", bTable);
+  }
+  #getRGB(color) {
+    this.#defs.style.color = color;
+    return getRGB(getComputedStyle(this.#defs).getPropertyValue("color"));
   }
 }
 exports.DOMFilterFactory = DOMFilterFactory;
@@ -4554,6 +4627,9 @@ class BaseFilterFactory {
     return "none";
   }
   addHCMFilter(fgColor, bgColor) {
+    return "none";
+  }
+  addHighlightHCMFilter(fgColor, bgColor, newFgColor, newBgColor) {
     return "none";
   }
   destroy(keepHCM = false) {}
@@ -11469,7 +11545,7 @@ class AnnotationElement {
     container.setAttribute("data-annotation-id", data.id);
     container.style.zIndex = this.parent.zIndex++;
     if (this.data.popupRef) {
-      container.setAttribute("aria-haspopup", true);
+      container.setAttribute("aria-haspopup", "dialog");
     }
     if (data.noRotate) {
       container.classList.add("norotate");
@@ -11686,7 +11762,7 @@ class AnnotationElement {
       container,
       data
     } = this;
-    container.setAttribute("aria-haspopup", true);
+    container.setAttribute("aria-haspopup", "dialog");
     const popup = new PopupAnnotationElement({
       data: {
         color: data.color,
@@ -11777,6 +11853,16 @@ class AnnotationElement {
   }
   getElementsToTriggerPopup() {
     return this.quadrilaterals || this.container;
+  }
+  addHighlightArea() {
+    const triggers = this.getElementsToTriggerPopup();
+    if (Array.isArray(triggers)) {
+      for (const element of triggers) {
+        element.classList.add("highlightArea");
+      }
+    } else {
+      triggers.classList.add("highlightArea");
+    }
   }
 }
 class LinkAnnotationElement extends AnnotationElement {
@@ -12857,6 +12943,7 @@ class PopupAnnotationElement extends AnnotationElement {
     for (const element of this.elements) {
       element.popup = popup;
       elementIds.push(element.data.id);
+      element.addHighlightArea();
     }
     this.container.setAttribute("aria-controls", elementIds.join(","));
     return this.container;
@@ -13127,6 +13214,9 @@ class LineAnnotationElement extends AnnotationElement {
   getElementsToTriggerPopup() {
     return this.#line;
   }
+  addHighlightArea() {
+    this.container.classList.add("highlightArea");
+  }
 }
 class SquareAnnotationElement extends AnnotationElement {
   #square = null;
@@ -13164,6 +13254,9 @@ class SquareAnnotationElement extends AnnotationElement {
   getElementsToTriggerPopup() {
     return this.#square;
   }
+  addHighlightArea() {
+    this.container.classList.add("highlightArea");
+  }
 }
 class CircleAnnotationElement extends AnnotationElement {
   #circle = null;
@@ -13200,6 +13293,9 @@ class CircleAnnotationElement extends AnnotationElement {
   }
   getElementsToTriggerPopup() {
     return this.#circle;
+  }
+  addHighlightArea() {
+    this.container.classList.add("highlightArea");
   }
 }
 class PolylineAnnotationElement extends AnnotationElement {
@@ -13242,6 +13338,9 @@ class PolylineAnnotationElement extends AnnotationElement {
   }
   getElementsToTriggerPopup() {
     return this.#polyline;
+  }
+  addHighlightArea() {
+    this.container.classList.add("highlightArea");
   }
 }
 class PolygonAnnotationElement extends PolylineAnnotationElement {
@@ -13311,6 +13410,9 @@ class InkAnnotationElement extends AnnotationElement {
   }
   getElementsToTriggerPopup() {
     return this.#polylines;
+  }
+  addHighlightArea() {
+    this.container.classList.add("highlightArea");
   }
 }
 exports.InkAnnotationElement = InkAnnotationElement;
@@ -13448,6 +13550,9 @@ class FileAttachmentAnnotationElement extends AnnotationElement {
   }
   getElementsToTriggerPopup() {
     return this.#trigger;
+  }
+  addHighlightArea() {
+    this.container.classList.add("highlightArea");
   }
   _download() {
     this.downloadManager?.openOrDownloadData(this.container, this.content, this.filename);
@@ -16318,7 +16423,7 @@ var _annotation_layer = __w_pdfjs_require__(29);
 var _worker_options = __w_pdfjs_require__(14);
 var _xfa_layer = __w_pdfjs_require__(31);
 const pdfjsVersion = '3.8.0';
-const pdfjsBuild = 'fa95bbc';
+const pdfjsBuild = '73b6ee5';
 const SVGGraphics = (__w_pdfjs_require__(34).SVGGraphics);
 exports.SVGGraphics = SVGGraphics;
 })();

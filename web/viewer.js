@@ -3050,10 +3050,6 @@ const defaultOptions = {
     value: false,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE
   },
-  enableFloatingToolbar: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
   enablePermissions: {
     value: false,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE
@@ -4289,10 +4285,12 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.PDFCursorTools = void 0;
-var _ui_utils = __webpack_require__(3);
 var _pdfjsLib = __webpack_require__(4);
+var _ui_utils = __webpack_require__(3);
 var _grab_to_pan = __webpack_require__(14);
 class PDFCursorTools {
+  #active = _ui_utils.CursorTool.SELECT;
+  #prevActive = null;
   constructor({
     container,
     eventBus,
@@ -4300,32 +4298,27 @@ class PDFCursorTools {
   }) {
     this.container = container;
     this.eventBus = eventBus;
-    this.active = _ui_utils.CursorTool.SELECT;
-    this.previouslyActive = null;
-    this.handTool = new _grab_to_pan.GrabToPan({
-      element: this.container
-    });
     this.#addEventListeners();
     Promise.resolve().then(() => {
       this.switchTool(cursorToolOnLoad);
     });
   }
   get activeTool() {
-    return this.active;
+    return this.#active;
   }
   switchTool(tool) {
-    if (this.previouslyActive !== null) {
+    if (this.#prevActive !== null) {
       return;
     }
-    if (tool === this.active) {
+    if (tool === this.#active) {
       return;
     }
     const disableActiveTool = () => {
-      switch (this.active) {
+      switch (this.#active) {
         case _ui_utils.CursorTool.SELECT:
           break;
         case _ui_utils.CursorTool.HAND:
-          this.handTool.deactivate();
+          this._handTool.deactivate();
           break;
         case _ui_utils.CursorTool.ZOOM:
       }
@@ -4336,20 +4329,17 @@ class PDFCursorTools {
         break;
       case _ui_utils.CursorTool.HAND:
         disableActiveTool();
-        this.handTool.activate();
+        this._handTool.activate();
         break;
       case _ui_utils.CursorTool.ZOOM:
       default:
         console.error(`switchTool: "${tool}" is an unsupported value.`);
         return;
     }
-    this.active = tool;
-    this.#dispatchEvent();
-  }
-  #dispatchEvent() {
+    this.#active = tool;
     this.eventBus.dispatch("cursortoolchanged", {
       source: this,
-      tool: this.active
+      tool
     });
   }
   #addEventListeners() {
@@ -4359,19 +4349,19 @@ class PDFCursorTools {
     let annotationEditorMode = _pdfjsLib.AnnotationEditorType.NONE,
       presentationModeState = _ui_utils.PresentationModeState.NORMAL;
     const disableActive = () => {
-      const previouslyActive = this.active;
+      const prevActive = this.#active;
       this.switchTool(_ui_utils.CursorTool.SELECT);
-      this.previouslyActive ??= previouslyActive;
+      this.#prevActive ??= prevActive;
     };
     const enableActive = () => {
-      const previouslyActive = this.previouslyActive;
-      if (previouslyActive !== null && annotationEditorMode === _pdfjsLib.AnnotationEditorType.NONE && presentationModeState === _ui_utils.PresentationModeState.NORMAL) {
-        this.previouslyActive = null;
-        this.switchTool(previouslyActive);
+      const prevActive = this.#prevActive;
+      if (prevActive !== null && annotationEditorMode === _pdfjsLib.AnnotationEditorType.NONE && presentationModeState === _ui_utils.PresentationModeState.NORMAL) {
+        this.#prevActive = null;
+        this.switchTool(prevActive);
       }
     };
     this.eventBus._on("secondarytoolbarreset", evt => {
-      if (this.previouslyActive !== null) {
+      if (this.#prevActive !== null) {
         annotationEditorMode = _pdfjsLib.AnnotationEditorType.NONE;
         presentationModeState = _ui_utils.PresentationModeState.NORMAL;
         enableActive();
@@ -4398,6 +4388,11 @@ class PDFCursorTools {
       }
     });
   }
+  get _handTool() {
+    return (0, _pdfjsLib.shadow)(this, "_handTool", new _grab_to_pan.GrabToPan({
+      element: this.container
+    }));
+  }
 }
 exports.PDFCursorTools = PDFCursorTools;
 
@@ -4413,13 +4408,11 @@ Object.defineProperty(exports, "__esModule", ({
 exports.GrabToPan = void 0;
 const CSS_CLASS_GRAB = "grab-to-pan-grab";
 class GrabToPan {
-  constructor(options) {
-    this.element = options.element;
-    this.document = options.element.ownerDocument;
-    if (typeof options.ignoreTarget === "function") {
-      this.ignoreTarget = options.ignoreTarget;
-    }
-    this.onActiveChanged = options.onActiveChanged;
+  constructor({
+    element
+  }) {
+    this.element = element;
+    this.document = element.ownerDocument;
     this.activate = this.activate.bind(this);
     this.deactivate = this.deactivate.bind(this);
     this.toggle = this.toggle.bind(this);
@@ -4434,7 +4427,6 @@ class GrabToPan {
       this.active = true;
       this.element.addEventListener("mousedown", this._onMouseDown, true);
       this.element.classList.add(CSS_CLASS_GRAB);
-      this.onActiveChanged?.(true);
     }
   }
   deactivate() {
@@ -4443,7 +4435,6 @@ class GrabToPan {
       this.element.removeEventListener("mousedown", this._onMouseDown, true);
       this._endPan();
       this.element.classList.remove(CSS_CLASS_GRAB);
-      this.onActiveChanged?.(false);
     }
   }
   toggle() {
@@ -4489,18 +4480,11 @@ class GrabToPan {
     }
     const xDiff = event.clientX - this.clientXStart;
     const yDiff = event.clientY - this.clientYStart;
-    const scrollTop = this.scrollTopStart - yDiff;
-    const scrollLeft = this.scrollLeftStart - xDiff;
-    if (this.element.scrollTo) {
-      this.element.scrollTo({
-        top: scrollTop,
-        left: scrollLeft,
-        behavior: "instant"
-      });
-    } else {
-      this.element.scrollTop = scrollTop;
-      this.element.scrollLeft = scrollLeft;
-    }
+    this.element.scrollTo({
+      top: this.scrollTopStart - yDiff,
+      left: this.scrollLeftStart - xDiff,
+      behavior: "instant"
+    });
     if (!this.overlay.parentNode) {
       document.body.append(this.overlay);
     }
@@ -7775,12 +7759,6 @@ class PDFThumbnailViewer {
     this.renderingQueue = renderingQueue;
     this.l10n = l10n;
     this.pageColors = pageColors || null;
-    if (this.pageColors && !(CSS.supports("color", this.pageColors.background) && CSS.supports("color", this.pageColors.foreground))) {
-      if (this.pageColors.background || this.pageColors.foreground) {
-        console.warn("PDFThumbnailViewer: Ignoring `pageColors`-option, since the browser doesn't support the values used.");
-      }
-      this.pageColors = null;
-    }
     this.scroll = (0, _ui_utils.watchScroll)(this.container, this._scrollUpdated.bind(this));
     this._resetView();
   }
@@ -8412,12 +8390,6 @@ class PDFViewer {
     this.l10n = options.l10n || _l10n_utils.NullL10n;
     this.#enablePermissions = options.enablePermissions || false;
     this.pageColors = options.pageColors || null;
-    if (this.pageColors && !(CSS.supports("color", this.pageColors.background) && CSS.supports("color", this.pageColors.foreground))) {
-      if (this.pageColors.background || this.pageColors.foreground) {
-        console.warn("PDFViewer: Ignoring `pageColors`-option, since the browser doesn't support the values used.");
-      }
-      this.pageColors = null;
-    }
     this.defaultRenderingQueue = !options.renderingQueue;
     if (this.defaultRenderingQueue) {
       this.renderingQueue = new _pdf_rendering_queue.PDFRenderingQueue();
@@ -8804,6 +8776,9 @@ class PDFViewer {
         scale: scale * _pdfjsLib.PixelsPerInch.PDF_TO_CSS_UNITS
       });
       this.viewer.style.setProperty("--scale-factor", viewport.scale);
+      if (this.pageColors?.foreground === "CanvasText" || this.pageColors?.background === "Canvas") {
+        this.viewer.style.setProperty("--hcm-highligh-filter", pdfDocument.filterFactory.addHighlightHCMFilter("CanvasText", "Canvas", "HighlightText", "Highlight"));
+      }
       for (let pageNum = 1; pageNum <= pagesCount; ++pageNum) {
         const pageView = new _pdf_page_view.PDFPageView({
           container: viewerElement,
@@ -9968,6 +9943,7 @@ class PDFPageView {
     this.renderTask = null;
     this.resume = null;
     this._isStandalone = !this.renderingQueue?.hasViewer();
+    this._container = container;
     this._annotationCanvasMap = null;
     this.annotationLayer = null;
     this.annotationEditorLayer = null;
@@ -10044,6 +10020,9 @@ class PDFPageView {
     (0, _pdfjsLib.setLayerDimensions)(this.div, viewport, true, false);
   }
   setPdfPage(pdfPage) {
+    if (this._isStandalone && (this.pageColors?.foreground === "CanvasText" || this.pageColors?.background === "Canvas")) {
+      this._container?.style.setProperty("--hcm-highligh-filter", pdfPage.filterFactory.addHighlightHCMFilter("CanvasText", "Canvas", "HighlightText", "Highlight"));
+    }
     this.pdfPage = pdfPage;
     this.pdfPageRotate = pdfPage.rotate;
     const totalRotation = (this.rotation + this.pdfPageRotate) % 360;
@@ -10265,7 +10244,7 @@ class PDFPageView {
     });
     this.#setDimensions();
     if (this._isStandalone) {
-      this.div.parentNode?.style.setProperty("--scale-factor", this.viewport.scale);
+      this._container?.style.setProperty("--scale-factor", this.viewport.scale);
     }
     let isScalingRestricted = false;
     if (this.canvas && this.maxCanvasPixels > 0) {
@@ -12280,7 +12259,6 @@ class BasePreferences {
     "defaultZoomDelay": 400,
     "defaultZoomValue": "",
     "disablePageLabels": false,
-    "enableFloatingToolbar": false,
     "enablePermissions": false,
     "enablePrintAutoRotate": true,
     "enableScripting": true,
@@ -12466,9 +12444,6 @@ Object.defineProperty(exports, "__esModule", ({
 exports.GenericL10n = void 0;
 __webpack_require__(44);
 var _l10n_utils = __webpack_require__(29);
-const {
-  webL10n
-} = document;
 const PARTIAL_LANG_CODES = {
   en: "en-US",
   es: "es-ES",
@@ -12490,6 +12465,9 @@ function fixupLangCode(langCode) {
 }
 class GenericL10n {
   constructor(lang) {
+    const {
+      webL10n
+    } = document;
     this._lang = lang;
     this._ready = new Promise((resolve, reject) => {
       webL10n.setLanguage(fixupLangCode(lang), () => {
@@ -12522,7 +12500,7 @@ exports.GenericL10n = GenericL10n;
 
 
 
-document.webL10n = function (window, document, undefined) {
+document.webL10n = function (window, document) {
   var gL10nData = {};
   var gTextData = '';
   var gTextProp = 'textContent';
@@ -13646,7 +13624,7 @@ var _app_options = __webpack_require__(5);
 var _pdf_link_service = __webpack_require__(7);
 var _app = __webpack_require__(2);
 const pdfjsVersion = '3.8.0';
-const pdfjsBuild = 'fa95bbc';
+const pdfjsBuild = '73b6ee5';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,
