@@ -450,6 +450,10 @@ const PDFViewerApplication = {
     }
     if (appConfig.annotationEditorParams) {
       if (annotationEditorMode !== _pdfjsLib.AnnotationEditorType.DISABLE) {
+        const editorStampButton = appConfig.toolbar?.editorStampButton;
+        if (editorStampButton && _app_options.AppOptions.get("enableStampEditor") && _app_options.AppOptions.get("isOffscreenCanvasSupported") && _pdfjsLib.FeatureTest.isOffscreenCanvasSupported) {
+          editorStampButton.hidden = false;
+        }
         this.annotationEditorParams = new _webAnnotation_editor_params.AnnotationEditorParams(appConfig.annotationEditorParams, eventBus);
       } else {
         for (const id of ["editorModeButtons", "editorModeSeparator"]) {
@@ -522,8 +526,85 @@ const PDFViewerApplication = {
       };
     }
   },
-  run(config) {
-    this.initialize(config).then(webViewerInitialized);
+  async run(config) {
+    await this.initialize(config);
+    const {
+      appConfig,
+      eventBus,
+      l10n
+    } = this;
+    let file;
+    const queryString = document.location.search.substring(1);
+    const params = (0, _ui_utils.parseQueryString)(queryString);
+    file = params.get("file") ?? _app_options.AppOptions.get("defaultUrl");
+    validateFileURL(file);
+    const fileInput = appConfig.openFileInput;
+    fileInput.value = null;
+    fileInput.addEventListener("change", function (evt) {
+      const {
+        files
+      } = evt.target;
+      if (!files || files.length === 0) {
+        return;
+      }
+      eventBus.dispatch("fileinputchange", {
+        source: this,
+        fileInput: evt.target
+      });
+    });
+    appConfig.mainContainer.addEventListener("dragover", function (evt) {
+      evt.preventDefault();
+      evt.dataTransfer.dropEffect = evt.dataTransfer.effectAllowed === "copy" ? "copy" : "move";
+    });
+    appConfig.mainContainer.addEventListener("drop", function (evt) {
+      evt.preventDefault();
+      const {
+        files
+      } = evt.dataTransfer;
+      if (!files || files.length === 0) {
+        return;
+      }
+      eventBus.dispatch("fileinputchange", {
+        source: this,
+        fileInput: evt.dataTransfer
+      });
+    });
+    if (!this.supportsDocumentFonts) {
+      _app_options.AppOptions.set("disableFontFace", true);
+      l10n.get("web_fonts_disabled").then(msg => {
+        console.warn(msg);
+      });
+    }
+    if (!this.supportsPrinting) {
+      appConfig.toolbar?.print?.classList.add("hidden");
+      appConfig.secondaryToolbar?.printButton.classList.add("hidden");
+    }
+    if (!this.supportsFullscreen) {
+      appConfig.secondaryToolbar?.presentationModeButton.classList.add("hidden");
+    }
+    if (this.supportsIntegratedFind) {
+      appConfig.toolbar?.viewFind?.classList.add("hidden");
+    }
+    appConfig.mainContainer.addEventListener("transitionend", function (evt) {
+      if (evt.target === this) {
+        eventBus.dispatch("resize", {
+          source: this
+        });
+      }
+    }, true);
+    try {
+      if (file) {
+        this.open({
+          url: file
+        });
+      } else {
+        this._hideViewBookmark();
+      }
+    } catch (reason) {
+      l10n.get("loading_error").then(msg => {
+        this._documentError(msg, reason);
+      });
+    }
   },
   get initialized() {
     return this._initializedCapability.settled;
@@ -589,7 +670,7 @@ const PDFViewerApplication = {
   get supportedMouseWheelZoomModifierKeys() {
     return this.externalServices.supportedMouseWheelZoomModifierKeys;
   },
-  initPassiveLoading() {
+  initPassiveLoading(file) {
     throw new Error("Not implemented: initPassiveLoading");
   },
   setTitleUsingUrl(url = "", downloadUrl = null) {
@@ -1608,85 +1689,6 @@ function reportPageStatsPDFBug({
   const pageView = PDFViewerApplication.pdfViewer.getPageView(pageNumber - 1);
   globalThis.Stats.add(pageNumber, pageView?.pdfPage?.stats);
 }
-function webViewerInitialized() {
-  const {
-    appConfig,
-    eventBus,
-    l10n
-  } = PDFViewerApplication;
-  let file;
-  const queryString = document.location.search.substring(1);
-  const params = (0, _ui_utils.parseQueryString)(queryString);
-  file = params.get("file") ?? _app_options.AppOptions.get("defaultUrl");
-  validateFileURL(file);
-  const fileInput = appConfig.openFileInput;
-  fileInput.value = null;
-  fileInput.addEventListener("change", function (evt) {
-    const {
-      files
-    } = evt.target;
-    if (!files || files.length === 0) {
-      return;
-    }
-    eventBus.dispatch("fileinputchange", {
-      source: this,
-      fileInput: evt.target
-    });
-  });
-  appConfig.mainContainer.addEventListener("dragover", function (evt) {
-    evt.preventDefault();
-    evt.dataTransfer.dropEffect = evt.dataTransfer.effectAllowed === "copy" ? "copy" : "move";
-  });
-  appConfig.mainContainer.addEventListener("drop", function (evt) {
-    evt.preventDefault();
-    const {
-      files
-    } = evt.dataTransfer;
-    if (!files || files.length === 0) {
-      return;
-    }
-    eventBus.dispatch("fileinputchange", {
-      source: this,
-      fileInput: evt.dataTransfer
-    });
-  });
-  if (!PDFViewerApplication.supportsDocumentFonts) {
-    _app_options.AppOptions.set("disableFontFace", true);
-    l10n.get("web_fonts_disabled").then(msg => {
-      console.warn(msg);
-    });
-  }
-  if (!PDFViewerApplication.supportsPrinting) {
-    appConfig.toolbar?.print?.classList.add("hidden");
-    appConfig.secondaryToolbar?.printButton.classList.add("hidden");
-  }
-  if (!PDFViewerApplication.supportsFullscreen) {
-    appConfig.secondaryToolbar?.presentationModeButton.classList.add("hidden");
-  }
-  if (PDFViewerApplication.supportsIntegratedFind) {
-    appConfig.toolbar?.viewFind?.classList.add("hidden");
-  }
-  appConfig.mainContainer.addEventListener("transitionend", function (evt) {
-    if (evt.target === this) {
-      eventBus.dispatch("resize", {
-        source: this
-      });
-    }
-  }, true);
-  try {
-    if (file) {
-      PDFViewerApplication.open({
-        url: file
-      });
-    } else {
-      PDFViewerApplication._hideViewBookmark();
-    }
-  } catch (reason) {
-    l10n.get("loading_error").then(msg => {
-      PDFViewerApplication._documentError(msg, reason);
-    });
-  }
-}
 function webViewerPageRender({
   pageNumber
 }) {
@@ -1846,7 +1848,7 @@ function webViewerPresentationMode() {
   PDFViewerApplication.requestPresentationMode();
 }
 function webViewerSwitchAnnotationEditorMode(evt) {
-  PDFViewerApplication.pdfViewer.annotationEditorMode = evt.mode;
+  PDFViewerApplication.pdfViewer.annotationEditorMode = evt;
 }
 function webViewerSwitchAnnotationEditorParams(evt) {
   PDFViewerApplication.pdfViewer.annotationEditorParams = evt;
@@ -3059,6 +3061,10 @@ const defaultOptions = {
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE
   },
   enableScripting: {
+    value: true,
+    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+  },
+  enableStampEditor: {
     value: true,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE
   },
@@ -6757,7 +6763,9 @@ class PDFPresentationMode {
       this.pdfViewer.currentPageNumber = this.#args.pageNumber;
       this.pdfViewer.currentScaleValue = "page-fit";
       if (this.#args.annotationEditorMode !== null) {
-        this.pdfViewer.annotationEditorMode = _pdfjsLib.AnnotationEditorType.NONE;
+        this.pdfViewer.annotationEditorMode = {
+          mode: _pdfjsLib.AnnotationEditorType.NONE
+        };
       }
     }, 0);
     this.#addWindowListeners();
@@ -8357,7 +8365,7 @@ class PDFViewer {
   #scaleTimeoutId = null;
   #textLayerMode = _ui_utils.TextLayerMode.ENABLE;
   constructor(options) {
-    const viewerVersion = '3.8.0';
+    const viewerVersion = '3.9.0';
     if (_pdfjsLib.version !== viewerVersion) {
       throw new Error(`The API version "${_pdfjsLib.version}" does not match the Viewer version "${viewerVersion}".`);
     }
@@ -8761,7 +8769,7 @@ class PDFViewer {
         if (pdfDocument.isPureXfa) {
           console.warn("Warning: XFA-editing is not implemented.");
         } else if (isValidAnnotationEditorMode(mode)) {
-          this.#annotationEditorUIManager = new _pdfjsLib.AnnotationEditorUIManager(this.container, this.eventBus, pdfDocument?.annotationStorage);
+          this.#annotationEditorUIManager = new _pdfjsLib.AnnotationEditorUIManager(this.container, this.eventBus, pdfDocument, this.pageColors);
           if (mode !== _pdfjsLib.AnnotationEditorType.NONE) {
             this.#annotationEditorUIManager.updateMode(mode);
           }
@@ -9734,7 +9742,10 @@ class PDFViewer {
   get annotationEditorMode() {
     return this.#annotationEditorUIManager ? this.#annotationEditorMode : _pdfjsLib.AnnotationEditorType.DISABLE;
   }
-  set annotationEditorMode(mode) {
+  set annotationEditorMode({
+    mode,
+    editId = null
+  }) {
     if (!this.#annotationEditorUIManager) {
       throw new Error(`The AnnotationEditor is not enabled.`);
     }
@@ -9752,7 +9763,7 @@ class PDFViewer {
       source: this,
       mode
     });
-    this.#annotationEditorUIManager.updateMode(mode);
+    this.#annotationEditorUIManager.updateMode(mode, editId);
   }
   set annotationEditorParams({
     type,
@@ -11944,6 +11955,17 @@ class Toolbar {
           return classList.contains("toggled") ? _pdfjsLib.AnnotationEditorType.NONE : _pdfjsLib.AnnotationEditorType.INK;
         }
       }
+    }, {
+      element: options.editorStampButton,
+      eventName: "switchannotationeditormode",
+      eventDetails: {
+        get mode() {
+          const {
+            classList
+          } = options.editorStampButton;
+          return classList.contains("toggled") ? _pdfjsLib.AnnotationEditorType.NONE : _pdfjsLib.AnnotationEditorType.STAMP;
+        }
+      }
     }];
     this.buttons.push({
       element: options.openFile,
@@ -12046,16 +12068,19 @@ class Toolbar {
     editorFreeTextButton,
     editorFreeTextParamsToolbar,
     editorInkButton,
-    editorInkParamsToolbar
+    editorInkParamsToolbar,
+    editorStampButton
   }) {
     const editorModeChanged = ({
       mode
     }) => {
       (0, _ui_utils.toggleCheckedBtn)(editorFreeTextButton, mode === _pdfjsLib.AnnotationEditorType.FREETEXT, editorFreeTextParamsToolbar);
       (0, _ui_utils.toggleCheckedBtn)(editorInkButton, mode === _pdfjsLib.AnnotationEditorType.INK, editorInkParamsToolbar);
+      (0, _ui_utils.toggleCheckedBtn)(editorStampButton, mode === _pdfjsLib.AnnotationEditorType.STAMP);
       const isDisable = mode === _pdfjsLib.AnnotationEditorType.DISABLE;
       editorFreeTextButton.disabled = isDisable;
       editorInkButton.disabled = isDisable;
+      editorStampButton.disabled = isDisable;
     };
     this.eventBus._on("annotationeditormodechanged", editorModeChanged);
     this.eventBus._on("toolbarreset", evt => {
@@ -12262,6 +12287,7 @@ class BasePreferences {
     "enablePermissions": false,
     "enablePrintAutoRotate": true,
     "enableScripting": true,
+    "enableStampEditor": true,
     "externalLinkTarget": 0,
     "historyUpdateUrl": false,
     "ignoreDestinationZoom": false,
@@ -13623,8 +13649,8 @@ var _ui_utils = __webpack_require__(3);
 var _app_options = __webpack_require__(5);
 var _pdf_link_service = __webpack_require__(7);
 var _app = __webpack_require__(2);
-const pdfjsVersion = '3.8.0';
-const pdfjsBuild = '73b6ee5';
+const pdfjsVersion = '3.9.0';
+const pdfjsBuild = '3efb276';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,
@@ -13657,6 +13683,7 @@ function getViewerConfiguration() {
       editorFreeTextParamsToolbar: document.getElementById("editorFreeTextParamsToolbar"),
       editorInkButton: document.getElementById("editorInk"),
       editorInkParamsToolbar: document.getElementById("editorInkParamsToolbar"),
+      editorStampButton: document.getElementById("editorStamp"),
       download: document.getElementById("download")
     },
     secondaryToolbar: {
