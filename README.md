@@ -4,9 +4,9 @@
 
 This is a plugin that allows to preview PDF files in the blog pages.
 
-If the browser supports embedded PDFs natively, NexT will create a `<embed>` tag and include the PDF file on your website. Otherwise it will create a `<iframe>` tag and uses PDF.js by @mozilla to render the pdf file.
+If the browser supports embedded PDFs natively, NexT will create a `<embed>` tag and include the PDF file on your website. Otherwise, it will create a `<iframe>` tag and uses PDF.js by @mozilla to render the pdf file.
 
-Follow the guide below to install dependencies.
+Follow the guide below to install the plugin.
 
 ## Installation
 
@@ -21,9 +21,15 @@ _config.next.yml  db.json           package-lock.json scaffolds         themes
 _config.yml       node_modules      package.json      source
 ```
 
-### Step 2 &rarr; Get module
+### Step 2 &rarr; Install plugin
 
-Install module to `source/lib` directory:
+If you have already added the **Hexo** directory to a git repository, then install this plugin as a git submodule:
+
+```sh
+$ git submodule add https://github.com/next-theme/theme-next-pdf source/lib/pdf
+```
+
+Otherwise, install the plugin to `source/lib` directory via `git clone`:
 
 ```sh
 $ git clone https://github.com/next-theme/theme-next-pdf source/lib/pdf
@@ -31,7 +37,7 @@ $ git clone https://github.com/next-theme/theme-next-pdf source/lib/pdf
 
 ### Step 3 &rarr; Set it up
 
-Enable module in **NexT** `_config.next.yml` file:
+Enable the plugin in **NexT** `_config.next.yml` file:
 
 ```yml
 # PDF tag
@@ -53,7 +59,7 @@ skip_render:
 
 ## Usage
 
-In order to embed PDF files in the article, you just need to create an `pdf` tag with the URL of your local PDF file, e.g.
+In order to embed PDF files in the article, you just need to create `pdf` tags with the URL of your local PDF file, e.g.
 
 ```
 {% pdf /path/to/your/file.pdf %}
