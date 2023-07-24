@@ -225,11 +225,19 @@
 }
 
 .annotationLayer
-  :is(.linkAnnotation, .buttonWidgetAnnotation.pushButton)
+  :is(.linkAnnotation, .buttonWidgetAnnotation.pushButton):not(.hasBorder)
   > a:hover {
   opacity: 0.2;
-  background: rgba(255, 255, 0, 1);
+  background-color: rgba(255, 255, 0, 1);
   box-shadow: 0 2px 10px rgba(255, 255, 0, 1);
+}
+
+.annotationLayer .linkAnnotation.hasBorder:hover {
+  background-color: rgba(255, 255, 0, 0.2);
+}
+
+.annotationLayer .hasBorder {
+  background-size: 100% 100%;
 }
 
 .annotationLayer .textAnnotation img {
@@ -478,6 +486,16 @@
 .annotationLayer .annotationTextContent span {
   width: 100%;
   display: inline-block;
+}
+
+.annotationLayer svg.quadrilateralsContainer {
+  contain: strict;
+  width: 0;
+  height: 0;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -1;
 }
 
 
@@ -869,6 +887,8 @@
   z-index: 1;
   transform-origin: 0 0;
   cursor: auto;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .annotationEditorLayer :is(.inkEditor, .stampEditor) {
@@ -1408,8 +1428,7 @@ body {
   z-index: 100;
   font: message-box;
   border-top: 1px solid rgba(51, 51, 51, 1);
-  -webkit-border-end: var(--doorhanger-border-color-whcm);
-          border-inline-end: var(--doorhanger-border-color-whcm);
+  border-inline-end: var(--doorhanger-border-color-whcm);
   transition-property: inset-inline-start;
   transition-duration: var(--sidebar-transition-duration);
   transition-timing-function: var(--sidebar-transition-timing-function);
@@ -1601,8 +1620,7 @@ body {
   height: 32px;
 }
 .findbar > div#findbarInputContainer {
-  -webkit-margin-end: 4px;
-          margin-inline-end: 4px;
+  margin-inline-end: 4px;
 }
 .findbar.wrapContainers > div,
 .findbar.wrapContainers > div#findbarMessageContainer > * {
@@ -1673,8 +1691,7 @@ body {
 }
 
 .editorParamsToolbarContainer .editorParamsLabel {
-  -webkit-padding-end: 10px;
-          padding-inline-end: 10px;
+  padding-inline-end: 10px;
   flex: none;
   color: var(--main-color);
 }
@@ -1726,7 +1743,8 @@ body {
 .doorHanger,
 .doorHangerRight {
   border-radius: 2px;
-  box-shadow: 0 1px 5px var(--doorhanger-border-color),
+  box-shadow:
+    0 1px 5px var(--doorhanger-border-color),
     0 0 0 1px var(--doorhanger-border-color);
   border: var(--doorhanger-border-color-whcm);
 }
@@ -1743,14 +1761,12 @@ body {
 }
 .doorHanger::after {
   inset-inline-start: 10px;
-  -webkit-margin-start: -8px;
-          margin-inline-start: -8px;
+  margin-inline-start: -8px;
   border-bottom-color: var(--toolbar-bg-color);
 }
 .doorHangerRight::after {
   inset-inline-end: 10px;
-  -webkit-margin-end: -8px;
-          margin-inline-end: -8px;
+  margin-inline-end: -8px;
   border-bottom-color: var(--doorhanger-bg-color);
 }
 :is(.doorHanger, .doorHangerRight)::before {
@@ -1759,13 +1775,11 @@ body {
 }
 .doorHanger::before {
   inset-inline-start: 10px;
-  -webkit-margin-start: -9px;
-          margin-inline-start: -9px;
+  margin-inline-start: -9px;
 }
 .doorHangerRight::before {
   inset-inline-end: 10px;
-  -webkit-margin-end: -9px;
-          margin-inline-end: -9px;
+  margin-inline-end: -9px;
 }
 
 #findResultsCount {
@@ -1810,16 +1824,13 @@ body {
 }
 
 #toolbarViewerLeft {
-  -webkit-padding-start: 1px;
-          padding-inline-start: 1px;
+  padding-inline-start: 1px;
 }
 #toolbarViewerRight {
-  -webkit-padding-end: 1px;
-          padding-inline-end: 1px;
+  padding-inline-end: 1px;
 }
 #toolbarSidebarRight {
-  -webkit-padding-end: 2px;
-          padding-inline-end: 2px;
+  padding-inline-end: 2px;
 }
 
 .splitToolbarButton {
@@ -1868,8 +1879,7 @@ body {
   margin: 0;
 }
 #toolbarSidebar .splitToolbarButton > .toolbarButton {
-  -webkit-margin-end: 2px;
-          margin-inline-end: 2px;
+  margin-inline-end: 2px;
 }
 
 .splitToolbarButtonSeparator {
@@ -1950,8 +1960,7 @@ body {
   color: var(--main-color);
   margin: 0;
   padding: 1px 0 2px;
-  -webkit-padding-start: 6px;
-          padding-inline-start: 6px;
+  padding-inline-start: 6px;
   border: none;
   background-color: var(--dropdown-btn-bg-color);
 }
@@ -2147,8 +2156,7 @@ a:is(.toolbarButton, .secondaryToolbarButton)[href="#"] {
   position: relative;
   margin: 0;
   padding: 0 0 1px;
-  -webkit-padding-start: 36px;
-          padding-inline-start: 36px;
+  padding-inline-start: 36px;
   height: auto;
   min-height: 26px;
   width: auto;
@@ -2160,8 +2168,7 @@ a:is(.toolbarButton, .secondaryToolbarButton)[href="#"] {
   display: inline-block;
 }
 .secondaryToolbarButton > span {
-  -webkit-padding-end: 4px;
-          padding-inline-end: 4px;
+  padding-inline-end: 4px;
 }
 
 #firstPage::before {
@@ -2268,8 +2275,7 @@ a:is(.toolbarButton, .secondaryToolbarButton)[href="#"] {
   position: absolute !important;
   left: 0;
   margin: 10px 0 3px;
-  -webkit-margin-start: 7px;
-          margin-inline-start: 7px;
+  margin-inline-start: 7px;
 }
 
 #pageNumber {
@@ -2313,8 +2319,7 @@ a:is(.toolbarButton, .secondaryToolbarButton)[href="#"] {
 }
 
 #numPages.toolbarLabel {
-  -webkit-padding-start: 3px;
-          padding-inline-start: 3px;
+  padding-inline-start: 3px;
 }
 
 #thumbnailView,
@@ -2387,8 +2392,7 @@ a:focus > .thumbnail > .thumbnailImage,
 
 .treeWithDeepNesting > .treeItem,
 .treeItem > .treeItems {
-  -webkit-margin-start: 20px;
-          margin-inline-start: 20px;
+  margin-inline-start: 20px;
 }
 
 .treeItem > a {
@@ -2399,8 +2403,7 @@ a:focus > .thumbnail > .thumbnailImage,
   height: auto;
   margin-bottom: 1px;
   padding: 2px 0 5px;
-  -webkit-padding-start: 4px;
-          padding-inline-start: 4px;
+  padding-inline-start: 4px;
   border-radius: 2px;
   color: var(--treeitem-color);
   font-size: 13px;
@@ -2416,8 +2419,7 @@ a:focus > .thumbnail > .thumbnailImage,
   cursor: pointer;
 }
 #layersView .treeItem > a > label {
-  -webkit-padding-start: 4px;
-          padding-inline-start: 4px;
+  padding-inline-start: 4px;
 }
 #layersView .treeItem > a > label > input {
   float: var(--inline-start);

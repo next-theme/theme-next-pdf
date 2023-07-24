@@ -50,9 +50,8 @@ var _pdf_manager = __w_pdfjs_require__(6);
 var _annotation = __w_pdfjs_require__(10);
 var _cleanup_helper = __w_pdfjs_require__(72);
 var _writer = __w_pdfjs_require__(66);
-var _is_node = __w_pdfjs_require__(104);
-var _message_handler = __w_pdfjs_require__(105);
-var _worker_stream = __w_pdfjs_require__(106);
+var _message_handler = __w_pdfjs_require__(104);
+var _worker_stream = __w_pdfjs_require__(105);
 class WorkerTask {
   constructor(name) {
     this.name = name;
@@ -424,7 +423,7 @@ class WorkerMessageHandler {
       annotationStorage,
       filename
     }) {
-      const promises = [pdfManager.requestLoadedStream(), pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("acroFormRef"), pdfManager.ensureDoc("startXRef")];
+      const promises = [pdfManager.requestLoadedStream(), pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("acroFormRef"), pdfManager.ensureDoc("startXRef"), pdfManager.ensureDoc("linearization")];
       const newAnnotationsByPage = !isPureXfa ? (0, _core_utils.getNewAnnotationsMap)(annotationStorage) : null;
       const xref = await pdfManager.ensureDoc("xref");
       if (newAnnotationsByPage) {
@@ -450,7 +449,7 @@ class WorkerMessageHandler {
           }));
         }
       }
-      return Promise.all(promises).then(function ([stream, acroForm, acroFormRef, startXRef, ...refs]) {
+      return Promise.all(promises).then(function ([stream, acroForm, acroFormRef, startXRef, linearization, ...refs]) {
         let newRefs = [];
         let xfaData = null;
         if (isPureXfa) {
@@ -499,27 +498,25 @@ class WorkerMessageHandler {
             infoRef: xref.trailer.getRaw("Info") || null,
             info: infoObj,
             fileIds: xref.trailer.get("ID") || null,
-            startXRef: xref.lastXRefStreamPos ?? startXRef,
+            startXRef: linearization ? startXRef : xref.lastXRefStreamPos ?? startXRef,
             filename
           };
         }
-        try {
-          return (0, _writer.incrementalUpdate)({
-            originalData: stream.bytes,
-            xrefInfo: newXrefInfo,
-            newRefs,
-            xref,
-            hasXfa: !!xfa,
-            xfaDatasetsRef,
-            hasXfaDatasetsEntry,
-            needAppearances,
-            acroFormRef,
-            acroForm,
-            xfaData
-          });
-        } finally {
+        return (0, _writer.incrementalUpdate)({
+          originalData: stream.bytes,
+          xrefInfo: newXrefInfo,
+          newRefs,
+          xref,
+          hasXfa: !!xfa,
+          xfaDatasetsRef,
+          hasXfaDatasetsEntry,
+          needAppearances,
+          acroFormRef,
+          acroForm,
+          xfaData
+        }).finally(() => {
           xref.resetNewTemporaryRef();
-        }
+        });
       });
     });
     handler.on("GetOperatorList", function (data, sink) {
@@ -631,7 +628,7 @@ exports.WorkerMessageHandler = WorkerMessageHandler;
 function isMessagePort(maybePort) {
   return typeof maybePort.postMessage === "function" && "onmessage" in maybePort;
 }
-if (typeof window === "undefined" && !_is_node.isNodeJS && typeof self !== "undefined" && isMessagePort(self)) {
+if (typeof window === "undefined" && !_util.isNodeJS && typeof self !== "undefined" && isMessagePort(self)) {
   WorkerMessageHandler.initializeFromPort(self);
 }
 
@@ -654,6 +651,7 @@ exports.getVerbosityLevel = getVerbosityLevel;
 exports.info = info;
 exports.isArrayBuffer = isArrayBuffer;
 exports.isArrayEqual = isArrayEqual;
+exports.isNodeJS = void 0;
 exports.normalizeUnicode = normalizeUnicode;
 exports.objectFromMap = objectFromMap;
 exports.objectSize = objectSize;
@@ -666,7 +664,8 @@ exports.stringToUTF8String = stringToUTF8String;
 exports.unreachable = unreachable;
 exports.utf8StringToString = utf8StringToString;
 exports.warn = warn;
-;
+const isNodeJS = typeof process === "object" && process + "" === "[object process]" && !process.versions.nw && !(process.versions.electron && process.type && process.type !== "browser");
+exports.isNodeJS = isNodeJS;
 const IDENTITY_MATRIX = [1, 0, 0, 1, 0, 0];
 exports.IDENTITY_MATRIX = IDENTITY_MATRIX;
 const FONT_IDENTITY_MATRIX = [0.001, 0, 0, 0.001, 0, 0];
@@ -2549,10 +2548,8 @@ class ChunkedStream extends _stream.Stream {
       if (start + length > this.progressiveDataLength) {
         this.ensureRange(start, start + length);
       }
-    } else {
-      if (start >= this.progressiveDataLength) {
-        this.ensureByte(start);
-      }
+    } else if (start >= this.progressiveDataLength) {
+      this.ensureByte(start);
     }
     function ChunkedStreamSubstream() {}
     ChunkedStreamSubstream.prototype = Object.create(this);
@@ -3231,7 +3228,7 @@ class Page {
           isOffscreenCanvasSupported
         } = this.evaluatorOptions;
         if (missingBitmaps.size > 0) {
-          const annotationWithBitmaps = [];
+          const annotationWithBitmaps = newAnnotations.slice();
           for (const [key, annotation] of annotationStorage) {
             if (!key.startsWith(_util.AnnotationEditorPrefix)) {
               continue;
@@ -4617,7 +4614,7 @@ class Annotation {
     this.setOptionalContent(dict);
     const MK = dict.get("MK");
     this.setBorderAndBackgroundColors(MK);
-    this.setRotation(MK);
+    this.setRotation(MK, dict);
     this.ref = params.ref instanceof _primitives.Ref ? params.ref : null;
     this._streams = [];
     if (this.appearance) {
@@ -4771,18 +4768,21 @@ class Annotation {
       }
     }
   }
-  setRotation(mk) {
+  setRotation(mk, dict) {
     this.rotation = 0;
+    let angle;
     if (mk instanceof _primitives.Dict) {
-      let angle = mk.get("R") || 0;
-      if (Number.isInteger(angle) && angle !== 0) {
-        angle %= 360;
-        if (angle < 0) {
-          angle += 360;
-        }
-        if (angle % 90 === 0) {
-          this.rotation = angle;
-        }
+      angle = mk.get("R") || 0;
+    } else {
+      angle = dict.get("Rotate") || 0;
+    }
+    if (Number.isInteger(angle) && angle !== 0) {
+      angle %= 360;
+      if (angle < 0) {
+        angle += 360;
+      }
+      if (angle % 90 === 0) {
+        this.rotation = angle;
       }
     }
   }
@@ -4924,6 +4924,7 @@ class Annotation {
     const resources = await this.loadResources(["ExtGState", "Font", "Properties", "XObject"], this.appearance);
     const text = [];
     const buffer = [];
+    let firstPosition = null;
     const sink = {
       desiredSize: Math.Infinity,
       ready: true,
@@ -4932,6 +4933,7 @@ class Annotation {
           if (item.str === undefined) {
             continue;
           }
+          firstPosition ||= item.transform.slice(-2);
           buffer.push(item.str);
           if (item.hasEOL) {
             text.push(buffer.join(""));
@@ -4953,6 +4955,16 @@ class Annotation {
       text.push(buffer.join(""));
     }
     if (text.length > 1 || text[0]) {
+      const appearanceDict = this.appearance.dict;
+      const bbox = appearanceDict.getArray("BBox") || [0, 0, 1, 1];
+      const matrix = appearanceDict.getArray("Matrix") || [1, 0, 0, 1, 0, 0];
+      const rect = this.data.rect;
+      const transform = getTransformMatrix(rect, bbox, matrix);
+      transform[4] -= rect[0];
+      transform[5] -= rect[1];
+      firstPosition = _util.Util.applyTransform(firstPosition, transform);
+      firstPosition = _util.Util.applyTransform(firstPosition, matrix);
+      this.data.textPosition = firstPosition;
       this.data.textContent = text;
     }
   }
@@ -5420,6 +5432,7 @@ class WidgetAnnotation extends Annotation {
         separateCanvas: false
       };
     }
+    const isUsingOwnCanvas = !!(this.data.hasOwnCanvas && intent & _util.RenderingIntentFlag.DISPLAY);
     const matrix = [1, 0, 0, 1, 0, 0];
     const bbox = [0, 0, this.data.rect[2] - this.data.rect[0], this.data.rect[3] - this.data.rect[1]];
     const transform = getTransformMatrix(this.data.rect, bbox, matrix);
@@ -5430,7 +5443,7 @@ class WidgetAnnotation extends Annotation {
     if (optionalContent !== undefined) {
       opList.addOp(_util.OPS.beginMarkedContentProps, ["OC", optionalContent]);
     }
-    opList.addOp(_util.OPS.beginAnnotation, [this.data.id, this.data.rect, transform, this.getRotationMatrix(annotationStorage), false]);
+    opList.addOp(_util.OPS.beginAnnotation, [this.data.id, this.data.rect, transform, this.getRotationMatrix(annotationStorage), isUsingOwnCanvas]);
     const stream = new _stream.StringStream(content);
     await evaluator.getOperatorList({
       stream,
@@ -5445,7 +5458,7 @@ class WidgetAnnotation extends Annotation {
     return {
       opList,
       separateForm: false,
-      separateCanvas: false
+      separateCanvas: isUsingOwnCanvas
     };
   }
   _getMKDict(rotation) {
@@ -5849,7 +5862,7 @@ class TextWidgetAnnotation extends WidgetAnnotation {
     this.data.doNotScroll = this.hasFieldFlag(_util.AnnotationFieldFlag.DONOTSCROLL);
   }
   get hasTextContent() {
-    return !!this.appearance;
+    return !!this.appearance && !this._needAppearances;
   }
   _getCombAppearance(defaultAppearance, font, text, fontSize, width, height, hPadding, vPadding, descent, lineHeight, annotationStorage) {
     const combWidth = width / this.data.maxLen;
@@ -5912,22 +5925,20 @@ class TextWidgetAnnotation extends WidgetAnnotation {
           lastSpacePosInStringEnd = end;
           lastSpacePos = i;
         }
-      } else {
-        if (currentWidth + glyphWidth > width) {
-          if (lastSpacePosInStringStart !== -1) {
-            chunks.push(line.substring(startChunk, lastSpacePosInStringEnd));
-            startChunk = lastSpacePosInStringEnd;
-            i = lastSpacePos + 1;
-            lastSpacePosInStringStart = -1;
-            currentWidth = 0;
-          } else {
-            chunks.push(line.substring(startChunk, start));
-            startChunk = start;
-            currentWidth = glyphWidth;
-          }
+      } else if (currentWidth + glyphWidth > width) {
+        if (lastSpacePosInStringStart !== -1) {
+          chunks.push(line.substring(startChunk, lastSpacePosInStringEnd));
+          startChunk = lastSpacePosInStringEnd;
+          i = lastSpacePos + 1;
+          lastSpacePosInStringStart = -1;
+          currentWidth = 0;
         } else {
-          currentWidth += glyphWidth;
+          chunks.push(line.substring(startChunk, start));
+          startChunk = start;
+          currentWidth = glyphWidth;
         }
+      } else {
+        currentWidth += glyphWidth;
       }
     }
     if (startChunk < line.length) {
@@ -7926,13 +7937,11 @@ class ColorSpace {
           rgbBuf[rgbPos++] = colorMap[key + 2];
         }
       }
+    } else if (!needsResizing) {
+      this.getRgbBuffer(comps, 0, width * actualHeight, dest, 0, bpc, alpha01);
     } else {
-      if (!needsResizing) {
-        this.getRgbBuffer(comps, 0, width * actualHeight, dest, 0, bpc, alpha01);
-      } else {
-        rgbBuf = new Uint8ClampedArray(count * 3);
-        this.getRgbBuffer(comps, 0, count, rgbBuf, 0, bpc, 0);
-      }
+      rgbBuf = new Uint8ClampedArray(count * 3);
+      this.getRgbBuffer(comps, 0, count, rgbBuf, 0, bpc, 0);
     }
     if (rgbBuf) {
       if (needsResizing) {
@@ -31858,14 +31867,12 @@ function compileGlyf(code, cmds, font) {
           arg2 = getUint16(code, i + 2);
         }
         i += 4;
+      } else if (flags & 0x02) {
+        arg1 = getInt8(code, i++);
+        arg2 = getInt8(code, i++);
       } else {
-        if (flags & 0x02) {
-          arg1 = getInt8(code, i++);
-          arg2 = getInt8(code, i++);
-        } else {
-          arg1 = code[i++];
-          arg2 = code[i++];
-        }
+        arg1 = code[i++];
+        arg2 = code[i++];
       }
       if (flags & 0x02) {
         x = arg1;
@@ -36028,10 +36035,8 @@ class CompositeGlyph {
       if (!(this.argument1 >= -128 && this.argument1 <= 127 && this.argument2 >= -128 && this.argument2 <= 127)) {
         size += 2;
       }
-    } else {
-      if (!(this.argument1 >= 0 && this.argument1 <= 255 && this.argument2 >= 0 && this.argument2 <= 255)) {
-        size += 2;
-      }
+    } else if (!(this.argument1 >= 0 && this.argument1 <= 255 && this.argument2 >= 0 && this.argument2 <= 255)) {
+      size += 2;
     }
     return size;
   }
@@ -36041,10 +36046,8 @@ class CompositeGlyph {
       if (!(this.argument1 >= -128 && this.argument1 <= 127 && this.argument2 >= -128 && this.argument2 <= 127)) {
         this.flags |= ARG_1_AND_2_ARE_WORDS;
       }
-    } else {
-      if (!(this.argument1 >= 0 && this.argument1 <= 255 && this.argument2 >= 0 && this.argument2 <= 255)) {
-        this.flags |= ARG_1_AND_2_ARE_WORDS;
-      }
+    } else if (!(this.argument1 >= 0 && this.argument1 <= 255 && this.argument2 >= 0 && this.argument2 <= 255)) {
+      this.flags |= ARG_1_AND_2_ARE_WORDS;
     }
     buf.setUint16(pos, this.flags);
     buf.setUint16(pos + 2, this.glyphIndex);
@@ -38894,7 +38897,7 @@ class PostScriptEvaluator {
           break;
         case "log":
           a = stack.pop();
-          stack.push(Math.log(a) / Math.LN10);
+          stack.push(Math.log10(a));
           break;
         case "lt":
           b = stack.pop();
@@ -39957,10 +39960,8 @@ function bidi(str, startLevel = -1, vertical = false) {
       } else if (t === "AN" || t === "EN") {
         levels[i] += 2;
       }
-    } else {
-      if (t === "L" || t === "AN" || t === "EN") {
-        levels[i] += 1;
-      }
+    } else if (t === "L" || t === "AN" || t === "EN") {
+      levels[i] += 1;
     }
   }
   let highestLevel = -1;
@@ -41949,18 +41950,11 @@ async function writeStream(stream, buffer, transform) {
   const {
     dict
   } = stream;
-  if (typeof CompressionStream === "undefined") {
-    dict.set("Length", string.length);
-    await writeDict(dict, buffer, transform);
-    buffer.push(" stream\n", string, "\nendstream");
-    return;
-  }
-  const filter = await dict.getAsync("Filter");
-  const params = await dict.getAsync("DecodeParms");
+  const [filter, params] = await Promise.all([dict.getAsync("Filter"), dict.getAsync("DecodeParms")]);
   const filterZero = Array.isArray(filter) ? await dict.xref.fetchIfRefAsync(filter[0]) : filter;
   const isFilterZeroFlateDecode = (0, _primitives.isName)(filterZero, "FlateDecode");
   const MIN_LENGTH_FOR_COMPRESSING = 256;
-  if (string.length >= MIN_LENGTH_FOR_COMPRESSING || isFilterZeroFlateDecode) {
+  if (typeof CompressionStream !== "undefined" && (string.length >= MIN_LENGTH_FOR_COMPRESSING || isFilterZeroFlateDecode)) {
     try {
       const byteArray = (0, _util.stringToBytes)(string);
       const cs = new CompressionStream("deflate");
@@ -42109,7 +42103,7 @@ async function updateAcroform({
   if (hasXfa && !hasXfaDatasetsEntry && !xfaDatasetsRef) {
     (0, _util.warn)("XFA - Cannot save it");
   }
-  if (!needAppearances && (!hasXfa || !xfaDatasetsRef)) {
+  if (!needAppearances && (!hasXfa || !xfaDatasetsRef || hasXfaDatasetsEntry)) {
     return;
   }
   const dict = new _primitives.Dict(xref);
@@ -49502,12 +49496,10 @@ class Line extends _xfa_object.XFAObject {
     } else if (parent.h <= thickness) {
       [x1, y1, x2, y2] = [0, "50%", "100%", "50%"];
       height = style.strokeWidth;
+    } else if (this.slope === "\\") {
+      [x1, y1, x2, y2] = [0, 0, "100%", "100%"];
     } else {
-      if (this.slope === "\\") {
-        [x1, y1, x2, y2] = [0, 0, "100%", "100%"];
-      } else {
-        [x1, y1, x2, y2] = [0, "100%", "100%", 0];
-      }
+      [x1, y1, x2, y2] = [0, "100%", "100%", 0];
     }
     const line = {
       name: "line",
@@ -57305,6 +57297,7 @@ var _core_utils = __w_pdfjs_require__(3);
 var _base_stream = __w_pdfjs_require__(5);
 var _crypto = __w_pdfjs_require__(68);
 class XRef {
+  #firstXRefStmPos = null;
   constructor(stream, pdfManager) {
     this.stream = stream;
     this.pdfManager = pdfManager;
@@ -57798,6 +57791,7 @@ class XRef {
           if (Number.isInteger(obj) && !this._xrefStms.has(obj)) {
             this._xrefStms.add(obj);
             this.startXRefQueue.push(obj);
+            this.#firstXRefStmPos ??= obj;
           }
         } else if (Number.isInteger(obj)) {
           if (!Number.isInteger(parser.getObj()) || !(0, _primitives.isCmd)(parser.getObj(), "obj") || !((obj = parser.getObj()) instanceof _base_stream.BaseStream)) {
@@ -57836,7 +57830,7 @@ class XRef {
     throw new _core_utils.XRefParseException();
   }
   get lastXRefStreamPos() {
-    return this._xrefStms.size > 0 ? Math.max(...this._xrefStms) : null;
+    return this.#firstXRefStmPos ?? (this._xrefStms.size > 0 ? Math.max(...this._xrefStms) : null);
   }
   getEntry(i) {
     const xrefEntry = this.entries[i];
@@ -58018,19 +58012,6 @@ exports.XRef = XRef;
 
 /***/ }),
 /* 104 */
-/***/ ((__unused_webpack_module, exports) => {
-
-
-
-Object.defineProperty(exports, "__esModule", ({
-  value: true
-}));
-exports.isNodeJS = void 0;
-const isNodeJS = typeof process === "object" && process + "" === "[object process]" && !process.versions.nw && !(process.versions.electron && process.type && process.type !== "browser");
-exports.isNodeJS = isNodeJS;
-
-/***/ }),
-/* 105 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -58443,7 +58424,7 @@ class MessageHandler {
 exports.MessageHandler = MessageHandler;
 
 /***/ }),
-/* 106 */
+/* 105 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -58635,7 +58616,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.9.0';
-const pdfjsBuild = '3efb276';
+const pdfjsBuild = '71f113b';
 })();
 
 /******/ 	return __webpack_exports__;
