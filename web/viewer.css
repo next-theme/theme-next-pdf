@@ -819,10 +819,18 @@
 
 
 :root {
-  --focus-outline: solid 2px blue;
-  --hover-outline: dashed 2px blue;
+  --outline-width: 2px;
+  --outline-color: blue;
+  --focus-outline: solid var(--outline-width) var(--outline-color);
+  --hover-outline: dashed var(--outline-width) var(--outline-color);
   --freetext-line-height: 1.35;
   --freetext-padding: 2px;
+  --resizer-size: 8px;
+  --resizer-shift: calc(
+    0px - var(--outline-width) - var(--resizer-size) / 2 - var(--outline-width) /
+      2
+  );
+  --resizer-color: white;
   --editorFreeText-editing-cursor: text;
   --editorInk-editing-cursor: url(images/cursor-editorInk.svg) 0 16, pointer;
 }
@@ -836,8 +844,10 @@
 
 @media screen and (forced-colors: active) {
   :root {
-    --focus-outline: solid 3px ButtonText;
-    --hover-outline: dashed 3px ButtonText;
+    --outline-width: 3px;
+    --outline-color: ButtonText;
+    --resizer-size: 12px;
+    --resizer-color: ButtonFace;
   }
 }
 
@@ -854,8 +864,7 @@
 .annotationEditorLayer {
   background: transparent;
   position: absolute;
-  top: 0;
-  left: 0;
+  inset: 0;
   font-size: calc(100px * var(--scale-factor));
   transform-origin: 0 0;
   cursor: auto;
@@ -877,7 +886,6 @@
 
 .annotationEditorLayer .selectedEditor {
   outline: var(--focus-outline);
-  resize: none;
 }
 
 .annotationEditorLayer :is(.freeTextEditor, .inkEditor, .stampEditor) {
@@ -891,13 +899,8 @@
   max-height: 100%;
 }
 
-.annotationEditorLayer :is(.inkEditor, .stampEditor) {
-  overflow: auto;
-}
-
 .annotationEditorLayer .freeTextEditor {
   padding: calc(var(--freetext-padding) * var(--scale-factor));
-  resize: none;
   width: auto;
   height: auto;
   touch-action: none;
@@ -906,21 +909,21 @@
 .annotationEditorLayer .freeTextEditor .internal {
   background: transparent;
   border: none;
-  top: 0;
-  left: 0;
+  inset: 0;
   overflow: visible;
   white-space: nowrap;
-  resize: none;
   font: 10px sans-serif;
   line-height: var(--freetext-line-height);
+  -webkit-user-select: none;
+     -moz-user-select: none;
+          user-select: none;
 }
 
 .annotationEditorLayer .freeTextEditor .overlay {
   position: absolute;
   display: none;
   background: transparent;
-  top: 0;
-  left: 0;
+  inset: 0;
   width: 100%;
   height: 100%;
 }
@@ -936,14 +939,9 @@
 
 .annotationEditorLayer .freeTextEditor .internal:focus {
   outline: none;
-}
-
-.annotationEditorLayer .inkEditor.disabled {
-  resize: none;
-}
-
-.annotationEditorLayer .inkEditor.disabled.selectedEditor {
-  resize: horizontal;
+  -webkit-user-select: auto;
+     -moz-user-select: auto;
+          user-select: auto;
 }
 
 .annotationEditorLayer
@@ -957,14 +955,12 @@
 }
 
 .annotationEditorLayer .inkEditor.editing {
-  resize: none;
   cursor: inherit;
 }
 
 .annotationEditorLayer .inkEditor .inkEditorCanvas {
   position: absolute;
-  top: 0;
-  left: 0;
+  inset: 0;
   width: 100%;
   height: 100%;
   touch-action: none;
@@ -988,13 +984,109 @@
   transition-delay: var(--loading-icon-delay);
 }
 
-.annotationEditorLayer .stampEditor.selectedEditor {
-  resize: horizontal;
-}
-
 .annotationEditorLayer .stampEditor canvas {
   width: 100%;
   height: 100%;
+}
+
+.annotationEditorLayer .resizers {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  inset: 0;
+}
+
+.annotationEditorLayer .resizers.hidden {
+  display: none;
+}
+
+.annotationEditorLayer .resizer {
+  width: var(--resizer-size);
+  height: var(--resizer-size);
+  border-radius: 50%;
+  background: var(--resizer-color);
+  border: var(--focus-outline);
+  position: absolute;
+}
+
+.annotationEditorLayer .resizer.topLeft {
+  cursor: nw-resize;
+  top: var(--resizer-shift);
+  left: var(--resizer-shift);
+}
+
+.annotationEditorLayer .resizer.topMiddle {
+  cursor: n-resize;
+  top: var(--resizer-shift);
+  left: calc(50% + var(--resizer-shift));
+}
+
+.annotationEditorLayer .resizer.topRight {
+  cursor: ne-resize;
+  top: var(--resizer-shift);
+  right: var(--resizer-shift);
+}
+
+.annotationEditorLayer .resizer.middleRight {
+  cursor: e-resize;
+  top: calc(50% + var(--resizer-shift));
+  right: var(--resizer-shift);
+}
+
+.annotationEditorLayer .resizer.bottomRight {
+  cursor: se-resize;
+  bottom: var(--resizer-shift);
+  right: var(--resizer-shift);
+}
+
+.annotationEditorLayer .resizer.bottomMiddle {
+  cursor: s-resize;
+  bottom: var(--resizer-shift);
+  left: calc(50% + var(--resizer-shift));
+}
+
+.annotationEditorLayer .resizer.bottomLeft {
+  cursor: sw-resize;
+  bottom: var(--resizer-shift);
+  left: var(--resizer-shift);
+}
+
+.annotationEditorLayer .resizer.middleLeft {
+  cursor: w-resize;
+  top: calc(50% + var(--resizer-shift));
+  left: var(--resizer-shift);
+}
+
+.annotationEditorLayer.resizingTopLeft {
+  cursor: nw-resize;
+}
+
+.annotationEditorLayer.resizingTopMiddle {
+  cursor: n-resize;
+}
+
+.annotationEditorLayer.resizingTopRight {
+  cursor: ne-resize;
+}
+
+.annotationEditorLayer.resizingMiddleRight {
+  cursor: e-resize;
+}
+
+.annotationEditorLayer.resizingBottomRight {
+  cursor: se-resize;
+}
+
+.annotationEditorLayer.resizingBottomMiddle {
+  cursor: s-resize;
+}
+
+.annotationEditorLayer.resizingBottomLeft {
+  cursor: sw-resize;
+}
+
+.annotationEditorLayer.resizingMiddleLeft {
+  cursor: w-resize;
 }
 
 :root {
@@ -1197,6 +1289,7 @@
   --toggled-btn-color: rgba(0, 0, 0, 1);
   --toggled-btn-bg-color: rgba(0, 0, 0, 0.3);
   --toggled-hover-active-btn-color: rgba(0, 0, 0, 0.4);
+  --toggled-hover-btn-outline: none;
   --dropdown-btn-bg-color: rgba(215, 215, 219, 1);
   --dropdown-btn-border: none;
   --separator-color: rgba(0, 0, 0, 0.3);
@@ -1321,6 +1414,8 @@
     --toolbar-icon-opacity: 1;
     --toolbar-icon-bg-color: ButtonText;
     --toolbar-icon-hover-bg-color: ButtonFace;
+    --toggled-hover-active-btn-color: ButtonText;
+    --toggled-hover-btn-outline: 2px solid ButtonBorder;
     --toolbar-border-color: CanvasText;
     --toolbar-border-bottom: 1px solid var(--toolbar-border-color);
     --toolbar-box-shadow: none;
@@ -1921,6 +2016,11 @@ body {
 .splitToolbarButton.toggled > .toolbarButton.toggled {
   background-color: var(--toggled-btn-bg-color);
   color: var(--toggled-btn-color);
+}
+
+:is(.toolbarButton, .secondaryToolbarButton).toggled:hover,
+.splitToolbarButton.toggled > .toolbarButton.toggled:hover {
+  outline: var(--toggled-hover-btn-outline) !important;
 }
 
 :is(.toolbarButton, .secondaryToolbarButton).toggled::before {
