@@ -966,7 +966,7 @@ function getDocument(src) {
   }
   const fetchDocParams = {
     docId,
-    apiVersion: '3.9.0',
+    apiVersion: '3.10.0',
     data,
     password,
     disableAutoFetch,
@@ -1171,6 +1171,21 @@ class PDFDocumentProxy {
   constructor(pdfInfo, transport) {
     this._pdfInfo = pdfInfo;
     this._transport = transport;
+    Object.defineProperty(this, "getJavaScript", {
+      value: () => {
+        (0, _display_utils.deprecated)("`PDFDocumentProxy.getJavaScript`, " + "please use `PDFDocumentProxy.getJSActions` instead.");
+        return this.getJSActions().then(js => {
+          if (!js) {
+            return js;
+          }
+          const jsArr = [];
+          for (const name in js) {
+            jsArr.push(...js[name]);
+          }
+          return jsArr;
+        });
+      }
+    });
   }
   get annotationStorage() {
     return this._transport.annotationStorage;
@@ -1219,9 +1234,6 @@ class PDFDocumentProxy {
   }
   getAttachments() {
     return this._transport.getAttachments();
-  }
-  getJavaScript() {
-    return this._transport.getJavaScript();
   }
   getJSActions() {
     return this._transport.getDocJSActions();
@@ -1961,6 +1973,7 @@ class WorkerTransport {
   #methodPromises = new Map();
   #pageCache = new Map();
   #pagePromises = new Map();
+  #passwordCapability = null;
   constructor(messageHandler, loadingTask, networkStream, params, factory) {
     this.messageHandler = messageHandler;
     this.loadingTask = loadingTask;
@@ -1976,7 +1989,6 @@ class WorkerTransport {
     this.standardFontDataFactory = factory.standardFontDataFactory;
     this.destroyed = false;
     this.destroyCapability = null;
-    this._passwordCapability = null;
     this._networkStream = networkStream;
     this._fullReader = null;
     this._lastProgress = null;
@@ -2042,9 +2054,7 @@ class WorkerTransport {
     }
     this.destroyed = true;
     this.destroyCapability = new _util.PromiseCapability();
-    if (this._passwordCapability) {
-      this._passwordCapability.reject(new Error("Worker was destroyed during onPassword callback"));
-    }
+    this.#passwordCapability?.reject(new Error("Worker was destroyed during onPassword callback"));
     const waitOn = [];
     for (const page of this.#pageCache.values()) {
       waitOn.push(page._destroy());
@@ -2198,13 +2208,13 @@ class WorkerTransport {
       loadingTask._capability.reject(reason);
     });
     messageHandler.on("PasswordRequest", exception => {
-      this._passwordCapability = new _util.PromiseCapability();
+      this.#passwordCapability = new _util.PromiseCapability();
       if (loadingTask.onPassword) {
         const updatePassword = password => {
           if (password instanceof Error) {
-            this._passwordCapability.reject(password);
+            this.#passwordCapability.reject(password);
           } else {
-            this._passwordCapability.resolve({
+            this.#passwordCapability.resolve({
               password
             });
           }
@@ -2212,12 +2222,12 @@ class WorkerTransport {
         try {
           loadingTask.onPassword(updatePassword, exception.code);
         } catch (ex) {
-          this._passwordCapability.reject(ex);
+          this.#passwordCapability.reject(ex);
         }
       } else {
-        this._passwordCapability.reject(new _util.PasswordException(exception.message, exception.code));
+        this.#passwordCapability.reject(new _util.PasswordException(exception.message, exception.code));
       }
-      return this._passwordCapability.promise;
+      return this.#passwordCapability.promise;
     });
     messageHandler.on("DataLoaded", data => {
       loadingTask.onProgress?.({
@@ -2433,11 +2443,8 @@ class WorkerTransport {
   getAttachments() {
     return this.messageHandler.sendWithPromise("GetAttachments", null);
   }
-  getJavaScript() {
-    return this.messageHandler.sendWithPromise("GetJavaScript", null);
-  }
   getDocJSActions() {
-    return this.messageHandler.sendWithPromise("GetDocJSActions", null);
+    return this.#cacheSimpleMethod("GetDocJSActions");
   }
   getPageJSActions(pageIndex) {
     return this.messageHandler.sendWithPromise("GetPageJSActions", {
@@ -2716,9 +2723,9 @@ class InternalRenderTask {
     }
   }
 }
-const version = '3.9.0';
+const version = '3.10.0';
 exports.version = version;
-const build = '7ae5a0f';
+const build = '3994752';
 exports.build = build;
 
 /***/ }),
@@ -2907,6 +2914,7 @@ class AnnotationEditor {
   #isEditing = false;
   #isInEditMode = false;
   _uiManager = null;
+  #isDraggable = false;
   #zIndex = AnnotationEditor._zIndex++;
   static _colorManager = new _tools.ColorManager();
   static _zIndex = 1;
@@ -2963,6 +2971,13 @@ class AnnotationEditor {
   get propertiesToUpdate() {
     return [];
   }
+  get _isDraggable() {
+    return this.#isDraggable;
+  }
+  set _isDraggable(value) {
+    this.#isDraggable = value;
+    this.div?.classList.toggle("draggable", value);
+  }
   addCommands(params) {
     this._uiManager.addCommands(params);
   }
@@ -3014,13 +3029,6 @@ class AnnotationEditor {
   }
   addToAnnotationStorage() {
     this._uiManager.addToAnnotationStorage(this);
-  }
-  dragstart(event) {
-    const rect = this.parent.div.getBoundingClientRect();
-    this.startX = event.clientX - rect.x;
-    this.startY = event.clientY - rect.y;
-    event.dataTransfer.setData("text/plain", this.id);
-    event.dataTransfer.effectAllowed = "move";
   }
   setAt(x, y, tx, ty) {
     const [width, height] = this.parentDimensions;
@@ -3169,8 +3177,8 @@ class AnnotationEditor {
     event.preventDefault();
     this.#resizePosition = [event.clientX, event.clientY];
     const boundResizerPointermove = this.#resizerPointermove.bind(this, name);
-    const savedDraggable = this.div.draggable;
-    this.div.draggable = false;
+    const savedDraggable = this._isDraggable;
+    this._isDraggable = false;
     const resizingClassName = `resizing${name.charAt(0).toUpperCase()}${name.slice(1)}`;
     this.parent.div.classList.add(resizingClassName);
     const pointerMoveOptions = {
@@ -3180,13 +3188,14 @@ class AnnotationEditor {
     window.addEventListener("pointermove", boundResizerPointermove, pointerMoveOptions);
     const pointerUpCallback = () => {
       this._uiManager.stopUndoAccumulation();
-      this.div.draggable = savedDraggable;
+      this._isDraggable = savedDraggable;
       this.parent.div.classList.remove(resizingClassName);
+      window.removeEventListener("pointerup", pointerUpCallback);
+      window.removeEventListener("blur", pointerUpCallback);
       window.removeEventListener("pointermove", boundResizerPointermove, pointerMoveOptions);
     };
-    window.addEventListener("pointerup", pointerUpCallback, {
-      once: true
-    });
+    window.addEventListener("pointerup", pointerUpCallback);
+    window.addEventListener("blur", pointerUpCallback);
   }
   #resizerPointermove(name, event) {
     const {
@@ -3367,7 +3376,7 @@ class AnnotationEditor {
     }
     const [tx, ty] = this.getInitialTranslation();
     this.translate(tx, ty);
-    (0, _tools.bindEvents)(this, this.div, ["dragstart", "pointerdown"]);
+    (0, _tools.bindEvents)(this, this.div, ["pointerdown"]);
     return this.div;
   }
   pointerdown(event) {
@@ -3384,6 +3393,76 @@ class AnnotationEditor {
       this.parent.setSelected(this);
     }
     this.#hasBeenSelected = true;
+    this.#setUpDragSession(event);
+  }
+  #setUpDragSession(event) {
+    if (!this._isDraggable) {
+      return;
+    }
+    this._uiManager.disableUserSelect(true);
+    const savedParent = this.parent;
+    const savedX = this.x;
+    const savedY = this.y;
+    const pointerMoveOptions = {
+      passive: true,
+      capture: true
+    };
+    const pointerMoveCallback = e => {
+      const [parentWidth, parentHeight] = this.parentDimensions;
+      const [tx, ty] = this.screenToPageTranslation(e.movementX, e.movementY);
+      this.x += tx / parentWidth;
+      this.y += ty / parentHeight;
+      if (this.x < 0 || this.x > 1 || this.y < 0 || this.y > 1) {
+        const {
+          x,
+          y
+        } = this.div.getBoundingClientRect();
+        if (this.parent.findNewParent(this, x, y)) {
+          this.x -= Math.floor(this.x);
+          this.y -= Math.floor(this.y);
+        }
+      }
+      this.div.style.left = `${(100 * this.x).toFixed(2)}%`;
+      this.div.style.top = `${(100 * this.y).toFixed(2)}%`;
+      this.div.scrollIntoView({
+        block: "nearest"
+      });
+    };
+    window.addEventListener("pointermove", pointerMoveCallback, pointerMoveOptions);
+    const pointerUpCallback = () => {
+      this._uiManager.disableUserSelect(false);
+      window.removeEventListener("pointerup", pointerUpCallback);
+      window.removeEventListener("blur", pointerUpCallback);
+      window.removeEventListener("pointermove", pointerMoveCallback, pointerMoveOptions);
+      const newParent = this.parent;
+      const newX = this.x;
+      const newY = this.y;
+      if (newParent === savedParent && newX === savedX && newY === savedY) {
+        return;
+      }
+      this.addCommands({
+        cmd: () => {
+          newParent.changeParent(this);
+          this.x = newX;
+          this.y = newY;
+          this.fixAndSetPosition();
+          newParent.moveEditorInDOM(this);
+        },
+        undo: () => {
+          savedParent.changeParent(this);
+          this.x = savedX;
+          this.y = savedY;
+          this.fixAndSetPosition();
+          savedParent.moveEditorInDOM(this);
+        },
+        mustExec: false
+      });
+      this.fixAndSetPosition();
+      this.parent.moveEditorInDOM(this);
+      this.div.focus();
+    };
+    window.addEventListener("pointerup", pointerUpCallback);
+    window.addEventListener("blur", pointerUpCallback);
   }
   getRect(tx, ty) {
     const scale = this.parentScale;
@@ -3581,6 +3660,18 @@ class ImageManager {
   #baseId = (0, _util.getUuid)();
   #id = 0;
   #cache = null;
+  static get _isSVGFittingCanvas() {
+    const svg = `data:image/svg+xml;charset=UTF-8,<svg viewBox="0 0 1 1" width="1" height="1" xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1" style="fill:red;"/></svg>`;
+    const canvas = new OffscreenCanvas(1, 3);
+    const ctx = canvas.getContext("2d");
+    const image = new Image();
+    image.src = svg;
+    const promise = image.decode().then(() => {
+      ctx.drawImage(image, 0, 0, 1, 1, 0, 0, 1, 3);
+      return new Uint32Array(ctx.getImageData(0, 0, 1, 1).data.buffer)[0] === 0;
+    });
+    return (0, _util.shadow)(this, "_isSVGFittingCanvas", promise);
+  }
   async #get(key, rawData) {
     this.#cache ||= new Map();
     let data = this.#cache.get(key);
@@ -3610,6 +3701,7 @@ class ImageManager {
         image = data.file = rawData;
       }
       if (image.type === "image/svg+xml") {
+        const mustRemoveAspectRatioPromise = ImageManager._isSVGFittingCanvas;
         const fileReader = new FileReader();
         const imageElement = new Image();
         const imagePromise = new Promise((resolve, reject) => {
@@ -3618,8 +3710,9 @@ class ImageManager {
             data.isSvg = true;
             resolve();
           };
-          fileReader.onload = () => {
-            imageElement.src = data.svgUrl = fileReader.result;
+          fileReader.onload = async () => {
+            const url = data.svgUrl = fileReader.result;
+            imageElement.src = (await mustRemoveAspectRatioPromise) ? `${url}#svgView(preserveAspectRatio(none))` : url;
           };
           imageElement.onerror = fileReader.onerror = reject;
         });
@@ -3910,6 +4003,7 @@ class AnnotationEditorUIManager {
   #translation = [0, 0];
   #translationTimeoutId = null;
   #container = null;
+  #viewer = null;
   static TRANSLATE_SMALL = 1;
   static TRANSLATE_BIG = 10;
   static get _keyboardManager() {
@@ -3948,8 +4042,9 @@ class AnnotationEditorUIManager {
       checker: arrowChecker
     }]]));
   }
-  constructor(container, eventBus, pdfDocument, pageColors) {
+  constructor(container, viewer, eventBus, pdfDocument, pageColors) {
     this.#container = container;
+    this.#viewer = viewer;
     this.#eventBus = eventBus;
     this.#eventBus._on("editingaction", this.#boundOnEditingAction);
     this.#eventBus._on("pagechanging", this.#boundOnPageChanging);
@@ -3989,6 +4084,23 @@ class AnnotationEditorUIManager {
   }
   focusMainContainer() {
     this.#container.focus();
+  }
+  findParent(x, y) {
+    for (const layer of this.#allLayers.values()) {
+      const {
+        x: layerX,
+        y: layerY,
+        width,
+        height
+      } = layer.div.getBoundingClientRect();
+      if (x >= layerX && x <= layerX + width && y >= layerY && y <= layerY + height) {
+        return layer;
+      }
+    }
+    return null;
+  }
+  disableUserSelect(value = false) {
+    this.#viewer.classList.toggle("noUserSelect", value);
   }
   addShouldRescale(editor) {
     this.#editorsToRescale.add(editor);
@@ -4148,6 +4260,7 @@ class AnnotationEditorUIManager {
       this.#dispatchUpdateStates({
         isEditing: false
       });
+      this.disableUserSelect(false);
     }
   }
   registerEditorTypes(types) {
@@ -9202,7 +9315,7 @@ class OptionalContentConfig {
     this.#cachedGetHash = null;
   }
   get hasInitialVisibility() {
-    return this.getHash() === this.#initialHash;
+    return this.#initialHash === null || this.getHash() === this.#initialHash;
   }
   getOrder() {
     if (!this.#groups.size) {
@@ -12398,7 +12511,6 @@ Object.defineProperty(exports, "__esModule", ({
 exports.AnnotationEditorLayer = void 0;
 var _util = __w_pdfjs_require__(1);
 var _editor = __w_pdfjs_require__(4);
-var _tools = __w_pdfjs_require__(5);
 var _freetext = __w_pdfjs_require__(28);
 var _ink = __w_pdfjs_require__(33);
 var _display_utils = __w_pdfjs_require__(6);
@@ -12596,7 +12708,7 @@ class AnnotationEditorLayer {
       this.addInkEditorIfNeeded(false);
     }
   }
-  #changeParent(editor) {
+  changeParent(editor) {
     if (editor.parent === this) {
       return;
     }
@@ -12614,7 +12726,7 @@ class AnnotationEditorLayer {
     }
   }
   add(editor) {
-    this.#changeParent(editor);
+    this.changeParent(editor);
     this.#uiManager.addEditor(editor);
     this.attach(editor);
     if (!editor.isAttachedToDOM) {
@@ -12738,24 +12850,13 @@ class AnnotationEditorLayer {
     const editor = this.#uiManager.getActive();
     this.#allowClick = !editor || editor.isEmpty();
   }
-  drop(event) {
-    const id = event.dataTransfer.getData("text/plain");
-    const editor = this.#uiManager.getEditor(id);
-    if (!editor) {
-      return;
+  findNewParent(editor, x, y) {
+    const layer = this.#uiManager.findParent(x, y);
+    if (layer === null || layer === this) {
+      return false;
     }
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    this.#changeParent(editor);
-    const rect = this.div.getBoundingClientRect();
-    const endX = event.clientX - rect.x;
-    const endY = event.clientY - rect.y;
-    editor.translate(endX - editor.startX, endY - editor.startY);
-    this.moveEditorInDOM(editor);
-    editor.div.focus();
-  }
-  dragover(event) {
-    event.preventDefault();
+    layer.changeParent(editor);
+    return true;
   }
   destroy() {
     if (this.#uiManager.getActive()?.parent === this) {
@@ -12785,7 +12886,6 @@ class AnnotationEditorLayer {
   }) {
     this.viewport = viewport;
     (0, _display_utils.setLayerDimensions)(this.div, viewport);
-    (0, _tools.bindEvents)(this, this.div, ["dragover", "drop"]);
     for (const editor of this.#uiManager.getEditors(this.pageIndex)) {
       this.add(editor);
     }
@@ -12974,7 +13074,7 @@ class FreeTextEditor extends _editor.AnnotationEditor {
     super.enableEditMode();
     this.overlayDiv.classList.remove("enabled");
     this.editorDiv.contentEditable = true;
-    this.div.draggable = false;
+    this._isDraggable = false;
     this.div.removeAttribute("aria-activedescendant");
     this.editorDiv.addEventListener("keydown", this.#boundEditorDivKeydown);
     this.editorDiv.addEventListener("focus", this.#boundEditorDivFocus);
@@ -12990,7 +13090,7 @@ class FreeTextEditor extends _editor.AnnotationEditor {
     this.overlayDiv.classList.add("enabled");
     this.editorDiv.contentEditable = false;
     this.div.setAttribute("aria-activedescendant", this.#editorDivId);
-    this.div.draggable = true;
+    this._isDraggable = true;
     this.editorDiv.removeEventListener("keydown", this.#boundEditorDivKeydown);
     this.editorDiv.removeEventListener("focus", this.#boundEditorDivFocus);
     this.editorDiv.removeEventListener("blur", this.#boundEditorDivBlur);
@@ -13194,10 +13294,10 @@ class FreeTextEditor extends _editor.AnnotationEditor {
         this.setAt(baseX * parentWidth, baseY * parentHeight, this.width * parentWidth, this.height * parentHeight);
       }
       this.#setContent();
-      this.div.draggable = true;
+      this._isDraggable = true;
       this.editorDiv.contentEditable = false;
     } else {
-      this.div.draggable = false;
+      this._isDraggable = false;
       this.editorDiv.contentEditable = true;
     }
     return this.div;
@@ -13546,26 +13646,38 @@ class AnnotationElement {
   get _commonActions() {
     const setColor = (jsName, styleName, event) => {
       const color = event.detail[jsName];
-      event.target.style[styleName] = _scripting_utils.ColorConverters[`${color[0]}_HTML`](color.slice(1));
+      const colorType = color[0];
+      const colorArray = color.slice(1);
+      event.target.style[styleName] = _scripting_utils.ColorConverters[`${colorType}_HTML`](colorArray);
+      this.annotationStorage.setValue(this.data.id, {
+        [styleName]: _scripting_utils.ColorConverters[`${colorType}_rgb`](colorArray)
+      });
     };
     return (0, _util.shadow)(this, "_commonActions", {
       display: event => {
-        const hidden = event.detail.display % 2 === 1;
+        const {
+          display
+        } = event.detail;
+        const hidden = display % 2 === 1;
         this.container.style.visibility = hidden ? "hidden" : "visible";
         this.annotationStorage.setValue(this.data.id, {
-          hidden,
-          print: event.detail.display === 0 || event.detail.display === 3
+          noView: hidden,
+          noPrint: display === 1 || display === 2
         });
       },
       print: event => {
         this.annotationStorage.setValue(this.data.id, {
-          print: event.detail.print
+          noPrint: !event.detail.print
         });
       },
       hidden: event => {
-        this.container.style.visibility = event.detail.hidden ? "hidden" : "visible";
+        const {
+          hidden
+        } = event.detail;
+        this.container.style.visibility = hidden ? "hidden" : "visible";
         this.annotationStorage.setValue(this.data.id, {
-          hidden: event.detail.hidden
+          noPrint: hidden,
+          noView: hidden
         });
       },
       focus: event => {
@@ -15665,6 +15777,9 @@ exports.ColorConverters = void 0;
 function makeColorComp(n) {
   return Math.floor(Math.max(0, Math.min(1, n)) * 255).toString(16).padStart(2, "0");
 }
+function scaleAndClamp(x) {
+  return Math.max(0, Math.min(255, 255 * x));
+}
 class ColorConverters {
   static CMYK_G([c, y, m, k]) {
     return ["G", 1 - Math.min(1, 0.3 * c + 0.59 * m + 0.11 * y + k)];
@@ -15675,6 +15790,10 @@ class ColorConverters {
   static G_RGB([g]) {
     return ["RGB", g, g, g];
   }
+  static G_rgb([g]) {
+    g = scaleAndClamp(g);
+    return [g, g, g];
+  }
   static G_HTML([g]) {
     const G = makeColorComp(g);
     return `#${G}${G}${G}`;
@@ -15682,17 +15801,23 @@ class ColorConverters {
   static RGB_G([r, g, b]) {
     return ["G", 0.3 * r + 0.59 * g + 0.11 * b];
   }
-  static RGB_HTML([r, g, b]) {
-    const R = makeColorComp(r);
-    const G = makeColorComp(g);
-    const B = makeColorComp(b);
-    return `#${R}${G}${B}`;
+  static RGB_rgb(color) {
+    return color.map(scaleAndClamp);
+  }
+  static RGB_HTML(color) {
+    return `#${color.map(makeColorComp).join("")}`;
   }
   static T_HTML() {
     return "#00000000";
   }
+  static T_rgb() {
+    return [null];
+  }
   static CMYK_RGB([c, y, m, k]) {
     return ["RGB", 1 - Math.min(1, c + k), 1 - Math.min(1, m + k), 1 - Math.min(1, y + k)];
+  }
+  static CMYK_rgb([c, y, m, k]) {
+    return [scaleAndClamp(1 - Math.min(1, c + k)), scaleAndClamp(1 - Math.min(1, m + k)), scaleAndClamp(1 - Math.min(1, y + k))];
   }
   static CMYK_HTML(components) {
     const rgb = this.CMYK_RGB(components).slice(1);
@@ -16199,7 +16324,7 @@ class InkEditor extends _editor.AnnotationEditor {
       return;
     }
     super.enableEditMode();
-    this.div.draggable = false;
+    this._isDraggable = false;
     this.canvas.addEventListener("pointerdown", this.#boundCanvasPointerdown);
   }
   disableEditMode() {
@@ -16207,12 +16332,12 @@ class InkEditor extends _editor.AnnotationEditor {
       return;
     }
     super.disableEditMode();
-    this.div.draggable = !this.isEmpty();
+    this._isDraggable = !this.isEmpty();
     this.div.classList.remove("editing");
     this.canvas.removeEventListener("pointerdown", this.#boundCanvasPointerdown);
   }
   onceAdded() {
-    this.div.draggable = !this.isEmpty();
+    this._isDraggable = !this.isEmpty();
   }
   isEmpty() {
     return this.paths.length === 0 || this.paths.length === 1 && this.paths[0].length === 0;
@@ -16808,8 +16933,8 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.StampEditor = void 0;
-var _editor = __w_pdfjs_require__(4);
 var _util = __w_pdfjs_require__(1);
+var _editor = __w_pdfjs_require__(4);
 var _display_utils = __w_pdfjs_require__(6);
 var _annotation_layer = __w_pdfjs_require__(29);
 class StampEditor extends _editor.AnnotationEditor {
@@ -16828,6 +16953,10 @@ class StampEditor extends _editor.AnnotationEditor {
       name: "stampEditor"
     });
     this.#bitmapUrl = params.bitmapUrl;
+  }
+  static get supportedTypes() {
+    const types = ["apng", "avif", "bmp", "gif", "jpeg", "png", "svg+xml", "webp", "x-icon"];
+    return (0, _util.shadow)(this, "supportedTypes", types.map(type => `image/${type}`).join(","));
   }
   #getBitmap() {
     if (this.#bitmapId) {
@@ -16861,7 +16990,7 @@ class StampEditor extends _editor.AnnotationEditor {
     }
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = StampEditor.supportedTypes;
     this.#bitmapPromise = new Promise(resolve => {
       input.addEventListener("change", async () => {
         this.#bitmapPromise = null;
@@ -16914,7 +17043,7 @@ class StampEditor extends _editor.AnnotationEditor {
     }
   }
   onceAdded() {
-    this.div.draggable = true;
+    this._isDraggable = true;
     this.parent.addUndoableEditor(this);
     this.div.focus();
   }
@@ -17420,8 +17549,8 @@ var _tools = __w_pdfjs_require__(5);
 var _annotation_layer = __w_pdfjs_require__(29);
 var _worker_options = __w_pdfjs_require__(14);
 var _xfa_layer = __w_pdfjs_require__(32);
-const pdfjsVersion = '3.9.0';
-const pdfjsBuild = '7ae5a0f';
+const pdfjsVersion = '3.10.0';
+const pdfjsBuild = '3994752';
 })();
 
 /******/ 	return __webpack_exports__;

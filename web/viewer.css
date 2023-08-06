@@ -880,7 +880,7 @@
 }
 
 .annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor)[draggable="true"] {
+  :is(.freeTextEditor, .inkEditor, .stampEditor).draggable {
   cursor: move;
 }
 
@@ -1157,6 +1157,12 @@
   position: relative;
   width: 0;
   height: var(--viewer-container-height);
+}
+
+.pdfViewer.noUserSelect {
+  -webkit-user-select: none;
+     -moz-user-select: none;
+          user-select: none;
 }
 
 .pdfViewer.removePageBorders .page {
