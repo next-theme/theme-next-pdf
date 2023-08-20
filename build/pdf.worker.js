@@ -57855,7 +57855,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.10.0';
-const pdfjsBuild = '690b873';
+const pdfjsBuild = '5828ac0';
 })();
 
 /******/ 	return __webpack_exports__;

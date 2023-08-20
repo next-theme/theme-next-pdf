@@ -1103,7 +1103,17 @@ class PDFDocumentLoadingTask {
   }
   async destroy() {
     this.destroyed = true;
-    await this._transport?.destroy();
+    try {
+      if (this._worker?.port) {
+        this._worker._pendingDestroy = true;
+      }
+      await this._transport?.destroy();
+    } catch (ex) {
+      if (this._worker?.port) {
+        delete this._worker._pendingDestroy;
+      }
+      throw ex;
+    }
     this._transport = null;
     if (this._worker) {
       this._worker.destroy();
@@ -1784,9 +1794,6 @@ class PDFWorker {
     port = null,
     verbosity = (0, _util.getVerbosityLevel)()
   } = {}) {
-    if (port && PDFWorker.#workerPorts.has(port)) {
-      throw new Error("Cannot use more than one PDFWorker per port.");
-    }
     this.name = name;
     this.destroyed = false;
     this.verbosity = verbosity;
@@ -1795,6 +1802,9 @@ class PDFWorker {
     this._webWorker = null;
     this._messageHandler = null;
     if (port) {
+      if (PDFWorker.#workerPorts.has(port)) {
+        throw new Error("Cannot use more than one PDFWorker per port.");
+      }
       PDFWorker.#workerPorts.set(port, this);
       this._initializeFromPort(port);
       return;
@@ -1932,8 +1942,12 @@ class PDFWorker {
     if (!params?.port) {
       throw new Error("PDFWorker.fromPort - invalid method signature.");
     }
-    if (this.#workerPorts.has(params.port)) {
-      return this.#workerPorts.get(params.port);
+    const cachedPort = this.#workerPorts.get(params.port);
+    if (cachedPort) {
+      if (cachedPort._pendingDestroy) {
+        throw new Error("PDFWorker.fromPort - the worker is being destroyed.\n" + "Please remember to await `PDFDocumentLoadingTask.destroy()`-calls.");
+      }
+      return cachedPort;
     }
     return new PDFWorker(params);
   }
@@ -2727,7 +2741,7 @@ class InternalRenderTask {
 }
 const version = '3.10.0';
 exports.version = version;
-const build = '690b873';
+const build = '5828ac0';
 exports.build = build;
 
 /***/ }),
@@ -17239,7 +17253,20 @@ class StampEditor extends _editor.AnnotationEditor {
       bitmapFile: item.getAsFile()
     });
   }
+  #getBitmapFetched(data, fromId = false) {
+    if (!data) {
+      this.remove();
+      return;
+    }
+    this.#bitmap = data.bitmap;
+    if (!fromId) {
+      this.#bitmapId = data.id;
+      this.#isSvg = data.isSvg;
+    }
+    this.#createCanvas();
+  }
   #getBitmapDone() {
+    this.#bitmapPromise = null;
     this._uiManager.enableWaiting(false);
     if (this.#canvas) {
       this.div.focus();
@@ -17248,52 +17275,21 @@ class StampEditor extends _editor.AnnotationEditor {
   #getBitmap() {
     if (this.#bitmapId) {
       this._uiManager.enableWaiting(true);
-      this._uiManager.imageManager.getFromId(this.#bitmapId).then(data => {
-        if (!data) {
-          this.remove();
-          return;
-        }
-        this.#bitmap = data.bitmap;
-        this.#createCanvas();
-      }).finally(() => this.#getBitmapDone());
+      this._uiManager.imageManager.getFromId(this.#bitmapId).then(data => this.#getBitmapFetched(data, true)).finally(() => this.#getBitmapDone());
       return;
     }
     if (this.#bitmapUrl) {
       const url = this.#bitmapUrl;
       this.#bitmapUrl = null;
       this._uiManager.enableWaiting(true);
-      this.#bitmapPromise = this._uiManager.imageManager.getFromUrl(url).then(data => {
-        this.#bitmapPromise = null;
-        if (!data) {
-          this.remove();
-          return;
-        }
-        ({
-          bitmap: this.#bitmap,
-          id: this.#bitmapId,
-          isSvg: this.#isSvg
-        } = data);
-        this.#createCanvas();
-      }).finally(() => this.#getBitmapDone());
+      this.#bitmapPromise = this._uiManager.imageManager.getFromUrl(url).then(data => this.#getBitmapFetched(data)).finally(() => this.#getBitmapDone());
       return;
     }
     if (this.#bitmapFile) {
       const file = this.#bitmapFile;
       this.#bitmapFile = null;
       this._uiManager.enableWaiting(true);
-      this.#bitmapPromise = this._uiManager.imageManager.getFromFile(file).then(data => {
-        this.#bitmapPromise = null;
-        if (!data) {
-          this.remove();
-          return;
-        }
-        ({
-          bitmap: this.#bitmap,
-          id: this.#bitmapId,
-          isSvg: this.#isSvg
-        } = data);
-        this.#createCanvas();
-      }).finally(() => this.#getBitmapDone());
+      this.#bitmapPromise = this._uiManager.imageManager.getFromFile(file).then(data => this.#getBitmapFetched(data)).finally(() => this.#getBitmapDone());
       return;
     }
     const input = document.createElement("input");
@@ -17301,27 +17297,16 @@ class StampEditor extends _editor.AnnotationEditor {
     input.accept = StampEditor.supportedTypesStr;
     this.#bitmapPromise = new Promise(resolve => {
       input.addEventListener("change", async () => {
-        this.#bitmapPromise = null;
         if (!input.files || input.files.length === 0) {
           this.remove();
         } else {
           this._uiManager.enableWaiting(true);
           const data = await this._uiManager.imageManager.getFromFile(input.files[0]);
-          if (!data) {
-            this.remove();
-            return;
-          }
-          ({
-            bitmap: this.#bitmap,
-            id: this.#bitmapId,
-            isSvg: this.#isSvg
-          } = data);
-          this.#createCanvas();
+          this.#getBitmapFetched(data);
         }
         resolve();
       });
       input.addEventListener("cancel", () => {
-        this.#bitmapPromise = null;
         this.remove();
         resolve();
       });
@@ -17362,7 +17347,7 @@ class StampEditor extends _editor.AnnotationEditor {
     this.div.focus();
   }
   isEmpty() {
-    return this.#bitmapPromise === null && this.#bitmap === null && this.#bitmapUrl === null;
+    return !(this.#bitmapPromise || this.#bitmap || this.#bitmapUrl || this.#bitmapFile);
   }
   get isResizable() {
     return true;
@@ -17876,7 +17861,7 @@ var _annotation_layer = __w_pdfjs_require__(29);
 var _worker_options = __w_pdfjs_require__(14);
 var _xfa_layer = __w_pdfjs_require__(32);
 const pdfjsVersion = '3.10.0';
-const pdfjsBuild = '690b873';
+const pdfjsBuild = '5828ac0';
 })();
 
 /******/ 	return __webpack_exports__;
