@@ -4165,9 +4165,6 @@ class PDFDocument {
       const partName = (0, _util.stringToPDFString)(field.get("T"));
       name = name === "" ? partName : `${name}.${partName}`;
     }
-    if (!field.has("Kids") && field.has("T") && /\[\d+\]$/.test(name)) {
-      name = name.substring(0, name.lastIndexOf("["));
-    }
     if (!promises.has(name)) {
       promises.set(name, []);
     }
@@ -5306,9 +5303,6 @@ class WidgetAnnotation extends Annotation {
     if (data.fieldName === undefined) {
       data.fieldName = this._constructFieldName(dict);
     }
-    if (data.fieldName && /\[\d+\]$/.test(data.fieldName) && !dict.has("Kids") && dict.has("T")) {
-      data.baseFieldName = data.fieldName.substring(0, data.fieldName.lastIndexOf("["));
-    }
     if (data.actions === undefined) {
       data.actions = (0, _core_utils.collectActions)(xref, dict, _util.AnnotationActionEventType);
     }
@@ -6264,6 +6258,9 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
       this._streams.push(this.uncheckedAppearance);
     }
     this._fallbackFontDict = this.fallbackFontDict;
+    if (this.data.defaultFieldValue === null) {
+      this.data.defaultFieldValue = "Off";
+    }
   }
   _processRadioButton(params) {
     this.data.fieldValue = this.data.buttonValue = null;
@@ -6302,6 +6299,9 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
       this._streams.push(this.uncheckedAppearance);
     }
     this._fallbackFontDict = this.fallbackFontDict;
+    if (this.data.defaultFieldValue === null) {
+      this.data.defaultFieldValue = "Off";
+    }
   }
   _processPushButton(params) {
     if (!params.dict.has("A") && !params.dict.has("AA") && !this.data.alternativeText) {
@@ -57855,7 +57855,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.10.0';
-const pdfjsBuild = '5828ac0';
+const pdfjsBuild = '598421b';
 })();
 
 /******/ 	return __webpack_exports__;
