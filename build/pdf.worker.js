@@ -101,7 +101,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = '3.10.0';
+    const workerVersion = '3.11.0';
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }
@@ -638,7 +638,7 @@ if (typeof window === "undefined" && !_util.isNodeJS && typeof self !== "undefin
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.VerbosityLevel = exports.Util = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.TextRenderingMode = exports.RenderingIntentFlag = exports.PromiseCapability = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.MAX_IMAGE_SIZE_TO_CACHE = exports.LINE_FACTOR = exports.LINE_DESCENT_FACTOR = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FeatureTest = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.BASELINE_FACTOR = exports.AnnotationType = exports.AnnotationReplyType = exports.AnnotationMode = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationEditorType = exports.AnnotationEditorPrefix = exports.AnnotationEditorParamsType = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
+exports.VerbosityLevel = exports.Util = exports.UnknownErrorException = exports.UnexpectedResponseException = exports.TextRenderingMode = exports.RenderingIntentFlag = exports.PromiseCapability = exports.PermissionFlag = exports.PasswordResponses = exports.PasswordException = exports.PageActionEventType = exports.OPS = exports.MissingPDFException = exports.MAX_IMAGE_SIZE_TO_CACHE = exports.LINE_FACTOR = exports.LINE_DESCENT_FACTOR = exports.InvalidPDFException = exports.ImageKind = exports.IDENTITY_MATRIX = exports.FormatError = exports.FeatureTest = exports.FONT_IDENTITY_MATRIX = exports.DocumentActionEventType = exports.CMapCompressionType = exports.BaseException = exports.BASELINE_FACTOR = exports.AnnotationType = exports.AnnotationReplyType = exports.AnnotationPrefix = exports.AnnotationMode = exports.AnnotationFlag = exports.AnnotationFieldFlag = exports.AnnotationEditorType = exports.AnnotationEditorPrefix = exports.AnnotationEditorParamsType = exports.AnnotationBorderStyleType = exports.AnnotationActionEventType = exports.AbortException = void 0;
 exports.assert = assert;
 exports.bytesToString = bytesToString;
 exports.createValidAbsoluteUrl = createValidAbsoluteUrl;
@@ -1436,6 +1436,8 @@ function getUuid() {
   }
   return bytesToString(buf);
 }
+const AnnotationPrefix = "pdfjs_internal_id_";
+exports.AnnotationPrefix = AnnotationPrefix;
 
 /***/ }),
 /* 3 */
@@ -3363,12 +3365,13 @@ class Page {
     if (!structTreeRoot) {
       return null;
     }
+    await this._parsedAnnotations;
     const structTree = await this.pdfManager.ensure(this, "_parseStructTree", [structTreeRoot]);
     return structTree.serializable;
   }
   _parseStructTree(structTreeRoot) {
     const tree = new _struct_tree.StructTreePage(structTreeRoot, this.pageDict);
-    tree.parse();
+    tree.parse(this.ref);
     return tree;
   }
   async getAnnotationsData(handler, task, intent) {
@@ -3416,7 +3419,7 @@ class Page {
     const parsedAnnotations = this.pdfManager.ensure(this, "annotations").then(() => {
       const annotationPromises = [];
       for (const annotationRef of this.annotations) {
-        annotationPromises.push(_annotation.AnnotationFactory.create(this.xref, annotationRef, this.pdfManager, this._localIdFactory, false).catch(function (reason) {
+        annotationPromises.push(_annotation.AnnotationFactory.create(this.xref, annotationRef, this.pdfManager, this._localIdFactory, false, this.ref).catch(function (reason) {
           (0, _util.warn)(`_parsedAnnotations: "${reason}".`);
           return null;
         }));
@@ -4168,7 +4171,7 @@ class PDFDocument {
     if (!promises.has(name)) {
       promises.set(name, []);
     }
-    promises.get(name).push(_annotation.AnnotationFactory.create(this.xref, fieldRef, this.pdfManager, this._localIdFactory, true).then(annotation => annotation?.getFieldObject()).catch(function (reason) {
+    promises.get(name).push(_annotation.AnnotationFactory.create(this.xref, fieldRef, this.pdfManager, this._localIdFactory, true, null).then(annotation => annotation?.getFieldObject()).catch(function (reason) {
       (0, _util.warn)(`_collectFieldObjects: "${reason}".`);
       return null;
     }));
@@ -4263,10 +4266,10 @@ var _object_loader = __w_pdfjs_require__(76);
 var _operator_list = __w_pdfjs_require__(64);
 var _factory = __w_pdfjs_require__(77);
 class AnnotationFactory {
-  static create(xref, ref, pdfManager, idFactory, collectFields) {
-    return Promise.all([pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("baseUrl"), pdfManager.ensureCatalog("attachments"), pdfManager.ensureDoc("xfaDatasets"), collectFields ? this._getPageIndex(xref, ref, pdfManager) : -1]).then(([acroForm, baseUrl, attachments, xfaDatasets, pageIndex]) => pdfManager.ensure(this, "_create", [xref, ref, pdfManager, idFactory, acroForm, attachments, xfaDatasets, collectFields, pageIndex]));
+  static create(xref, ref, pdfManager, idFactory, collectFields, pageRef) {
+    return Promise.all([pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("baseUrl"), pdfManager.ensureCatalog("attachments"), pdfManager.ensureDoc("xfaDatasets"), collectFields ? this._getPageIndex(xref, ref, pdfManager) : -1, pageRef ? pdfManager.ensureCatalog("structTreeRoot") : null]).then(([acroForm, baseUrl, attachments, xfaDatasets, pageIndex, structTreeRoot]) => pdfManager.ensure(this, "_create", [xref, ref, pdfManager, idFactory, acroForm, attachments, xfaDatasets, collectFields, pageIndex, structTreeRoot, pageRef]));
   }
-  static _create(xref, ref, pdfManager, idFactory, acroForm, attachments = null, xfaDatasets, collectFields, pageIndex = -1) {
+  static _create(xref, ref, pdfManager, idFactory, acroForm, attachments = null, xfaDatasets, collectFields, pageIndex = -1, structTreeRoot = null, pageRef = null) {
     const dict = xref.fetchIfRef(ref);
     if (!(dict instanceof _primitives.Dict)) {
       return undefined;
@@ -4288,7 +4291,9 @@ class AnnotationFactory {
       collectFields,
       needAppearances: !collectFields && acroFormDict.get("NeedAppearances") === true,
       pageIndex,
-      evaluatorOptions: pdfManager.evaluatorOptions
+      evaluatorOptions: pdfManager.evaluatorOptions,
+      structTreeRoot,
+      pageRef
     };
     switch (subtype) {
       case "Link":
@@ -4634,6 +4639,11 @@ class Annotation {
     }
     const isLocked = !!(this.flags & _util.AnnotationFlag.LOCKED);
     const isContentLocked = !!(this.flags & _util.AnnotationFlag.LOCKEDCONTENTS);
+    if (params.structTreeRoot) {
+      let structParent = dict.get("StructParent");
+      structParent = Number.isInteger(structParent) && structParent >= 0 ? structParent : -1;
+      params.structTreeRoot.addAnnotationIdToPage(params.pageRef, structParent);
+    }
     this.data = {
       annotationFlags: this.flags,
       borderStyle: this.borderStyle,
@@ -45047,23 +45057,40 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.StructTreeRoot = exports.StructTreePage = void 0;
-var _primitives = __w_pdfjs_require__(4);
 var _util = __w_pdfjs_require__(2);
+var _primitives = __w_pdfjs_require__(4);
 var _name_number_tree = __w_pdfjs_require__(71);
 const MAX_DEPTH = 40;
 const StructElementType = {
-  PAGE_CONTENT: "PAGE_CONTENT",
-  STREAM_CONTENT: "STREAM_CONTENT",
-  OBJECT: "OBJECT",
-  ELEMENT: "ELEMENT"
+  PAGE_CONTENT: 1,
+  STREAM_CONTENT: 2,
+  OBJECT: 3,
+  ANNOTATION: 4,
+  ELEMENT: 5
 };
 class StructTreeRoot {
   constructor(rootDict) {
     this.dict = rootDict;
     this.roleMap = new Map();
+    this.structParentIds = null;
   }
   init() {
     this.readRoleMap();
+  }
+  #addIdToPage(pageRef, id, type) {
+    if (!(pageRef instanceof _primitives.Ref) || id < 0) {
+      return;
+    }
+    this.structParentIds ||= new _primitives.RefSetCache();
+    let ids = this.structParentIds.get(pageRef);
+    if (!ids) {
+      ids = [];
+      this.structParentIds.put(pageRef, ids);
+    }
+    ids.push([id, type]);
+  }
+  addAnnotationIdToPage(pageRef, id) {
+    this.#addIdToPage(pageRef, id, StructElementType.ANNOTATION);
   }
   readRoleMap() {
     const roleMapDict = this.dict.get("RoleMap");
@@ -45147,9 +45174,10 @@ class StructElementNode {
       if (this.tree.pageDict.objId !== pageObjId) {
         return null;
       }
+      const kidRef = kidDict.getRaw("Stm");
       return new StructElement({
         type: StructElementType.STREAM_CONTENT,
-        refObjId: kidDict.getRaw("Stm") instanceof _primitives.Ref ? kidDict.getRaw("Stm").toString() : null,
+        refObjId: kidRef instanceof _primitives.Ref ? kidRef.toString() : null,
         pageObjId,
         mcid: kidDict.get("MCID")
       });
@@ -45158,9 +45186,10 @@ class StructElementNode {
       if (this.tree.pageDict.objId !== pageObjId) {
         return null;
       }
+      const kidRef = kidDict.getRaw("Obj");
       return new StructElement({
         type: StructElementType.OBJECT,
-        refObjId: kidDict.getRaw("Obj") instanceof _primitives.Ref ? kidDict.getRaw("Obj").toString() : null,
+        refObjId: kidRef instanceof _primitives.Ref ? kidRef.toString() : null,
         pageObjId
       });
     }
@@ -45193,7 +45222,7 @@ class StructTreePage {
     this.pageDict = pageDict;
     this.nodes = [];
   }
-  parse() {
+  parse(pageRef) {
     if (!this.root || !this.rootDict) {
       return;
     }
@@ -45202,18 +45231,32 @@ class StructTreePage {
       return;
     }
     const id = this.pageDict.get("StructParents");
-    if (!Number.isInteger(id)) {
-      return;
-    }
-    const numberTree = new _name_number_tree.NumberTree(parentTree, this.rootDict.xref);
-    const parentArray = numberTree.get(id);
-    if (!Array.isArray(parentArray)) {
+    const ids = pageRef instanceof _primitives.Ref && this.root.structParentIds?.get(pageRef);
+    if (!Number.isInteger(id) && !ids) {
       return;
     }
     const map = new Map();
-    for (const ref of parentArray) {
-      if (ref instanceof _primitives.Ref) {
-        this.addNode(this.rootDict.xref.fetch(ref), map);
+    const numberTree = new _name_number_tree.NumberTree(parentTree, this.rootDict.xref);
+    if (Number.isInteger(id)) {
+      const parentArray = numberTree.get(id);
+      if (Array.isArray(parentArray)) {
+        for (const ref of parentArray) {
+          if (ref instanceof _primitives.Ref) {
+            this.addNode(this.rootDict.xref.fetch(ref), map);
+          }
+        }
+      }
+    }
+    if (!ids) {
+      return;
+    }
+    for (const [elemId, type] of ids) {
+      const obj = numberTree.get(elemId);
+      if (obj) {
+        const elem = this.addNode(this.rootDict.xref.fetchIfRef(obj), map);
+        if (elem?.kids?.length === 1 && elem.kids[0].type === StructElementType.OBJECT) {
+          elem.kids[0].type = type;
+        }
       }
     }
   }
@@ -45307,6 +45350,11 @@ class StructTreePage {
           obj.children.push({
             type: "object",
             id: kid.refObjId
+          });
+        } else if (kid.type === StructElementType.ANNOTATION) {
+          obj.children.push({
+            type: "annotation",
+            id: `${_util.AnnotationPrefix}${kid.refObjId}`
           });
         }
       }
@@ -57720,9 +57768,7 @@ class PDFWorkerStream {
     return reader;
   }
   cancelAllRequests(reason) {
-    if (this._fullRequestReader) {
-      this._fullRequestReader.cancel(reason);
-    }
+    this._fullRequestReader?.cancel(reason);
     for (const reader of this._rangeRequestReaders.slice(0)) {
       reader.cancel(reason);
     }
@@ -57854,8 +57900,8 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
   }
 }));
 var _worker = __w_pdfjs_require__(1);
-const pdfjsVersion = '3.10.0';
-const pdfjsBuild = '598421b';
+const pdfjsVersion = '3.11.0';
+const pdfjsBuild = '87ea2ed';
 })();
 
 /******/ 	return __webpack_exports__;

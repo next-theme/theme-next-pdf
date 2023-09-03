@@ -3405,12 +3405,11 @@ function addLinkAttributes(link, {
   if (!url || typeof url !== "string") {
     throw new Error('A valid "url" parameter must provided.');
   }
-  const urlNullRemoved = (0, _ui_utils.removeNullCharacters)(url);
   if (enabled) {
-    link.href = link.title = urlNullRemoved;
+    link.href = link.title = url;
   } else {
     link.href = "";
-    link.title = `Disabled: ${urlNullRemoved}`;
+    link.title = `Disabled: ${url}`;
     link.onclick = () => {
       return false;
     };
@@ -8361,7 +8360,7 @@ class PDFViewer {
   #scaleTimeoutId = null;
   #textLayerMode = _ui_utils.TextLayerMode.ENABLE;
   constructor(options) {
-    const viewerVersion = '3.10.0';
+    const viewerVersion = '3.11.0';
     if (_pdfjsLib.version !== viewerVersion) {
       throw new Error(`The API version "${_pdfjsLib.version}" does not match the Viewer version "${viewerVersion}".`);
     }
@@ -10874,7 +10873,7 @@ exports.AnnotationLayerBuilder = AnnotationLayerBuilder;
 
 /***/ }),
 /* 33 */
-/***/ ((__unused_webpack_module, exports) => {
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
 
 
 
@@ -10882,6 +10881,7 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.StructTreeLayerBuilder = void 0;
+var _ui_utils = __webpack_require__(3);
 const PDF_ROLE_TO_HTML_ROLE = {
   Document: null,
   DocumentFragment: null,
@@ -10949,14 +10949,19 @@ class StructTreeLayerBuilder {
     }
   }
   #setAttributes(structElement, htmlElement) {
-    if (structElement.alt !== undefined) {
-      htmlElement.setAttribute("aria-label", structElement.alt);
+    const {
+      alt,
+      id,
+      lang
+    } = structElement;
+    if (alt !== undefined) {
+      htmlElement.setAttribute("aria-label", (0, _ui_utils.removeNullCharacters)(alt));
     }
-    if (structElement.id !== undefined) {
-      htmlElement.setAttribute("aria-owns", structElement.id);
+    if (id !== undefined) {
+      htmlElement.setAttribute("aria-owns", id);
     }
-    if (structElement.lang !== undefined) {
-      htmlElement.setAttribute("lang", structElement.lang);
+    if (lang !== undefined) {
+      htmlElement.setAttribute("lang", (0, _ui_utils.removeNullCharacters)(lang, true));
     }
   }
   #walk(node) {
@@ -13647,8 +13652,8 @@ var _ui_utils = __webpack_require__(3);
 var _app_options = __webpack_require__(5);
 var _pdf_link_service = __webpack_require__(7);
 var _app = __webpack_require__(2);
-const pdfjsVersion = '3.10.0';
-const pdfjsBuild = '598421b';
+const pdfjsVersion = '3.11.0';
+const pdfjsBuild = '87ea2ed';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,
