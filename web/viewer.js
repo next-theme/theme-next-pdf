@@ -11115,33 +11115,36 @@ class TextAccessibilityManager {
       id
     } = element;
     if (!id) {
-      return;
+      return null;
     }
     if (!this.#enabled) {
       this.#waitingElements.set(element, isRemovable);
-      return;
+      return null;
     }
     if (isRemovable) {
       this.removePointerInTextLayer(element);
     }
     const children = this.#textChildren;
     if (!children || children.length === 0) {
-      return;
+      return null;
     }
     const index = (0, _ui_utils.binarySearchFirstItem)(children, node => TextAccessibilityManager.#compareElementPositions(element, node) < 0);
     const nodeIndex = Math.max(0, index - 1);
-    this.#addIdToAriaOwns(id, children[nodeIndex]);
+    const child = children[nodeIndex];
+    this.#addIdToAriaOwns(id, child);
     this.#textNodes.set(id, nodeIndex);
+    const parent = child.parentNode;
+    return parent?.classList.contains("markedContent") ? parent.id : null;
   }
   moveElementInDOM(container, element, contentElement, isRemovable) {
-    this.addPointerInTextLayer(contentElement, isRemovable);
+    const id = this.addPointerInTextLayer(contentElement, isRemovable);
     if (!container.hasChildNodes()) {
       container.append(element);
-      return;
+      return id;
     }
     const children = Array.from(container.childNodes).filter(node => node !== element);
     if (children.length === 0) {
-      return;
+      return id;
     }
     const elementToCompare = contentElement || element;
     const index = (0, _ui_utils.binarySearchFirstItem)(children, node => TextAccessibilityManager.#compareElementPositions(elementToCompare, node) < 0);
@@ -11150,6 +11153,7 @@ class TextAccessibilityManager {
     } else {
       children[index - 1].after(element);
     }
+    return id;
   }
 }
 exports.TextAccessibilityManager = TextAccessibilityManager;
@@ -13653,7 +13657,7 @@ var _app_options = __webpack_require__(5);
 var _pdf_link_service = __webpack_require__(7);
 var _app = __webpack_require__(2);
 const pdfjsVersion = '3.11.0';
-const pdfjsBuild = '87ea2ed';
+const pdfjsBuild = '18a661b';
 const AppConstants = {
   LinkTarget: _pdf_link_service.LinkTarget,
   RenderingStates: _ui_utils.RenderingStates,
