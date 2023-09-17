@@ -420,9 +420,10 @@ class WorkerMessageHandler {
       annotationStorage,
       filename
     }) {
-      const promises = [pdfManager.requestLoadedStream(), pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("acroFormRef"), pdfManager.ensureDoc("startXRef"), pdfManager.ensureDoc("linearization")];
+      const globalPromises = [pdfManager.requestLoadedStream(), pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("acroFormRef"), pdfManager.ensureDoc("startXRef"), pdfManager.ensureDoc("xref"), pdfManager.ensureDoc("linearization")];
+      const promises = [];
       const newAnnotationsByPage = !isPureXfa ? (0, _core_utils.getNewAnnotationsMap)(annotationStorage) : null;
-      const xref = await pdfManager.ensureDoc("xref");
+      const [stream, acroForm, acroFormRef, startXRef, xref, linearization] = await Promise.all(globalPromises);
       if (newAnnotationsByPage) {
         const imagePromises = _annotation.AnnotationFactory.generateImages(annotationStorage.values(), xref, pdfManager.evaluatorOptions.isOffscreenCanvasSupported);
         for (const [pageIndex, annotations] of newAnnotationsByPage) {
@@ -446,74 +447,73 @@ class WorkerMessageHandler {
           }));
         }
       }
-      return Promise.all(promises).then(function ([stream, acroForm, acroFormRef, startXRef, linearization, ...refs]) {
-        let newRefs = [];
-        let xfaData = null;
-        if (isPureXfa) {
-          xfaData = refs[0];
-          if (!xfaData) {
-            return stream.bytes;
-          }
-        } else {
-          newRefs = refs.flat(2);
-          if (newRefs.length === 0) {
-            return stream.bytes;
+      const refs = await Promise.all(promises);
+      let newRefs = [];
+      let xfaData = null;
+      if (isPureXfa) {
+        xfaData = refs[0];
+        if (!xfaData) {
+          return stream.bytes;
+        }
+      } else {
+        newRefs = refs.flat(2);
+        if (newRefs.length === 0) {
+          return stream.bytes;
+        }
+      }
+      const needAppearances = acroFormRef && acroForm instanceof _primitives.Dict && newRefs.some(ref => ref.needAppearances);
+      const xfa = acroForm instanceof _primitives.Dict && acroForm.get("XFA") || null;
+      let xfaDatasetsRef = null;
+      let hasXfaDatasetsEntry = false;
+      if (Array.isArray(xfa)) {
+        for (let i = 0, ii = xfa.length; i < ii; i += 2) {
+          if (xfa[i] === "datasets") {
+            xfaDatasetsRef = xfa[i + 1];
+            hasXfaDatasetsEntry = true;
           }
         }
-        const needAppearances = acroFormRef && acroForm instanceof _primitives.Dict && newRefs.some(ref => ref.needAppearances);
-        const xfa = acroForm instanceof _primitives.Dict && acroForm.get("XFA") || null;
-        let xfaDatasetsRef = null;
-        let hasXfaDatasetsEntry = false;
-        if (Array.isArray(xfa)) {
-          for (let i = 0, ii = xfa.length; i < ii; i += 2) {
-            if (xfa[i] === "datasets") {
-              xfaDatasetsRef = xfa[i + 1];
-              hasXfaDatasetsEntry = true;
+        if (xfaDatasetsRef === null) {
+          xfaDatasetsRef = xref.getNewTemporaryRef();
+        }
+      } else if (xfa) {
+        (0, _util.warn)("Unsupported XFA type.");
+      }
+      let newXrefInfo = Object.create(null);
+      if (xref.trailer) {
+        const infoObj = Object.create(null);
+        const xrefInfo = xref.trailer.get("Info") || null;
+        if (xrefInfo instanceof _primitives.Dict) {
+          xrefInfo.forEach((key, value) => {
+            if (typeof value === "string") {
+              infoObj[key] = (0, _util.stringToPDFString)(value);
             }
-          }
-          if (xfaDatasetsRef === null) {
-            xfaDatasetsRef = xref.getNewTemporaryRef();
-          }
-        } else if (xfa) {
-          (0, _util.warn)("Unsupported XFA type.");
+          });
         }
-        let newXrefInfo = Object.create(null);
-        if (xref.trailer) {
-          const infoObj = Object.create(null);
-          const xrefInfo = xref.trailer.get("Info") || null;
-          if (xrefInfo instanceof _primitives.Dict) {
-            xrefInfo.forEach((key, value) => {
-              if (typeof value === "string") {
-                infoObj[key] = (0, _util.stringToPDFString)(value);
-              }
-            });
-          }
-          newXrefInfo = {
-            rootRef: xref.trailer.getRaw("Root") || null,
-            encryptRef: xref.trailer.getRaw("Encrypt") || null,
-            newRef: xref.getNewTemporaryRef(),
-            infoRef: xref.trailer.getRaw("Info") || null,
-            info: infoObj,
-            fileIds: xref.trailer.get("ID") || null,
-            startXRef: linearization ? startXRef : xref.lastXRefStreamPos ?? startXRef,
-            filename
-          };
-        }
-        return (0, _writer.incrementalUpdate)({
-          originalData: stream.bytes,
-          xrefInfo: newXrefInfo,
-          newRefs,
-          xref,
-          hasXfa: !!xfa,
-          xfaDatasetsRef,
-          hasXfaDatasetsEntry,
-          needAppearances,
-          acroFormRef,
-          acroForm,
-          xfaData
-        }).finally(() => {
-          xref.resetNewTemporaryRef();
-        });
+        newXrefInfo = {
+          rootRef: xref.trailer.getRaw("Root") || null,
+          encryptRef: xref.trailer.getRaw("Encrypt") || null,
+          newRef: xref.getNewTemporaryRef(),
+          infoRef: xref.trailer.getRaw("Info") || null,
+          info: infoObj,
+          fileIds: xref.trailer.get("ID") || null,
+          startXRef: linearization ? startXRef : xref.lastXRefStreamPos ?? startXRef,
+          filename
+        };
+      }
+      return (0, _writer.incrementalUpdate)({
+        originalData: stream.bytes,
+        xrefInfo: newXrefInfo,
+        newRefs,
+        xref,
+        hasXfa: !!xfa,
+        xfaDatasetsRef,
+        hasXfaDatasetsEntry,
+        needAppearances,
+        acroFormRef,
+        acroForm,
+        xfaData
+      }).finally(() => {
+        xref.resetNewTemporaryRef();
       });
     });
     handler.on("GetOperatorList", function (data, sink) {
@@ -8363,8 +8363,11 @@ class DeviceRgbCS extends ColorSpace {
     return bits === 8;
   }
 }
-const DeviceCmykCS = function DeviceCmykCSClosure() {
-  function convertToRgb(src, srcOffset, srcScale, dest, destOffset) {
+class DeviceCmykCS extends ColorSpace {
+  constructor() {
+    super("DeviceCMYK", 4);
+  }
+  #toRgb(src, srcOffset, srcScale, dest, destOffset) {
     const c = src[srcOffset] * srcScale;
     const m = src[srcOffset + 1] * srcScale;
     const y = src[srcOffset + 2] * srcScale;
@@ -8373,104 +8376,110 @@ const DeviceCmykCS = function DeviceCmykCSClosure() {
     dest[destOffset + 1] = 255 + c * (8.841041422036149 * c + 60.118027045597366 * m + 6.871425592049007 * y + 31.159100130055922 * k + -79.2970844816548) + m * (-15.310361306967817 * m + 17.575251261109482 * y + 131.35250912493976 * k - 190.9453302588951) + y * (4.444339102852739 * y + 9.8632861493405 * k - 24.86741582555878) + k * (-20.737325471181034 * k - 187.80453709719578);
     dest[destOffset + 2] = 255 + c * (0.8842522430003296 * c + 8.078677503112928 * m + 30.89978309703729 * y - 0.23883238689178934 * k + -14.183576799673286) + m * (10.49593273432072 * m + 63.02378494754052 * y + 50.606957656360734 * k - 112.23884253719248) + y * (0.03296041114873217 * y + 115.60384449646641 * k + -193.58209356861505) + k * (-22.33816807309886 * k - 180.12613974708367);
   }
-  class DeviceCmykCS extends ColorSpace {
-    constructor() {
-      super("DeviceCMYK", 4);
-    }
-    getRgbItem(src, srcOffset, dest, destOffset) {
-      convertToRgb(src, srcOffset, 1, dest, destOffset);
-    }
-    getRgbBuffer(src, srcOffset, count, dest, destOffset, bits, alpha01) {
-      const scale = 1 / ((1 << bits) - 1);
-      for (let i = 0; i < count; i++) {
-        convertToRgb(src, srcOffset, scale, dest, destOffset);
-        srcOffset += 4;
-        destOffset += 3 + alpha01;
-      }
-    }
-    getOutputLength(inputLength, alpha01) {
-      return inputLength / 4 * (3 + alpha01) | 0;
+  getRgbItem(src, srcOffset, dest, destOffset) {
+    this.#toRgb(src, srcOffset, 1, dest, destOffset);
+  }
+  getRgbBuffer(src, srcOffset, count, dest, destOffset, bits, alpha01) {
+    const scale = 1 / ((1 << bits) - 1);
+    for (let i = 0; i < count; i++) {
+      this.#toRgb(src, srcOffset, scale, dest, destOffset);
+      srcOffset += 4;
+      destOffset += 3 + alpha01;
     }
   }
-  return DeviceCmykCS;
-}();
-const CalGrayCS = function CalGrayCSClosure() {
-  function convertToRgb(cs, src, srcOffset, dest, destOffset, scale) {
+  getOutputLength(inputLength, alpha01) {
+    return inputLength / 4 * (3 + alpha01) | 0;
+  }
+}
+class CalGrayCS extends ColorSpace {
+  constructor(whitePoint, blackPoint, gamma) {
+    super("CalGray", 1);
+    if (!whitePoint) {
+      throw new _util.FormatError("WhitePoint missing - required for color space CalGray");
+    }
+    [this.XW, this.YW, this.ZW] = whitePoint;
+    [this.XB, this.YB, this.ZB] = blackPoint || [0, 0, 0];
+    this.G = gamma || 1;
+    if (this.XW < 0 || this.ZW < 0 || this.YW !== 1) {
+      throw new _util.FormatError(`Invalid WhitePoint components for ${this.name}, no fallback available`);
+    }
+    if (this.XB < 0 || this.YB < 0 || this.ZB < 0) {
+      (0, _util.info)(`Invalid BlackPoint for ${this.name}, falling back to default.`);
+      this.XB = this.YB = this.ZB = 0;
+    }
+    if (this.XB !== 0 || this.YB !== 0 || this.ZB !== 0) {
+      (0, _util.warn)(`${this.name}, BlackPoint: XB: ${this.XB}, YB: ${this.YB}, ` + `ZB: ${this.ZB}, only default values are supported.`);
+    }
+    if (this.G < 1) {
+      (0, _util.info)(`Invalid Gamma: ${this.G} for ${this.name}, falling back to default.`);
+      this.G = 1;
+    }
+  }
+  #toRgb(src, srcOffset, dest, destOffset, scale) {
     const A = src[srcOffset] * scale;
-    const AG = A ** cs.G;
-    const L = cs.YW * AG;
+    const AG = A ** this.G;
+    const L = this.YW * AG;
     const val = Math.max(295.8 * L ** 0.3333333333333333 - 40.8, 0);
     dest[destOffset] = val;
     dest[destOffset + 1] = val;
     dest[destOffset + 2] = val;
   }
-  class CalGrayCS extends ColorSpace {
-    constructor(whitePoint, blackPoint, gamma) {
-      super("CalGray", 1);
-      if (!whitePoint) {
-        throw new _util.FormatError("WhitePoint missing - required for color space CalGray");
-      }
-      blackPoint ||= [0, 0, 0];
-      gamma ||= 1;
-      this.XW = whitePoint[0];
-      this.YW = whitePoint[1];
-      this.ZW = whitePoint[2];
-      this.XB = blackPoint[0];
-      this.YB = blackPoint[1];
-      this.ZB = blackPoint[2];
-      this.G = gamma;
-      if (this.XW < 0 || this.ZW < 0 || this.YW !== 1) {
-        throw new _util.FormatError(`Invalid WhitePoint components for ${this.name}` + ", no fallback available");
-      }
-      if (this.XB < 0 || this.YB < 0 || this.ZB < 0) {
-        (0, _util.info)(`Invalid BlackPoint for ${this.name}, falling back to default.`);
-        this.XB = this.YB = this.ZB = 0;
-      }
-      if (this.XB !== 0 || this.YB !== 0 || this.ZB !== 0) {
-        (0, _util.warn)(`${this.name}, BlackPoint: XB: ${this.XB}, YB: ${this.YB}, ` + `ZB: ${this.ZB}, only default values are supported.`);
-      }
-      if (this.G < 1) {
-        (0, _util.info)(`Invalid Gamma: ${this.G} for ${this.name}, ` + "falling back to default.");
-        this.G = 1;
-      }
-    }
-    getRgbItem(src, srcOffset, dest, destOffset) {
-      convertToRgb(this, src, srcOffset, dest, destOffset, 1);
-    }
-    getRgbBuffer(src, srcOffset, count, dest, destOffset, bits, alpha01) {
-      const scale = 1 / ((1 << bits) - 1);
-      for (let i = 0; i < count; ++i) {
-        convertToRgb(this, src, srcOffset, dest, destOffset, scale);
-        srcOffset += 1;
-        destOffset += 3 + alpha01;
-      }
-    }
-    getOutputLength(inputLength, alpha01) {
-      return inputLength * (3 + alpha01);
+  getRgbItem(src, srcOffset, dest, destOffset) {
+    this.#toRgb(src, srcOffset, dest, destOffset, 1);
+  }
+  getRgbBuffer(src, srcOffset, count, dest, destOffset, bits, alpha01) {
+    const scale = 1 / ((1 << bits) - 1);
+    for (let i = 0; i < count; ++i) {
+      this.#toRgb(src, srcOffset, dest, destOffset, scale);
+      srcOffset += 1;
+      destOffset += 3 + alpha01;
     }
   }
-  return CalGrayCS;
-}();
-const CalRGBCS = function CalRGBCSClosure() {
-  const BRADFORD_SCALE_MATRIX = new Float32Array([0.8951, 0.2664, -0.1614, -0.7502, 1.7135, 0.0367, 0.0389, -0.0685, 1.0296]);
-  const BRADFORD_SCALE_INVERSE_MATRIX = new Float32Array([0.9869929, -0.1470543, 0.1599627, 0.4323053, 0.5183603, 0.0492912, -0.0085287, 0.0400428, 0.9684867]);
-  const SRGB_D65_XYZ_TO_RGB_MATRIX = new Float32Array([3.2404542, -1.5371385, -0.4985314, -0.9692660, 1.8760108, 0.0415560, 0.0556434, -0.2040259, 1.0572252]);
-  const FLAT_WHITEPOINT_MATRIX = new Float32Array([1, 1, 1]);
-  const tempNormalizeMatrix = new Float32Array(3);
-  const tempConvertMatrix1 = new Float32Array(3);
-  const tempConvertMatrix2 = new Float32Array(3);
-  const DECODE_L_CONSTANT = ((8 + 16) / 116) ** 3 / 8.0;
-  function matrixProduct(a, b, result) {
+  getOutputLength(inputLength, alpha01) {
+    return inputLength * (3 + alpha01);
+  }
+}
+class CalRGBCS extends ColorSpace {
+  static #BRADFORD_SCALE_MATRIX = new Float32Array([0.8951, 0.2664, -0.1614, -0.7502, 1.7135, 0.0367, 0.0389, -0.0685, 1.0296]);
+  static #BRADFORD_SCALE_INVERSE_MATRIX = new Float32Array([0.9869929, -0.1470543, 0.1599627, 0.4323053, 0.5183603, 0.0492912, -0.0085287, 0.0400428, 0.9684867]);
+  static #SRGB_D65_XYZ_TO_RGB_MATRIX = new Float32Array([3.2404542, -1.5371385, -0.4985314, -0.9692660, 1.8760108, 0.0415560, 0.0556434, -0.2040259, 1.0572252]);
+  static #FLAT_WHITEPOINT_MATRIX = new Float32Array([1, 1, 1]);
+  static #tempNormalizeMatrix = new Float32Array(3);
+  static #tempConvertMatrix1 = new Float32Array(3);
+  static #tempConvertMatrix2 = new Float32Array(3);
+  static #DECODE_L_CONSTANT = ((8 + 16) / 116) ** 3 / 8.0;
+  constructor(whitePoint, blackPoint, gamma, matrix) {
+    super("CalRGB", 3);
+    if (!whitePoint) {
+      throw new _util.FormatError("WhitePoint missing - required for color space CalRGB");
+    }
+    const [XW, YW, ZW] = this.whitePoint = whitePoint;
+    const [XB, YB, ZB] = this.blackPoint = blackPoint || new Float32Array(3);
+    [this.GR, this.GG, this.GB] = gamma || new Float32Array([1, 1, 1]);
+    [this.MXA, this.MYA, this.MZA, this.MXB, this.MYB, this.MZB, this.MXC, this.MYC, this.MZC] = matrix || new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+    if (XW < 0 || ZW < 0 || YW !== 1) {
+      throw new _util.FormatError(`Invalid WhitePoint components for ${this.name}, no fallback available`);
+    }
+    if (XB < 0 || YB < 0 || ZB < 0) {
+      (0, _util.info)(`Invalid BlackPoint for ${this.name} [${XB}, ${YB}, ${ZB}], ` + "falling back to default.");
+      this.blackPoint = new Float32Array(3);
+    }
+    if (this.GR < 0 || this.GG < 0 || this.GB < 0) {
+      (0, _util.info)(`Invalid Gamma [${this.GR}, ${this.GG}, ${this.GB}] for ` + `${this.name}, falling back to default.`);
+      this.GR = this.GG = this.GB = 1;
+    }
+  }
+  #matrixProduct(a, b, result) {
     result[0] = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
     result[1] = a[3] * b[0] + a[4] * b[1] + a[5] * b[2];
     result[2] = a[6] * b[0] + a[7] * b[1] + a[8] * b[2];
   }
-  function convertToFlat(sourceWhitePoint, LMS, result) {
+  #toFlat(sourceWhitePoint, LMS, result) {
     result[0] = LMS[0] * 1 / sourceWhitePoint[0];
     result[1] = LMS[1] * 1 / sourceWhitePoint[1];
     result[2] = LMS[2] * 1 / sourceWhitePoint[2];
   }
-  function convertToD65(sourceWhitePoint, LMS, result) {
+  #toD65(sourceWhitePoint, LMS, result) {
     const D65X = 0.95047;
     const D65Y = 1;
     const D65Z = 1.08883;
@@ -8478,41 +8487,41 @@ const CalRGBCS = function CalRGBCSClosure() {
     result[1] = LMS[1] * D65Y / sourceWhitePoint[1];
     result[2] = LMS[2] * D65Z / sourceWhitePoint[2];
   }
-  function sRGBTransferFunction(color) {
+  #sRGBTransferFunction(color) {
     if (color <= 0.0031308) {
-      return adjustToRange(0, 1, 12.92 * color);
+      return this.#adjustToRange(0, 1, 12.92 * color);
     }
     if (color >= 0.99554525) {
       return 1;
     }
-    return adjustToRange(0, 1, (1 + 0.055) * color ** (1 / 2.4) - 0.055);
+    return this.#adjustToRange(0, 1, (1 + 0.055) * color ** (1 / 2.4) - 0.055);
   }
-  function adjustToRange(min, max, value) {
+  #adjustToRange(min, max, value) {
     return Math.max(min, Math.min(max, value));
   }
-  function decodeL(L) {
+  #decodeL(L) {
     if (L < 0) {
-      return -decodeL(-L);
+      return -this.#decodeL(-L);
     }
     if (L > 8.0) {
       return ((L + 16) / 116) ** 3;
     }
-    return L * DECODE_L_CONSTANT;
+    return L * CalRGBCS.#DECODE_L_CONSTANT;
   }
-  function compensateBlackPoint(sourceBlackPoint, XYZ_Flat, result) {
+  #compensateBlackPoint(sourceBlackPoint, XYZ_Flat, result) {
     if (sourceBlackPoint[0] === 0 && sourceBlackPoint[1] === 0 && sourceBlackPoint[2] === 0) {
       result[0] = XYZ_Flat[0];
       result[1] = XYZ_Flat[1];
       result[2] = XYZ_Flat[2];
       return;
     }
-    const zeroDecodeL = decodeL(0);
+    const zeroDecodeL = this.#decodeL(0);
     const X_DST = zeroDecodeL;
-    const X_SRC = decodeL(sourceBlackPoint[0]);
+    const X_SRC = this.#decodeL(sourceBlackPoint[0]);
     const Y_DST = zeroDecodeL;
-    const Y_SRC = decodeL(sourceBlackPoint[1]);
+    const Y_SRC = this.#decodeL(sourceBlackPoint[1]);
     const Z_DST = zeroDecodeL;
-    const Z_SRC = decodeL(sourceBlackPoint[2]);
+    const Z_SRC = this.#decodeL(sourceBlackPoint[2]);
     const X_Scale = (1 - X_DST) / (1 - X_SRC);
     const X_Offset = 1 - X_Scale;
     const Y_Scale = (1 - Y_DST) / (1 - Y_SRC);
@@ -8523,7 +8532,7 @@ const CalRGBCS = function CalRGBCSClosure() {
     result[1] = XYZ_Flat[1] * Y_Scale + Y_Offset;
     result[2] = XYZ_Flat[2] * Z_Scale + Z_Offset;
   }
-  function normalizeWhitePointToFlat(sourceWhitePoint, XYZ_In, result) {
+  #normalizeWhitePointToFlat(sourceWhitePoint, XYZ_In, result) {
     if (sourceWhitePoint[0] === 1 && sourceWhitePoint[2] === 1) {
       result[0] = XYZ_In[0];
       result[1] = XYZ_In[1];
@@ -8531,136 +8540,116 @@ const CalRGBCS = function CalRGBCSClosure() {
       return;
     }
     const LMS = result;
-    matrixProduct(BRADFORD_SCALE_MATRIX, XYZ_In, LMS);
-    const LMS_Flat = tempNormalizeMatrix;
-    convertToFlat(sourceWhitePoint, LMS, LMS_Flat);
-    matrixProduct(BRADFORD_SCALE_INVERSE_MATRIX, LMS_Flat, result);
+    this.#matrixProduct(CalRGBCS.#BRADFORD_SCALE_MATRIX, XYZ_In, LMS);
+    const LMS_Flat = CalRGBCS.#tempNormalizeMatrix;
+    this.#toFlat(sourceWhitePoint, LMS, LMS_Flat);
+    this.#matrixProduct(CalRGBCS.#BRADFORD_SCALE_INVERSE_MATRIX, LMS_Flat, result);
   }
-  function normalizeWhitePointToD65(sourceWhitePoint, XYZ_In, result) {
+  #normalizeWhitePointToD65(sourceWhitePoint, XYZ_In, result) {
     const LMS = result;
-    matrixProduct(BRADFORD_SCALE_MATRIX, XYZ_In, LMS);
-    const LMS_D65 = tempNormalizeMatrix;
-    convertToD65(sourceWhitePoint, LMS, LMS_D65);
-    matrixProduct(BRADFORD_SCALE_INVERSE_MATRIX, LMS_D65, result);
+    this.#matrixProduct(CalRGBCS.#BRADFORD_SCALE_MATRIX, XYZ_In, LMS);
+    const LMS_D65 = CalRGBCS.#tempNormalizeMatrix;
+    this.#toD65(sourceWhitePoint, LMS, LMS_D65);
+    this.#matrixProduct(CalRGBCS.#BRADFORD_SCALE_INVERSE_MATRIX, LMS_D65, result);
   }
-  function convertToRgb(cs, src, srcOffset, dest, destOffset, scale) {
-    const A = adjustToRange(0, 1, src[srcOffset] * scale);
-    const B = adjustToRange(0, 1, src[srcOffset + 1] * scale);
-    const C = adjustToRange(0, 1, src[srcOffset + 2] * scale);
-    const AGR = A === 1 ? 1 : A ** cs.GR;
-    const BGG = B === 1 ? 1 : B ** cs.GG;
-    const CGB = C === 1 ? 1 : C ** cs.GB;
-    const X = cs.MXA * AGR + cs.MXB * BGG + cs.MXC * CGB;
-    const Y = cs.MYA * AGR + cs.MYB * BGG + cs.MYC * CGB;
-    const Z = cs.MZA * AGR + cs.MZB * BGG + cs.MZC * CGB;
-    const XYZ = tempConvertMatrix1;
+  #toRgb(src, srcOffset, dest, destOffset, scale) {
+    const A = this.#adjustToRange(0, 1, src[srcOffset] * scale);
+    const B = this.#adjustToRange(0, 1, src[srcOffset + 1] * scale);
+    const C = this.#adjustToRange(0, 1, src[srcOffset + 2] * scale);
+    const AGR = A === 1 ? 1 : A ** this.GR;
+    const BGG = B === 1 ? 1 : B ** this.GG;
+    const CGB = C === 1 ? 1 : C ** this.GB;
+    const X = this.MXA * AGR + this.MXB * BGG + this.MXC * CGB;
+    const Y = this.MYA * AGR + this.MYB * BGG + this.MYC * CGB;
+    const Z = this.MZA * AGR + this.MZB * BGG + this.MZC * CGB;
+    const XYZ = CalRGBCS.#tempConvertMatrix1;
     XYZ[0] = X;
     XYZ[1] = Y;
     XYZ[2] = Z;
-    const XYZ_Flat = tempConvertMatrix2;
-    normalizeWhitePointToFlat(cs.whitePoint, XYZ, XYZ_Flat);
-    const XYZ_Black = tempConvertMatrix1;
-    compensateBlackPoint(cs.blackPoint, XYZ_Flat, XYZ_Black);
-    const XYZ_D65 = tempConvertMatrix2;
-    normalizeWhitePointToD65(FLAT_WHITEPOINT_MATRIX, XYZ_Black, XYZ_D65);
-    const SRGB = tempConvertMatrix1;
-    matrixProduct(SRGB_D65_XYZ_TO_RGB_MATRIX, XYZ_D65, SRGB);
-    dest[destOffset] = sRGBTransferFunction(SRGB[0]) * 255;
-    dest[destOffset + 1] = sRGBTransferFunction(SRGB[1]) * 255;
-    dest[destOffset + 2] = sRGBTransferFunction(SRGB[2]) * 255;
+    const XYZ_Flat = CalRGBCS.#tempConvertMatrix2;
+    this.#normalizeWhitePointToFlat(this.whitePoint, XYZ, XYZ_Flat);
+    const XYZ_Black = CalRGBCS.#tempConvertMatrix1;
+    this.#compensateBlackPoint(this.blackPoint, XYZ_Flat, XYZ_Black);
+    const XYZ_D65 = CalRGBCS.#tempConvertMatrix2;
+    this.#normalizeWhitePointToD65(CalRGBCS.#FLAT_WHITEPOINT_MATRIX, XYZ_Black, XYZ_D65);
+    const SRGB = CalRGBCS.#tempConvertMatrix1;
+    this.#matrixProduct(CalRGBCS.#SRGB_D65_XYZ_TO_RGB_MATRIX, XYZ_D65, SRGB);
+    dest[destOffset] = this.#sRGBTransferFunction(SRGB[0]) * 255;
+    dest[destOffset + 1] = this.#sRGBTransferFunction(SRGB[1]) * 255;
+    dest[destOffset + 2] = this.#sRGBTransferFunction(SRGB[2]) * 255;
   }
-  class CalRGBCS extends ColorSpace {
-    constructor(whitePoint, blackPoint, gamma, matrix) {
-      super("CalRGB", 3);
-      if (!whitePoint) {
-        throw new _util.FormatError("WhitePoint missing - required for color space CalRGB");
-      }
-      blackPoint ||= new Float32Array(3);
-      gamma ||= new Float32Array([1, 1, 1]);
-      matrix ||= new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
-      const XW = whitePoint[0];
-      const YW = whitePoint[1];
-      const ZW = whitePoint[2];
-      this.whitePoint = whitePoint;
-      const XB = blackPoint[0];
-      const YB = blackPoint[1];
-      const ZB = blackPoint[2];
-      this.blackPoint = blackPoint;
-      this.GR = gamma[0];
-      this.GG = gamma[1];
-      this.GB = gamma[2];
-      this.MXA = matrix[0];
-      this.MYA = matrix[1];
-      this.MZA = matrix[2];
-      this.MXB = matrix[3];
-      this.MYB = matrix[4];
-      this.MZB = matrix[5];
-      this.MXC = matrix[6];
-      this.MYC = matrix[7];
-      this.MZC = matrix[8];
-      if (XW < 0 || ZW < 0 || YW !== 1) {
-        throw new _util.FormatError(`Invalid WhitePoint components for ${this.name}` + ", no fallback available");
-      }
-      if (XB < 0 || YB < 0 || ZB < 0) {
-        (0, _util.info)(`Invalid BlackPoint for ${this.name} [${XB}, ${YB}, ${ZB}], ` + "falling back to default.");
-        this.blackPoint = new Float32Array(3);
-      }
-      if (this.GR < 0 || this.GG < 0 || this.GB < 0) {
-        (0, _util.info)(`Invalid Gamma [${this.GR}, ${this.GG}, ${this.GB}] for ` + `${this.name}, falling back to default.`);
-        this.GR = this.GG = this.GB = 1;
-      }
-    }
-    getRgbItem(src, srcOffset, dest, destOffset) {
-      convertToRgb(this, src, srcOffset, dest, destOffset, 1);
-    }
-    getRgbBuffer(src, srcOffset, count, dest, destOffset, bits, alpha01) {
-      const scale = 1 / ((1 << bits) - 1);
-      for (let i = 0; i < count; ++i) {
-        convertToRgb(this, src, srcOffset, dest, destOffset, scale);
-        srcOffset += 3;
-        destOffset += 3 + alpha01;
-      }
-    }
-    getOutputLength(inputLength, alpha01) {
-      return inputLength * (3 + alpha01) / 3 | 0;
+  getRgbItem(src, srcOffset, dest, destOffset) {
+    this.#toRgb(src, srcOffset, dest, destOffset, 1);
+  }
+  getRgbBuffer(src, srcOffset, count, dest, destOffset, bits, alpha01) {
+    const scale = 1 / ((1 << bits) - 1);
+    for (let i = 0; i < count; ++i) {
+      this.#toRgb(src, srcOffset, dest, destOffset, scale);
+      srcOffset += 3;
+      destOffset += 3 + alpha01;
     }
   }
-  return CalRGBCS;
-}();
-const LabCS = function LabCSClosure() {
-  function fn_g(x) {
+  getOutputLength(inputLength, alpha01) {
+    return inputLength * (3 + alpha01) / 3 | 0;
+  }
+}
+class LabCS extends ColorSpace {
+  constructor(whitePoint, blackPoint, range) {
+    super("Lab", 3);
+    if (!whitePoint) {
+      throw new _util.FormatError("WhitePoint missing - required for color space Lab");
+    }
+    [this.XW, this.YW, this.ZW] = whitePoint;
+    [this.amin, this.amax, this.bmin, this.bmax] = range || [-100, 100, -100, 100];
+    [this.XB, this.YB, this.ZB] = blackPoint || [0, 0, 0];
+    if (this.XW < 0 || this.ZW < 0 || this.YW !== 1) {
+      throw new _util.FormatError("Invalid WhitePoint components, no fallback available");
+    }
+    if (this.XB < 0 || this.YB < 0 || this.ZB < 0) {
+      (0, _util.info)("Invalid BlackPoint, falling back to default");
+      this.XB = this.YB = this.ZB = 0;
+    }
+    if (this.amin > this.amax || this.bmin > this.bmax) {
+      (0, _util.info)("Invalid Range, falling back to defaults");
+      this.amin = -100;
+      this.amax = 100;
+      this.bmin = -100;
+      this.bmax = 100;
+    }
+  }
+  #fn_g(x) {
     return x >= 6 / 29 ? x ** 3 : 108 / 841 * (x - 4 / 29);
   }
-  function decode(value, high1, low2, high2) {
+  #decode(value, high1, low2, high2) {
     return low2 + value * (high2 - low2) / high1;
   }
-  function convertToRgb(cs, src, srcOffset, maxVal, dest, destOffset) {
+  #toRgb(src, srcOffset, maxVal, dest, destOffset) {
     let Ls = src[srcOffset];
     let as = src[srcOffset + 1];
     let bs = src[srcOffset + 2];
     if (maxVal !== false) {
-      Ls = decode(Ls, maxVal, 0, 100);
-      as = decode(as, maxVal, cs.amin, cs.amax);
-      bs = decode(bs, maxVal, cs.bmin, cs.bmax);
+      Ls = this.#decode(Ls, maxVal, 0, 100);
+      as = this.#decode(as, maxVal, this.amin, this.amax);
+      bs = this.#decode(bs, maxVal, this.bmin, this.bmax);
     }
-    if (as > cs.amax) {
-      as = cs.amax;
-    } else if (as < cs.amin) {
-      as = cs.amin;
+    if (as > this.amax) {
+      as = this.amax;
+    } else if (as < this.amin) {
+      as = this.amin;
     }
-    if (bs > cs.bmax) {
-      bs = cs.bmax;
-    } else if (bs < cs.bmin) {
-      bs = cs.bmin;
+    if (bs > this.bmax) {
+      bs = this.bmax;
+    } else if (bs < this.bmin) {
+      bs = this.bmin;
     }
     const M = (Ls + 16) / 116;
     const L = M + as / 500;
     const N = M - bs / 200;
-    const X = cs.XW * fn_g(L);
-    const Y = cs.YW * fn_g(M);
-    const Z = cs.ZW * fn_g(N);
+    const X = this.XW * this.#fn_g(L);
+    const Y = this.YW * this.#fn_g(M);
+    const Z = this.ZW * this.#fn_g(N);
     let r, g, b;
-    if (cs.ZW < 1) {
+    if (this.ZW < 1) {
       r = X * 3.1339 + Y * -1.617 + Z * -0.4906;
       g = X * -0.9785 + Y * 1.916 + Z * 0.0333;
       b = X * 0.072 + Y * -0.229 + Z * 1.4057;
@@ -8673,62 +8662,27 @@ const LabCS = function LabCSClosure() {
     dest[destOffset + 1] = Math.sqrt(g) * 255;
     dest[destOffset + 2] = Math.sqrt(b) * 255;
   }
-  class LabCS extends ColorSpace {
-    constructor(whitePoint, blackPoint, range) {
-      super("Lab", 3);
-      if (!whitePoint) {
-        throw new _util.FormatError("WhitePoint missing - required for color space Lab");
-      }
-      blackPoint ||= [0, 0, 0];
-      range ||= [-100, 100, -100, 100];
-      this.XW = whitePoint[0];
-      this.YW = whitePoint[1];
-      this.ZW = whitePoint[2];
-      this.amin = range[0];
-      this.amax = range[1];
-      this.bmin = range[2];
-      this.bmax = range[3];
-      this.XB = blackPoint[0];
-      this.YB = blackPoint[1];
-      this.ZB = blackPoint[2];
-      if (this.XW < 0 || this.ZW < 0 || this.YW !== 1) {
-        throw new _util.FormatError("Invalid WhitePoint components, no fallback available");
-      }
-      if (this.XB < 0 || this.YB < 0 || this.ZB < 0) {
-        (0, _util.info)("Invalid BlackPoint, falling back to default");
-        this.XB = this.YB = this.ZB = 0;
-      }
-      if (this.amin > this.amax || this.bmin > this.bmax) {
-        (0, _util.info)("Invalid Range, falling back to defaults");
-        this.amin = -100;
-        this.amax = 100;
-        this.bmin = -100;
-        this.bmax = 100;
-      }
-    }
-    getRgbItem(src, srcOffset, dest, destOffset) {
-      convertToRgb(this, src, srcOffset, false, dest, destOffset);
-    }
-    getRgbBuffer(src, srcOffset, count, dest, destOffset, bits, alpha01) {
-      const maxVal = (1 << bits) - 1;
-      for (let i = 0; i < count; i++) {
-        convertToRgb(this, src, srcOffset, maxVal, dest, destOffset);
-        srcOffset += 3;
-        destOffset += 3 + alpha01;
-      }
-    }
-    getOutputLength(inputLength, alpha01) {
-      return inputLength * (3 + alpha01) / 3 | 0;
-    }
-    isDefaultDecode(decodeMap, bpc) {
-      return true;
-    }
-    get usesZeroToOneRange() {
-      return (0, _util.shadow)(this, "usesZeroToOneRange", false);
+  getRgbItem(src, srcOffset, dest, destOffset) {
+    this.#toRgb(src, srcOffset, false, dest, destOffset);
+  }
+  getRgbBuffer(src, srcOffset, count, dest, destOffset, bits, alpha01) {
+    const maxVal = (1 << bits) - 1;
+    for (let i = 0; i < count; i++) {
+      this.#toRgb(src, srcOffset, maxVal, dest, destOffset);
+      srcOffset += 3;
+      destOffset += 3 + alpha01;
     }
   }
-  return LabCS;
-}();
+  getOutputLength(inputLength, alpha01) {
+    return inputLength * (3 + alpha01) / 3 | 0;
+  }
+  isDefaultDecode(decodeMap, bpc) {
+    return true;
+  }
+  get usesZeroToOneRange() {
+    return (0, _util.shadow)(this, "usesZeroToOneRange", false);
+  }
+}
 
 /***/ }),
 /* 13 */
@@ -8760,7 +8714,6 @@ var _decode_stream = __w_pdfjs_require__(18);
 var _fonts_utils = __w_pdfjs_require__(38);
 var _font_substitutions = __w_pdfjs_require__(61);
 var _glyphlist = __w_pdfjs_require__(39);
-var _core_utils = __w_pdfjs_require__(3);
 var _metrics = __w_pdfjs_require__(45);
 var _unicode = __w_pdfjs_require__(40);
 var _image_resizer = __w_pdfjs_require__(62);
@@ -12100,384 +12053,383 @@ class EvalState {
 }
 class EvaluatorPreprocessor {
   static get opMap() {
-    const getOPMap = (0, _core_utils.getLookupTableFactory)(function (t) {
-      t.w = {
+    return (0, _util.shadow)(this, "opMap", {
+      w: {
         id: _util.OPS.setLineWidth,
         numArgs: 1,
         variableArgs: false
-      };
-      t.J = {
+      },
+      J: {
         id: _util.OPS.setLineCap,
         numArgs: 1,
         variableArgs: false
-      };
-      t.j = {
+      },
+      j: {
         id: _util.OPS.setLineJoin,
         numArgs: 1,
         variableArgs: false
-      };
-      t.M = {
+      },
+      M: {
         id: _util.OPS.setMiterLimit,
         numArgs: 1,
         variableArgs: false
-      };
-      t.d = {
+      },
+      d: {
         id: _util.OPS.setDash,
         numArgs: 2,
         variableArgs: false
-      };
-      t.ri = {
+      },
+      ri: {
         id: _util.OPS.setRenderingIntent,
         numArgs: 1,
         variableArgs: false
-      };
-      t.i = {
+      },
+      i: {
         id: _util.OPS.setFlatness,
         numArgs: 1,
         variableArgs: false
-      };
-      t.gs = {
+      },
+      gs: {
         id: _util.OPS.setGState,
         numArgs: 1,
         variableArgs: false
-      };
-      t.q = {
+      },
+      q: {
         id: _util.OPS.save,
         numArgs: 0,
         variableArgs: false
-      };
-      t.Q = {
+      },
+      Q: {
         id: _util.OPS.restore,
         numArgs: 0,
         variableArgs: false
-      };
-      t.cm = {
+      },
+      cm: {
         id: _util.OPS.transform,
         numArgs: 6,
         variableArgs: false
-      };
-      t.m = {
+      },
+      m: {
         id: _util.OPS.moveTo,
         numArgs: 2,
         variableArgs: false
-      };
-      t.l = {
+      },
+      l: {
         id: _util.OPS.lineTo,
         numArgs: 2,
         variableArgs: false
-      };
-      t.c = {
+      },
+      c: {
         id: _util.OPS.curveTo,
         numArgs: 6,
         variableArgs: false
-      };
-      t.v = {
+      },
+      v: {
         id: _util.OPS.curveTo2,
         numArgs: 4,
         variableArgs: false
-      };
-      t.y = {
+      },
+      y: {
         id: _util.OPS.curveTo3,
         numArgs: 4,
         variableArgs: false
-      };
-      t.h = {
+      },
+      h: {
         id: _util.OPS.closePath,
         numArgs: 0,
         variableArgs: false
-      };
-      t.re = {
+      },
+      re: {
         id: _util.OPS.rectangle,
         numArgs: 4,
         variableArgs: false
-      };
-      t.S = {
+      },
+      S: {
         id: _util.OPS.stroke,
         numArgs: 0,
         variableArgs: false
-      };
-      t.s = {
+      },
+      s: {
         id: _util.OPS.closeStroke,
         numArgs: 0,
         variableArgs: false
-      };
-      t.f = {
+      },
+      f: {
         id: _util.OPS.fill,
         numArgs: 0,
         variableArgs: false
-      };
-      t.F = {
+      },
+      F: {
         id: _util.OPS.fill,
         numArgs: 0,
         variableArgs: false
-      };
-      t["f*"] = {
+      },
+      "f*": {
         id: _util.OPS.eoFill,
         numArgs: 0,
         variableArgs: false
-      };
-      t.B = {
+      },
+      B: {
         id: _util.OPS.fillStroke,
         numArgs: 0,
         variableArgs: false
-      };
-      t["B*"] = {
+      },
+      "B*": {
         id: _util.OPS.eoFillStroke,
         numArgs: 0,
         variableArgs: false
-      };
-      t.b = {
+      },
+      b: {
         id: _util.OPS.closeFillStroke,
         numArgs: 0,
         variableArgs: false
-      };
-      t["b*"] = {
+      },
+      "b*": {
         id: _util.OPS.closeEOFillStroke,
         numArgs: 0,
         variableArgs: false
-      };
-      t.n = {
+      },
+      n: {
         id: _util.OPS.endPath,
         numArgs: 0,
         variableArgs: false
-      };
-      t.W = {
+      },
+      W: {
         id: _util.OPS.clip,
         numArgs: 0,
         variableArgs: false
-      };
-      t["W*"] = {
+      },
+      "W*": {
         id: _util.OPS.eoClip,
         numArgs: 0,
         variableArgs: false
-      };
-      t.BT = {
+      },
+      BT: {
         id: _util.OPS.beginText,
         numArgs: 0,
         variableArgs: false
-      };
-      t.ET = {
+      },
+      ET: {
         id: _util.OPS.endText,
         numArgs: 0,
         variableArgs: false
-      };
-      t.Tc = {
+      },
+      Tc: {
         id: _util.OPS.setCharSpacing,
         numArgs: 1,
         variableArgs: false
-      };
-      t.Tw = {
+      },
+      Tw: {
         id: _util.OPS.setWordSpacing,
         numArgs: 1,
         variableArgs: false
-      };
-      t.Tz = {
+      },
+      Tz: {
         id: _util.OPS.setHScale,
         numArgs: 1,
         variableArgs: false
-      };
-      t.TL = {
+      },
+      TL: {
         id: _util.OPS.setLeading,
         numArgs: 1,
         variableArgs: false
-      };
-      t.Tf = {
+      },
+      Tf: {
         id: _util.OPS.setFont,
         numArgs: 2,
         variableArgs: false
-      };
-      t.Tr = {
+      },
+      Tr: {
         id: _util.OPS.setTextRenderingMode,
         numArgs: 1,
         variableArgs: false
-      };
-      t.Ts = {
+      },
+      Ts: {
         id: _util.OPS.setTextRise,
         numArgs: 1,
         variableArgs: false
-      };
-      t.Td = {
+      },
+      Td: {
         id: _util.OPS.moveText,
         numArgs: 2,
         variableArgs: false
-      };
-      t.TD = {
+      },
+      TD: {
         id: _util.OPS.setLeadingMoveText,
         numArgs: 2,
         variableArgs: false
-      };
-      t.Tm = {
+      },
+      Tm: {
         id: _util.OPS.setTextMatrix,
         numArgs: 6,
         variableArgs: false
-      };
-      t["T*"] = {
+      },
+      "T*": {
         id: _util.OPS.nextLine,
         numArgs: 0,
         variableArgs: false
-      };
-      t.Tj = {
+      },
+      Tj: {
         id: _util.OPS.showText,
         numArgs: 1,
         variableArgs: false
-      };
-      t.TJ = {
+      },
+      TJ: {
         id: _util.OPS.showSpacedText,
         numArgs: 1,
         variableArgs: false
-      };
-      t["'"] = {
+      },
+      "'": {
         id: _util.OPS.nextLineShowText,
         numArgs: 1,
         variableArgs: false
-      };
-      t['"'] = {
+      },
+      '"': {
         id: _util.OPS.nextLineSetSpacingShowText,
         numArgs: 3,
         variableArgs: false
-      };
-      t.d0 = {
+      },
+      d0: {
         id: _util.OPS.setCharWidth,
         numArgs: 2,
         variableArgs: false
-      };
-      t.d1 = {
+      },
+      d1: {
         id: _util.OPS.setCharWidthAndBounds,
         numArgs: 6,
         variableArgs: false
-      };
-      t.CS = {
+      },
+      CS: {
         id: _util.OPS.setStrokeColorSpace,
         numArgs: 1,
         variableArgs: false
-      };
-      t.cs = {
+      },
+      cs: {
         id: _util.OPS.setFillColorSpace,
         numArgs: 1,
         variableArgs: false
-      };
-      t.SC = {
+      },
+      SC: {
         id: _util.OPS.setStrokeColor,
         numArgs: 4,
         variableArgs: true
-      };
-      t.SCN = {
+      },
+      SCN: {
         id: _util.OPS.setStrokeColorN,
         numArgs: 33,
         variableArgs: true
-      };
-      t.sc = {
+      },
+      sc: {
         id: _util.OPS.setFillColor,
         numArgs: 4,
         variableArgs: true
-      };
-      t.scn = {
+      },
+      scn: {
         id: _util.OPS.setFillColorN,
         numArgs: 33,
         variableArgs: true
-      };
-      t.G = {
+      },
+      G: {
         id: _util.OPS.setStrokeGray,
         numArgs: 1,
         variableArgs: false
-      };
-      t.g = {
+      },
+      g: {
         id: _util.OPS.setFillGray,
         numArgs: 1,
         variableArgs: false
-      };
-      t.RG = {
+      },
+      RG: {
         id: _util.OPS.setStrokeRGBColor,
         numArgs: 3,
         variableArgs: false
-      };
-      t.rg = {
+      },
+      rg: {
         id: _util.OPS.setFillRGBColor,
         numArgs: 3,
         variableArgs: false
-      };
-      t.K = {
+      },
+      K: {
         id: _util.OPS.setStrokeCMYKColor,
         numArgs: 4,
         variableArgs: false
-      };
-      t.k = {
+      },
+      k: {
         id: _util.OPS.setFillCMYKColor,
         numArgs: 4,
         variableArgs: false
-      };
-      t.sh = {
+      },
+      sh: {
         id: _util.OPS.shadingFill,
         numArgs: 1,
         variableArgs: false
-      };
-      t.BI = {
+      },
+      BI: {
         id: _util.OPS.beginInlineImage,
         numArgs: 0,
         variableArgs: false
-      };
-      t.ID = {
+      },
+      ID: {
         id: _util.OPS.beginImageData,
         numArgs: 0,
         variableArgs: false
-      };
-      t.EI = {
+      },
+      EI: {
         id: _util.OPS.endInlineImage,
         numArgs: 1,
         variableArgs: false
-      };
-      t.Do = {
+      },
+      Do: {
         id: _util.OPS.paintXObject,
         numArgs: 1,
         variableArgs: false
-      };
-      t.MP = {
+      },
+      MP: {
         id: _util.OPS.markPoint,
         numArgs: 1,
         variableArgs: false
-      };
-      t.DP = {
+      },
+      DP: {
         id: _util.OPS.markPointProps,
         numArgs: 2,
         variableArgs: false
-      };
-      t.BMC = {
+      },
+      BMC: {
         id: _util.OPS.beginMarkedContent,
         numArgs: 1,
         variableArgs: false
-      };
-      t.BDC = {
+      },
+      BDC: {
         id: _util.OPS.beginMarkedContentProps,
         numArgs: 2,
         variableArgs: false
-      };
-      t.EMC = {
+      },
+      EMC: {
         id: _util.OPS.endMarkedContent,
         numArgs: 0,
         variableArgs: false
-      };
-      t.BX = {
+      },
+      BX: {
         id: _util.OPS.beginCompat,
         numArgs: 0,
         variableArgs: false
-      };
-      t.EX = {
+      },
+      EX: {
         id: _util.OPS.endCompat,
         numArgs: 0,
         variableArgs: false
-      };
-      t.BM = null;
-      t.BD = null;
-      t.true = null;
-      t.fa = null;
-      t.fal = null;
-      t.fals = null;
-      t.false = null;
-      t.nu = null;
-      t.nul = null;
-      t.null = null;
+      },
+      BM: null,
+      BD: null,
+      true: null,
+      fa: null,
+      fal: null,
+      fals: null,
+      false: null,
+      nu: null,
+      nul: null,
+      null: null
     });
-    return (0, _util.shadow)(this, "opMap", getOPMap());
   }
   static MAX_INVALID_PATH_OPS = 10;
   constructor(stream, xref, stateManager = new StateManager()) {
@@ -36453,6 +36405,7 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.Pattern = void 0;
+exports.clearPatternCaches = clearPatternCaches;
 exports.getTilingPatternIR = getTilingPatternIR;
 var _util = __w_pdfjs_require__(2);
 var _base_stream = __w_pdfjs_require__(5);
@@ -36721,21 +36674,22 @@ class MeshStreamReader {
     return this.context.colorSpace.getRgb(color, 0);
   }
 }
-const getB = function getBClosure() {
-  function buildB(count) {
-    const lut = [];
-    for (let i = 0; i <= count; i++) {
-      const t = i / count,
-        t_ = 1 - t;
-      lut.push(new Float32Array([t_ * t_ * t_, 3 * t * t_ * t_, 3 * t * t * t_, t * t * t]));
-    }
-    return lut;
+let bCache = Object.create(null);
+function buildB(count) {
+  const lut = [];
+  for (let i = 0; i <= count; i++) {
+    const t = i / count,
+      t_ = 1 - t;
+    lut.push(new Float32Array([t_ ** 3, 3 * t * t_ ** 2, 3 * t ** 2 * t_, t ** 3]));
   }
-  const cache = Object.create(null);
-  return function (count) {
-    return cache[count] ||= buildB(count);
-  };
-}();
+  return lut;
+}
+function getB(count) {
+  return bCache[count] ||= buildB(count);
+}
+function clearPatternCaches() {
+  bCache = Object.create(null);
+}
 class MeshShading extends BaseShading {
   static MIN_SPLIT_PATCH_CHUNKS_AMOUNT = 3;
   static MAX_SPLIT_PATCH_CHUNKS_AMOUNT = 20;
@@ -42740,9 +42694,11 @@ Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
 exports.clearGlobalCaches = clearGlobalCaches;
+var _pattern = __w_pdfjs_require__(50);
 var _primitives = __w_pdfjs_require__(4);
 var _unicode = __w_pdfjs_require__(40);
 function clearGlobalCaches() {
+  (0, _pattern.clearPatternCaches)();
   (0, _primitives.clearPrimitiveCaches)();
   (0, _unicode.clearUnicodeCaches)();
 }
@@ -57910,7 +57866,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.11.0';
-const pdfjsBuild = '18a661b';
+const pdfjsBuild = 'b49fe5b';
 })();
 
 /******/ 	return __webpack_exports__;
