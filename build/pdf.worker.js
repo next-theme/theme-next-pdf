@@ -49,9 +49,10 @@ var _primitives = __w_pdfjs_require__(4);
 var _pdf_manager = __w_pdfjs_require__(6);
 var _annotation = __w_pdfjs_require__(10);
 var _cleanup_helper = __w_pdfjs_require__(68);
-var _writer = __w_pdfjs_require__(74);
+var _writer = __w_pdfjs_require__(73);
 var _message_handler = __w_pdfjs_require__(104);
 var _worker_stream = __w_pdfjs_require__(105);
+var _struct_tree = __w_pdfjs_require__(72);
 class WorkerTask {
   constructor(name) {
     this.name = name;
@@ -420,18 +421,56 @@ class WorkerMessageHandler {
       annotationStorage,
       filename
     }) {
-      const globalPromises = [pdfManager.requestLoadedStream(), pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("acroFormRef"), pdfManager.ensureDoc("startXRef"), pdfManager.ensureDoc("xref"), pdfManager.ensureDoc("linearization")];
+      const globalPromises = [pdfManager.requestLoadedStream(), pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("acroFormRef"), pdfManager.ensureDoc("startXRef"), pdfManager.ensureDoc("xref"), pdfManager.ensureDoc("linearization"), pdfManager.ensureCatalog("structTreeRoot")];
       const promises = [];
       const newAnnotationsByPage = !isPureXfa ? (0, _core_utils.getNewAnnotationsMap)(annotationStorage) : null;
-      const [stream, acroForm, acroFormRef, startXRef, xref, linearization] = await Promise.all(globalPromises);
+      const [stream, acroForm, acroFormRef, startXRef, xref, linearization, _structTreeRoot] = await Promise.all(globalPromises);
+      const catalogRef = xref.trailer.getRaw("Root") || null;
+      let structTreeRoot;
       if (newAnnotationsByPage) {
+        if (!_structTreeRoot) {
+          if (await _struct_tree.StructTreeRoot.canCreateStructureTree({
+            catalogRef,
+            pdfManager,
+            newAnnotationsByPage
+          })) {
+            structTreeRoot = null;
+          }
+        } else if (await _structTreeRoot.canUpdateStructTree({
+          pdfManager,
+          newAnnotationsByPage
+        })) {
+          structTreeRoot = _structTreeRoot;
+        }
         const imagePromises = _annotation.AnnotationFactory.generateImages(annotationStorage.values(), xref, pdfManager.evaluatorOptions.isOffscreenCanvasSupported);
+        const newAnnotationPromises = structTreeRoot === undefined ? promises : [];
         for (const [pageIndex, annotations] of newAnnotationsByPage) {
-          promises.push(pdfManager.getPage(pageIndex).then(page => {
+          newAnnotationPromises.push(pdfManager.getPage(pageIndex).then(page => {
             const task = new WorkerTask(`Save (editor): page ${pageIndex}`);
             return page.saveNewAnnotations(handler, task, annotations, imagePromises).finally(function () {
               finishWorkerTask(task);
             });
+          }));
+        }
+        if (structTreeRoot === null) {
+          promises.push(Promise.all(newAnnotationPromises).then(async newRefs => {
+            await _struct_tree.StructTreeRoot.createStructureTree({
+              newAnnotationsByPage,
+              xref,
+              catalogRef,
+              pdfManager,
+              newRefs
+            });
+            return newRefs;
+          }));
+        } else if (structTreeRoot) {
+          promises.push(Promise.all(newAnnotationPromises).then(async newRefs => {
+            await structTreeRoot.updateStructureTree({
+              newAnnotationsByPage,
+              pdfManager,
+              newRefs
+            });
+            return newRefs;
           }));
         }
       }
@@ -490,7 +529,7 @@ class WorkerMessageHandler {
           });
         }
         newXrefInfo = {
-          rootRef: xref.trailer.getRaw("Root") || null,
+          rootRef: catalogRef,
           encryptRef: xref.trailer.getRaw("Encrypt") || null,
           newRef: xref.getNewTemporaryRef(),
           infoRef: xref.trailer.getRaw("Info") || null,
@@ -2060,6 +2099,13 @@ class Dict {
     properties.clear();
     return mergedDict.size > 0 ? mergedDict : Dict.empty;
   }
+  clone() {
+    const dict = new Dict(this.xref);
+    for (const key of this.getKeys()) {
+      dict.set(key, this.getRaw(key));
+    }
+    return dict;
+  }
 }
 exports.Dict = Dict;
 class Ref {
@@ -2279,6 +2325,9 @@ class BasePdfManager {
   }
   get docBaseUrl() {
     return this._docBaseUrl;
+  }
+  get catalog() {
+    return this.pdfDocument.catalog;
   }
   ensureDoc(prop, args) {
     return this.ensure(this.pdfDocument, prop, args);
@@ -2926,18 +2975,18 @@ var _core_utils = __w_pdfjs_require__(3);
 var _primitives = __w_pdfjs_require__(4);
 var _xfa_fonts = __w_pdfjs_require__(51);
 var _base_stream = __w_pdfjs_require__(5);
-var _crypto = __w_pdfjs_require__(75);
+var _crypto = __w_pdfjs_require__(74);
 var _catalog = __w_pdfjs_require__(66);
 var _cleanup_helper = __w_pdfjs_require__(68);
 var _dataset_reader = __w_pdfjs_require__(102);
 var _parser = __w_pdfjs_require__(16);
 var _stream = __w_pdfjs_require__(8);
-var _object_loader = __w_pdfjs_require__(73);
+var _object_loader = __w_pdfjs_require__(76);
 var _operator_list = __w_pdfjs_require__(64);
 var _evaluator = __w_pdfjs_require__(13);
 var _decode_stream = __w_pdfjs_require__(18);
 var _struct_tree = __w_pdfjs_require__(72);
-var _writer = __w_pdfjs_require__(74);
+var _writer = __w_pdfjs_require__(73);
 var _factory = __w_pdfjs_require__(77);
 var _xref = __w_pdfjs_require__(103);
 const DEFAULT_USER_UNIT = 1.0;
@@ -4273,9 +4322,9 @@ var _catalog = __w_pdfjs_require__(66);
 var _colorspace = __w_pdfjs_require__(12);
 var _file_spec = __w_pdfjs_require__(69);
 var _jpeg_stream = __w_pdfjs_require__(26);
-var _object_loader = __w_pdfjs_require__(73);
+var _object_loader = __w_pdfjs_require__(76);
 var _operator_list = __w_pdfjs_require__(64);
-var _writer = __w_pdfjs_require__(74);
+var _writer = __w_pdfjs_require__(73);
 var _factory = __w_pdfjs_require__(77);
 class AnnotationFactory {
   static createGlobals(pdfManager) {
@@ -4295,9 +4344,9 @@ class AnnotationFactory {
   }
   static async create(xref, ref, annotationGlobals, idFactory, collectFields, pageRef) {
     const pageIndex = collectFields ? await this._getPageIndex(xref, ref, annotationGlobals.pdfManager) : null;
-    return annotationGlobals.pdfManager.ensure(this, "_create", [xref, ref, annotationGlobals, idFactory, pageIndex, pageRef]);
+    return annotationGlobals.pdfManager.ensure(this, "_create", [xref, ref, annotationGlobals, idFactory, collectFields, pageIndex, pageRef]);
   }
-  static _create(xref, ref, annotationGlobals, idFactory, pageIndex = null, pageRef = null) {
+  static _create(xref, ref, annotationGlobals, idFactory, collectFields = false, pageIndex = null, pageRef = null) {
     const dict = xref.fetchIfRef(ref);
     if (!(dict instanceof _primitives.Dict)) {
       return undefined;
@@ -4316,7 +4365,8 @@ class AnnotationFactory {
       subtype,
       id,
       annotationGlobals,
-      needAppearances: pageIndex === null && acroForm.get("NeedAppearances") === true,
+      collectFields,
+      needAppearances: !collectFields && acroForm.get("NeedAppearances") === true,
       pageIndex,
       evaluatorOptions: pdfManager.evaluatorOptions,
       pageRef
@@ -4375,7 +4425,7 @@ class AnnotationFactory {
       case "FileAttachment":
         return new FileAttachmentAnnotation(parameters);
       default:
-        if (pageIndex === null) {
+        if (!collectFields) {
           if (!subtype) {
             (0, _util.warn)("Annotation is missing the required /Subtype.");
           } else {
@@ -4685,7 +4735,7 @@ class Annotation {
       noRotate: !!(this.flags & _util.AnnotationFlag.NOROTATE),
       noHTML: isLocked && isContentLocked
     };
-    if (params.pageIndex !== null) {
+    if (params.collectFields) {
       const kids = dict.get("Kids");
       if (Array.isArray(kids)) {
         const kidIds = [];
@@ -5282,7 +5332,7 @@ class MarkupAnnotation extends Annotation {
     this._streams.push(this.appearance, appearanceStream);
   }
   static async createNewAnnotation(xref, annotation, dependencies, params) {
-    const annotationRef = annotation.ref || xref.getNewTemporaryRef();
+    const annotationRef = annotation.ref ||= xref.getNewTemporaryRef();
     const ap = await this.createNewAppearanceStream(annotation, xref, params);
     const buffer = [];
     let annotationDict;
@@ -5298,6 +5348,9 @@ class MarkupAnnotation extends Annotation {
       });
     } else {
       annotationDict = this.createNewDict(annotation, xref, {});
+    }
+    if (Number.isInteger(annotation.parentTreeId)) {
+      annotationDict.set("StructParent", annotation.parentTreeId);
     }
     buffer.length = 0;
     await (0, _writer.writeObject)(annotationRef, annotationDict, buffer, xref);
@@ -9769,7 +9822,7 @@ class PartialEvaluator {
     } else {
       throw new _util.FormatError("Optional content properties malformed.");
     }
-    const optionalContentType = optionalContent.get("Type").name;
+    const optionalContentType = optionalContent.get("Type")?.name;
     if (optionalContentType === "OCG") {
       return {
         type: optionalContentType,
@@ -41273,6 +41326,9 @@ class Catalog {
     this.nonBlendModesSet = new _primitives.RefSet();
     this.systemFontCache = new Map();
   }
+  cloneDict() {
+    return this._catDict.clone();
+  }
   get version() {
     const version = this._catDict.get("Version");
     if (version instanceof _primitives.Name) {
@@ -41394,11 +41450,12 @@ class Catalog {
     return (0, _util.shadow)(this, "structTreeRoot", structTree);
   }
   _readStructTreeRoot() {
-    const obj = this._catDict.get("StructTreeRoot");
+    const rawObj = this._catDict.getRaw("StructTreeRoot");
+    const obj = this.xref.fetchIfRef(rawObj);
     if (!(obj instanceof _primitives.Dict)) {
       return null;
     }
-    const root = new _struct_tree.StructTreeRoot(obj);
+    const root = new _struct_tree.StructTreeRoot(obj, rawObj);
     root.init();
     return root;
   }
@@ -43338,6 +43395,7 @@ exports.StructTreeRoot = exports.StructTreePage = void 0;
 var _util = __w_pdfjs_require__(2);
 var _primitives = __w_pdfjs_require__(4);
 var _name_number_tree = __w_pdfjs_require__(67);
+var _writer = __w_pdfjs_require__(73);
 const MAX_DEPTH = 40;
 const StructElementType = {
   PAGE_CONTENT: 1,
@@ -43347,8 +43405,9 @@ const StructElementType = {
   ELEMENT: 5
 };
 class StructTreeRoot {
-  constructor(rootDict) {
+  constructor(rootDict, rootRef) {
     this.dict = rootDict;
+    this.ref = rootRef instanceof _primitives.Ref ? rootRef : null;
     this.roleMap = new Map();
     this.structParentIds = null;
   }
@@ -43380,6 +43439,431 @@ class StructTreeRoot {
         return;
       }
       this.roleMap.set(key, value.name);
+    });
+  }
+  static async canCreateStructureTree({
+    catalogRef,
+    pdfManager,
+    newAnnotationsByPage
+  }) {
+    if (!(catalogRef instanceof _primitives.Ref)) {
+      (0, _util.warn)("Cannot save the struct tree: no catalog reference.");
+      return false;
+    }
+    let nextKey = 0;
+    let hasNothingToUpdate = true;
+    for (const [pageIndex, elements] of newAnnotationsByPage) {
+      const {
+        ref: pageRef
+      } = await pdfManager.getPage(pageIndex);
+      if (!(pageRef instanceof _primitives.Ref)) {
+        (0, _util.warn)(`Cannot save the struct tree: page ${pageIndex} has no ref.`);
+        hasNothingToUpdate = true;
+        break;
+      }
+      for (const element of elements) {
+        if (element.accessibilityData?.type) {
+          element.parentTreeId = nextKey++;
+          hasNothingToUpdate = false;
+        }
+      }
+    }
+    if (hasNothingToUpdate) {
+      for (const elements of newAnnotationsByPage.values()) {
+        for (const element of elements) {
+          delete element.parentTreeId;
+        }
+      }
+      return false;
+    }
+    return true;
+  }
+  static async createStructureTree({
+    newAnnotationsByPage,
+    xref,
+    catalogRef,
+    pdfManager,
+    newRefs
+  }) {
+    const root = pdfManager.catalog.cloneDict();
+    const structTreeRootRef = xref.getNewTemporaryRef();
+    root.set("StructTreeRoot", structTreeRootRef);
+    const buffer = [];
+    await (0, _writer.writeObject)(catalogRef, root, buffer, xref);
+    newRefs.push({
+      ref: catalogRef,
+      data: buffer.join("")
+    });
+    const structTreeRoot = new _primitives.Dict(xref);
+    structTreeRoot.set("Type", _primitives.Name.get("StructTreeRoot"));
+    const parentTreeRef = xref.getNewTemporaryRef();
+    structTreeRoot.set("ParentTree", parentTreeRef);
+    const kids = [];
+    structTreeRoot.set("K", kids);
+    const parentTree = new _primitives.Dict(xref);
+    const nums = [];
+    parentTree.set("Nums", nums);
+    const nextKey = await this.#writeKids({
+      newAnnotationsByPage,
+      structTreeRootRef,
+      kids,
+      nums,
+      xref,
+      pdfManager,
+      newRefs,
+      buffer
+    });
+    structTreeRoot.set("ParentTreeNextKey", nextKey);
+    buffer.length = 0;
+    await (0, _writer.writeObject)(parentTreeRef, parentTree, buffer, xref);
+    newRefs.push({
+      ref: parentTreeRef,
+      data: buffer.join("")
+    });
+    buffer.length = 0;
+    await (0, _writer.writeObject)(structTreeRootRef, structTreeRoot, buffer, xref);
+    newRefs.push({
+      ref: structTreeRootRef,
+      data: buffer.join("")
+    });
+  }
+  async canUpdateStructTree({
+    pdfManager,
+    newAnnotationsByPage
+  }) {
+    if (!this.ref) {
+      (0, _util.warn)("Cannot update the struct tree: no root reference.");
+      return false;
+    }
+    let nextKey = this.dict.get("ParentTreeNextKey");
+    if (!Number.isInteger(nextKey) || nextKey < 0) {
+      (0, _util.warn)("Cannot update the struct tree: invalid next key.");
+      return false;
+    }
+    const parentTree = this.dict.get("ParentTree");
+    if (!(parentTree instanceof _primitives.Dict)) {
+      (0, _util.warn)("Cannot update the struct tree: ParentTree isn't a dict.");
+      return false;
+    }
+    const nums = parentTree.get("Nums");
+    if (!Array.isArray(nums)) {
+      (0, _util.warn)("Cannot update the struct tree: nums isn't an array.");
+      return false;
+    }
+    const {
+      numPages
+    } = pdfManager.catalog;
+    for (const pageIndex of newAnnotationsByPage.keys()) {
+      const {
+        pageDict,
+        ref: pageRef
+      } = await pdfManager.getPage(pageIndex);
+      if (!(pageRef instanceof _primitives.Ref)) {
+        (0, _util.warn)(`Cannot save the struct tree: page ${pageIndex} has no ref.`);
+        return false;
+      }
+      const id = pageDict.get("StructParents");
+      if (!Number.isInteger(id) || id < 0 || id >= numPages) {
+        (0, _util.warn)(`Cannot save the struct tree: page ${pageIndex} has no id.`);
+        return false;
+      }
+    }
+    let hasNothingToUpdate = true;
+    for (const [pageIndex, elements] of newAnnotationsByPage) {
+      const {
+        pageDict
+      } = await pdfManager.getPage(pageIndex);
+      StructTreeRoot.#collectParents({
+        elements,
+        xref: this.dict.xref,
+        pageDict,
+        parentTree
+      });
+      for (const element of elements) {
+        if (element.accessibilityData?.type) {
+          element.parentTreeId = nextKey++;
+          hasNothingToUpdate = false;
+        }
+      }
+    }
+    if (hasNothingToUpdate) {
+      for (const elements of newAnnotationsByPage.values()) {
+        for (const element of elements) {
+          delete element.parentTreeId;
+          delete element.structTreeParent;
+        }
+      }
+      return false;
+    }
+    return true;
+  }
+  async updateStructureTree({
+    newAnnotationsByPage,
+    pdfManager,
+    newRefs
+  }) {
+    const xref = this.dict.xref;
+    const structTreeRoot = this.dict.clone();
+    const structTreeRootRef = this.ref;
+    let parentTreeRef = structTreeRoot.getRaw("ParentTree");
+    let parentTree;
+    if (parentTreeRef instanceof _primitives.Ref) {
+      parentTree = xref.fetch(parentTreeRef);
+    } else {
+      parentTree = parentTreeRef;
+      parentTreeRef = xref.getNewTemporaryRef();
+      structTreeRoot.set("ParentTree", parentTreeRef);
+    }
+    parentTree = parentTree.clone();
+    let nums = parentTree.getRaw("Nums");
+    let numsRef = null;
+    if (nums instanceof _primitives.Ref) {
+      numsRef = nums;
+      nums = xref.fetch(numsRef);
+    }
+    nums = nums.slice();
+    if (!numsRef) {
+      parentTree.set("Nums", nums);
+    }
+    let kids = structTreeRoot.getRaw("K");
+    let kidsRef = null;
+    if (kids instanceof _primitives.Ref) {
+      kidsRef = kids;
+      kids = xref.fetch(kidsRef);
+    } else {
+      kidsRef = xref.getNewTemporaryRef();
+      structTreeRoot.set("K", kidsRef);
+    }
+    kids = Array.isArray(kids) ? kids.slice() : [kids];
+    const buffer = [];
+    const newNextkey = await StructTreeRoot.#writeKids({
+      newAnnotationsByPage,
+      structTreeRootRef,
+      kids,
+      nums,
+      xref,
+      pdfManager,
+      newRefs,
+      buffer
+    });
+    structTreeRoot.set("ParentTreeNextKey", newNextkey);
+    buffer.length = 0;
+    await (0, _writer.writeObject)(kidsRef, kids, buffer, xref);
+    newRefs.push({
+      ref: kidsRef,
+      data: buffer.join("")
+    });
+    if (numsRef) {
+      buffer.length = 0;
+      await (0, _writer.writeObject)(numsRef, nums, buffer, xref);
+      newRefs.push({
+        ref: numsRef,
+        data: buffer.join("")
+      });
+    }
+    buffer.length = 0;
+    await (0, _writer.writeObject)(parentTreeRef, parentTree, buffer, xref);
+    newRefs.push({
+      ref: parentTreeRef,
+      data: buffer.join("")
+    });
+    buffer.length = 0;
+    await (0, _writer.writeObject)(structTreeRootRef, structTreeRoot, buffer, xref);
+    newRefs.push({
+      ref: structTreeRootRef,
+      data: buffer.join("")
+    });
+  }
+  static async #writeKids({
+    newAnnotationsByPage,
+    structTreeRootRef,
+    kids,
+    nums,
+    xref,
+    pdfManager,
+    newRefs,
+    buffer
+  }) {
+    const objr = _primitives.Name.get("OBJR");
+    let nextKey = -Infinity;
+    for (const [pageIndex, elements] of newAnnotationsByPage) {
+      const {
+        ref: pageRef
+      } = await pdfManager.getPage(pageIndex);
+      for (const {
+        accessibilityData: {
+          type,
+          title,
+          lang,
+          alt,
+          expanded,
+          actualText
+        },
+        ref,
+        parentTreeId,
+        structTreeParent
+      } of elements) {
+        nextKey = Math.max(nextKey, parentTreeId);
+        const tagRef = xref.getNewTemporaryRef();
+        const tagDict = new _primitives.Dict(xref);
+        tagDict.set("S", _primitives.Name.get(type));
+        if (title) {
+          tagDict.set("T", title);
+        }
+        if (lang) {
+          tagDict.set("Lang", lang);
+        }
+        if (alt) {
+          tagDict.set("Alt", alt);
+        }
+        if (expanded) {
+          tagDict.set("E", expanded);
+        }
+        if (actualText) {
+          tagDict.set("ActualText", actualText);
+        }
+        if (structTreeParent) {
+          await this.#updateParentTag({
+            structTreeParent,
+            tagDict,
+            newTagRef: tagRef,
+            fallbackRef: structTreeRootRef,
+            xref,
+            newRefs,
+            buffer
+          });
+        } else {
+          tagDict.set("P", structTreeRootRef);
+        }
+        const objDict = new _primitives.Dict(xref);
+        tagDict.set("K", objDict);
+        objDict.set("Type", objr);
+        objDict.set("Pg", pageRef);
+        objDict.set("Obj", ref);
+        buffer.length = 0;
+        await (0, _writer.writeObject)(tagRef, tagDict, buffer, xref);
+        newRefs.push({
+          ref: tagRef,
+          data: buffer.join("")
+        });
+        nums.push(parentTreeId, tagRef);
+        kids.push(tagRef);
+      }
+    }
+    return nextKey + 1;
+  }
+  static #collectParents({
+    elements,
+    xref,
+    pageDict,
+    parentTree
+  }) {
+    const idToElement = new Map();
+    for (const element of elements) {
+      if (element.structTreeParentId) {
+        const id = parseInt(element.structTreeParentId.split("_mc")[1], 10);
+        idToElement.set(id, element);
+      }
+    }
+    const id = pageDict.get("StructParents");
+    const numberTree = new _name_number_tree.NumberTree(parentTree, xref);
+    const parentArray = numberTree.get(id);
+    if (!Array.isArray(parentArray)) {
+      return;
+    }
+    const updateElement = (kid, pageKid, kidRef) => {
+      const element = idToElement.get(kid);
+      if (element) {
+        const parentRef = pageKid.getRaw("P");
+        const parentDict = xref.fetchIfRef(parentRef);
+        if (parentRef instanceof _primitives.Ref && parentDict instanceof _primitives.Dict) {
+          element.structTreeParent = {
+            ref: kidRef,
+            dict: pageKid
+          };
+        }
+        return true;
+      }
+      return false;
+    };
+    for (const kidRef of parentArray) {
+      if (!(kidRef instanceof _primitives.Ref)) {
+        continue;
+      }
+      const pageKid = xref.fetch(kidRef);
+      const k = pageKid.get("K");
+      if (Number.isInteger(k)) {
+        updateElement(k, pageKid, kidRef);
+        continue;
+      }
+      if (!Array.isArray(k)) {
+        continue;
+      }
+      for (let kid of k) {
+        kid = xref.fetchIfRef(kid);
+        if (Number.isInteger(kid) && updateElement(kid, pageKid, kidRef)) {
+          break;
+        }
+      }
+    }
+  }
+  static async #updateParentTag({
+    structTreeParent: {
+      ref,
+      dict
+    },
+    tagDict,
+    newTagRef,
+    fallbackRef,
+    xref,
+    newRefs,
+    buffer
+  }) {
+    const parentRef = dict.getRaw("P");
+    let parentDict = xref.fetchIfRef(parentRef);
+    tagDict.set("P", parentRef);
+    let saveParentDict = false;
+    let parentKids;
+    let parentKidsRef = parentDict.getRaw("K");
+    if (!(parentKidsRef instanceof _primitives.Ref)) {
+      parentKids = parentKidsRef;
+      parentKidsRef = xref.getNewTemporaryRef();
+      parentDict = parentDict.clone();
+      parentDict.set("K", parentKidsRef);
+      saveParentDict = true;
+    } else {
+      parentKids = xref.fetch(parentKidsRef);
+    }
+    if (Array.isArray(parentKids)) {
+      const index = parentKids.indexOf(ref);
+      if (index >= 0) {
+        parentKids = parentKids.slice();
+        parentKids.splice(index + 1, 0, newTagRef);
+      } else {
+        (0, _util.warn)("Cannot update the struct tree: parent kid not found.");
+        tagDict.set("P", fallbackRef);
+        return;
+      }
+    } else if (parentKids instanceof _primitives.Dict) {
+      parentKids = [parentKidsRef, newTagRef];
+      parentKidsRef = xref.getNewTemporaryRef();
+      parentDict.set("K", parentKidsRef);
+      saveParentDict = true;
+    }
+    buffer.length = 0;
+    await (0, _writer.writeObject)(parentKidsRef, parentKids, buffer, xref);
+    newRefs.push({
+      ref: parentKidsRef,
+      data: buffer.join("")
+    });
+    if (!saveParentDict) {
+      return;
+    }
+    buffer.length = 0;
+    await (0, _writer.writeObject)(parentRef, parentDict, buffer, xref);
+    newRefs.push({
+      ref: parentRef,
+      data: buffer.join("")
     });
   }
 }
@@ -43660,126 +44144,6 @@ exports.StructTreePage = StructTreePage;
 Object.defineProperty(exports, "__esModule", ({
   value: true
 }));
-exports.ObjectLoader = void 0;
-var _primitives = __w_pdfjs_require__(4);
-var _base_stream = __w_pdfjs_require__(5);
-var _core_utils = __w_pdfjs_require__(3);
-var _util = __w_pdfjs_require__(2);
-function mayHaveChildren(value) {
-  return value instanceof _primitives.Ref || value instanceof _primitives.Dict || value instanceof _base_stream.BaseStream || Array.isArray(value);
-}
-function addChildren(node, nodesToVisit) {
-  if (node instanceof _primitives.Dict) {
-    node = node.getRawValues();
-  } else if (node instanceof _base_stream.BaseStream) {
-    node = node.dict.getRawValues();
-  } else if (!Array.isArray(node)) {
-    return;
-  }
-  for (const rawValue of node) {
-    if (mayHaveChildren(rawValue)) {
-      nodesToVisit.push(rawValue);
-    }
-  }
-}
-class ObjectLoader {
-  constructor(dict, keys, xref) {
-    this.dict = dict;
-    this.keys = keys;
-    this.xref = xref;
-    this.refSet = null;
-  }
-  async load() {
-    if (this.xref.stream.isDataLoaded) {
-      return undefined;
-    }
-    const {
-      keys,
-      dict
-    } = this;
-    this.refSet = new _primitives.RefSet();
-    const nodesToVisit = [];
-    for (const key of keys) {
-      const rawValue = dict.getRaw(key);
-      if (rawValue !== undefined) {
-        nodesToVisit.push(rawValue);
-      }
-    }
-    return this._walk(nodesToVisit);
-  }
-  async _walk(nodesToVisit) {
-    const nodesToRevisit = [];
-    const pendingRequests = [];
-    while (nodesToVisit.length) {
-      let currentNode = nodesToVisit.pop();
-      if (currentNode instanceof _primitives.Ref) {
-        if (this.refSet.has(currentNode)) {
-          continue;
-        }
-        try {
-          this.refSet.put(currentNode);
-          currentNode = this.xref.fetch(currentNode);
-        } catch (ex) {
-          if (!(ex instanceof _core_utils.MissingDataException)) {
-            (0, _util.warn)(`ObjectLoader._walk - requesting all data: "${ex}".`);
-            this.refSet = null;
-            const {
-              manager
-            } = this.xref.stream;
-            return manager.requestAllChunks();
-          }
-          nodesToRevisit.push(currentNode);
-          pendingRequests.push({
-            begin: ex.begin,
-            end: ex.end
-          });
-        }
-      }
-      if (currentNode instanceof _base_stream.BaseStream) {
-        const baseStreams = currentNode.getBaseStreams();
-        if (baseStreams) {
-          let foundMissingData = false;
-          for (const stream of baseStreams) {
-            if (stream.isDataLoaded) {
-              continue;
-            }
-            foundMissingData = true;
-            pendingRequests.push({
-              begin: stream.start,
-              end: stream.end
-            });
-          }
-          if (foundMissingData) {
-            nodesToRevisit.push(currentNode);
-          }
-        }
-      }
-      addChildren(currentNode, nodesToVisit);
-    }
-    if (pendingRequests.length) {
-      await this.xref.stream.manager.requestRanges(pendingRequests);
-      for (const node of nodesToRevisit) {
-        if (node instanceof _primitives.Ref) {
-          this.refSet.remove(node);
-        }
-      }
-      return this._walk(nodesToRevisit);
-    }
-    this.refSet = null;
-    return undefined;
-  }
-}
-exports.ObjectLoader = ObjectLoader;
-
-/***/ }),
-/* 74 */
-/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
-
-
-
-Object.defineProperty(exports, "__esModule", ({
-  value: true
-}));
 exports.incrementalUpdate = incrementalUpdate;
 exports.writeDict = writeDict;
 exports.writeObject = writeObject;
@@ -43788,7 +44152,7 @@ var _primitives = __w_pdfjs_require__(4);
 var _core_utils = __w_pdfjs_require__(3);
 var _xml_parser = __w_pdfjs_require__(71);
 var _base_stream = __w_pdfjs_require__(5);
-var _crypto = __w_pdfjs_require__(75);
+var _crypto = __w_pdfjs_require__(74);
 async function writeObject(ref, obj, buffer, {
   encrypt = null
 }) {
@@ -43798,6 +44162,8 @@ async function writeObject(ref, obj, buffer, {
     await writeDict(obj, buffer, transform);
   } else if (obj instanceof _base_stream.BaseStream) {
     await writeStream(obj, buffer, transform);
+  } else if (Array.isArray(obj)) {
+    await writeArray(obj, buffer, transform);
   }
   buffer.push("\nendobj\n");
 }
@@ -43969,10 +44335,7 @@ async function updateAcroform({
   if (!needAppearances && (!hasXfa || !xfaDatasetsRef || hasXfaDatasetsEntry)) {
     return;
   }
-  const dict = new _primitives.Dict(xref);
-  for (const key of acroForm.getKeys()) {
-    dict.set(key, acroForm.getRaw(key));
-  }
+  const dict = acroForm.clone();
   if (hasXfa && !hasXfaDatasetsEntry) {
     const newXfa = acroForm.get("XFA").slice();
     newXfa.splice(2, 0, "datasets");
@@ -44117,7 +44480,7 @@ async function incrementalUpdate({
 }
 
 /***/ }),
-/* 75 */
+/* 74 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -44130,7 +44493,7 @@ exports.calculateSHA384 = calculateSHA384;
 exports.calculateSHA512 = void 0;
 var _util = __w_pdfjs_require__(2);
 var _primitives = __w_pdfjs_require__(4);
-var _decrypt_stream = __w_pdfjs_require__(76);
+var _decrypt_stream = __w_pdfjs_require__(75);
 class ARCFourCipher {
   constructor(key) {
     this.a = 0;
@@ -45129,9 +45492,9 @@ class CipherTransform {
     return (0, _util.bytesToString)(data);
   }
 }
-const CipherTransformFactory = function CipherTransformFactoryClosure() {
-  const defaultPasswordBytes = new Uint8Array([0x28, 0xbf, 0x4e, 0x5e, 0x4e, 0x75, 0x8a, 0x41, 0x64, 0x00, 0x4e, 0x56, 0xff, 0xfa, 0x01, 0x08, 0x2e, 0x2e, 0x00, 0xb6, 0xd0, 0x68, 0x3e, 0x80, 0x2f, 0x0c, 0xa9, 0xfe, 0x64, 0x53, 0x69, 0x7a]);
-  function createEncryptionKey20(revision, password, ownerPassword, ownerValidationSalt, ownerKeySalt, uBytes, userPassword, userValidationSalt, userKeySalt, ownerEncryption, userEncryption, perms) {
+class CipherTransformFactory {
+  static #defaultPasswordBytes = new Uint8Array([0x28, 0xbf, 0x4e, 0x5e, 0x4e, 0x75, 0x8a, 0x41, 0x64, 0x00, 0x4e, 0x56, 0xff, 0xfa, 0x01, 0x08, 0x2e, 0x2e, 0x00, 0xb6, 0xd0, 0x68, 0x3e, 0x80, 0x2f, 0x0c, 0xa9, 0xfe, 0x64, 0x53, 0x69, 0x7a]);
+  #createEncryptionKey20(revision, password, ownerPassword, ownerValidationSalt, ownerKeySalt, uBytes, userPassword, userValidationSalt, userKeySalt, ownerEncryption, userEncryption, perms) {
     if (password) {
       const passwordLength = Math.min(127, password.length);
       password = password.subarray(0, passwordLength);
@@ -45146,7 +45509,7 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
     }
     return null;
   }
-  function prepareKeyData(fileId, password, ownerPassword, userPassword, flags, revision, keyLength, encryptMetadata) {
+  #prepareKeyData(fileId, password, ownerPassword, userPassword, flags, revision, keyLength, encryptMetadata) {
     const hashDataSize = 40 + ownerPassword.length + fileId.length;
     const hashData = new Uint8Array(hashDataSize);
     let i = 0,
@@ -45160,7 +45523,7 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
     }
     j = 0;
     while (i < 32) {
-      hashData[i++] = defaultPasswordBytes[j++];
+      hashData[i++] = CipherTransformFactory.#defaultPasswordBytes[j++];
     }
     for (j = 0, n = ownerPassword.length; j < n; ++j) {
       hashData[i++] = ownerPassword[j];
@@ -45189,7 +45552,7 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
     let cipher, checkData;
     if (revision >= 3) {
       for (i = 0; i < 32; ++i) {
-        hashData[i] = defaultPasswordBytes[i];
+        hashData[i] = CipherTransformFactory.#defaultPasswordBytes[i];
       }
       for (j = 0, n = fileId.length; j < n; ++j) {
         hashData[i++] = fileId[j];
@@ -45212,7 +45575,7 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
       }
     } else {
       cipher = new ARCFourCipher(encryptionKey);
-      checkData = cipher.encryptBlock(defaultPasswordBytes);
+      checkData = cipher.encryptBlock(CipherTransformFactory.#defaultPasswordBytes);
       for (j = 0, n = checkData.length; j < n; ++j) {
         if (userPassword[j] !== checkData[j]) {
           return null;
@@ -45221,7 +45584,7 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
     }
     return encryptionKey;
   }
-  function decodeUserPassword(password, ownerPassword, revision, keyLength) {
+  #decodeUserPassword(password, ownerPassword, revision, keyLength) {
     const hashData = new Uint8Array(32);
     let i = 0;
     const n = Math.min(32, password.length);
@@ -45230,7 +45593,7 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
     }
     let j = 0;
     while (i < 32) {
-      hashData[i++] = defaultPasswordBytes[j++];
+      hashData[i++] = CipherTransformFactory.#defaultPasswordBytes[j++];
     }
     let hash = calculateMD5(hashData, 0, i);
     const keyLengthInBytes = keyLength >> 3;
@@ -45256,8 +45619,7 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
     }
     return userPassword;
   }
-  const identityName = _primitives.Name.get("Identity");
-  function buildObjectKey(num, gen, encryptionKey, isAes = false) {
+  #buildObjectKey(num, gen, encryptionKey, isAes = false) {
     const key = new Uint8Array(encryptionKey.length + 9);
     const n = encryptionKey.length;
     let i;
@@ -45278,142 +45640,137 @@ const CipherTransformFactory = function CipherTransformFactoryClosure() {
     const hash = calculateMD5(key, 0, i);
     return hash.subarray(0, Math.min(encryptionKey.length + 5, 16));
   }
-  function buildCipherConstructor(cf, name, num, gen, key) {
+  #buildCipherConstructor(cf, name, num, gen, key) {
     if (!(name instanceof _primitives.Name)) {
       throw new _util.FormatError("Invalid crypt filter name.");
     }
+    const self = this;
     const cryptFilter = cf.get(name.name);
-    let cfm;
-    if (cryptFilter !== null && cryptFilter !== undefined) {
-      cfm = cryptFilter.get("CFM");
-    }
+    const cfm = cryptFilter?.get("CFM");
     if (!cfm || cfm.name === "None") {
-      return function cipherTransformFactoryBuildCipherConstructorNone() {
+      return function () {
         return new NullCipher();
       };
     }
     if (cfm.name === "V2") {
-      return function cipherTransformFactoryBuildCipherConstructorV2() {
-        return new ARCFourCipher(buildObjectKey(num, gen, key, false));
+      return function () {
+        return new ARCFourCipher(self.#buildObjectKey(num, gen, key, false));
       };
     }
     if (cfm.name === "AESV2") {
-      return function cipherTransformFactoryBuildCipherConstructorAESV2() {
-        return new AES128Cipher(buildObjectKey(num, gen, key, true));
+      return function () {
+        return new AES128Cipher(self.#buildObjectKey(num, gen, key, true));
       };
     }
     if (cfm.name === "AESV3") {
-      return function cipherTransformFactoryBuildCipherConstructorAESV3() {
+      return function () {
         return new AES256Cipher(key);
       };
     }
     throw new _util.FormatError("Unknown crypto method");
   }
-  class CipherTransformFactory {
-    constructor(dict, fileId, password) {
-      const filter = dict.get("Filter");
-      if (!(0, _primitives.isName)(filter, "Standard")) {
-        throw new _util.FormatError("unknown encryption method");
-      }
-      this.filterName = filter.name;
-      this.dict = dict;
-      const algorithm = dict.get("V");
-      if (!Number.isInteger(algorithm) || algorithm !== 1 && algorithm !== 2 && algorithm !== 4 && algorithm !== 5) {
-        throw new _util.FormatError("unsupported encryption algorithm");
-      }
-      this.algorithm = algorithm;
-      let keyLength = dict.get("Length");
-      if (!keyLength) {
-        if (algorithm <= 3) {
-          keyLength = 40;
-        } else {
-          const cfDict = dict.get("CF");
-          const streamCryptoName = dict.get("StmF");
-          if (cfDict instanceof _primitives.Dict && streamCryptoName instanceof _primitives.Name) {
-            cfDict.suppressEncryption = true;
-            const handlerDict = cfDict.get(streamCryptoName.name);
-            keyLength = handlerDict?.get("Length") || 128;
-            if (keyLength < 40) {
-              keyLength <<= 3;
-            }
-          }
-        }
-      }
-      if (!Number.isInteger(keyLength) || keyLength < 40 || keyLength % 8 !== 0) {
-        throw new _util.FormatError("invalid key length");
-      }
-      const ownerBytes = (0, _util.stringToBytes)(dict.get("O")),
-        userBytes = (0, _util.stringToBytes)(dict.get("U"));
-      const ownerPassword = ownerBytes.subarray(0, 32);
-      const userPassword = userBytes.subarray(0, 32);
-      const flags = dict.get("P");
-      const revision = dict.get("R");
-      const encryptMetadata = (algorithm === 4 || algorithm === 5) && dict.get("EncryptMetadata") !== false;
-      this.encryptMetadata = encryptMetadata;
-      const fileIdBytes = (0, _util.stringToBytes)(fileId);
-      let passwordBytes;
-      if (password) {
-        if (revision === 6) {
-          try {
-            password = (0, _util.utf8StringToString)(password);
-          } catch {
-            (0, _util.warn)("CipherTransformFactory: Unable to convert UTF8 encoded password.");
-          }
-        }
-        passwordBytes = (0, _util.stringToBytes)(password);
-      }
-      let encryptionKey;
-      if (algorithm !== 5) {
-        encryptionKey = prepareKeyData(fileIdBytes, passwordBytes, ownerPassword, userPassword, flags, revision, keyLength, encryptMetadata);
+  constructor(dict, fileId, password) {
+    const filter = dict.get("Filter");
+    if (!(0, _primitives.isName)(filter, "Standard")) {
+      throw new _util.FormatError("unknown encryption method");
+    }
+    this.filterName = filter.name;
+    this.dict = dict;
+    const algorithm = dict.get("V");
+    if (!Number.isInteger(algorithm) || algorithm !== 1 && algorithm !== 2 && algorithm !== 4 && algorithm !== 5) {
+      throw new _util.FormatError("unsupported encryption algorithm");
+    }
+    this.algorithm = algorithm;
+    let keyLength = dict.get("Length");
+    if (!keyLength) {
+      if (algorithm <= 3) {
+        keyLength = 40;
       } else {
-        const ownerValidationSalt = ownerBytes.subarray(32, 40);
-        const ownerKeySalt = ownerBytes.subarray(40, 48);
-        const uBytes = userBytes.subarray(0, 48);
-        const userValidationSalt = userBytes.subarray(32, 40);
-        const userKeySalt = userBytes.subarray(40, 48);
-        const ownerEncryption = (0, _util.stringToBytes)(dict.get("OE"));
-        const userEncryption = (0, _util.stringToBytes)(dict.get("UE"));
-        const perms = (0, _util.stringToBytes)(dict.get("Perms"));
-        encryptionKey = createEncryptionKey20(revision, passwordBytes, ownerPassword, ownerValidationSalt, ownerKeySalt, uBytes, userPassword, userValidationSalt, userKeySalt, ownerEncryption, userEncryption, perms);
-      }
-      if (!encryptionKey && !password) {
-        throw new _util.PasswordException("No password given", _util.PasswordResponses.NEED_PASSWORD);
-      } else if (!encryptionKey && password) {
-        const decodedPassword = decodeUserPassword(passwordBytes, ownerPassword, revision, keyLength);
-        encryptionKey = prepareKeyData(fileIdBytes, decodedPassword, ownerPassword, userPassword, flags, revision, keyLength, encryptMetadata);
-      }
-      if (!encryptionKey) {
-        throw new _util.PasswordException("Incorrect Password", _util.PasswordResponses.INCORRECT_PASSWORD);
-      }
-      this.encryptionKey = encryptionKey;
-      if (algorithm >= 4) {
-        const cf = dict.get("CF");
-        if (cf instanceof _primitives.Dict) {
-          cf.suppressEncryption = true;
+        const cfDict = dict.get("CF");
+        const streamCryptoName = dict.get("StmF");
+        if (cfDict instanceof _primitives.Dict && streamCryptoName instanceof _primitives.Name) {
+          cfDict.suppressEncryption = true;
+          const handlerDict = cfDict.get(streamCryptoName.name);
+          keyLength = handlerDict?.get("Length") || 128;
+          if (keyLength < 40) {
+            keyLength <<= 3;
+          }
         }
-        this.cf = cf;
-        this.stmf = dict.get("StmF") || identityName;
-        this.strf = dict.get("StrF") || identityName;
-        this.eff = dict.get("EFF") || this.stmf;
       }
     }
-    createCipherTransform(num, gen) {
-      if (this.algorithm === 4 || this.algorithm === 5) {
-        return new CipherTransform(buildCipherConstructor(this.cf, this.strf, num, gen, this.encryptionKey), buildCipherConstructor(this.cf, this.stmf, num, gen, this.encryptionKey));
+    if (!Number.isInteger(keyLength) || keyLength < 40 || keyLength % 8 !== 0) {
+      throw new _util.FormatError("invalid key length");
+    }
+    const ownerBytes = (0, _util.stringToBytes)(dict.get("O")),
+      userBytes = (0, _util.stringToBytes)(dict.get("U"));
+    const ownerPassword = ownerBytes.subarray(0, 32);
+    const userPassword = userBytes.subarray(0, 32);
+    const flags = dict.get("P");
+    const revision = dict.get("R");
+    const encryptMetadata = (algorithm === 4 || algorithm === 5) && dict.get("EncryptMetadata") !== false;
+    this.encryptMetadata = encryptMetadata;
+    const fileIdBytes = (0, _util.stringToBytes)(fileId);
+    let passwordBytes;
+    if (password) {
+      if (revision === 6) {
+        try {
+          password = (0, _util.utf8StringToString)(password);
+        } catch {
+          (0, _util.warn)("CipherTransformFactory: Unable to convert UTF8 encoded password.");
+        }
       }
-      const key = buildObjectKey(num, gen, this.encryptionKey, false);
-      const cipherConstructor = function buildCipherCipherConstructor() {
-        return new ARCFourCipher(key);
-      };
-      return new CipherTransform(cipherConstructor, cipherConstructor);
+      passwordBytes = (0, _util.stringToBytes)(password);
+    }
+    let encryptionKey;
+    if (algorithm !== 5) {
+      encryptionKey = this.#prepareKeyData(fileIdBytes, passwordBytes, ownerPassword, userPassword, flags, revision, keyLength, encryptMetadata);
+    } else {
+      const ownerValidationSalt = ownerBytes.subarray(32, 40);
+      const ownerKeySalt = ownerBytes.subarray(40, 48);
+      const uBytes = userBytes.subarray(0, 48);
+      const userValidationSalt = userBytes.subarray(32, 40);
+      const userKeySalt = userBytes.subarray(40, 48);
+      const ownerEncryption = (0, _util.stringToBytes)(dict.get("OE"));
+      const userEncryption = (0, _util.stringToBytes)(dict.get("UE"));
+      const perms = (0, _util.stringToBytes)(dict.get("Perms"));
+      encryptionKey = this.#createEncryptionKey20(revision, passwordBytes, ownerPassword, ownerValidationSalt, ownerKeySalt, uBytes, userPassword, userValidationSalt, userKeySalt, ownerEncryption, userEncryption, perms);
+    }
+    if (!encryptionKey && !password) {
+      throw new _util.PasswordException("No password given", _util.PasswordResponses.NEED_PASSWORD);
+    } else if (!encryptionKey && password) {
+      const decodedPassword = this.#decodeUserPassword(passwordBytes, ownerPassword, revision, keyLength);
+      encryptionKey = this.#prepareKeyData(fileIdBytes, decodedPassword, ownerPassword, userPassword, flags, revision, keyLength, encryptMetadata);
+    }
+    if (!encryptionKey) {
+      throw new _util.PasswordException("Incorrect Password", _util.PasswordResponses.INCORRECT_PASSWORD);
+    }
+    this.encryptionKey = encryptionKey;
+    if (algorithm >= 4) {
+      const cf = dict.get("CF");
+      if (cf instanceof _primitives.Dict) {
+        cf.suppressEncryption = true;
+      }
+      this.cf = cf;
+      this.stmf = dict.get("StmF") || _primitives.Name.get("Identity");
+      this.strf = dict.get("StrF") || _primitives.Name.get("Identity");
+      this.eff = dict.get("EFF") || this.stmf;
     }
   }
-  return CipherTransformFactory;
-}();
+  createCipherTransform(num, gen) {
+    if (this.algorithm === 4 || this.algorithm === 5) {
+      return new CipherTransform(this.#buildCipherConstructor(this.cf, this.strf, num, gen, this.encryptionKey), this.#buildCipherConstructor(this.cf, this.stmf, num, gen, this.encryptionKey));
+    }
+    const key = this.#buildObjectKey(num, gen, this.encryptionKey, false);
+    const cipherConstructor = function () {
+      return new ARCFourCipher(key);
+    };
+    return new CipherTransform(cipherConstructor, cipherConstructor);
+  }
+}
 exports.CipherTransformFactory = CipherTransformFactory;
 
 /***/ }),
-/* 76 */
+/* 75 */
 /***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
 
 
@@ -45457,6 +45814,126 @@ class DecryptStream extends _decode_stream.DecodeStream {
   }
 }
 exports.DecryptStream = DecryptStream;
+
+/***/ }),
+/* 76 */
+/***/ ((__unused_webpack_module, exports, __w_pdfjs_require__) => {
+
+
+
+Object.defineProperty(exports, "__esModule", ({
+  value: true
+}));
+exports.ObjectLoader = void 0;
+var _primitives = __w_pdfjs_require__(4);
+var _base_stream = __w_pdfjs_require__(5);
+var _core_utils = __w_pdfjs_require__(3);
+var _util = __w_pdfjs_require__(2);
+function mayHaveChildren(value) {
+  return value instanceof _primitives.Ref || value instanceof _primitives.Dict || value instanceof _base_stream.BaseStream || Array.isArray(value);
+}
+function addChildren(node, nodesToVisit) {
+  if (node instanceof _primitives.Dict) {
+    node = node.getRawValues();
+  } else if (node instanceof _base_stream.BaseStream) {
+    node = node.dict.getRawValues();
+  } else if (!Array.isArray(node)) {
+    return;
+  }
+  for (const rawValue of node) {
+    if (mayHaveChildren(rawValue)) {
+      nodesToVisit.push(rawValue);
+    }
+  }
+}
+class ObjectLoader {
+  constructor(dict, keys, xref) {
+    this.dict = dict;
+    this.keys = keys;
+    this.xref = xref;
+    this.refSet = null;
+  }
+  async load() {
+    if (this.xref.stream.isDataLoaded) {
+      return undefined;
+    }
+    const {
+      keys,
+      dict
+    } = this;
+    this.refSet = new _primitives.RefSet();
+    const nodesToVisit = [];
+    for (const key of keys) {
+      const rawValue = dict.getRaw(key);
+      if (rawValue !== undefined) {
+        nodesToVisit.push(rawValue);
+      }
+    }
+    return this._walk(nodesToVisit);
+  }
+  async _walk(nodesToVisit) {
+    const nodesToRevisit = [];
+    const pendingRequests = [];
+    while (nodesToVisit.length) {
+      let currentNode = nodesToVisit.pop();
+      if (currentNode instanceof _primitives.Ref) {
+        if (this.refSet.has(currentNode)) {
+          continue;
+        }
+        try {
+          this.refSet.put(currentNode);
+          currentNode = this.xref.fetch(currentNode);
+        } catch (ex) {
+          if (!(ex instanceof _core_utils.MissingDataException)) {
+            (0, _util.warn)(`ObjectLoader._walk - requesting all data: "${ex}".`);
+            this.refSet = null;
+            const {
+              manager
+            } = this.xref.stream;
+            return manager.requestAllChunks();
+          }
+          nodesToRevisit.push(currentNode);
+          pendingRequests.push({
+            begin: ex.begin,
+            end: ex.end
+          });
+        }
+      }
+      if (currentNode instanceof _base_stream.BaseStream) {
+        const baseStreams = currentNode.getBaseStreams();
+        if (baseStreams) {
+          let foundMissingData = false;
+          for (const stream of baseStreams) {
+            if (stream.isDataLoaded) {
+              continue;
+            }
+            foundMissingData = true;
+            pendingRequests.push({
+              begin: stream.start,
+              end: stream.end
+            });
+          }
+          if (foundMissingData) {
+            nodesToRevisit.push(currentNode);
+          }
+        }
+      }
+      addChildren(currentNode, nodesToVisit);
+    }
+    if (pendingRequests.length) {
+      await this.xref.stream.manager.requestRanges(pendingRequests);
+      for (const node of nodesToRevisit) {
+        if (node instanceof _primitives.Ref) {
+          this.refSet.remove(node);
+        }
+      }
+      return this._walk(nodesToRevisit);
+    }
+    this.refSet = null;
+    return undefined;
+  }
+}
+exports.ObjectLoader = ObjectLoader;
 
 /***/ }),
 /* 77 */
@@ -56584,7 +57061,7 @@ var _primitives = __w_pdfjs_require__(4);
 var _parser = __w_pdfjs_require__(16);
 var _core_utils = __w_pdfjs_require__(3);
 var _base_stream = __w_pdfjs_require__(5);
-var _crypto = __w_pdfjs_require__(75);
+var _crypto = __w_pdfjs_require__(74);
 class XRef {
   #firstXRefStmPos = null;
   constructor(stream, pdfManager) {
@@ -57866,7 +58343,7 @@ Object.defineProperty(exports, "WorkerMessageHandler", ({
 }));
 var _worker = __w_pdfjs_require__(1);
 const pdfjsVersion = '3.11.0';
-const pdfjsBuild = 'b49fe5b';
+const pdfjsBuild = '0fc0dc3';
 })();
 
 /******/ 	return __webpack_exports__;
