@@ -32581,6 +32581,11 @@ class PartialEvaluator {
           descent: font.descent,
           vertical: font.vertical
         };
+        if (self.options.fontExtraProperties && font.systemFontInfo) {
+          const style = textContent.styles[loadedName];
+          style.fontSubstitution = font.systemFontInfo.css;
+          style.fontSubstitutionLoadedName = font.systemFontInfo.loadedName;
+        }
       }
       textContentItem.fontName = loadedName;
       const trm = textContentItem.transform = getCurrentTextTransform();
@@ -56959,7 +56964,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '60a458d';
+const pdfjsBuild = '5c45dfa';
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };
