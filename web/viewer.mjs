@@ -837,7 +837,15 @@ class AppOptions {
   static set(name, value) {
     userOptions[name] = value;
   }
-  static setAll(options) {
+  static setAll(options, init = false) {
+    if (init) {
+      if (this.get("disablePreferences")) {
+        return;
+      }
+      if (Object.keys(userOptions).length) {
+        console.warn("setAll: The Preferences may override manually set AppOptions; " + 'please use the "disablePreferences"-option in order to prevent that.');
+      }
+    }
     for (const name in options) {
       userOptions[name] = options[name];
     }
@@ -845,11 +853,6 @@ class AppOptions {
   static remove(name) {
     delete userOptions[name];
   }
-}
-{
-  AppOptions._hasUserOptions = function () {
-    return Object.keys(userOptions).length > 0;
-  };
 }
 
 ;// CONCATENATED MODULE: ./web/event_utils.js
@@ -1796,7 +1799,7 @@ class PasswordPrompt {
     if (!this._isViewerEmbedded || passwordIncorrect) {
       this.input.focus();
     }
-    this.label.textContent = await this.l10n.get(`password_${passwordIncorrect ? "invalid" : "label"}`);
+    this.label.textContent = await this.l10n.get(`pdfjs-password-${passwordIncorrect ? "invalid" : "label"}`);
   }
   async close() {
     if (this.overlayManager.active === this.dialog) {
@@ -1965,7 +1968,7 @@ class PDFAttachmentViewer extends BaseTreeViewer {
     filename
   }) {
     element.onclick = () => {
-      this.downloadManager.openOrDownloadData(element, content, filename);
+      this.downloadManager.openOrDownloadData(content, filename);
       return false;
     };
   }
@@ -2241,8 +2244,8 @@ const US_PAGE_NAMES = {
   "8.5x14": "Legal"
 };
 const METRIC_PAGE_NAMES = {
-  "297x420": "A3",
-  "210x297": "A4"
+  "297x420": "a-three",
+  "210x297": "a-four"
 };
 function getPageName(size, isPortrait, pageNames) {
   const width = isPortrait ? size.width : size.height;
@@ -2270,10 +2273,7 @@ class PDFDocumentProperties {
     eventBus._on("rotationchanging", evt => {
       this._pagesRotation = evt.pagesRotation;
     });
-    this._isNonMetricLocale = true;
-    l10n.getLanguage().then(locale => {
-      this._isNonMetricLocale = NON_METRIC_LOCALES.includes(locale);
-    });
+    this._isNonMetricLocale = NON_METRIC_LOCALES.includes(l10n.getLanguage());
   }
   async open() {
     await Promise.all([this.overlayManager.open(this.dialog), this._dataAvailableCapability.promise]);
@@ -2362,7 +2362,7 @@ class PDFDocumentProperties {
     if (!kb) {
       return undefined;
     }
-    return this.l10n.get(`document_properties_${mb >= 1 ? "mb" : "kb"}`, {
+    return this.l10n.get(`pdfjs-document-properties-${mb >= 1 ? "mb" : "kb"}`, {
       size_mb: mb >= 1 && (+mb.toPrecision(3)).toLocaleString(),
       size_kb: mb < 1 && (+kb.toPrecision(3)).toLocaleString(),
       size_b: fileSize.toLocaleString()
@@ -2411,8 +2411,8 @@ class PDFDocumentProperties {
     const [{
       width,
       height
-    }, unit, name, orientation] = await Promise.all([this._isNonMetricLocale ? sizeInches : sizeMillimeters, this.l10n.get(`document_properties_page_size_unit_${this._isNonMetricLocale ? "inches" : "millimeters"}`), rawName && this.l10n.get(`document_properties_page_size_name_${rawName.toLowerCase()}`), this.l10n.get(`document_properties_page_size_orientation_${isPortrait ? "portrait" : "landscape"}`)]);
-    return this.l10n.get(`document_properties_page_size_dimension_${name ? "name_" : ""}string`, {
+    }, unit, name, orientation] = await Promise.all([this._isNonMetricLocale ? sizeInches : sizeMillimeters, this.l10n.get(`pdfjs-document-properties-page-size-unit-${this._isNonMetricLocale ? "inches" : "millimeters"}`), rawName && this.l10n.get(`pdfjs-document-properties-page-size-name-${rawName.toLowerCase()}`), this.l10n.get(`pdfjs-document-properties-page-size-orientation-${isPortrait ? "portrait" : "landscape"}`)]);
+    return this.l10n.get(`pdfjs-document-properties-page-size-dimension-${name ? "name-" : ""}string`, {
       width: width.toLocaleString(),
       height: height.toLocaleString(),
       unit,
@@ -2425,13 +2425,13 @@ class PDFDocumentProperties {
     if (!dateObject) {
       return undefined;
     }
-    return this.l10n.get("document_properties_date_string", {
+    return this.l10n.get("pdfjs-document-properties-date-string", {
       date: dateObject.toLocaleDateString(),
       time: dateObject.toLocaleTimeString()
     });
   }
   #parseLinearization(isLinearized) {
-    return this.l10n.get(`document_properties_linearized_${isLinearized ? "yes" : "no"}`);
+    return this.l10n.get(`pdfjs-document-properties-linearized-${isLinearized ? "yes" : "no"}`);
   }
 }
 
@@ -3235,6 +3235,7 @@ class PDFFindController {
 
 const MATCHES_COUNT_LIMIT = 1000;
 class PDFFindBar {
+  #resizeObserver = new ResizeObserver(this.#resizeObserverCallback.bind(this));
   constructor(options, eventBus, l10n) {
     this.opened = false;
     this.bar = options.bar;
@@ -3286,7 +3287,6 @@ class PDFFindBar {
     this.matchDiacritics.addEventListener("click", () => {
       this.dispatchEvent("diacriticmatchingchange");
     });
-    this.eventBus._on("resize", this.#adjustWidth.bind(this));
   }
   reset() {
     this.updateUIState();
@@ -3313,11 +3313,11 @@ class PDFFindBar {
         status = "pending";
         break;
       case FindState.NOT_FOUND:
-        findMsg = this.l10n.get("find_not_found");
+        findMsg = this.l10n.get("pdfjs-find-not-found");
         status = "notFound";
         break;
       case FindState.WRAPPED:
-        findMsg = this.l10n.get(`find_reached_${previous ? "top" : "bottom"}`);
+        findMsg = this.l10n.get(`pdfjs-find-reached-${previous ? "top" : "bottom"}`);
         break;
     }
     this.findField.setAttribute("data-status", status);
@@ -3325,7 +3325,6 @@ class PDFFindBar {
     findMsg.then(msg => {
       this.findMsg.setAttribute("data-status", status);
       this.findMsg.textContent = msg;
-      this.#adjustWidth();
     });
     this.updateResultsCount(matchesCount);
   }
@@ -3336,37 +3335,32 @@ class PDFFindBar {
     const limit = MATCHES_COUNT_LIMIT;
     let matchCountMsg = Promise.resolve("");
     if (total > 0) {
-      if (total > limit) {
-        let key = "find_match_count_limit";
-        matchCountMsg = this.l10n.get(key, {
-          limit
-        });
-      } else {
-        let key = "find_match_count";
-        matchCountMsg = this.l10n.get(key, {
-          current,
-          total
-        });
-      }
+      matchCountMsg = total > limit ? this.l10n.get("pdfjs-find-match-count-limit", {
+        limit
+      }) : this.l10n.get("pdfjs-find-match-count", {
+        current,
+        total
+      });
     }
     matchCountMsg.then(msg => {
       this.findResultsCount.textContent = msg;
-      this.#adjustWidth();
     });
   }
   open() {
     if (!this.opened) {
+      this.#resizeObserver.observe(this.bar.parentNode);
+      this.#resizeObserver.observe(this.bar);
       this.opened = true;
       toggleExpandedBtn(this.toggleButton, true, this.bar);
     }
     this.findField.select();
     this.findField.focus();
-    this.#adjustWidth();
   }
   close() {
     if (!this.opened) {
       return;
     }
+    this.#resizeObserver.disconnect();
     this.opened = false;
     toggleExpandedBtn(this.toggleButton, false, this.bar);
     this.eventBus.dispatch("findbarclose", {
@@ -3380,15 +3374,15 @@ class PDFFindBar {
       this.open();
     }
   }
-  #adjustWidth() {
-    if (!this.opened) {
-      return;
-    }
-    this.bar.classList.remove("wrapContainers");
-    const findbarHeight = this.bar.clientHeight;
-    const inputContainerHeight = this.bar.firstElementChild.clientHeight;
+  #resizeObserverCallback(entries) {
+    const {
+      bar
+    } = this;
+    bar.classList.remove("wrapContainers");
+    const findbarHeight = bar.clientHeight;
+    const inputContainerHeight = bar.firstElementChild.clientHeight;
     if (findbarHeight > inputContainerHeight) {
-      this.bar.classList.add("wrapContainers");
+      bar.classList.add("wrapContainers");
     }
   }
 }
@@ -3916,7 +3910,7 @@ class PDFLayerViewer extends BaseTreeViewer {
       element.textContent = this._normalizeTextContent(name);
       return;
     }
-    element.textContent = await this.l10n.get("additional_layers");
+    element.setAttribute("data-l10n-id", "pdfjs-additional-layers");
     element.style.fontStyle = "italic";
   }
   _addToggleButton(div, {
@@ -4090,7 +4084,7 @@ class PDFOutlineViewer extends BaseTreeViewer {
     if (attachment) {
       element.href = linkService.getAnchorUrl("");
       element.onclick = () => {
-        this.downloadManager.openOrDownloadData(element, attachment.content, attachment.filename);
+        this.downloadManager.openOrDownloadData(attachment.content, attachment.filename);
         return false;
       };
       return;
@@ -5092,9 +5086,7 @@ class PDFSidebar {
     this._currentOutlineItemButton = elements.currentOutlineItemButton;
     this.eventBus = eventBus;
     this.l10n = l10n;
-    l10n.getDirection().then(dir => {
-      this.#isRTL = dir === "rtl";
-    });
+    this.#isRTL = l10n.getDirection() === "rtl";
     this.#addEventListeners();
   }
   reset() {
@@ -5217,8 +5209,7 @@ class PDFSidebar {
     });
   }
   #showUINotification() {
-    this.toggleButton.setAttribute("data-l10n-id", "toggle_sidebar_notification2");
-    this.l10n.translate(this.toggleButton);
+    this.toggleButton.setAttribute("data-l10n-id", "pdfjs-toggle-sidebar-notification-button");
     if (!this.isOpen) {
       this.toggleButton.classList.add(UI_NOTIFICATION_CLASS);
     }
@@ -5228,8 +5219,7 @@ class PDFSidebar {
       this.toggleButton.classList.remove(UI_NOTIFICATION_CLASS);
     }
     if (reset) {
-      this.toggleButton.setAttribute("data-l10n-id", "toggle_sidebar");
-      this.l10n.translate(this.toggleButton);
+      this.toggleButton.setAttribute("data-l10n-id", "pdfjs-toggle-sidebar-button");
     }
   }
   #addEventListeners() {
@@ -5644,12 +5634,12 @@ class PDFThumbnailView {
     return canvas;
   }
   get _thumbPageTitle() {
-    return this.l10n.get("thumb_page_title", {
+    return this.l10n.get("pdfjs-thumb-page-title", {
       page: this.pageLabel ?? this.id
     });
   }
   get _thumbPageCanvas() {
-    return this.l10n.get("thumb_page_canvas", {
+    return this.l10n.get("pdfjs-thumb-page-canvas", {
       page: this.pageLabel ?? this.id
     });
   }
@@ -5876,99 +5866,1434 @@ class PDFThumbnailViewer {
   }
 }
 
-;// CONCATENATED MODULE: ./web/l10n_utils.js
-const DEFAULT_L10N_STRINGS = {
-  of_pages: "of {{pagesCount}}",
-  page_of_pages: "({{pageNumber}} of {{pagesCount}})",
-  document_properties_kb: "{{size_kb}} KB ({{size_b}} bytes)",
-  document_properties_mb: "{{size_mb}} MB ({{size_b}} bytes)",
-  document_properties_date_string: "{{date}}, {{time}}",
-  document_properties_page_size_unit_inches: "in",
-  document_properties_page_size_unit_millimeters: "mm",
-  document_properties_page_size_orientation_portrait: "portrait",
-  document_properties_page_size_orientation_landscape: "landscape",
-  document_properties_page_size_name_a3: "A3",
-  document_properties_page_size_name_a4: "A4",
-  document_properties_page_size_name_letter: "Letter",
-  document_properties_page_size_name_legal: "Legal",
-  document_properties_page_size_dimension_string: "{{width}} × {{height}} {{unit}} ({{orientation}})",
-  document_properties_page_size_dimension_name_string: "{{width}} × {{height}} {{unit}} ({{name}}, {{orientation}})",
-  document_properties_linearized_yes: "Yes",
-  document_properties_linearized_no: "No",
-  additional_layers: "Additional Layers",
-  page_landmark: "Page {{page}}",
-  thumb_page_title: "Page {{page}}",
-  thumb_page_canvas: "Thumbnail of Page {{page}}",
-  find_reached_top: "Reached top of document, continued from bottom",
-  find_reached_bottom: "Reached end of document, continued from top",
-  "find_match_count[one]": "{{current}} of {{total}} match",
-  "find_match_count[other]": "{{current}} of {{total}} matches",
-  "find_match_count_limit[one]": "More than {{limit}} match",
-  "find_match_count_limit[other]": "More than {{limit}} matches",
-  find_not_found: "Phrase not found",
-  page_scale_width: "Page Width",
-  page_scale_fit: "Page Fit",
-  page_scale_auto: "Automatic Zoom",
-  page_scale_actual: "Actual Size",
-  page_scale_percent: "{{scale}}%",
-  loading_error: "An error occurred while loading the PDF.",
-  invalid_file_error: "Invalid or corrupted PDF file.",
-  missing_file_error: "Missing PDF file.",
-  unexpected_response_error: "Unexpected server response.",
-  rendering_error: "An error occurred while rendering the page.",
-  annotation_date_string: "{{date}}, {{time}}",
-  printing_not_supported: "Warning: Printing is not fully supported by this browser.",
-  printing_not_ready: "Warning: The PDF is not fully loaded for printing.",
-  web_fonts_disabled: "Web fonts are disabled: unable to use embedded PDF fonts.",
-  free_text2_default_content: "Start typing…",
-  editor_free_text2_aria_label: "Text Editor",
-  editor_ink2_aria_label: "Draw Editor",
-  editor_ink_canvas_aria_label: "User-created image",
-  editor_alt_text_button_label: "Alt text",
-  editor_alt_text_edit_button_label: "Edit alt text",
-  editor_alt_text_decorative_tooltip: "Marked as decorative",
-  editor_resizer_label_topLeft: "Top left corner — resize",
-  editor_resizer_label_topMiddle: "Top middle — resize",
-  editor_resizer_label_topRight: "Top right corner — resize",
-  editor_resizer_label_middleRight: "Middle right — resize",
-  editor_resizer_label_bottomRight: "Bottom right corner — resize",
-  editor_resizer_label_bottomMiddle: "Bottom middle — resize",
-  editor_resizer_label_bottomLeft: "Bottom left corner — resize",
-  editor_resizer_label_middleLeft: "Middle left — resize"
+;// CONCATENATED MODULE: ./node_modules/@fluent/bundle/esm/types.js
+class FluentType {
+  constructor(value) {
+    this.value = value;
+  }
+  valueOf() {
+    return this.value;
+  }
+}
+class FluentNone extends FluentType {
+  constructor(value = "???") {
+    super(value);
+  }
+  toString(scope) {
+    return `{${this.value}}`;
+  }
+}
+class FluentNumber extends FluentType {
+  constructor(value, opts = {}) {
+    super(value);
+    this.opts = opts;
+  }
+  toString(scope) {
+    try {
+      const nf = scope.memoizeIntlObject(Intl.NumberFormat, this.opts);
+      return nf.format(this.value);
+    } catch (err) {
+      scope.reportError(err);
+      return this.value.toString(10);
+    }
+  }
+}
+class FluentDateTime extends FluentType {
+  constructor(value, opts = {}) {
+    super(value);
+    this.opts = opts;
+  }
+  toString(scope) {
+    try {
+      const dtf = scope.memoizeIntlObject(Intl.DateTimeFormat, this.opts);
+      return dtf.format(this.value);
+    } catch (err) {
+      scope.reportError(err);
+      return new Date(this.value).toISOString();
+    }
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/@fluent/bundle/esm/resolver.js
+
+const MAX_PLACEABLES = 100;
+const FSI = "\u2068";
+const PDI = "\u2069";
+function match(scope, selector, key) {
+  if (key === selector) {
+    return true;
+  }
+  if (key instanceof FluentNumber && selector instanceof FluentNumber && key.value === selector.value) {
+    return true;
+  }
+  if (selector instanceof FluentNumber && typeof key === "string") {
+    let category = scope.memoizeIntlObject(Intl.PluralRules, selector.opts).select(selector.value);
+    if (key === category) {
+      return true;
+    }
+  }
+  return false;
+}
+function getDefault(scope, variants, star) {
+  if (variants[star]) {
+    return resolvePattern(scope, variants[star].value);
+  }
+  scope.reportError(new RangeError("No default"));
+  return new FluentNone();
+}
+function getArguments(scope, args) {
+  const positional = [];
+  const named = Object.create(null);
+  for (const arg of args) {
+    if (arg.type === "narg") {
+      named[arg.name] = resolveExpression(scope, arg.value);
+    } else {
+      positional.push(resolveExpression(scope, arg));
+    }
+  }
+  return {
+    positional,
+    named
+  };
+}
+function resolveExpression(scope, expr) {
+  switch (expr.type) {
+    case "str":
+      return expr.value;
+    case "num":
+      return new FluentNumber(expr.value, {
+        minimumFractionDigits: expr.precision
+      });
+    case "var":
+      return resolveVariableReference(scope, expr);
+    case "mesg":
+      return resolveMessageReference(scope, expr);
+    case "term":
+      return resolveTermReference(scope, expr);
+    case "func":
+      return resolveFunctionReference(scope, expr);
+    case "select":
+      return resolveSelectExpression(scope, expr);
+    default:
+      return new FluentNone();
+  }
+}
+function resolveVariableReference(scope, {
+  name
+}) {
+  let arg;
+  if (scope.params) {
+    if (Object.prototype.hasOwnProperty.call(scope.params, name)) {
+      arg = scope.params[name];
+    } else {
+      return new FluentNone(`$${name}`);
+    }
+  } else if (scope.args && Object.prototype.hasOwnProperty.call(scope.args, name)) {
+    arg = scope.args[name];
+  } else {
+    scope.reportError(new ReferenceError(`Unknown variable: $${name}`));
+    return new FluentNone(`$${name}`);
+  }
+  if (arg instanceof FluentType) {
+    return arg;
+  }
+  switch (typeof arg) {
+    case "string":
+      return arg;
+    case "number":
+      return new FluentNumber(arg);
+    case "object":
+      if (arg instanceof Date) {
+        return new FluentDateTime(arg.getTime());
+      }
+    default:
+      scope.reportError(new TypeError(`Variable type not supported: $${name}, ${typeof arg}`));
+      return new FluentNone(`$${name}`);
+  }
+}
+function resolveMessageReference(scope, {
+  name,
+  attr
+}) {
+  const message = scope.bundle._messages.get(name);
+  if (!message) {
+    scope.reportError(new ReferenceError(`Unknown message: ${name}`));
+    return new FluentNone(name);
+  }
+  if (attr) {
+    const attribute = message.attributes[attr];
+    if (attribute) {
+      return resolvePattern(scope, attribute);
+    }
+    scope.reportError(new ReferenceError(`Unknown attribute: ${attr}`));
+    return new FluentNone(`${name}.${attr}`);
+  }
+  if (message.value) {
+    return resolvePattern(scope, message.value);
+  }
+  scope.reportError(new ReferenceError(`No value: ${name}`));
+  return new FluentNone(name);
+}
+function resolveTermReference(scope, {
+  name,
+  attr,
+  args
+}) {
+  const id = `-${name}`;
+  const term = scope.bundle._terms.get(id);
+  if (!term) {
+    scope.reportError(new ReferenceError(`Unknown term: ${id}`));
+    return new FluentNone(id);
+  }
+  if (attr) {
+    const attribute = term.attributes[attr];
+    if (attribute) {
+      scope.params = getArguments(scope, args).named;
+      const resolved = resolvePattern(scope, attribute);
+      scope.params = null;
+      return resolved;
+    }
+    scope.reportError(new ReferenceError(`Unknown attribute: ${attr}`));
+    return new FluentNone(`${id}.${attr}`);
+  }
+  scope.params = getArguments(scope, args).named;
+  const resolved = resolvePattern(scope, term.value);
+  scope.params = null;
+  return resolved;
+}
+function resolveFunctionReference(scope, {
+  name,
+  args
+}) {
+  let func = scope.bundle._functions[name];
+  if (!func) {
+    scope.reportError(new ReferenceError(`Unknown function: ${name}()`));
+    return new FluentNone(`${name}()`);
+  }
+  if (typeof func !== "function") {
+    scope.reportError(new TypeError(`Function ${name}() is not callable`));
+    return new FluentNone(`${name}()`);
+  }
+  try {
+    let resolved = getArguments(scope, args);
+    return func(resolved.positional, resolved.named);
+  } catch (err) {
+    scope.reportError(err);
+    return new FluentNone(`${name}()`);
+  }
+}
+function resolveSelectExpression(scope, {
+  selector,
+  variants,
+  star
+}) {
+  let sel = resolveExpression(scope, selector);
+  if (sel instanceof FluentNone) {
+    return getDefault(scope, variants, star);
+  }
+  for (const variant of variants) {
+    const key = resolveExpression(scope, variant.key);
+    if (match(scope, sel, key)) {
+      return resolvePattern(scope, variant.value);
+    }
+  }
+  return getDefault(scope, variants, star);
+}
+function resolveComplexPattern(scope, ptn) {
+  if (scope.dirty.has(ptn)) {
+    scope.reportError(new RangeError("Cyclic reference"));
+    return new FluentNone();
+  }
+  scope.dirty.add(ptn);
+  const result = [];
+  const useIsolating = scope.bundle._useIsolating && ptn.length > 1;
+  for (const elem of ptn) {
+    if (typeof elem === "string") {
+      result.push(scope.bundle._transform(elem));
+      continue;
+    }
+    scope.placeables++;
+    if (scope.placeables > MAX_PLACEABLES) {
+      scope.dirty.delete(ptn);
+      throw new RangeError(`Too many placeables expanded: ${scope.placeables}, ` + `max allowed is ${MAX_PLACEABLES}`);
+    }
+    if (useIsolating) {
+      result.push(FSI);
+    }
+    result.push(resolveExpression(scope, elem).toString(scope));
+    if (useIsolating) {
+      result.push(PDI);
+    }
+  }
+  scope.dirty.delete(ptn);
+  return result.join("");
+}
+function resolvePattern(scope, value) {
+  if (typeof value === "string") {
+    return scope.bundle._transform(value);
+  }
+  return resolveComplexPattern(scope, value);
+}
+;// CONCATENATED MODULE: ./node_modules/@fluent/bundle/esm/scope.js
+class Scope {
+  constructor(bundle, errors, args) {
+    this.dirty = new WeakSet();
+    this.params = null;
+    this.placeables = 0;
+    this.bundle = bundle;
+    this.errors = errors;
+    this.args = args;
+  }
+  reportError(error) {
+    if (!this.errors || !(error instanceof Error)) {
+      throw error;
+    }
+    this.errors.push(error);
+  }
+  memoizeIntlObject(ctor, opts) {
+    let cache = this.bundle._intls.get(ctor);
+    if (!cache) {
+      cache = {};
+      this.bundle._intls.set(ctor, cache);
+    }
+    let id = JSON.stringify(opts);
+    if (!cache[id]) {
+      cache[id] = new ctor(this.bundle.locales, opts);
+    }
+    return cache[id];
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/@fluent/bundle/esm/builtins.js
+
+function values(opts, allowed) {
+  const unwrapped = Object.create(null);
+  for (const [name, opt] of Object.entries(opts)) {
+    if (allowed.includes(name)) {
+      unwrapped[name] = opt.valueOf();
+    }
+  }
+  return unwrapped;
+}
+const NUMBER_ALLOWED = ["unitDisplay", "currencyDisplay", "useGrouping", "minimumIntegerDigits", "minimumFractionDigits", "maximumFractionDigits", "minimumSignificantDigits", "maximumSignificantDigits"];
+function NUMBER(args, opts) {
+  let arg = args[0];
+  if (arg instanceof FluentNone) {
+    return new FluentNone(`NUMBER(${arg.valueOf()})`);
+  }
+  if (arg instanceof FluentNumber) {
+    return new FluentNumber(arg.valueOf(), {
+      ...arg.opts,
+      ...values(opts, NUMBER_ALLOWED)
+    });
+  }
+  if (arg instanceof FluentDateTime) {
+    return new FluentNumber(arg.valueOf(), {
+      ...values(opts, NUMBER_ALLOWED)
+    });
+  }
+  throw new TypeError("Invalid argument to NUMBER");
+}
+const DATETIME_ALLOWED = ["dateStyle", "timeStyle", "fractionalSecondDigits", "dayPeriod", "hour12", "weekday", "era", "year", "month", "day", "hour", "minute", "second", "timeZoneName"];
+function DATETIME(args, opts) {
+  let arg = args[0];
+  if (arg instanceof FluentNone) {
+    return new FluentNone(`DATETIME(${arg.valueOf()})`);
+  }
+  if (arg instanceof FluentDateTime) {
+    return new FluentDateTime(arg.valueOf(), {
+      ...arg.opts,
+      ...values(opts, DATETIME_ALLOWED)
+    });
+  }
+  if (arg instanceof FluentNumber) {
+    return new FluentDateTime(arg.valueOf(), {
+      ...values(opts, DATETIME_ALLOWED)
+    });
+  }
+  throw new TypeError("Invalid argument to DATETIME");
+}
+;// CONCATENATED MODULE: ./node_modules/@fluent/bundle/esm/memoizer.js
+const cache = new Map();
+function getMemoizerForLocale(locales) {
+  const stringLocale = Array.isArray(locales) ? locales.join(" ") : locales;
+  let memoizer = cache.get(stringLocale);
+  if (memoizer === undefined) {
+    memoizer = new Map();
+    cache.set(stringLocale, memoizer);
+  }
+  return memoizer;
+}
+;// CONCATENATED MODULE: ./node_modules/@fluent/bundle/esm/bundle.js
+
+
+
+
+
+class FluentBundle {
+  constructor(locales, {
+    functions,
+    useIsolating = true,
+    transform = v => v
+  } = {}) {
+    this._terms = new Map();
+    this._messages = new Map();
+    this.locales = Array.isArray(locales) ? locales : [locales];
+    this._functions = {
+      NUMBER: NUMBER,
+      DATETIME: DATETIME,
+      ...functions
+    };
+    this._useIsolating = useIsolating;
+    this._transform = transform;
+    this._intls = getMemoizerForLocale(locales);
+  }
+  hasMessage(id) {
+    return this._messages.has(id);
+  }
+  getMessage(id) {
+    return this._messages.get(id);
+  }
+  addResource(res, {
+    allowOverrides = false
+  } = {}) {
+    const errors = [];
+    for (let i = 0; i < res.body.length; i++) {
+      let entry = res.body[i];
+      if (entry.id.startsWith("-")) {
+        if (allowOverrides === false && this._terms.has(entry.id)) {
+          errors.push(new Error(`Attempt to override an existing term: "${entry.id}"`));
+          continue;
+        }
+        this._terms.set(entry.id, entry);
+      } else {
+        if (allowOverrides === false && this._messages.has(entry.id)) {
+          errors.push(new Error(`Attempt to override an existing message: "${entry.id}"`));
+          continue;
+        }
+        this._messages.set(entry.id, entry);
+      }
+    }
+    return errors;
+  }
+  formatPattern(pattern, args = null, errors = null) {
+    if (typeof pattern === "string") {
+      return this._transform(pattern);
+    }
+    let scope = new Scope(this, errors, args);
+    try {
+      let value = resolveComplexPattern(scope, pattern);
+      return value.toString(scope);
+    } catch (err) {
+      if (scope.errors && err instanceof Error) {
+        scope.errors.push(err);
+        return new FluentNone().toString(scope);
+      }
+      throw err;
+    }
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/@fluent/bundle/esm/resource.js
+const RE_MESSAGE_START = /^(-?[a-zA-Z][\w-]*) *= */gm;
+const RE_ATTRIBUTE_START = /\.([a-zA-Z][\w-]*) *= */y;
+const RE_VARIANT_START = /\*?\[/y;
+const RE_NUMBER_LITERAL = /(-?[0-9]+(?:\.([0-9]+))?)/y;
+const RE_IDENTIFIER = /([a-zA-Z][\w-]*)/y;
+const RE_REFERENCE = /([$-])?([a-zA-Z][\w-]*)(?:\.([a-zA-Z][\w-]*))?/y;
+const RE_FUNCTION_NAME = /^[A-Z][A-Z0-9_-]*$/;
+const RE_TEXT_RUN = /([^{}\n\r]+)/y;
+const RE_STRING_RUN = /([^\\"\n\r]*)/y;
+const RE_STRING_ESCAPE = /\\([\\"])/y;
+const RE_UNICODE_ESCAPE = /\\u([a-fA-F0-9]{4})|\\U([a-fA-F0-9]{6})/y;
+const RE_LEADING_NEWLINES = /^\n+/;
+const RE_TRAILING_SPACES = / +$/;
+const RE_BLANK_LINES = / *\r?\n/g;
+const RE_INDENT = /( *)$/;
+const TOKEN_BRACE_OPEN = /{\s*/y;
+const TOKEN_BRACE_CLOSE = /\s*}/y;
+const TOKEN_BRACKET_OPEN = /\[\s*/y;
+const TOKEN_BRACKET_CLOSE = /\s*] */y;
+const TOKEN_PAREN_OPEN = /\s*\(\s*/y;
+const TOKEN_ARROW = /\s*->\s*/y;
+const TOKEN_COLON = /\s*:\s*/y;
+const TOKEN_COMMA = /\s*,?\s*/y;
+const TOKEN_BLANK = /\s+/y;
+class FluentResource {
+  constructor(source) {
+    this.body = [];
+    RE_MESSAGE_START.lastIndex = 0;
+    let cursor = 0;
+    while (true) {
+      let next = RE_MESSAGE_START.exec(source);
+      if (next === null) {
+        break;
+      }
+      cursor = RE_MESSAGE_START.lastIndex;
+      try {
+        this.body.push(parseMessage(next[1]));
+      } catch (err) {
+        if (err instanceof SyntaxError) {
+          continue;
+        }
+        throw err;
+      }
+    }
+    function test(re) {
+      re.lastIndex = cursor;
+      return re.test(source);
+    }
+    function consumeChar(char, errorClass) {
+      if (source[cursor] === char) {
+        cursor++;
+        return true;
+      }
+      if (errorClass) {
+        throw new errorClass(`Expected ${char}`);
+      }
+      return false;
+    }
+    function consumeToken(re, errorClass) {
+      if (test(re)) {
+        cursor = re.lastIndex;
+        return true;
+      }
+      if (errorClass) {
+        throw new errorClass(`Expected ${re.toString()}`);
+      }
+      return false;
+    }
+    function match(re) {
+      re.lastIndex = cursor;
+      let result = re.exec(source);
+      if (result === null) {
+        throw new SyntaxError(`Expected ${re.toString()}`);
+      }
+      cursor = re.lastIndex;
+      return result;
+    }
+    function match1(re) {
+      return match(re)[1];
+    }
+    function parseMessage(id) {
+      let value = parsePattern();
+      let attributes = parseAttributes();
+      if (value === null && Object.keys(attributes).length === 0) {
+        throw new SyntaxError("Expected message value or attributes");
+      }
+      return {
+        id,
+        value,
+        attributes
+      };
+    }
+    function parseAttributes() {
+      let attrs = Object.create(null);
+      while (test(RE_ATTRIBUTE_START)) {
+        let name = match1(RE_ATTRIBUTE_START);
+        let value = parsePattern();
+        if (value === null) {
+          throw new SyntaxError("Expected attribute value");
+        }
+        attrs[name] = value;
+      }
+      return attrs;
+    }
+    function parsePattern() {
+      let first;
+      if (test(RE_TEXT_RUN)) {
+        first = match1(RE_TEXT_RUN);
+      }
+      if (source[cursor] === "{" || source[cursor] === "}") {
+        return parsePatternElements(first ? [first] : [], Infinity);
+      }
+      let indent = parseIndent();
+      if (indent) {
+        if (first) {
+          return parsePatternElements([first, indent], indent.length);
+        }
+        indent.value = trim(indent.value, RE_LEADING_NEWLINES);
+        return parsePatternElements([indent], indent.length);
+      }
+      if (first) {
+        return trim(first, RE_TRAILING_SPACES);
+      }
+      return null;
+    }
+    function parsePatternElements(elements = [], commonIndent) {
+      while (true) {
+        if (test(RE_TEXT_RUN)) {
+          elements.push(match1(RE_TEXT_RUN));
+          continue;
+        }
+        if (source[cursor] === "{") {
+          elements.push(parsePlaceable());
+          continue;
+        }
+        if (source[cursor] === "}") {
+          throw new SyntaxError("Unbalanced closing brace");
+        }
+        let indent = parseIndent();
+        if (indent) {
+          elements.push(indent);
+          commonIndent = Math.min(commonIndent, indent.length);
+          continue;
+        }
+        break;
+      }
+      let lastIndex = elements.length - 1;
+      let lastElement = elements[lastIndex];
+      if (typeof lastElement === "string") {
+        elements[lastIndex] = trim(lastElement, RE_TRAILING_SPACES);
+      }
+      let baked = [];
+      for (let element of elements) {
+        if (element instanceof Indent) {
+          element = element.value.slice(0, element.value.length - commonIndent);
+        }
+        if (element) {
+          baked.push(element);
+        }
+      }
+      return baked;
+    }
+    function parsePlaceable() {
+      consumeToken(TOKEN_BRACE_OPEN, SyntaxError);
+      let selector = parseInlineExpression();
+      if (consumeToken(TOKEN_BRACE_CLOSE)) {
+        return selector;
+      }
+      if (consumeToken(TOKEN_ARROW)) {
+        let variants = parseVariants();
+        consumeToken(TOKEN_BRACE_CLOSE, SyntaxError);
+        return {
+          type: "select",
+          selector,
+          ...variants
+        };
+      }
+      throw new SyntaxError("Unclosed placeable");
+    }
+    function parseInlineExpression() {
+      if (source[cursor] === "{") {
+        return parsePlaceable();
+      }
+      if (test(RE_REFERENCE)) {
+        let [, sigil, name, attr = null] = match(RE_REFERENCE);
+        if (sigil === "$") {
+          return {
+            type: "var",
+            name
+          };
+        }
+        if (consumeToken(TOKEN_PAREN_OPEN)) {
+          let args = parseArguments();
+          if (sigil === "-") {
+            return {
+              type: "term",
+              name,
+              attr,
+              args
+            };
+          }
+          if (RE_FUNCTION_NAME.test(name)) {
+            return {
+              type: "func",
+              name,
+              args
+            };
+          }
+          throw new SyntaxError("Function names must be all upper-case");
+        }
+        if (sigil === "-") {
+          return {
+            type: "term",
+            name,
+            attr,
+            args: []
+          };
+        }
+        return {
+          type: "mesg",
+          name,
+          attr
+        };
+      }
+      return parseLiteral();
+    }
+    function parseArguments() {
+      let args = [];
+      while (true) {
+        switch (source[cursor]) {
+          case ")":
+            cursor++;
+            return args;
+          case undefined:
+            throw new SyntaxError("Unclosed argument list");
+        }
+        args.push(parseArgument());
+        consumeToken(TOKEN_COMMA);
+      }
+    }
+    function parseArgument() {
+      let expr = parseInlineExpression();
+      if (expr.type !== "mesg") {
+        return expr;
+      }
+      if (consumeToken(TOKEN_COLON)) {
+        return {
+          type: "narg",
+          name: expr.name,
+          value: parseLiteral()
+        };
+      }
+      return expr;
+    }
+    function parseVariants() {
+      let variants = [];
+      let count = 0;
+      let star;
+      while (test(RE_VARIANT_START)) {
+        if (consumeChar("*")) {
+          star = count;
+        }
+        let key = parseVariantKey();
+        let value = parsePattern();
+        if (value === null) {
+          throw new SyntaxError("Expected variant value");
+        }
+        variants[count++] = {
+          key,
+          value
+        };
+      }
+      if (count === 0) {
+        return null;
+      }
+      if (star === undefined) {
+        throw new SyntaxError("Expected default variant");
+      }
+      return {
+        variants,
+        star
+      };
+    }
+    function parseVariantKey() {
+      consumeToken(TOKEN_BRACKET_OPEN, SyntaxError);
+      let key;
+      if (test(RE_NUMBER_LITERAL)) {
+        key = parseNumberLiteral();
+      } else {
+        key = {
+          type: "str",
+          value: match1(RE_IDENTIFIER)
+        };
+      }
+      consumeToken(TOKEN_BRACKET_CLOSE, SyntaxError);
+      return key;
+    }
+    function parseLiteral() {
+      if (test(RE_NUMBER_LITERAL)) {
+        return parseNumberLiteral();
+      }
+      if (source[cursor] === '"') {
+        return parseStringLiteral();
+      }
+      throw new SyntaxError("Invalid expression");
+    }
+    function parseNumberLiteral() {
+      let [, value, fraction = ""] = match(RE_NUMBER_LITERAL);
+      let precision = fraction.length;
+      return {
+        type: "num",
+        value: parseFloat(value),
+        precision
+      };
+    }
+    function parseStringLiteral() {
+      consumeChar('"', SyntaxError);
+      let value = "";
+      while (true) {
+        value += match1(RE_STRING_RUN);
+        if (source[cursor] === "\\") {
+          value += parseEscapeSequence();
+          continue;
+        }
+        if (consumeChar('"')) {
+          return {
+            type: "str",
+            value
+          };
+        }
+        throw new SyntaxError("Unclosed string literal");
+      }
+    }
+    function parseEscapeSequence() {
+      if (test(RE_STRING_ESCAPE)) {
+        return match1(RE_STRING_ESCAPE);
+      }
+      if (test(RE_UNICODE_ESCAPE)) {
+        let [, codepoint4, codepoint6] = match(RE_UNICODE_ESCAPE);
+        let codepoint = parseInt(codepoint4 || codepoint6, 16);
+        return codepoint <= 0xd7ff || 0xe000 <= codepoint ? String.fromCodePoint(codepoint) : "�";
+      }
+      throw new SyntaxError("Unknown escape sequence");
+    }
+    function parseIndent() {
+      let start = cursor;
+      consumeToken(TOKEN_BLANK);
+      switch (source[cursor]) {
+        case ".":
+        case "[":
+        case "*":
+        case "}":
+        case undefined:
+          return false;
+        case "{":
+          return makeIndent(source.slice(start, cursor));
+      }
+      if (source[cursor - 1] === " ") {
+        return makeIndent(source.slice(start, cursor));
+      }
+      return false;
+    }
+    function trim(text, re) {
+      return text.replace(re, "");
+    }
+    function makeIndent(blank) {
+      let value = blank.replace(RE_BLANK_LINES, "\n");
+      let length = RE_INDENT.exec(blank)[1].length;
+      return new Indent(value, length);
+    }
+  }
+}
+class Indent {
+  constructor(value, length) {
+    this.value = value;
+    this.length = length;
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/@fluent/bundle/esm/index.js
+
+
+
+;// CONCATENATED MODULE: ./node_modules/@fluent/dom/esm/overlay.js
+const reOverlay = /<|&#?\w+;/;
+const TEXT_LEVEL_ELEMENTS = {
+  "http://www.w3.org/1999/xhtml": ["em", "strong", "small", "s", "cite", "q", "dfn", "abbr", "data", "time", "code", "var", "samp", "kbd", "sub", "sup", "i", "b", "u", "mark", "bdi", "bdo", "span", "br", "wbr"]
 };
-{
-  DEFAULT_L10N_STRINGS.print_progress_percent = "{{progress}}%";
-}
-function getL10nFallback(key, args) {
-  switch (key) {
-    case "find_match_count":
-      key = `find_match_count[${args.total === 1 ? "one" : "other"}]`;
-      break;
-    case "find_match_count_limit":
-      key = `find_match_count_limit[${args.limit === 1 ? "one" : "other"}]`;
-      break;
+const LOCALIZABLE_ATTRIBUTES = {
+  "http://www.w3.org/1999/xhtml": {
+    global: ["title", "aria-label", "aria-valuetext"],
+    a: ["download"],
+    area: ["download", "alt"],
+    input: ["alt", "placeholder"],
+    menuitem: ["label"],
+    menu: ["label"],
+    optgroup: ["label"],
+    option: ["label"],
+    track: ["label"],
+    img: ["alt"],
+    textarea: ["placeholder"],
+    th: ["abbr"]
+  },
+  "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul": {
+    global: ["accesskey", "aria-label", "aria-valuetext", "label", "title", "tooltiptext"],
+    description: ["value"],
+    key: ["key", "keycode"],
+    label: ["value"],
+    textbox: ["placeholder", "value"]
   }
-  return DEFAULT_L10N_STRINGS[key] || "";
-}
-function formatL10nValue(text, args) {
-  if (!args) {
-    return text;
+};
+function translateElement(element, translation) {
+  const {
+    value
+  } = translation;
+  if (typeof value === "string") {
+    if (element.localName === "title" && element.namespaceURI === "http://www.w3.org/1999/xhtml") {
+      element.textContent = value;
+    } else if (!reOverlay.test(value)) {
+      element.textContent = value;
+    } else {
+      const templateElement = element.ownerDocument.createElementNS("http://www.w3.org/1999/xhtml", "template");
+      templateElement.innerHTML = value;
+      overlayChildNodes(templateElement.content, element);
+    }
   }
-  return text.replaceAll(/\{\{\s*(\w+)\s*\}\}/g, (all, name) => {
-    return name in args ? args[name] : "{{" + name + "}}";
+  overlayAttributes(translation, element);
+}
+function overlayChildNodes(fromFragment, toElement) {
+  for (const childNode of fromFragment.childNodes) {
+    if (childNode.nodeType === childNode.TEXT_NODE) {
+      continue;
+    }
+    if (childNode.hasAttribute("data-l10n-name")) {
+      const sanitized = getNodeForNamedElement(toElement, childNode);
+      fromFragment.replaceChild(sanitized, childNode);
+      continue;
+    }
+    if (isElementAllowed(childNode)) {
+      const sanitized = createSanitizedElement(childNode);
+      fromFragment.replaceChild(sanitized, childNode);
+      continue;
+    }
+    console.warn(`An element of forbidden type "${childNode.localName}" was found in ` + "the translation. Only safe text-level elements and elements with " + "data-l10n-name are allowed.");
+    fromFragment.replaceChild(createTextNodeFromTextContent(childNode), childNode);
+  }
+  toElement.textContent = "";
+  toElement.appendChild(fromFragment);
+}
+function hasAttribute(attributes, name) {
+  if (!attributes) {
+    return false;
+  }
+  for (let attr of attributes) {
+    if (attr.name === name) {
+      return true;
+    }
+  }
+  return false;
+}
+function overlayAttributes(fromElement, toElement) {
+  const explicitlyAllowed = toElement.hasAttribute("data-l10n-attrs") ? toElement.getAttribute("data-l10n-attrs").split(",").map(i => i.trim()) : null;
+  for (const attr of Array.from(toElement.attributes)) {
+    if (isAttrNameLocalizable(attr.name, toElement, explicitlyAllowed) && !hasAttribute(fromElement.attributes, attr.name)) {
+      toElement.removeAttribute(attr.name);
+    }
+  }
+  if (!fromElement.attributes) {
+    return;
+  }
+  for (const attr of Array.from(fromElement.attributes)) {
+    if (isAttrNameLocalizable(attr.name, toElement, explicitlyAllowed) && toElement.getAttribute(attr.name) !== attr.value) {
+      toElement.setAttribute(attr.name, attr.value);
+    }
+  }
+}
+function getNodeForNamedElement(sourceElement, translatedChild) {
+  const childName = translatedChild.getAttribute("data-l10n-name");
+  const sourceChild = sourceElement.querySelector(`[data-l10n-name="${childName}"]`);
+  if (!sourceChild) {
+    console.warn(`An element named "${childName}" wasn't found in the source.`);
+    return createTextNodeFromTextContent(translatedChild);
+  }
+  if (sourceChild.localName !== translatedChild.localName) {
+    console.warn(`An element named "${childName}" was found in the translation ` + `but its type ${translatedChild.localName} didn't match the ` + `element found in the source (${sourceChild.localName}).`);
+    return createTextNodeFromTextContent(translatedChild);
+  }
+  sourceElement.removeChild(sourceChild);
+  const clone = sourceChild.cloneNode(false);
+  return shallowPopulateUsing(translatedChild, clone);
+}
+function createSanitizedElement(element) {
+  const clone = element.ownerDocument.createElement(element.localName);
+  return shallowPopulateUsing(element, clone);
+}
+function createTextNodeFromTextContent(element) {
+  return element.ownerDocument.createTextNode(element.textContent);
+}
+function isElementAllowed(element) {
+  const allowed = TEXT_LEVEL_ELEMENTS[element.namespaceURI];
+  return allowed && allowed.includes(element.localName);
+}
+function isAttrNameLocalizable(name, element, explicitlyAllowed = null) {
+  if (explicitlyAllowed && explicitlyAllowed.includes(name)) {
+    return true;
+  }
+  const allowed = LOCALIZABLE_ATTRIBUTES[element.namespaceURI];
+  if (!allowed) {
+    return false;
+  }
+  const attrName = name.toLowerCase();
+  const elemName = element.localName;
+  if (allowed.global.includes(attrName)) {
+    return true;
+  }
+  if (!allowed[elemName]) {
+    return false;
+  }
+  if (allowed[elemName].includes(attrName)) {
+    return true;
+  }
+  if (element.namespaceURI === "http://www.w3.org/1999/xhtml" && elemName === "input" && attrName === "value") {
+    const type = element.type.toLowerCase();
+    if (type === "submit" || type === "button" || type === "reset") {
+      return true;
+    }
+  }
+  return false;
+}
+function shallowPopulateUsing(fromElement, toElement) {
+  toElement.textContent = fromElement.textContent;
+  overlayAttributes(fromElement, toElement);
+  return toElement;
+}
+;// CONCATENATED MODULE: ./node_modules/cached-iterable/src/cached_iterable.mjs
+class CachedIterable extends Array {
+  static from(iterable) {
+    if (iterable instanceof this) {
+      return iterable;
+    }
+    return new this(iterable);
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/cached-iterable/src/cached_sync_iterable.mjs
+
+class CachedSyncIterable extends CachedIterable {
+  constructor(iterable) {
+    super();
+    if (Symbol.iterator in Object(iterable)) {
+      this.iterator = iterable[Symbol.iterator]();
+    } else {
+      throw new TypeError("Argument must implement the iteration protocol.");
+    }
+  }
+  [Symbol.iterator]() {
+    const cached = this;
+    let cur = 0;
+    return {
+      next() {
+        if (cached.length <= cur) {
+          cached.push(cached.iterator.next());
+        }
+        return cached[cur++];
+      }
+    };
+  }
+  touchNext(count = 1) {
+    let idx = 0;
+    while (idx++ < count) {
+      const last = this[this.length - 1];
+      if (last && last.done) {
+        break;
+      }
+      this.push(this.iterator.next());
+    }
+    return this[this.length - 1];
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/cached-iterable/src/cached_async_iterable.mjs
+
+class CachedAsyncIterable extends CachedIterable {
+  constructor(iterable) {
+    super();
+    if (Symbol.asyncIterator in Object(iterable)) {
+      this.iterator = iterable[Symbol.asyncIterator]();
+    } else if (Symbol.iterator in Object(iterable)) {
+      this.iterator = iterable[Symbol.iterator]();
+    } else {
+      throw new TypeError("Argument must implement the iteration protocol.");
+    }
+  }
+  [Symbol.asyncIterator]() {
+    const cached = this;
+    let cur = 0;
+    return {
+      async next() {
+        if (cached.length <= cur) {
+          cached.push(cached.iterator.next());
+        }
+        return cached[cur++];
+      }
+    };
+  }
+  async touchNext(count = 1) {
+    let idx = 0;
+    while (idx++ < count) {
+      const last = this[this.length - 1];
+      if (last && (await last).done) {
+        break;
+      }
+      this.push(this.iterator.next());
+    }
+    return this[this.length - 1];
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/cached-iterable/src/index.mjs
+
+
+;// CONCATENATED MODULE: ./node_modules/@fluent/dom/esm/localization.js
+
+class Localization {
+  constructor(resourceIds = [], generateBundles) {
+    this.resourceIds = resourceIds;
+    this.generateBundles = generateBundles;
+    this.onChange(true);
+  }
+  addResourceIds(resourceIds, eager = false) {
+    this.resourceIds.push(...resourceIds);
+    this.onChange(eager);
+    return this.resourceIds.length;
+  }
+  removeResourceIds(resourceIds) {
+    this.resourceIds = this.resourceIds.filter(r => !resourceIds.includes(r));
+    this.onChange();
+    return this.resourceIds.length;
+  }
+  async formatWithFallback(keys, method) {
+    const translations = [];
+    let hasAtLeastOneBundle = false;
+    for await (const bundle of this.bundles) {
+      hasAtLeastOneBundle = true;
+      const missingIds = keysFromBundle(method, bundle, keys, translations);
+      if (missingIds.size === 0) {
+        break;
+      }
+      if (typeof console !== "undefined") {
+        const locale = bundle.locales[0];
+        const ids = Array.from(missingIds).join(", ");
+        console.warn(`[fluent] Missing translations in ${locale}: ${ids}`);
+      }
+    }
+    if (!hasAtLeastOneBundle && typeof console !== "undefined") {
+      console.warn(`[fluent] Request for keys failed because no resource bundles got generated.
+  keys: ${JSON.stringify(keys)}.
+  resourceIds: ${JSON.stringify(this.resourceIds)}.`);
+    }
+    return translations;
+  }
+  formatMessages(keys) {
+    return this.formatWithFallback(keys, messageFromBundle);
+  }
+  formatValues(keys) {
+    return this.formatWithFallback(keys, valueFromBundle);
+  }
+  async formatValue(id, args) {
+    const [val] = await this.formatValues([{
+      id,
+      args
+    }]);
+    return val;
+  }
+  handleEvent() {
+    this.onChange();
+  }
+  onChange(eager = false) {
+    this.bundles = CachedAsyncIterable.from(this.generateBundles(this.resourceIds));
+    if (eager) {
+      this.bundles.touchNext(2);
+    }
+  }
+}
+function valueFromBundle(bundle, errors, message, args) {
+  if (message.value) {
+    return bundle.formatPattern(message.value, args, errors);
+  }
+  return null;
+}
+function messageFromBundle(bundle, errors, message, args) {
+  const formatted = {
+    value: null,
+    attributes: null
+  };
+  if (message.value) {
+    formatted.value = bundle.formatPattern(message.value, args, errors);
+  }
+  let attrNames = Object.keys(message.attributes);
+  if (attrNames.length > 0) {
+    formatted.attributes = new Array(attrNames.length);
+    for (let [i, name] of attrNames.entries()) {
+      let value = bundle.formatPattern(message.attributes[name], args, errors);
+      formatted.attributes[i] = {
+        name,
+        value
+      };
+    }
+  }
+  return formatted;
+}
+function keysFromBundle(method, bundle, keys, translations) {
+  const messageErrors = [];
+  const missingIds = new Set();
+  keys.forEach(({
+    id,
+    args
+  }, i) => {
+    if (translations[i] !== undefined) {
+      return;
+    }
+    let message = bundle.getMessage(id);
+    if (message) {
+      messageErrors.length = 0;
+      translations[i] = method(bundle, messageErrors, message, args);
+      if (messageErrors.length > 0 && typeof console !== "undefined") {
+        const locale = bundle.locales[0];
+        const errors = messageErrors.join(", ");
+        console.warn(`[fluent][resolver] errors in ${locale}/${id}: ${errors}.`);
+      }
+    } else {
+      missingIds.add(id);
+    }
   });
+  return missingIds;
+}
+;// CONCATENATED MODULE: ./node_modules/@fluent/dom/esm/dom_localization.js
+
+
+const L10NID_ATTR_NAME = "data-l10n-id";
+const L10NARGS_ATTR_NAME = "data-l10n-args";
+const L10N_ELEMENT_QUERY = `[${L10NID_ATTR_NAME}]`;
+class DOMLocalization extends Localization {
+  constructor(resourceIds, generateBundles) {
+    super(resourceIds, generateBundles);
+    this.roots = new Set();
+    this.pendingrAF = null;
+    this.pendingElements = new Set();
+    this.windowElement = null;
+    this.mutationObserver = null;
+    this.observerConfig = {
+      attributes: true,
+      characterData: false,
+      childList: true,
+      subtree: true,
+      attributeFilter: [L10NID_ATTR_NAME, L10NARGS_ATTR_NAME]
+    };
+  }
+  onChange(eager = false) {
+    super.onChange(eager);
+    if (this.roots) {
+      this.translateRoots();
+    }
+  }
+  setAttributes(element, id, args) {
+    element.setAttribute(L10NID_ATTR_NAME, id);
+    if (args) {
+      element.setAttribute(L10NARGS_ATTR_NAME, JSON.stringify(args));
+    } else {
+      element.removeAttribute(L10NARGS_ATTR_NAME);
+    }
+    return element;
+  }
+  getAttributes(element) {
+    return {
+      id: element.getAttribute(L10NID_ATTR_NAME),
+      args: JSON.parse(element.getAttribute(L10NARGS_ATTR_NAME) || null)
+    };
+  }
+  connectRoot(newRoot) {
+    for (const root of this.roots) {
+      if (root === newRoot || root.contains(newRoot) || newRoot.contains(root)) {
+        throw new Error("Cannot add a root that overlaps with existing root.");
+      }
+    }
+    if (this.windowElement) {
+      if (this.windowElement !== newRoot.ownerDocument.defaultView) {
+        throw new Error(`Cannot connect a root:
+          DOMLocalization already has a root from a different window.`);
+      }
+    } else {
+      this.windowElement = newRoot.ownerDocument.defaultView;
+      this.mutationObserver = new this.windowElement.MutationObserver(mutations => this.translateMutations(mutations));
+    }
+    this.roots.add(newRoot);
+    this.mutationObserver.observe(newRoot, this.observerConfig);
+  }
+  disconnectRoot(root) {
+    this.roots.delete(root);
+    this.pauseObserving();
+    if (this.roots.size === 0) {
+      this.mutationObserver = null;
+      this.windowElement = null;
+      this.pendingrAF = null;
+      this.pendingElements.clear();
+      return true;
+    }
+    this.resumeObserving();
+    return false;
+  }
+  translateRoots() {
+    const roots = Array.from(this.roots);
+    return Promise.all(roots.map(root => this.translateFragment(root)));
+  }
+  pauseObserving() {
+    if (!this.mutationObserver) {
+      return;
+    }
+    this.translateMutations(this.mutationObserver.takeRecords());
+    this.mutationObserver.disconnect();
+  }
+  resumeObserving() {
+    if (!this.mutationObserver) {
+      return;
+    }
+    for (const root of this.roots) {
+      this.mutationObserver.observe(root, this.observerConfig);
+    }
+  }
+  translateMutations(mutations) {
+    for (const mutation of mutations) {
+      switch (mutation.type) {
+        case "attributes":
+          if (mutation.target.hasAttribute("data-l10n-id")) {
+            this.pendingElements.add(mutation.target);
+          }
+          break;
+        case "childList":
+          for (const addedNode of mutation.addedNodes) {
+            if (addedNode.nodeType === addedNode.ELEMENT_NODE) {
+              if (addedNode.childElementCount) {
+                for (const element of this.getTranslatables(addedNode)) {
+                  this.pendingElements.add(element);
+                }
+              } else if (addedNode.hasAttribute(L10NID_ATTR_NAME)) {
+                this.pendingElements.add(addedNode);
+              }
+            }
+          }
+          break;
+      }
+    }
+    if (this.pendingElements.size > 0) {
+      if (this.pendingrAF === null) {
+        this.pendingrAF = this.windowElement.requestAnimationFrame(() => {
+          this.translateElements(Array.from(this.pendingElements));
+          this.pendingElements.clear();
+          this.pendingrAF = null;
+        });
+      }
+    }
+  }
+  translateFragment(frag) {
+    return this.translateElements(this.getTranslatables(frag));
+  }
+  async translateElements(elements) {
+    if (!elements.length) {
+      return undefined;
+    }
+    const keys = elements.map(this.getKeysForElement);
+    const translations = await this.formatMessages(keys);
+    return this.applyTranslations(elements, translations);
+  }
+  applyTranslations(elements, translations) {
+    this.pauseObserving();
+    for (let i = 0; i < elements.length; i++) {
+      if (translations[i] !== undefined) {
+        translateElement(elements[i], translations[i]);
+      }
+    }
+    this.resumeObserving();
+  }
+  getTranslatables(element) {
+    const nodes = Array.from(element.querySelectorAll(L10N_ELEMENT_QUERY));
+    if (typeof element.hasAttribute === "function" && element.hasAttribute(L10NID_ATTR_NAME)) {
+      nodes.push(element);
+    }
+    return nodes;
+  }
+  getKeysForElement(element) {
+    return {
+      id: element.getAttribute(L10NID_ATTR_NAME),
+      args: JSON.parse(element.getAttribute(L10NARGS_ATTR_NAME) || null)
+    };
+  }
+}
+;// CONCATENATED MODULE: ./node_modules/@fluent/dom/esm/index.js
+
+
+;// CONCATENATED MODULE: ./web/l10n.js
+class L10n {
+  #dir;
+  #lang;
+  #l10n;
+  constructor({
+    lang,
+    isRTL
+  }, l10n = null) {
+    this.#lang = L10n.#fixupLangCode(lang);
+    this.#l10n = l10n;
+    this.#dir = isRTL ?? L10n.#isRTL(this.#lang) ? "rtl" : "ltr";
+  }
+  setL10n(l10n) {
+    this.#l10n = l10n;
+  }
+  getLanguage() {
+    return this.#lang;
+  }
+  getDirection() {
+    return this.#dir;
+  }
+  async get(ids, args = null, fallback) {
+    if (Array.isArray(ids)) {
+      ids = ids.map(id => ({
+        id
+      }));
+      const messages = await this.#l10n.formatMessages(ids);
+      return messages.map(message => message.value);
+    }
+    const messages = await this.#l10n.formatMessages([{
+      id: ids,
+      args
+    }]);
+    return messages?.[0].value || fallback;
+  }
+  async translate(element) {
+    try {
+      this.#l10n.connectRoot(element);
+      await this.#l10n.translateRoots();
+    } catch {}
+  }
+  static #fixupLangCode(langCode) {
+    const PARTIAL_LANG_CODES = {
+      en: "en-US",
+      es: "es-ES",
+      fy: "fy-NL",
+      ga: "ga-IE",
+      gu: "gu-IN",
+      hi: "hi-IN",
+      hy: "hy-AM",
+      nb: "nb-NO",
+      ne: "ne-NP",
+      nn: "nn-NO",
+      pa: "pa-IN",
+      pt: "pt-PT",
+      sv: "sv-SE",
+      zh: "zh-CN"
+    };
+    return PARTIAL_LANG_CODES[langCode?.toLowerCase()] || langCode;
+  }
+  static #isRTL(lang) {
+    const shortCode = lang.split("-", 1)[0];
+    return ["ar", "he", "fa", "ps", "ur"].includes(shortCode);
+  }
+}
+
+;// CONCATENATED MODULE: ./web/l10n_utils.js
+
+
+
+class ConstL10n extends L10n {
+  static #instance;
+  constructor(lang) {
+    super({
+      lang
+    });
+    this.setL10n(new DOMLocalization([], ConstL10n.#generateBundles.bind(ConstL10n, lang)));
+  }
+  static async *#generateBundles(lang) {
+    let text;
+    text = 'pdfjs-previous-button =\n    .title = Previous Page\npdfjs-previous-button-label = Previous\npdfjs-next-button =\n    .title = Next Page\npdfjs-next-button-label = Next\npdfjs-page-input =\n    .title = Page\npdfjs-of-pages = of { $pagesCount }\npdfjs-page-of-pages = ({ $pageNumber } of { $pagesCount })\npdfjs-zoom-out-button =\n    .title = Zoom Out\npdfjs-zoom-out-button-label = Zoom Out\npdfjs-zoom-in-button =\n    .title = Zoom In\npdfjs-zoom-in-button-label = Zoom In\npdfjs-zoom-select =\n    .title = Zoom\npdfjs-presentation-mode-button =\n    .title = Switch to Presentation Mode\npdfjs-presentation-mode-button-label = Presentation Mode\npdfjs-open-file-button =\n    .title = Open File\npdfjs-open-file-button-label = Open\npdfjs-print-button =\n    .title = Print\npdfjs-print-button-label = Print\npdfjs-save-button =\n    .title = Save\npdfjs-save-button-label = Save\npdfjs-download-button =\n    .title = Download\npdfjs-download-button-label = Download\npdfjs-bookmark-button =\n    .title = Current Page (View URL from Current Page)\npdfjs-bookmark-button-label = Current Page\npdfjs-open-in-app-button =\n    .title = Open in app\npdfjs-open-in-app-button-label = Open in app\npdfjs-tools-button =\n    .title = Tools\npdfjs-tools-button-label = Tools\npdfjs-first-page-button =\n    .title = Go to First Page\npdfjs-first-page-button-label = Go to First Page\npdfjs-last-page-button =\n    .title = Go to Last Page\npdfjs-last-page-button-label = Go to Last Page\npdfjs-page-rotate-cw-button =\n    .title = Rotate Clockwise\npdfjs-page-rotate-cw-button-label = Rotate Clockwise\npdfjs-page-rotate-ccw-button =\n    .title = Rotate Counterclockwise\npdfjs-page-rotate-ccw-button-label = Rotate Counterclockwise\npdfjs-cursor-text-select-tool-button =\n    .title = Enable Text Selection Tool\npdfjs-cursor-text-select-tool-button-label = Text Selection Tool\npdfjs-cursor-hand-tool-button =\n    .title = Enable Hand Tool\npdfjs-cursor-hand-tool-button-label = Hand Tool\npdfjs-scroll-page-button =\n    .title = Use Page Scrolling\npdfjs-scroll-page-button-label = Page Scrolling\npdfjs-scroll-vertical-button =\n    .title = Use Vertical Scrolling\npdfjs-scroll-vertical-button-label = Vertical Scrolling\npdfjs-scroll-horizontal-button =\n    .title = Use Horizontal Scrolling\npdfjs-scroll-horizontal-button-label = Horizontal Scrolling\npdfjs-scroll-wrapped-button =\n    .title = Use Wrapped Scrolling\npdfjs-scroll-wrapped-button-label = Wrapped Scrolling\npdfjs-spread-none-button =\n    .title = Do not join page spreads\npdfjs-spread-none-button-label = No Spreads\npdfjs-spread-odd-button =\n    .title = Join page spreads starting with odd-numbered pages\npdfjs-spread-odd-button-label = Odd Spreads\npdfjs-spread-even-button =\n    .title = Join page spreads starting with even-numbered pages\npdfjs-spread-even-button-label = Even Spreads\npdfjs-document-properties-button =\n    .title = Document Properties\u2026\npdfjs-document-properties-button-label = Document Properties\u2026\npdfjs-document-properties-file-name = File name:\npdfjs-document-properties-file-size = File size:\npdfjs-document-properties-kb = { $size_kb } KB ({ $size_b } bytes)\npdfjs-document-properties-mb = { $size_mb } MB ({ $size_b } bytes)\npdfjs-document-properties-title = Title:\npdfjs-document-properties-author = Author:\npdfjs-document-properties-subject = Subject:\npdfjs-document-properties-keywords = Keywords:\npdfjs-document-properties-creation-date = Creation Date:\npdfjs-document-properties-modification-date = Modification Date:\npdfjs-document-properties-date-string = { $date }, { $time }\npdfjs-document-properties-creator = Creator:\npdfjs-document-properties-producer = PDF Producer:\npdfjs-document-properties-version = PDF Version:\npdfjs-document-properties-page-count = Page Count:\npdfjs-document-properties-page-size = Page Size:\npdfjs-document-properties-page-size-unit-inches = in\npdfjs-document-properties-page-size-unit-millimeters = mm\npdfjs-document-properties-page-size-orientation-portrait = portrait\npdfjs-document-properties-page-size-orientation-landscape = landscape\npdfjs-document-properties-page-size-name-a-three = A3\npdfjs-document-properties-page-size-name-a-four = A4\npdfjs-document-properties-page-size-name-letter = Letter\npdfjs-document-properties-page-size-name-legal = Legal\npdfjs-document-properties-page-size-dimension-string = { $width } \xD7 { $height } { $unit } ({ $orientation })\npdfjs-document-properties-page-size-dimension-name-string = { $width } \xD7 { $height } { $unit } ({ $name }, { $orientation })\npdfjs-document-properties-linearized = Fast Web View:\npdfjs-document-properties-linearized-yes = Yes\npdfjs-document-properties-linearized-no = No\npdfjs-document-properties-close-button = Close\npdfjs-print-progress-message = Preparing document for printing\u2026\npdfjs-print-progress-percent = { $progress }%\npdfjs-print-progress-close-button = Cancel\npdfjs-printing-not-supported = Warning: Printing is not fully supported by this browser.\npdfjs-printing-not-ready = Warning: The PDF is not fully loaded for printing.\npdfjs-toggle-sidebar-button =\n    .title = Toggle Sidebar\npdfjs-toggle-sidebar-notification-button =\n    .title = Toggle Sidebar (document contains outline/attachments/layers)\npdfjs-toggle-sidebar-button-label = Toggle Sidebar\npdfjs-document-outline-button =\n    .title = Show Document Outline (double-click to expand/collapse all items)\npdfjs-document-outline-button-label = Document Outline\npdfjs-attachments-button =\n    .title = Show Attachments\npdfjs-attachments-button-label = Attachments\npdfjs-layers-button =\n    .title = Show Layers (double-click to reset all layers to the default state)\npdfjs-layers-button-label = Layers\npdfjs-thumbs-button =\n    .title = Show Thumbnails\npdfjs-thumbs-button-label = Thumbnails\npdfjs-current-outline-item-button =\n    .title = Find Current Outline Item\npdfjs-current-outline-item-button-label = Current Outline Item\npdfjs-findbar-button =\n    .title = Find in Document\npdfjs-findbar-button-label = Find\npdfjs-additional-layers = Additional Layers\npdfjs-thumb-page-title = Page { $page }\npdfjs-thumb-page-canvas = Thumbnail of Page { $page }\npdfjs-find-input =\n    .title = Find\n    .placeholder = Find in document\u2026\npdfjs-find-previous-button =\n    .title = Find the previous occurrence of the phrase\npdfjs-find-previous-button-label = Previous\npdfjs-find-next-button =\n    .title = Find the next occurrence of the phrase\npdfjs-find-next-button-label = Next\npdfjs-find-highlight-checkbox = Highlight All\npdfjs-find-match-case-checkbox-label = Match Case\npdfjs-find-match-diacritics-checkbox-label = Match Diacritics\npdfjs-find-entire-word-checkbox-label = Whole Words\npdfjs-find-reached-top = Reached top of document, continued from bottom\npdfjs-find-reached-bottom = Reached end of document, continued from top\npdfjs-find-match-count =\n    { $total ->\n        [one] { $current } of { $total } match\n       *[other] { $current } of { $total } matches\n    }\npdfjs-find-match-count-limit =\n    { $limit ->\n        [one] More than { $limit } match\n       *[other] More than { $limit } matches\n    }\npdfjs-find-not-found = Phrase not found\npdfjs-page-scale-width = Page Width\npdfjs-page-scale-fit = Page Fit\npdfjs-page-scale-auto = Automatic Zoom\npdfjs-page-scale-actual = Actual Size\npdfjs-page-scale-percent = { $scale }%\npdfjs-page-landmark = Page { $page }\npdfjs-loading-error = An error occurred while loading the PDF.\npdfjs-invalid-file-error = Invalid or corrupted PDF file.\npdfjs-missing-file-error = Missing PDF file.\npdfjs-unexpected-response-error = Unexpected server response.\npdfjs-rendering-error = An error occurred while rendering the page.\npdfjs-annotation-date-string = { $date }, { $time }\npdfjs-text-annotation-type =\n    .alt = [{ $type } Annotation]\npdfjs-password-label = Enter the password to open this PDF file.\npdfjs-password-invalid = Invalid password. Please try again.\npdfjs-password-ok-button = OK\npdfjs-password-cancel-button = Cancel\npdfjs-web-fonts-disabled = Web fonts are disabled: unable to use embedded PDF fonts.\npdfjs-editor-free-text-button =\n    .title = Text\npdfjs-editor-free-text-button-label = Text\npdfjs-editor-ink-button =\n    .title = Draw\npdfjs-editor-ink-button-label = Draw\npdfjs-editor-stamp-button =\n    .title = Add or edit images\npdfjs-editor-stamp-button-label = Add or edit images\npdfjs-editor-free-text-color-input = Color\npdfjs-editor-free-text-size-input = Size\npdfjs-editor-ink-color-input = Color\npdfjs-editor-ink-thickness-input = Thickness\npdfjs-editor-ink-opacity-input = Opacity\npdfjs-editor-stamp-add-image-button =\n    .title = Add image\npdfjs-editor-stamp-add-image-button-label = Add image\npdfjs-free-text =\n    .aria-label = Text Editor\npdfjs-free-text-default-content = Start typing\u2026\npdfjs-ink =\n    .aria-label = Draw Editor\npdfjs-ink-canvas =\n    .aria-label = User-created image\npdfjs-editor-alt-text-button-label = Alt text\npdfjs-editor-alt-text-edit-button-label = Edit alt text\npdfjs-editor-alt-text-dialog-label = Choose an option\npdfjs-editor-alt-text-dialog-description = Alt text (alternative text) helps when people can\u2019t see the image or when it doesn\u2019t load.\npdfjs-editor-alt-text-add-description-label = Add a description\npdfjs-editor-alt-text-add-description-description = Aim for 1-2 sentences that describe the subject, setting, or actions.\npdfjs-editor-alt-text-mark-decorative-label = Mark as decorative\npdfjs-editor-alt-text-mark-decorative-description = This is used for ornamental images, like borders or watermarks.\npdfjs-editor-alt-text-cancel-button = Cancel\npdfjs-editor-alt-text-save-button = Save\npdfjs-editor-alt-text-decorative-tooltip = Marked as decorative\npdfjs-editor-alt-text-textarea =\n    .placeholder = For example, \u201CA young man sits down at a table to eat a meal\u201D\npdfjs-editor-resizer-label-top-left = Top left corner \u2014 resize\npdfjs-editor-resizer-label-top-middle = Top middle \u2014 resize\npdfjs-editor-resizer-label-top-right = Top right corner \u2014 resize\npdfjs-editor-resizer-label-middle-right = Middle right \u2014 resize\npdfjs-editor-resizer-label-bottom-right = Bottom right corner \u2014 resize\npdfjs-editor-resizer-label-bottom-middle = Bottom middle \u2014 resize\npdfjs-editor-resizer-label-bottom-left = Bottom left corner \u2014 resize\npdfjs-editor-resizer-label-middle-left = Middle left \u2014 resize';
+    const resource = new FluentResource(text);
+    const bundle = new FluentBundle(lang);
+    const errors = bundle.addResource(resource);
+    if (errors.length) {
+      console.error("L10n errors", errors);
+    }
+    yield bundle;
+  }
+  static get instance() {
+    return this.#instance ||= new ConstL10n("en-US");
+  }
 }
 const NullL10n = {
-  async getLanguage() {
-    return "en-us";
+  getLanguage() {
+    return ConstL10n.instance.getLanguage();
   },
-  async getDirection() {
-    return "ltr";
+  getDirection() {
+    return ConstL10n.instance.getDirection();
   },
-  async get(key, args = null, fallback = getL10nFallback(key, args)) {
-    return formatL10nValue(fallback, args);
+  async get(ids, args = null, fallback) {
+    return ConstL10n.instance.get(ids, args, fallback);
   },
-  async translate(element) {}
+  async translate(element) {
+    return ConstL10n.instance.translate(element);
+  }
 };
 
 ;// CONCATENATED MODULE: ./web/annotation_editor_layer_builder.js
@@ -6955,7 +8280,7 @@ class PDFPageView {
     div.className = "page";
     div.setAttribute("data-page-number", this.id);
     div.setAttribute("role", "region");
-    this.l10n.get("page_landmark", {
+    this.l10n.get("pdfjs-page-landmark", {
       page: this.id
     }).then(msg => {
       div.setAttribute("aria-label", msg);
@@ -6975,6 +8300,9 @@ class PDFPageView {
           }
           this.#useThumbnailCanvas.initialOptionalContent = optionalContentConfig.hasInitialVisibility;
         });
+      }
+      if (this.l10n === NullL10n) {
+        this.l10n.translate(this.div);
       }
     }
   }
@@ -7768,6 +9096,9 @@ class PDFViewer {
         pdfPage?.cleanup();
       }
     });
+    if (this.l10n === NullL10n) {
+      this.l10n.translate(this.container);
+    }
   }
   get pagesCount() {
     return this._pages.length;
@@ -9412,7 +10743,6 @@ class SecondaryToolbar {
 
 const PAGE_NUMBER_LOADING_INDICATOR = "visiblePageIsLoading";
 class Toolbar {
-  #wasLocalized = false;
   constructor(options, eventBus, l10n) {
     this.toolbar = options.container;
     this.eventBus = eventBus;
@@ -9560,11 +10890,6 @@ class Toolbar {
       }
     });
     scaleSelect.oncontextmenu = noContextMenu;
-    this.eventBus._on("localized", () => {
-      this.#wasLocalized = true;
-      this.#adjustScaleWidth();
-      this.#updateUIState(true);
-    });
     this.#bindEditorToolsListener(options);
   }
   #bindEditorToolsListener({
@@ -9596,9 +10921,6 @@ class Toolbar {
     });
   }
   #updateUIState(resetNumPages = false) {
-    if (!this.#wasLocalized) {
-      return;
-    }
     const {
       pageNumber,
       pagesCount,
@@ -9611,7 +10933,7 @@ class Toolbar {
         items.pageNumber.type = "text";
       } else {
         items.pageNumber.type = "number";
-        this.l10n.get("of_pages", {
+        this.l10n.get("pdfjs-of-pages", {
           pagesCount
         }).then(msg => {
           items.numPages.textContent = msg;
@@ -9621,7 +10943,7 @@ class Toolbar {
     }
     if (this.hasPageLabels) {
       items.pageNumber.value = this.pageLabel;
-      this.l10n.get("page_of_pages", {
+      this.l10n.get("pdfjs-page-of-pages", {
         pageNumber,
         pagesCount
       }).then(msg => {
@@ -9634,7 +10956,7 @@ class Toolbar {
     items.next.disabled = pageNumber >= pagesCount;
     items.zoomOut.disabled = pageScale <= MIN_SCALE;
     items.zoomIn.disabled = pageScale >= MAX_SCALE;
-    this.l10n.get("page_scale_percent", {
+    this.l10n.get("pdfjs-page-scale-percent", {
       scale: Math.round(pageScale * 10000) / 100
     }).then(msg => {
       let predefinedValueFound = false;
@@ -9657,37 +10979,6 @@ class Toolbar {
       pageNumber
     } = this.items;
     pageNumber.classList.toggle(PAGE_NUMBER_LOADING_INDICATOR, loading);
-  }
-  async #adjustScaleWidth() {
-    const {
-      items,
-      l10n
-    } = this;
-    const predefinedValuesPromise = Promise.all([l10n.get("page_scale_auto"), l10n.get("page_scale_actual"), l10n.get("page_scale_fit"), l10n.get("page_scale_width")]);
-    await animationStarted;
-    const style = getComputedStyle(items.scaleSelect);
-    const scaleSelectWidth = parseFloat(style.getPropertyValue("--scale-select-width"));
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d", {
-      alpha: false
-    });
-    ctx.font = `${style.fontSize} ${style.fontFamily}`;
-    let maxWidth = 0;
-    for (const predefinedValue of await predefinedValuesPromise) {
-      const {
-        width
-      } = ctx.measureText(predefinedValue);
-      if (width > maxWidth) {
-        maxWidth = width;
-      }
-    }
-    maxWidth += 0.3 * scaleSelectWidth;
-    if (maxWidth > scaleSelectWidth) {
-      const container = items.scaleSelect.parentNode;
-      container.style.setProperty("--scale-select-width", `${maxWidth}px`);
-    }
-    canvas.width = 0;
-    canvas.height = 0;
   }
 }
 
@@ -9811,7 +11102,7 @@ class DefaultExternalServices {
   static createPreferences() {
     throw new Error("Not implemented: createPreferences");
   }
-  static createL10n(options) {
+  static async createL10n() {
     throw new Error("Not implemented: createL10n");
   }
   static createScripting(options) {
@@ -9899,43 +11190,28 @@ const PDFViewerApplication = {
   _isCtrlKeyDown: false,
   _nimbusDataPromise: null,
   async initialize(appConfig) {
-    this.preferences = this.externalServices.createPreferences();
+    let l10nPromise;
     this.appConfig = appConfig;
-    await this._initializeOptions();
+    try {
+      await this.preferences.initializedPromise;
+    } catch (ex) {
+      console.error(`initialize: "${ex.message}".`);
+    }
+    if (AppOptions.get("pdfBugEnabled")) {
+      await this._parseHashParams();
+    }
     this._forceCssTheme();
-    await this._initializeL10n();
+    l10nPromise = this.externalServices.createL10n();
+    this.l10n = await l10nPromise;
+    document.getElementsByTagName("html")[0].dir = this.l10n.getDirection();
+    this.l10n.translate(appConfig.appContainer || document.documentElement);
     if (this.isViewerEmbedded && AppOptions.get("externalLinkTarget") === LinkTarget.NONE) {
       AppOptions.set("externalLinkTarget", LinkTarget.TOP);
     }
     await this._initializeViewerComponents();
     this.bindEvents();
     this.bindWindowEvents();
-    const appContainer = appConfig.appContainer || document.documentElement;
-    this.l10n.translate(appContainer).then(() => {
-      this.eventBus.dispatch("localized", {
-        source: this
-      });
-    });
     this._initializedCapability.resolve();
-  },
-  async _initializeOptions() {
-    if (AppOptions.get("disablePreferences")) {
-      if (AppOptions.get("pdfBugEnabled")) {
-        await this._parseHashParams();
-      }
-      return;
-    }
-    if (AppOptions._hasUserOptions()) {
-      console.warn("_initializeOptions: The Preferences may override manually set AppOptions; " + 'please use the "disablePreferences"-option in order to prevent that.');
-    }
-    try {
-      AppOptions.setAll(await this.preferences.getAll());
-    } catch (reason) {
-      console.error(`_initializeOptions: "${reason.message}".`);
-    }
-    if (AppOptions.get("pdfBugEnabled")) {
-      await this._parseHashParams();
-    }
   },
   async _parseHashParams() {
     const hash = document.location.hash.substring(1);
@@ -10004,13 +11280,6 @@ const PDFViewerApplication = {
     if (params.has("locale")) {
       AppOptions.set("locale", params.get("locale"));
     }
-  },
-  async _initializeL10n() {
-    this.l10n = this.externalServices.createL10n({
-      locale: AppOptions.get("locale")
-    });
-    const dir = await this.l10n.getDirection();
-    document.getElementsByTagName("html")[0].dir = dir;
   },
   _forceCssTheme() {
     const cssTheme = AppOptions.get("viewerCssTheme");
@@ -10206,6 +11475,7 @@ const PDFViewerApplication = {
     }
   },
   async run(config) {
+    this.preferences = this.externalServices.createPreferences();
     await this.initialize(config);
     const {
       appConfig,
@@ -10249,7 +11519,7 @@ const PDFViewerApplication = {
     });
     if (!this.supportsDocumentFonts) {
       AppOptions.set("disableFontFace", true);
-      this.l10n.get("web_fonts_disabled").then(msg => {
+      this.l10n.get("pdfjs-web-fonts-disabled").then(msg => {
         console.warn(msg);
       });
     }
@@ -10468,13 +11738,13 @@ const PDFViewerApplication = {
       if (loadingTask !== this.pdfLoadingTask) {
         return undefined;
       }
-      let key = "loading_error";
+      let key = "pdfjs-loading-error";
       if (reason instanceof InvalidPDFException) {
-        key = "invalid_file_error";
+        key = "pdfjs-invalid-file-error";
       } else if (reason instanceof MissingPDFException) {
-        key = "missing_file_error";
+        key = "pdfjs-missing-file-error";
       } else if (reason instanceof UnexpectedResponseException) {
-        key = "unexpected_response_error";
+        key = "pdfjs-unexpected-response-error";
       }
       return this.l10n.get(key).then(msg => {
         this._documentError(msg, {
@@ -10696,7 +11966,7 @@ const PDFViewerApplication = {
       this._unblockDocumentLoadEvent();
       this._initializeAutoPrint(pdfDocument, openActionPromise);
     }, reason => {
-      this.l10n.get("loading_error").then(msg => {
+      this.l10n.get("pdfjs-loading-error").then(msg => {
         this._documentError(msg, {
           message: reason?.message
         });
@@ -10990,13 +12260,13 @@ const PDFViewerApplication = {
       return;
     }
     if (!this.supportsPrinting) {
-      this.l10n.get("printing_not_supported").then(msg => {
+      this.l10n.get("pdfjs-printing-not-supported").then(msg => {
         this._otherError(msg);
       });
       return;
     }
     if (!this.pdfViewer.pageViewsReady) {
-      this.l10n.get("printing_not_ready").then(msg => {
+      this.l10n.get("pdfjs-printing-not-ready").then(msg => {
         window.alert(msg);
       });
       return;
@@ -11309,7 +12579,7 @@ const PDFViewerApplication = {
         throw new Error("file origin does not match viewer's");
       }
     } catch (ex) {
-      PDFViewerApplication.l10n.get("loading_error").then(msg => {
+      PDFViewerApplication.l10n.get("pdfjs-loading-error").then(msg => {
         PDFViewerApplication._documentError(msg, {
           message: ex?.message
         });
@@ -11362,7 +12632,7 @@ function webViewerPageRendered({
     }
   }
   if (error) {
-    PDFViewerApplication.l10n.get("rendering_error").then(msg => {
+    PDFViewerApplication.l10n.get("pdfjs-rendering-error").then(msg => {
       PDFViewerApplication._otherError(msg, error);
     });
   }
@@ -12139,12 +13409,11 @@ class BasePreferences {
       throw new Error("Cannot initialize BasePreferences.");
     }
     this.#initializedPromise = this._readFromStorage(this.#defaults).then(prefs => {
-      for (const name in this.#defaults) {
-        const prefValue = prefs?.[name];
-        if (typeof prefValue === typeof this.#defaults[name]) {
-          this.#prefs[name] = prefValue;
-        }
+      for (const [name, defaultVal] of Object.entries(this.#defaults)) {
+        const prefVal = prefs?.[name];
+        this.#prefs[name] = typeof prefVal === typeof defaultVal ? prefVal : defaultVal;
       }
+      AppOptions.setAll(this.#prefs, true);
     });
   }
   async _writeToStorage(prefObj) {
@@ -12196,13 +13465,8 @@ class BasePreferences {
     }
     return this.#prefs[name] ?? defaultValue;
   }
-  async getAll() {
-    await this.#initializedPromise;
-    const obj = Object.create(null);
-    for (const name in this.#defaults) {
-      obj[name] = this.#prefs[name] ?? this.#defaults[name];
-    }
-    return obj;
+  get initializedPromise() {
+    return this.#initializedPromise;
   }
 }
 
@@ -12238,16 +13502,16 @@ class DownloadManager {
     }));
     download(blobUrl, filename);
   }
-  openOrDownloadData(element, data, filename, dest = null) {
+  openOrDownloadData(data, filename, dest = null) {
     const isPdfData = isPdfFile(filename);
     const contentType = isPdfData ? "application/pdf" : "";
     if (isPdfData) {
-      let blobUrl = this.#openBlobUrls.get(element);
+      let blobUrl = this.#openBlobUrls.get(data);
       if (!blobUrl) {
         blobUrl = URL.createObjectURL(new Blob([data], {
           type: contentType
         }));
-        this.#openBlobUrls.set(element, blobUrl);
+        this.#openBlobUrls.set(data, blobUrl);
       }
       let viewerUrl;
       viewerUrl = "?file=" + encodeURIComponent(blobUrl + "#" + filename);
@@ -12260,7 +13524,7 @@ class DownloadManager {
       } catch (ex) {
         console.error(`openOrDownloadData: ${ex}`);
         URL.revokeObjectURL(blobUrl);
-        this.#openBlobUrls.delete(element);
+        this.#openBlobUrls.delete(data);
       }
     }
     this.downloadData(data, filename, contentType);
@@ -12272,776 +13536,56 @@ class DownloadManager {
   }
 }
 
-;// CONCATENATED MODULE: ./external/webL10n/l10n.js
-
-
-document.webL10n = function (window, document) {
-  var gL10nData = {};
-  var gTextData = '';
-  var gTextProp = 'textContent';
-  var gLanguage = '';
-  var gMacros = {};
-  var gReadyState = 'loading';
-  var gAsyncResourceLoading = true;
-  function getL10nResourceLinks() {
-    return document.querySelectorAll('link[type="application/l10n"]');
-  }
-  function getL10nDictionary() {
-    var script = document.querySelector('script[type="application/l10n"]');
-    return script ? JSON.parse(script.innerHTML) : null;
-  }
-  function getTranslatableChildren(element) {
-    return element ? element.querySelectorAll('*[data-l10n-id]') : [];
-  }
-  function getL10nAttributes(element) {
-    if (!element) return {};
-    var l10nId = element.getAttribute('data-l10n-id');
-    var l10nArgs = element.getAttribute('data-l10n-args');
-    var args = {};
-    if (l10nArgs) {
-      try {
-        args = JSON.parse(l10nArgs);
-      } catch (e) {
-        console.warn('could not parse arguments for #' + l10nId);
-      }
-    }
-    return {
-      id: l10nId,
-      args: args
-    };
-  }
-  function xhrLoadText(url, onSuccess, onFailure) {
-    onSuccess = onSuccess || function _onSuccess(data) {};
-    onFailure = onFailure || function _onFailure() {};
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', url, gAsyncResourceLoading);
-    if (xhr.overrideMimeType) {
-      xhr.overrideMimeType('text/plain; charset=utf-8');
-    }
-    xhr.onreadystatechange = function () {
-      if (xhr.readyState == 4) {
-        if (xhr.status == 200 || xhr.status === 0) {
-          onSuccess(xhr.responseText);
-        } else {
-          onFailure();
-        }
-      }
-    };
-    xhr.onerror = onFailure;
-    xhr.ontimeout = onFailure;
-    try {
-      xhr.send(null);
-    } catch (e) {
-      onFailure();
-    }
-  }
-  function parseResource(href, lang, successCallback, failureCallback) {
-    var baseURL = href.replace(/[^\/]*$/, '') || './';
-    function evalString(text) {
-      if (text.lastIndexOf('\\') < 0) return text;
-      return text.replace(/\\\\/g, '\\').replace(/\\n/g, '\n').replace(/\\r/g, '\r').replace(/\\t/g, '\t').replace(/\\b/g, '\b').replace(/\\f/g, '\f').replace(/\\{/g, '{').replace(/\\}/g, '}').replace(/\\"/g, '"').replace(/\\'/g, "'");
-    }
-    function parseProperties(text, parsedPropertiesCallback) {
-      var dictionary = {};
-      var reBlank = /^\s*|\s*$/;
-      var reComment = /^\s*#|^\s*$/;
-      var reSection = /^\s*\[(.*)\]\s*$/;
-      var reImport = /^\s*@import\s+url\((.*)\)\s*$/i;
-      var reSplit = /^([^=\s]*)\s*=\s*(.+)$/;
-      function parseRawLines(rawText, extendedSyntax, parsedRawLinesCallback) {
-        var entries = rawText.replace(reBlank, '').split(/[\r\n]+/);
-        var currentLang = '*';
-        var genericLang = lang.split('-', 1)[0];
-        var skipLang = false;
-        var match = '';
-        function nextEntry() {
-          while (true) {
-            if (!entries.length) {
-              parsedRawLinesCallback();
-              return;
-            }
-            var line = entries.shift();
-            if (reComment.test(line)) continue;
-            if (extendedSyntax) {
-              match = reSection.exec(line);
-              if (match) {
-                currentLang = match[1].toLowerCase();
-                skipLang = currentLang !== '*' && currentLang !== lang && currentLang !== genericLang;
-                continue;
-              } else if (skipLang) {
-                continue;
-              }
-              match = reImport.exec(line);
-              if (match) {
-                loadImport(baseURL + match[1], nextEntry);
-                return;
-              }
-            }
-            var tmp = line.match(reSplit);
-            if (tmp && tmp.length == 3) {
-              dictionary[tmp[1]] = evalString(tmp[2]);
-            }
-          }
-        }
-        nextEntry();
-      }
-      function loadImport(url, callback) {
-        xhrLoadText(url, function (content) {
-          parseRawLines(content, false, callback);
-        }, function () {
-          console.warn(url + ' not found.');
-          callback();
-        });
-      }
-      parseRawLines(text, true, function () {
-        parsedPropertiesCallback(dictionary);
-      });
-    }
-    xhrLoadText(href, function (response) {
-      gTextData += response;
-      parseProperties(response, function (data) {
-        for (var key in data) {
-          var id,
-            prop,
-            index = key.lastIndexOf('.');
-          if (index > 0) {
-            id = key.substring(0, index);
-            prop = key.substring(index + 1);
-          } else {
-            id = key;
-            prop = gTextProp;
-          }
-          if (!gL10nData[id]) {
-            gL10nData[id] = {};
-          }
-          gL10nData[id][prop] = data[key];
-        }
-        if (successCallback) {
-          successCallback();
-        }
-      });
-    }, failureCallback);
-  }
-  function loadLocale(lang, callback) {
-    if (lang) {
-      lang = lang.toLowerCase();
-    }
-    callback = callback || function _callback() {};
-    clear();
-    gLanguage = lang;
-    var langLinks = getL10nResourceLinks();
-    var langCount = langLinks.length;
-    if (langCount === 0) {
-      var dict = getL10nDictionary();
-      if (dict && dict.locales && dict.default_locale) {
-        console.log('using the embedded JSON directory, early way out');
-        gL10nData = dict.locales[lang];
-        if (!gL10nData) {
-          var defaultLocale = dict.default_locale.toLowerCase();
-          for (var anyCaseLang in dict.locales) {
-            anyCaseLang = anyCaseLang.toLowerCase();
-            if (anyCaseLang === lang) {
-              gL10nData = dict.locales[lang];
-              break;
-            } else if (anyCaseLang === defaultLocale) {
-              gL10nData = dict.locales[defaultLocale];
-            }
-          }
-        }
-        callback();
-      } else {
-        console.log('no resource to load, early way out');
-      }
-      gReadyState = 'complete';
-      return;
-    }
-    var onResourceLoaded = null;
-    var gResourceCount = 0;
-    onResourceLoaded = function () {
-      gResourceCount++;
-      if (gResourceCount >= langCount) {
-        callback();
-        gReadyState = 'complete';
-      }
-    };
-    function L10nResourceLink(link) {
-      var href = link.href;
-      this.load = function (lang, callback) {
-        parseResource(href, lang, callback, function () {
-          console.warn(href + ' not found.');
-          console.warn('"' + lang + '" resource not found');
-          gLanguage = '';
-          callback();
-        });
-      };
-    }
-    for (var i = 0; i < langCount; i++) {
-      var resource = new L10nResourceLink(langLinks[i]);
-      resource.load(lang, onResourceLoaded);
-    }
-  }
-  function clear() {
-    gL10nData = {};
-    gTextData = '';
-    gLanguage = '';
-  }
-  function getPluralRules(lang) {
-    var locales2rules = {
-      'af': 3,
-      'ak': 4,
-      'am': 4,
-      'ar': 1,
-      'asa': 3,
-      'az': 0,
-      'be': 11,
-      'bem': 3,
-      'bez': 3,
-      'bg': 3,
-      'bh': 4,
-      'bm': 0,
-      'bn': 3,
-      'bo': 0,
-      'br': 20,
-      'brx': 3,
-      'bs': 11,
-      'ca': 3,
-      'cgg': 3,
-      'chr': 3,
-      'cs': 12,
-      'cy': 17,
-      'da': 3,
-      'de': 3,
-      'dv': 3,
-      'dz': 0,
-      'ee': 3,
-      'el': 3,
-      'en': 3,
-      'eo': 3,
-      'es': 3,
-      'et': 3,
-      'eu': 3,
-      'fa': 0,
-      'ff': 5,
-      'fi': 3,
-      'fil': 4,
-      'fo': 3,
-      'fr': 5,
-      'fur': 3,
-      'fy': 3,
-      'ga': 8,
-      'gd': 24,
-      'gl': 3,
-      'gsw': 3,
-      'gu': 3,
-      'guw': 4,
-      'gv': 23,
-      'ha': 3,
-      'haw': 3,
-      'he': 2,
-      'hi': 4,
-      'hr': 11,
-      'hu': 0,
-      'id': 0,
-      'ig': 0,
-      'ii': 0,
-      'is': 3,
-      'it': 3,
-      'iu': 7,
-      'ja': 0,
-      'jmc': 3,
-      'jv': 0,
-      'ka': 0,
-      'kab': 5,
-      'kaj': 3,
-      'kcg': 3,
-      'kde': 0,
-      'kea': 0,
-      'kk': 3,
-      'kl': 3,
-      'km': 0,
-      'kn': 0,
-      'ko': 0,
-      'ksb': 3,
-      'ksh': 21,
-      'ku': 3,
-      'kw': 7,
-      'lag': 18,
-      'lb': 3,
-      'lg': 3,
-      'ln': 4,
-      'lo': 0,
-      'lt': 10,
-      'lv': 6,
-      'mas': 3,
-      'mg': 4,
-      'mk': 16,
-      'ml': 3,
-      'mn': 3,
-      'mo': 9,
-      'mr': 3,
-      'ms': 0,
-      'mt': 15,
-      'my': 0,
-      'nah': 3,
-      'naq': 7,
-      'nb': 3,
-      'nd': 3,
-      'ne': 3,
-      'nl': 3,
-      'nn': 3,
-      'no': 3,
-      'nr': 3,
-      'nso': 4,
-      'ny': 3,
-      'nyn': 3,
-      'om': 3,
-      'or': 3,
-      'pa': 3,
-      'pap': 3,
-      'pl': 13,
-      'ps': 3,
-      'pt': 3,
-      'rm': 3,
-      'ro': 9,
-      'rof': 3,
-      'ru': 11,
-      'rwk': 3,
-      'sah': 0,
-      'saq': 3,
-      'se': 7,
-      'seh': 3,
-      'ses': 0,
-      'sg': 0,
-      'sh': 11,
-      'shi': 19,
-      'sk': 12,
-      'sl': 14,
-      'sma': 7,
-      'smi': 7,
-      'smj': 7,
-      'smn': 7,
-      'sms': 7,
-      'sn': 3,
-      'so': 3,
-      'sq': 3,
-      'sr': 11,
-      'ss': 3,
-      'ssy': 3,
-      'st': 3,
-      'sv': 3,
-      'sw': 3,
-      'syr': 3,
-      'ta': 3,
-      'te': 3,
-      'teo': 3,
-      'th': 0,
-      'ti': 4,
-      'tig': 3,
-      'tk': 3,
-      'tl': 4,
-      'tn': 3,
-      'to': 0,
-      'tr': 0,
-      'ts': 3,
-      'tzm': 22,
-      'uk': 11,
-      'ur': 3,
-      've': 3,
-      'vi': 0,
-      'vun': 3,
-      'wa': 4,
-      'wae': 3,
-      'wo': 0,
-      'xh': 3,
-      'xog': 3,
-      'yo': 0,
-      'zh': 0,
-      'zu': 3
-    };
-    function isIn(n, list) {
-      return list.indexOf(n) !== -1;
-    }
-    function isBetween(n, start, end) {
-      return start <= n && n <= end;
-    }
-    var pluralRules = {
-      '0': function (n) {
-        return 'other';
-      },
-      '1': function (n) {
-        if (isBetween(n % 100, 3, 10)) return 'few';
-        if (n === 0) return 'zero';
-        if (isBetween(n % 100, 11, 99)) return 'many';
-        if (n == 2) return 'two';
-        if (n == 1) return 'one';
-        return 'other';
-      },
-      '2': function (n) {
-        if (n !== 0 && n % 10 === 0) return 'many';
-        if (n == 2) return 'two';
-        if (n == 1) return 'one';
-        return 'other';
-      },
-      '3': function (n) {
-        if (n == 1) return 'one';
-        return 'other';
-      },
-      '4': function (n) {
-        if (isBetween(n, 0, 1)) return 'one';
-        return 'other';
-      },
-      '5': function (n) {
-        if (isBetween(n, 0, 2) && n != 2) return 'one';
-        return 'other';
-      },
-      '6': function (n) {
-        if (n === 0) return 'zero';
-        if (n % 10 == 1 && n % 100 != 11) return 'one';
-        return 'other';
-      },
-      '7': function (n) {
-        if (n == 2) return 'two';
-        if (n == 1) return 'one';
-        return 'other';
-      },
-      '8': function (n) {
-        if (isBetween(n, 3, 6)) return 'few';
-        if (isBetween(n, 7, 10)) return 'many';
-        if (n == 2) return 'two';
-        if (n == 1) return 'one';
-        return 'other';
-      },
-      '9': function (n) {
-        if (n === 0 || n != 1 && isBetween(n % 100, 1, 19)) return 'few';
-        if (n == 1) return 'one';
-        return 'other';
-      },
-      '10': function (n) {
-        if (isBetween(n % 10, 2, 9) && !isBetween(n % 100, 11, 19)) return 'few';
-        if (n % 10 == 1 && !isBetween(n % 100, 11, 19)) return 'one';
-        return 'other';
-      },
-      '11': function (n) {
-        if (isBetween(n % 10, 2, 4) && !isBetween(n % 100, 12, 14)) return 'few';
-        if (n % 10 === 0 || isBetween(n % 10, 5, 9) || isBetween(n % 100, 11, 14)) return 'many';
-        if (n % 10 == 1 && n % 100 != 11) return 'one';
-        return 'other';
-      },
-      '12': function (n) {
-        if (isBetween(n, 2, 4)) return 'few';
-        if (n == 1) return 'one';
-        return 'other';
-      },
-      '13': function (n) {
-        if (isBetween(n % 10, 2, 4) && !isBetween(n % 100, 12, 14)) return 'few';
-        if (n != 1 && isBetween(n % 10, 0, 1) || isBetween(n % 10, 5, 9) || isBetween(n % 100, 12, 14)) return 'many';
-        if (n == 1) return 'one';
-        return 'other';
-      },
-      '14': function (n) {
-        if (isBetween(n % 100, 3, 4)) return 'few';
-        if (n % 100 == 2) return 'two';
-        if (n % 100 == 1) return 'one';
-        return 'other';
-      },
-      '15': function (n) {
-        if (n === 0 || isBetween(n % 100, 2, 10)) return 'few';
-        if (isBetween(n % 100, 11, 19)) return 'many';
-        if (n == 1) return 'one';
-        return 'other';
-      },
-      '16': function (n) {
-        if (n % 10 == 1 && n != 11) return 'one';
-        return 'other';
-      },
-      '17': function (n) {
-        if (n == 3) return 'few';
-        if (n === 0) return 'zero';
-        if (n == 6) return 'many';
-        if (n == 2) return 'two';
-        if (n == 1) return 'one';
-        return 'other';
-      },
-      '18': function (n) {
-        if (n === 0) return 'zero';
-        if (isBetween(n, 0, 2) && n !== 0 && n != 2) return 'one';
-        return 'other';
-      },
-      '19': function (n) {
-        if (isBetween(n, 2, 10)) return 'few';
-        if (isBetween(n, 0, 1)) return 'one';
-        return 'other';
-      },
-      '20': function (n) {
-        if ((isBetween(n % 10, 3, 4) || n % 10 == 9) && !(isBetween(n % 100, 10, 19) || isBetween(n % 100, 70, 79) || isBetween(n % 100, 90, 99))) return 'few';
-        if (n % 1000000 === 0 && n !== 0) return 'many';
-        if (n % 10 == 2 && !isIn(n % 100, [12, 72, 92])) return 'two';
-        if (n % 10 == 1 && !isIn(n % 100, [11, 71, 91])) return 'one';
-        return 'other';
-      },
-      '21': function (n) {
-        if (n === 0) return 'zero';
-        if (n == 1) return 'one';
-        return 'other';
-      },
-      '22': function (n) {
-        if (isBetween(n, 0, 1) || isBetween(n, 11, 99)) return 'one';
-        return 'other';
-      },
-      '23': function (n) {
-        if (isBetween(n % 10, 1, 2) || n % 20 === 0) return 'one';
-        return 'other';
-      },
-      '24': function (n) {
-        if (isBetween(n, 3, 10) || isBetween(n, 13, 19)) return 'few';
-        if (isIn(n, [2, 12])) return 'two';
-        if (isIn(n, [1, 11])) return 'one';
-        return 'other';
-      }
-    };
-    var index = locales2rules[lang.replace(/-.*$/, '')];
-    if (!(index in pluralRules)) {
-      console.warn('plural form unknown for [' + lang + ']');
-      return function () {
-        return 'other';
-      };
-    }
-    return pluralRules[index];
-  }
-  gMacros.plural = function (str, param, key, prop) {
-    var n = parseFloat(param);
-    if (isNaN(n)) return str;
-    if (prop != gTextProp) return str;
-    if (!gMacros._pluralRules) {
-      gMacros._pluralRules = getPluralRules(gLanguage);
-    }
-    var index = '[' + gMacros._pluralRules(n) + ']';
-    if (n === 0 && key + '[zero]' in gL10nData) {
-      str = gL10nData[key + '[zero]'][prop];
-    } else if (n == 1 && key + '[one]' in gL10nData) {
-      str = gL10nData[key + '[one]'][prop];
-    } else if (n == 2 && key + '[two]' in gL10nData) {
-      str = gL10nData[key + '[two]'][prop];
-    } else if (key + index in gL10nData) {
-      str = gL10nData[key + index][prop];
-    } else if (key + '[other]' in gL10nData) {
-      str = gL10nData[key + '[other]'][prop];
-    }
-    return str;
-  };
-  function getL10nData(key, args, fallback) {
-    var data = gL10nData[key];
-    if (!data) {
-      console.warn('#' + key + ' is undefined.');
-      if (!fallback) {
-        return null;
-      }
-      data = fallback;
-    }
-    var rv = {};
-    for (var prop in data) {
-      var str = data[prop];
-      str = substIndexes(str, args, key, prop);
-      str = substArguments(str, args, key);
-      rv[prop] = str;
-    }
-    return rv;
-  }
-  function substIndexes(str, args, key, prop) {
-    var reIndex = /\{\[\s*([a-zA-Z]+)\(([a-zA-Z]+)\)\s*\]\}/;
-    var reMatch = reIndex.exec(str);
-    if (!reMatch || !reMatch.length) return str;
-    var macroName = reMatch[1];
-    var paramName = reMatch[2];
-    var param;
-    if (args && paramName in args) {
-      param = args[paramName];
-    } else if (paramName in gL10nData) {
-      param = gL10nData[paramName];
-    }
-    if (macroName in gMacros) {
-      var macro = gMacros[macroName];
-      str = macro(str, param, key, prop);
-    }
-    return str;
-  }
-  function substArguments(str, args, key) {
-    var reArgs = /\{\{\s*(.+?)\s*\}\}/g;
-    return str.replace(reArgs, function (matched_text, arg) {
-      if (args && arg in args) {
-        return args[arg];
-      }
-      if (arg in gL10nData) {
-        return gL10nData[arg];
-      }
-      console.log('argument {{' + arg + '}} for #' + key + ' is undefined.');
-      return matched_text;
-    });
-  }
-  function translateElement(element) {
-    var l10n = getL10nAttributes(element);
-    if (!l10n.id) return;
-    var data = getL10nData(l10n.id, l10n.args);
-    if (!data) {
-      console.warn('#' + l10n.id + ' is undefined.');
-      return;
-    }
-    if (data[gTextProp]) {
-      if (getChildElementCount(element) === 0) {
-        element[gTextProp] = data[gTextProp];
-      } else {
-        var children = element.childNodes;
-        var found = false;
-        for (var i = 0, l = children.length; i < l; i++) {
-          if (children[i].nodeType === 3 && /\S/.test(children[i].nodeValue)) {
-            if (found) {
-              children[i].nodeValue = '';
-            } else {
-              children[i].nodeValue = data[gTextProp];
-              found = true;
-            }
-          }
-        }
-        if (!found) {
-          var textNode = document.createTextNode(data[gTextProp]);
-          element.prepend(textNode);
-        }
-      }
-      delete data[gTextProp];
-    }
-    for (var k in data) {
-      element[k] = data[k];
-    }
-  }
-  function getChildElementCount(element) {
-    if (element.children) {
-      return element.children.length;
-    }
-    if (typeof element.childElementCount !== 'undefined') {
-      return element.childElementCount;
-    }
-    var count = 0;
-    for (var i = 0; i < element.childNodes.length; i++) {
-      count += element.nodeType === 1 ? 1 : 0;
-    }
-    return count;
-  }
-  function translateFragment(element) {
-    element = element || document.documentElement;
-    var children = getTranslatableChildren(element);
-    var elementCount = children.length;
-    for (var i = 0; i < elementCount; i++) {
-      translateElement(children[i]);
-    }
-    translateElement(element);
-  }
-  return {
-    get: function (key, args, fallbackString) {
-      var index = key.lastIndexOf('.');
-      var prop = gTextProp;
-      if (index > 0) {
-        prop = key.substring(index + 1);
-        key = key.substring(0, index);
-      }
-      var fallback;
-      if (fallbackString) {
-        fallback = {};
-        fallback[prop] = fallbackString;
-      }
-      var data = getL10nData(key, args, fallback);
-      if (data && prop in data) {
-        return data[prop];
-      }
-      return '{{' + key + '}}';
-    },
-    getData: function () {
-      return gL10nData;
-    },
-    getText: function () {
-      return gTextData;
-    },
-    getLanguage: function () {
-      return gLanguage;
-    },
-    setLanguage: function (lang, callback) {
-      loadLocale(lang, function () {
-        if (callback) callback();
-      });
-    },
-    getDirection: function () {
-      var rtlList = ['ar', 'he', 'fa', 'ps', 'ur'];
-      var shortCode = gLanguage.split('-', 1)[0];
-      return rtlList.indexOf(shortCode) >= 0 ? 'rtl' : 'ltr';
-    },
-    translate: translateFragment,
-    getReadyState: function () {
-      return gReadyState;
-    },
-    ready: function (callback) {
-      if (!callback) {
-        return;
-      } else if (gReadyState == 'complete' || gReadyState == 'interactive') {
-        window.setTimeout(function () {
-          callback();
-        });
-      } else if (document.addEventListener) {
-        document.addEventListener('localized', function once() {
-          document.removeEventListener('localized', once);
-          callback();
-        });
-      }
-    }
-  };
-}(window, document);
 ;// CONCATENATED MODULE: ./web/genericl10n.js
 
 
-const PARTIAL_LANG_CODES = {
-  en: "en-US",
-  es: "es-ES",
-  fy: "fy-NL",
-  ga: "ga-IE",
-  gu: "gu-IN",
-  hi: "hi-IN",
-  hy: "hy-AM",
-  nb: "nb-NO",
-  ne: "ne-NP",
-  nn: "nn-NO",
-  pa: "pa-IN",
-  pt: "pt-PT",
-  sv: "sv-SE",
-  zh: "zh-CN"
-};
-function fixupLangCode(langCode) {
-  return PARTIAL_LANG_CODES[langCode?.toLowerCase()] || langCode;
-}
-class GenericL10n {
+
+class GenericL10n extends L10n {
   constructor(lang) {
-    const {
-      webL10n
-    } = document;
-    this._lang = lang;
-    this._ready = new Promise((resolve, reject) => {
-      webL10n.setLanguage(fixupLangCode(lang), () => {
-        resolve(webL10n);
-      });
+    super({
+      lang
     });
+    this.setL10n(new DOMLocalization([], GenericL10n.#generateBundles.bind(GenericL10n, "en-US", this.getLanguage())));
   }
-  async getLanguage() {
-    const l10n = await this._ready;
-    return l10n.getLanguage();
+  static async *#generateBundles(defaultLang, baseLang) {
+    const {
+      baseURL,
+      paths
+    } = await this.#getPaths();
+    const langs = baseLang === defaultLang ? [baseLang] : [baseLang, defaultLang];
+    for (const lang of langs) {
+      const bundle = await this.#createBundle(lang, baseURL, paths);
+      if (bundle) {
+        yield bundle;
+      }
+    }
   }
-  async getDirection() {
-    const l10n = await this._ready;
-    return l10n.getDirection();
+  static async #createBundle(lang, baseURL, paths) {
+    const path = paths[lang];
+    if (!path) {
+      return null;
+    }
+    const url = new URL(path, baseURL);
+    const data = await fetch(url);
+    const text = await data.text();
+    const resource = new FluentResource(text);
+    const bundle = new FluentBundle(lang);
+    const errors = bundle.addResource(resource);
+    if (errors.length) {
+      console.error("L10n errors", errors);
+    }
+    return bundle;
   }
-  async get(key, args = null, fallback = getL10nFallback(key, args)) {
-    const l10n = await this._ready;
-    return l10n.get(key, args, fallback);
-  }
-  async translate(element) {
-    const l10n = await this._ready;
-    return l10n.translate(element);
+  static async #getPaths() {
+    const {
+      href
+    } = document.querySelector(`link[type="application/l10n"]`);
+    const data = await fetch(href);
+    const paths = await data.json();
+    return {
+      baseURL: href.replace(/[^/]*$/, "") || "./",
+      paths
+    };
   }
 }
 
@@ -13102,6 +13646,7 @@ class GenericScripting {
 
 
 
+
 ;
 const GenericCom = {};
 class GenericPreferences extends BasePreferences {
@@ -13119,10 +13664,8 @@ class GenericExternalServices extends DefaultExternalServices {
   static createPreferences() {
     return new GenericPreferences();
   }
-  static createL10n({
-    locale = "en-US"
-  }) {
-    return new GenericL10n(locale);
+  static async createL10n() {
+    return new GenericL10n(AppOptions.get("locale") || "en-US");
   }
   static createScripting({
     sandboxBundleSrc
@@ -13355,7 +13898,7 @@ function renderProgress(index, total, l10n) {
   const progressBar = dialog.querySelector("progress");
   const progressPerc = dialog.querySelector(".relative-progress");
   progressBar.value = progress;
-  l10n.get("print_progress_percent", {
+  l10n.get("pdfjs-print-progress-percent", {
     progress
   }).then(msg => {
     progressPerc.textContent = msg;
@@ -13410,7 +13953,7 @@ PDFPrintServiceFactory.instance = {
 
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '5c45dfa';
+const pdfjsBuild = 'da186d1';
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,

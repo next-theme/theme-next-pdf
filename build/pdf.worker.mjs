@@ -37197,7 +37197,7 @@ async function writeDict(dict, buffer, transform) {
   buffer.push(">>");
 }
 async function writeStream(stream, buffer, transform) {
-  let string = stream.getString();
+  let bytes = stream.getBytes();
   const {
     dict
   } = stream;
@@ -37205,15 +37205,14 @@ async function writeStream(stream, buffer, transform) {
   const filterZero = Array.isArray(filter) ? await dict.xref.fetchIfRefAsync(filter[0]) : filter;
   const isFilterZeroFlateDecode = isName(filterZero, "FlateDecode");
   const MIN_LENGTH_FOR_COMPRESSING = 256;
-  if (typeof CompressionStream !== "undefined" && (string.length >= MIN_LENGTH_FOR_COMPRESSING || isFilterZeroFlateDecode)) {
+  if (typeof CompressionStream !== "undefined" && (bytes.length >= MIN_LENGTH_FOR_COMPRESSING || isFilterZeroFlateDecode)) {
     try {
-      const byteArray = stringToBytes(string);
       const cs = new CompressionStream("deflate");
       const writer = cs.writable.getWriter();
-      writer.write(byteArray);
+      writer.write(bytes);
       writer.close();
       const buf = await new Response(cs.readable).arrayBuffer();
-      string = bytesToString(new Uint8Array(buf));
+      bytes = new Uint8Array(buf);
       let newFilter, newParams;
       if (!filter) {
         newFilter = Name.get("FlateDecode");
@@ -37233,6 +37232,7 @@ async function writeStream(stream, buffer, transform) {
       info(`writeStream - cannot compress data: "${ex}".`);
     }
   }
+  let string = bytesToString(bytes);
   if (transform) {
     string = transform.encryptString(string);
   }
@@ -56964,7 +56964,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '5c45dfa';
+const pdfjsBuild = 'da186d1';
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };

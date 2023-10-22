@@ -22,7 +22,7 @@
 
 /******/ var __webpack_modules__ = ({
 
-/***/ 697:
+/***/ 640:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 
@@ -99,105 +99,9 @@ class ColorConverters {
   }
 }
 
-;// CONCATENATED MODULE: ./web/l10n_utils.js
-const DEFAULT_L10N_STRINGS = {
-  of_pages: "of {{pagesCount}}",
-  page_of_pages: "({{pageNumber}} of {{pagesCount}})",
-  document_properties_kb: "{{size_kb}} KB ({{size_b}} bytes)",
-  document_properties_mb: "{{size_mb}} MB ({{size_b}} bytes)",
-  document_properties_date_string: "{{date}}, {{time}}",
-  document_properties_page_size_unit_inches: "in",
-  document_properties_page_size_unit_millimeters: "mm",
-  document_properties_page_size_orientation_portrait: "portrait",
-  document_properties_page_size_orientation_landscape: "landscape",
-  document_properties_page_size_name_a3: "A3",
-  document_properties_page_size_name_a4: "A4",
-  document_properties_page_size_name_letter: "Letter",
-  document_properties_page_size_name_legal: "Legal",
-  document_properties_page_size_dimension_string: "{{width}} × {{height}} {{unit}} ({{orientation}})",
-  document_properties_page_size_dimension_name_string: "{{width}} × {{height}} {{unit}} ({{name}}, {{orientation}})",
-  document_properties_linearized_yes: "Yes",
-  document_properties_linearized_no: "No",
-  additional_layers: "Additional Layers",
-  page_landmark: "Page {{page}}",
-  thumb_page_title: "Page {{page}}",
-  thumb_page_canvas: "Thumbnail of Page {{page}}",
-  find_reached_top: "Reached top of document, continued from bottom",
-  find_reached_bottom: "Reached end of document, continued from top",
-  "find_match_count[one]": "{{current}} of {{total}} match",
-  "find_match_count[other]": "{{current}} of {{total}} matches",
-  "find_match_count_limit[one]": "More than {{limit}} match",
-  "find_match_count_limit[other]": "More than {{limit}} matches",
-  find_not_found: "Phrase not found",
-  page_scale_width: "Page Width",
-  page_scale_fit: "Page Fit",
-  page_scale_auto: "Automatic Zoom",
-  page_scale_actual: "Actual Size",
-  page_scale_percent: "{{scale}}%",
-  loading_error: "An error occurred while loading the PDF.",
-  invalid_file_error: "Invalid or corrupted PDF file.",
-  missing_file_error: "Missing PDF file.",
-  unexpected_response_error: "Unexpected server response.",
-  rendering_error: "An error occurred while rendering the page.",
-  annotation_date_string: "{{date}}, {{time}}",
-  printing_not_supported: "Warning: Printing is not fully supported by this browser.",
-  printing_not_ready: "Warning: The PDF is not fully loaded for printing.",
-  web_fonts_disabled: "Web fonts are disabled: unable to use embedded PDF fonts.",
-  free_text2_default_content: "Start typing…",
-  editor_free_text2_aria_label: "Text Editor",
-  editor_ink2_aria_label: "Draw Editor",
-  editor_ink_canvas_aria_label: "User-created image",
-  editor_alt_text_button_label: "Alt text",
-  editor_alt_text_edit_button_label: "Edit alt text",
-  editor_alt_text_decorative_tooltip: "Marked as decorative",
-  editor_resizer_label_topLeft: "Top left corner — resize",
-  editor_resizer_label_topMiddle: "Top middle — resize",
-  editor_resizer_label_topRight: "Top right corner — resize",
-  editor_resizer_label_middleRight: "Middle right — resize",
-  editor_resizer_label_bottomRight: "Bottom right corner — resize",
-  editor_resizer_label_bottomMiddle: "Bottom middle — resize",
-  editor_resizer_label_bottomLeft: "Bottom left corner — resize",
-  editor_resizer_label_middleLeft: "Middle left — resize"
-};
-{
-  DEFAULT_L10N_STRINGS.print_progress_percent = "{{progress}}%";
-}
-function getL10nFallback(key, args) {
-  switch (key) {
-    case "find_match_count":
-      key = `find_match_count[${args.total === 1 ? "one" : "other"}]`;
-      break;
-    case "find_match_count_limit":
-      key = `find_match_count_limit[${args.limit === 1 ? "one" : "other"}]`;
-      break;
-  }
-  return DEFAULT_L10N_STRINGS[key] || "";
-}
-function formatL10nValue(text, args) {
-  if (!args) {
-    return text;
-  }
-  return text.replaceAll(/\{\{\s*(\w+)\s*\}\}/g, (all, name) => {
-    return name in args ? args[name] : "{{" + name + "}}";
-  });
-}
-const NullL10n = {
-  async getLanguage() {
-    return "en-us";
-  },
-  async getDirection() {
-    return "ltr";
-  },
-  async get(key, args = null, fallback = getL10nFallback(key, args)) {
-    return formatL10nValue(fallback, args);
-  },
-  async translate(element) {}
-};
-
 // EXTERNAL MODULE: ./src/display/xfa_layer.js
 var xfa_layer = __webpack_require__(160);
 ;// CONCATENATED MODULE: ./src/display/annotation_layer.js
-
 
 
 
@@ -811,7 +715,7 @@ class LinkAnnotationElement extends AnnotationElement {
   #bindAttachment(link, attachment, dest = null) {
     link.href = this.linkService.getAnchorUrl("");
     link.onclick = () => {
-      this.downloadManager?.openOrDownloadData(this.container, attachment.content, attachment.filename, dest);
+      this.downloadManager?.openOrDownloadData(attachment.content, attachment.filename, dest);
       return false;
     };
     this.#setInternalLink();
@@ -961,8 +865,7 @@ class TextAnnotationElement extends AnnotationElement {
     this.container.classList.add("textAnnotation");
     const image = document.createElement("img");
     image.src = this.imageResourcesPath + "annotation-" + this.data.name.toLowerCase() + ".svg";
-    image.alt = "[{{type}} Annotation]";
-    image.dataset.l10nId = "text_annotation_type";
+    image.dataset.l10nId = "pdfjs-text-annotation-type";
     image.dataset.l10nArgs = JSON.stringify({
       type: this.data.name
     });
@@ -1843,7 +1746,6 @@ class PopupAnnotationElement extends AnnotationElement {
   }
 }
 class PopupElement {
-  #dateTimePromise = null;
   #boundKeyDown = this.#keyDown.bind(this);
   #boundHide = this.#hide.bind(this);
   #boundShow = this.#show.bind(this);
@@ -1851,6 +1753,7 @@ class PopupElement {
   #color = null;
   #container = null;
   #contentsObj = null;
+  #dateObj = null;
   #elements = null;
   #parent = null;
   #parentRect = null;
@@ -1882,13 +1785,7 @@ class PopupElement {
     this.#rect = rect;
     this.#parentRect = parentRect;
     this.#elements = elements;
-    const dateObject = display_utils.PDFDateString.toDateObject(modificationDate);
-    if (dateObject) {
-      this.#dateTimePromise = parent.l10n.get("annotation_date_string", {
-        date: dateObject.toLocaleDateString(),
-        time: dateObject.toLocaleTimeString()
-      });
-    }
+    this.#dateObj = display_utils.PDFDateString.toDateObject(modificationDate);
     this.trigger = elements.flatMap(e => e.getElementsToTriggerPopup());
     for (const element of this.trigger) {
       element.addEventListener("click", this.#boundToggle);
@@ -1941,11 +1838,13 @@ class PopupElement {
       str: title.textContent
     } = this.#titleObj);
     popup.append(header);
-    if (this.#dateTimePromise) {
+    if (this.#dateObj) {
       const modificationDate = document.createElement("span");
       modificationDate.classList.add("popupDate");
-      this.#dateTimePromise.then(localized => {
-        modificationDate.textContent = localized;
+      modificationDate.dataset.l10nId = "pdfjs-annotation-date-string";
+      modificationDate.dataset.l10nArgs = JSON.stringify({
+        date: this.#dateObj.toLocaleDateString(),
+        time: this.#dateObj.toLocaleTimeString()
       });
       header.append(modificationDate);
     }
@@ -2458,7 +2357,7 @@ class FileAttachmentAnnotationElement extends AnnotationElement {
     this.container.classList.add("highlightArea");
   }
   #download() {
-    this.downloadManager?.openOrDownloadData(this.container, this.content, this.filename);
+    this.downloadManager?.openOrDownloadData(this.content, this.filename);
   }
 }
 class AnnotationLayer {
@@ -2480,7 +2379,6 @@ class AnnotationLayer {
     this.page = page;
     this.viewport = viewport;
     this.zIndex = 0;
-    this.l10n ||= NullL10n;
   }
   #appendElement(element, id) {
     const contentElement = element.firstChild || element;
@@ -2553,7 +2451,6 @@ class AnnotationLayer {
       this.#appendElement(rendered, data.id);
     }
     this.#setAnnotationCanvasMap();
-    await this.l10n.translate(layer);
   }
   update({
     viewport
@@ -4627,7 +4524,7 @@ class InternalRenderTask {
   }
 }
 const version = '4.0.0';
-const build = '5c45dfa';
+const build = 'da186d1';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -6231,15 +6128,13 @@ class CanvasGraphics {
     }
     let maskToCanvas = util.Util.transform(currentTransform, [1 / width, 0, 0, -1 / height, 0, 0]);
     maskToCanvas = util.Util.transform(maskToCanvas, [1, 0, 0, 1, 0, -height]);
-    const cord1 = util.Util.applyTransform([0, 0], maskToCanvas);
-    const cord2 = util.Util.applyTransform([width, height], maskToCanvas);
-    const rect = util.Util.normalizeRect([cord1[0], cord1[1], cord2[0], cord2[1]]);
-    const drawnWidth = Math.round(rect[2] - rect[0]) || 1;
-    const drawnHeight = Math.round(rect[3] - rect[1]) || 1;
+    const [minX, minY, maxX, maxY] = util.Util.getAxialAlignedBoundingBox([0, 0, width, height], maskToCanvas);
+    const drawnWidth = Math.round(maxX - minX) || 1;
+    const drawnHeight = Math.round(maxY - minY) || 1;
     const fillCanvas = this.cachedCanvases.getCanvas("fillCanvas", drawnWidth, drawnHeight);
     const fillCtx = fillCanvas.context;
-    const offsetX = Math.min(cord1[0], cord2[0]);
-    const offsetY = Math.min(cord1[1], cord2[1]);
+    const offsetX = minX;
+    const offsetY = minY;
     fillCtx.translate(-offsetX, -offsetY);
     fillCtx.transform(...maskToCanvas);
     if (!scaled) {
@@ -8241,8 +8136,8 @@ var util = __webpack_require__(266);
 var editor_editor = __webpack_require__(682);
 // EXTERNAL MODULE: ./src/display/editor/tools.js
 var tools = __webpack_require__(812);
-// EXTERNAL MODULE: ./src/display/annotation_layer.js + 2 modules
-var annotation_layer = __webpack_require__(697);
+// EXTERNAL MODULE: ./src/display/annotation_layer.js + 1 modules
+var annotation_layer = __webpack_require__(640);
 ;// CONCATENATED MODULE: ./src/display/editor/freetext.js
 
 
@@ -8307,7 +8202,7 @@ class FreeTextEditor extends editor_editor.AnnotationEditor {
   }
   static initialize(l10n) {
     editor_editor.AnnotationEditor.initialize(l10n, {
-      strings: ["free_text2_default_content", "editor_free_text2_aria_label"]
+      strings: ["pdfjs-free-text-default-content"]
     });
     const style = getComputedStyle(document.documentElement);
     this._internalPadding = parseFloat(style.getPropertyValue("--freetext-padding"));
@@ -8579,9 +8474,9 @@ class FreeTextEditor extends editor_editor.AnnotationEditor {
     this.editorDiv = document.createElement("div");
     this.editorDiv.className = "internal";
     this.editorDiv.setAttribute("id", this.#editorDivId);
+    this.editorDiv.setAttribute("data-l10n-id", "pdfjs-free-text");
     this.enableEditing();
-    editor_editor.AnnotationEditor._l10nPromise.get("editor_free_text2_aria_label").then(msg => this.editorDiv?.setAttribute("aria-label", msg));
-    editor_editor.AnnotationEditor._l10nPromise.get("free_text2_default_content").then(msg => this.editorDiv?.setAttribute("default-content", msg));
+    editor_editor.AnnotationEditor._l10nPromise.get("pdfjs-free-text-default-content").then(msg => this.editorDiv?.setAttribute("default-content", msg));
     this.editorDiv.contentEditable = true;
     const {
       style
@@ -8802,9 +8697,7 @@ class InkEditor extends editor_editor.AnnotationEditor {
     this._willKeepAspectRatio = true;
   }
   static initialize(l10n) {
-    editor_editor.AnnotationEditor.initialize(l10n, {
-      strings: ["editor_ink_canvas_aria_label", "editor_ink2_aria_label"]
-    });
+    editor_editor.AnnotationEditor.initialize(l10n);
   }
   static updateDefaultParams(type, value) {
     switch (type) {
@@ -9229,7 +9122,7 @@ class InkEditor extends editor_editor.AnnotationEditor {
     this.canvas = document.createElement("canvas");
     this.canvas.width = this.canvas.height = 0;
     this.canvas.className = "inkEditorCanvas";
-    editor_editor.AnnotationEditor._l10nPromise.get("editor_ink_canvas_aria_label").then(msg => this.canvas?.setAttribute("aria-label", msg));
+    this.canvas.setAttribute("data-l10n-id", "pdfjs-ink-canvas");
     this.div.append(this.canvas);
     this.ctx = this.canvas.getContext("2d");
   }
@@ -9255,7 +9148,7 @@ class InkEditor extends editor_editor.AnnotationEditor {
       baseY = this.y;
     }
     super.render();
-    editor_editor.AnnotationEditor._l10nPromise.get("editor_ink2_aria_label").then(msg => this.div?.setAttribute("aria-label", msg));
+    this.div.setAttribute("data-l10n-id", "pdfjs-ink");
     const [x, y, w, h] = this.#getInitialBBox();
     this.setAt(x, y, 0, 0);
     this.setDims(w, h);
@@ -10525,7 +10418,7 @@ class AnnotationEditor {
     fakeEditor._uiManager.addToAnnotationStorage(fakeEditor);
   }
   static initialize(l10n, options = null) {
-    AnnotationEditor._l10nPromise ||= new Map(["editor_alt_text_button_label", "editor_alt_text_edit_button_label", "editor_alt_text_decorative_tooltip", "editor_resizer_label_topLeft", "editor_resizer_label_topMiddle", "editor_resizer_label_topRight", "editor_resizer_label_middleRight", "editor_resizer_label_bottomRight", "editor_resizer_label_bottomMiddle", "editor_resizer_label_bottomLeft", "editor_resizer_label_middleLeft"].map(str => [str, l10n.get(str)]));
+    AnnotationEditor._l10nPromise ||= new Map(["pdfjs-editor-alt-text-button-label", "pdfjs-editor-alt-text-edit-button-label", "pdfjs-editor-alt-text-decorative-tooltip", "pdfjs-editor-resizer-label-topLeft", "pdfjs-editor-resizer-label-topMiddle", "pdfjs-editor-resizer-label-topRight", "pdfjs-editor-resizer-label-middleRight", "pdfjs-editor-resizer-label-bottomRight", "pdfjs-editor-resizer-label-bottomMiddle", "pdfjs-editor-resizer-label-bottomLeft", "pdfjs-editor-resizer-label-middleLeft"].map(str => [str, l10n.get(str.replaceAll(/([A-Z])/g, c => `-${c.toLowerCase()}`))]));
     if (options?.strings) {
       for (const str of options.strings) {
         AnnotationEditor._l10nPromise.set(str, l10n.get(str));
@@ -11013,7 +10906,7 @@ class AnnotationEditor {
     }
     const altText = this.#altTextButton = document.createElement("button");
     altText.className = "altText";
-    const msg = await AnnotationEditor._l10nPromise.get("editor_alt_text_button_label");
+    const msg = await AnnotationEditor._l10nPromise.get("pdfjs-editor-alt-text-button-label");
     altText.textContent = msg;
     altText.setAttribute("aria-label", msg);
     altText.tabIndex = "0";
@@ -11051,7 +10944,7 @@ class AnnotationEditor {
       return;
     }
     button.classList.add("done");
-    AnnotationEditor._l10nPromise.get("editor_alt_text_edit_button_label").then(msg => {
+    AnnotationEditor._l10nPromise.get("pdfjs-editor-alt-text-edit-button-label").then(msg => {
       button.setAttribute("aria-label", msg);
     });
     let tooltip = this.#altTextTooltip;
@@ -11086,7 +10979,7 @@ class AnnotationEditor {
         this.#altTextTooltip?.classList.remove("show");
       });
     }
-    tooltip.innerText = this.#altTextDecorative ? await AnnotationEditor._l10nPromise.get("editor_alt_text_decorative_tooltip") : this.#altText;
+    tooltip.innerText = this.#altTextDecorative ? await AnnotationEditor._l10nPromise.get("pdfjs-editor-alt-text-decorative-tooltip") : this.#altText;
     if (!tooltip.parentNode) {
       button.append(tooltip);
     }
@@ -11350,7 +11243,7 @@ class AnnotationEditor {
         div.addEventListener("keydown", boundResizerKeydown);
         div.addEventListener("blur", boundResizerBlur);
         div.addEventListener("focus", this.#resizerFocus.bind(this, name));
-        AnnotationEditor._l10nPromise.get(`editor_resizer_label_${name}`).then(msg => div.setAttribute("aria-label", msg));
+        AnnotationEditor._l10nPromise.get(`pdfjs-editor-resizer-label-${name}`).then(msg => div.setAttribute("aria-label", msg));
       }
     }
     const first = this.#allResizerDivs[0];
@@ -11376,7 +11269,7 @@ class AnnotationEditor {
       for (const child of children) {
         const div = this.#allResizerDivs[i++];
         const name = div.getAttribute("data-resizer-name");
-        AnnotationEditor._l10nPromise.get(`editor_resizer_label_${name}`).then(msg => child.setAttribute("aria-label", msg));
+        AnnotationEditor._l10nPromise.get(`pdfjs-editor-resizer-label-${name}`).then(msg => child.setAttribute("aria-label", msg));
       }
     }
     this.#setResizerTabIndex(0);
@@ -15471,7 +15364,7 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var _display_text_layer_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(739);
 /* harmony import */ var _display_editor_annotation_editor_layer_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(331);
 /* harmony import */ var _display_editor_tools_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(812);
-/* harmony import */ var _display_annotation_layer_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(697);
+/* harmony import */ var _display_annotation_layer_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(640);
 /* harmony import */ var _display_worker_options_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(368);
 /* harmony import */ var _display_xfa_layer_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(160);
 var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([_display_api_js__WEBPACK_IMPORTED_MODULE_1__]);
@@ -15486,7 +15379,7 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '5c45dfa';
+const pdfjsBuild = 'da186d1';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
