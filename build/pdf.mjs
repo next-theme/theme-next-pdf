@@ -865,10 +865,10 @@ class TextAnnotationElement extends AnnotationElement {
     this.container.classList.add("textAnnotation");
     const image = document.createElement("img");
     image.src = this.imageResourcesPath + "annotation-" + this.data.name.toLowerCase() + ".svg";
-    image.dataset.l10nId = "pdfjs-text-annotation-type";
-    image.dataset.l10nArgs = JSON.stringify({
+    image.setAttribute("data-l10n-id", "pdfjs-text-annotation-type");
+    image.setAttribute("data-l10n-args", JSON.stringify({
       type: this.data.name
-    });
+    }));
     if (!this.data.popupRef && this.hasPopupData) {
       this._createPopup();
     }
@@ -892,11 +892,7 @@ class WidgetAnnotationElement extends AnnotationElement {
     }
   }
   _getKeyModifier(event) {
-    const {
-      isWin,
-      isMac
-    } = util.FeatureTest.platform;
-    return isWin && event.ctrlKey || isMac && event.metaKey;
+    return util.FeatureTest.platform.isMac ? event.metaKey : event.ctrlKey;
   }
   _setEventListener(element, elementData, baseName, eventName, valueGetter) {
     if (baseName.includes("mouse")) {
@@ -1841,11 +1837,11 @@ class PopupElement {
     if (this.#dateObj) {
       const modificationDate = document.createElement("span");
       modificationDate.classList.add("popupDate");
-      modificationDate.dataset.l10nId = "pdfjs-annotation-date-string";
-      modificationDate.dataset.l10nArgs = JSON.stringify({
+      modificationDate.setAttribute("data-l10n-id", "pdfjs-annotation-date-string");
+      modificationDate.setAttribute("data-l10n-args", JSON.stringify({
         date: this.#dateObj.toLocaleDateString(),
         time: this.#dateObj.toLocaleTimeString()
-      });
+      }));
       header.append(modificationDate);
     }
     const contentsObj = this.#contentsObj;
@@ -2368,14 +2364,12 @@ class AnnotationLayer {
     div,
     accessibilityManager,
     annotationCanvasMap,
-    l10n,
     page,
     viewport
   }) {
     this.div = div;
     this.#accessibilityManager = accessibilityManager;
     this.#annotationCanvasMap = annotationCanvasMap;
-    this.l10n = l10n;
     this.page = page;
     this.viewport = viewport;
     this.zIndex = 0;
@@ -4524,7 +4518,7 @@ class InternalRenderTask {
   }
 }
 const version = '4.0.0';
-const build = 'da186d1';
+const build = '80612f3';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -15379,7 +15373,7 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = 'da186d1';
+const pdfjsBuild = '80612f3';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -16414,12 +16408,10 @@ class FeatureTest {
   static get platform() {
     if (typeof navigator === "undefined") {
       return shadow(this, "platform", {
-        isWin: false,
         isMac: false
       });
     }
     return shadow(this, "platform", {
-      isWin: navigator.platform.includes("Win"),
       isMac: navigator.platform.includes("Mac")
     });
   }
