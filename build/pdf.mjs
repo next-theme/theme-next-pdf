@@ -4518,7 +4518,7 @@ class InternalRenderTask {
   }
 }
 const version = '4.0.0';
-const build = '80612f3';
+const build = '50f52b4';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -11777,9 +11777,28 @@ class AnnotationEditorUIManager {
     const arrowChecker = self => {
       return self.#container.contains(document.activeElement) && self.hasSomethingToControl();
     };
+    const textInputChecker = (_self, {
+      target: el
+    }) => {
+      if (el instanceof HTMLInputElement) {
+        const {
+          type
+        } = el;
+        return type !== "text" && type !== "number";
+      }
+      return true;
+    };
     const small = this.TRANSLATE_SMALL;
     const big = this.TRANSLATE_BIG;
-    return (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.shadow)(this, "_keyboardManager", new KeyboardManager([[["ctrl+a", "mac+meta+a"], proto.selectAll], [["ctrl+z", "mac+meta+z"], proto.undo], [["ctrl+y", "ctrl+shift+z", "mac+meta+shift+z", "ctrl+shift+Z", "mac+meta+shift+Z"], proto.redo], [["Backspace", "alt+Backspace", "ctrl+Backspace", "shift+Backspace", "mac+Backspace", "mac+alt+Backspace", "mac+ctrl+Backspace", "Delete", "ctrl+Delete", "shift+Delete", "mac+Delete"], proto.delete], [["Enter", "mac+Enter"], proto.addNewEditorFromKeyboard, {
+    return (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.shadow)(this, "_keyboardManager", new KeyboardManager([[["ctrl+a", "mac+meta+a"], proto.selectAll, {
+      checker: textInputChecker
+    }], [["ctrl+z", "mac+meta+z"], proto.undo, {
+      checker: textInputChecker
+    }], [["ctrl+y", "ctrl+shift+z", "mac+meta+shift+z", "ctrl+shift+Z", "mac+meta+shift+Z"], proto.redo, {
+      checker: textInputChecker
+    }], [["Backspace", "alt+Backspace", "ctrl+Backspace", "shift+Backspace", "mac+Backspace", "mac+alt+Backspace", "mac+ctrl+Backspace", "Delete", "ctrl+Delete", "shift+Delete", "mac+Delete"], proto.delete, {
+      checker: textInputChecker
+    }], [["Enter", "mac+Enter"], proto.addNewEditorFromKeyboard, {
       checker: self => self.#container.contains(document.activeElement) && !self.isEnterHandled
     }], [[" ", "mac+ "], proto.addNewEditorFromKeyboard, {
       checker: self => self.#container.contains(document.activeElement)
@@ -11949,14 +11968,10 @@ class AnnotationEditorUIManager {
     lastActiveElement.focus();
   }
   #addKeyboardManager() {
-    window.addEventListener("keydown", this.#boundKeydown, {
-      capture: true
-    });
+    window.addEventListener("keydown", this.#boundKeydown);
   }
   #removeKeyboardManager() {
-    window.removeEventListener("keydown", this.#boundKeydown, {
-      capture: true
-    });
+    window.removeEventListener("keydown", this.#boundKeydown);
   }
   #addCopyPasteListeners() {
     document.addEventListener("copy", this.#boundCopy);
@@ -12921,7 +12936,7 @@ class FontLoader {
     let supported = false;
     if (_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.isNodeJS) {
       supported = true;
-    } else if (typeof navigator !== "undefined" && /Mozilla\/5.0.*?rv:\d+.*? Gecko/.test(navigator.userAgent)) {
+    } else if (typeof navigator !== "undefined" && typeof navigator?.userAgent === "string" && /Mozilla\/5.0.*?rv:\d+.*? Gecko/.test(navigator.userAgent)) {
       supported = true;
     }
     return (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.shadow)(this, "isSyncFontLoadingSupported", supported);
@@ -15185,17 +15200,30 @@ class XfaLayer {
         linkService
       });
     }
-    const stack = [[root, -1, rootHtml]];
+    const isNotForRichText = intent !== "richText";
     const rootDiv = parameters.div;
     rootDiv.append(rootHtml);
     if (parameters.viewport) {
       const transform = `matrix(${parameters.viewport.transform.join(",")})`;
       rootDiv.style.transform = transform;
     }
-    if (intent !== "richText") {
+    if (isNotForRichText) {
       rootDiv.setAttribute("class", "xfaLayer xfaFont");
     }
     const textDivs = [];
+    if (root.children.length === 0) {
+      if (root.value) {
+        const node = document.createTextNode(root.value);
+        rootHtml.append(node);
+        if (isNotForRichText && _xfa_text_js__WEBPACK_IMPORTED_MODULE_0__.XfaText.shouldBuildText(root.name)) {
+          textDivs.push(node);
+        }
+      }
+      return {
+        textDivs
+      };
+    }
+    const stack = [[root, -1, rootHtml]];
     while (stack.length > 0) {
       const [parent, i, html] = stack.at(-1);
       if (i + 1 === parent.children.length) {
@@ -15226,11 +15254,11 @@ class XfaLayer {
           linkService
         });
       }
-      if (child.children && child.children.length > 0) {
+      if (child.children?.length > 0) {
         stack.push([child, -1, childHtml]);
       } else if (child.value) {
         const node = document.createTextNode(child.value);
-        if (_xfa_text_js__WEBPACK_IMPORTED_MODULE_0__.XfaText.shouldBuildText(name)) {
+        if (isNotForRichText && _xfa_text_js__WEBPACK_IMPORTED_MODULE_0__.XfaText.shouldBuildText(name)) {
           textDivs.push(node);
         }
         childHtml.append(node);
@@ -15373,7 +15401,7 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '80612f3';
+const pdfjsBuild = '50f52b4';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -16406,13 +16434,13 @@ class FeatureTest {
     return shadow(this, "isOffscreenCanvasSupported", typeof OffscreenCanvas !== "undefined");
   }
   static get platform() {
-    if (typeof navigator === "undefined") {
+    if (typeof navigator !== "undefined" && typeof navigator?.platform === "string") {
       return shadow(this, "platform", {
-        isMac: false
+        isMac: navigator.platform.includes("Mac")
       });
     }
     return shadow(this, "platform", {
-      isMac: navigator.platform.includes("Mac")
+      isMac: false
     });
   }
   static get isCSSRoundSupported() {
