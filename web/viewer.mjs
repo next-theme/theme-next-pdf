@@ -10821,10 +10821,6 @@ class Toolbar {
         }
       }
     }];
-    this.buttons.push({
-      element: options.openFile,
-      eventName: "openfile"
-    });
     this.items = {
       numPages: options.numPages,
       pageNumber: options.pageNumber,
@@ -13931,7 +13927,7 @@ PDFPrintServiceFactory.instance = {
 
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '50f52b4';
+const pdfjsBuild = '26fcd26';
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,
@@ -13957,7 +13953,6 @@ function getViewerConfiguration() {
       zoomIn: document.getElementById("zoomIn"),
       zoomOut: document.getElementById("zoomOut"),
       viewFind: document.getElementById("viewFind"),
-      openFile: document.getElementById("openFile"),
       print: document.getElementById("print"),
       editorFreeTextButton: document.getElementById("editorFreeText"),
       editorFreeTextParamsToolbar: document.getElementById("editorFreeTextParamsToolbar"),

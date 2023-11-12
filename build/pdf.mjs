@@ -1095,7 +1095,9 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
           }
           elementData.lastCommittedValue = target.value;
           elementData.commitKey = 1;
-          elementData.focused = true;
+          if (!this.data.actions?.Focus) {
+            elementData.focused = true;
+          }
         });
         element.addEventListener("updatefromsandbox", jsEvent => {
           this.showElementAndHideCanvas(jsEvent.target);
@@ -1199,7 +1201,9 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
           if (!elementData.focused || !event.relatedTarget) {
             return;
           }
-          elementData.focused = false;
+          if (!this.data.actions?.Blur) {
+            elementData.focused = false;
+          }
           const {
             value
           } = event.target;
@@ -2500,7 +2504,7 @@ class AnnotationLayer {
 /* harmony export */   SerializableEmpty: () => (/* binding */ SerializableEmpty)
 /* harmony export */ });
 /* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
-/* harmony import */ var _editor_editor_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(682);
+/* harmony import */ var _editor_editor_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(796);
 /* harmony import */ var _shared_murmurhash3_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(825);
 
 
@@ -4518,7 +4522,7 @@ class InternalRenderTask {
   }
 }
 const version = '4.0.0';
-const build = '50f52b4';
+const build = '26fcd26';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -8126,8 +8130,8 @@ __webpack_require__.d(__webpack_exports__, {
 
 // EXTERNAL MODULE: ./src/shared/util.js
 var util = __webpack_require__(266);
-// EXTERNAL MODULE: ./src/display/editor/editor.js
-var editor_editor = __webpack_require__(682);
+// EXTERNAL MODULE: ./src/display/editor/editor.js + 1 modules
+var editor_editor = __webpack_require__(796);
 // EXTERNAL MODULE: ./src/display/editor/tools.js
 var tools = __webpack_require__(812);
 // EXTERNAL MODULE: ./src/display/annotation_layer.js + 1 modules
@@ -9060,7 +9064,7 @@ class InkEditor extends editor_editor.AnnotationEditor {
     this.#disableEditing = true;
     this.div.classList.add("disabled");
     this.#fitToContent(true);
-    this.makeResizable();
+    this.select();
     this.parent.addInkEditorIfNeeded(true);
     this.moveInDOM();
     this.div.focus({
@@ -10298,15 +10302,86 @@ class AnnotationEditorLayer {
 
 /***/ }),
 
-/***/ 682:
+/***/ 796:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   AnnotationEditor: () => (/* binding */ AnnotationEditor)
-/* harmony export */ });
-/* harmony import */ var _tools_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(812);
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(266);
-/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(473);
+
+// EXPORTS
+__webpack_require__.d(__webpack_exports__, {
+  AnnotationEditor: () => (/* binding */ AnnotationEditor)
+});
+
+// EXTERNAL MODULE: ./src/display/editor/tools.js
+var tools = __webpack_require__(812);
+// EXTERNAL MODULE: ./src/shared/util.js
+var util = __webpack_require__(266);
+// EXTERNAL MODULE: ./src/display/display_utils.js
+var display_utils = __webpack_require__(473);
+;// CONCATENATED MODULE: ./src/display/editor/toolbar.js
+
+class EditorToolbar {
+  #toolbar = null;
+  #editor;
+  #buttons = null;
+  constructor(editor) {
+    this.#editor = editor;
+  }
+  render() {
+    const editToolbar = this.#toolbar = document.createElement("div");
+    editToolbar.className = "editToolbar";
+    editToolbar.addEventListener("contextmenu", display_utils.noContextMenu);
+    editToolbar.addEventListener("pointerdown", EditorToolbar.#pointerDown);
+    const buttons = this.#buttons = document.createElement("div");
+    buttons.className = "buttons";
+    editToolbar.append(buttons);
+    this.#addDeleteButton();
+    return editToolbar;
+  }
+  static #pointerDown(e) {
+    e.stopPropagation();
+  }
+  #focusIn(e) {
+    this.#editor._focusEventsAllowed = false;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  #focusOut(e) {
+    this.#editor._focusEventsAllowed = true;
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  #addListenersToElement(element) {
+    element.addEventListener("focusin", this.#focusIn.bind(this), {
+      capture: true
+    });
+    element.addEventListener("focusout", this.#focusOut.bind(this), {
+      capture: true
+    });
+    element.addEventListener("contextmenu", display_utils.noContextMenu);
+  }
+  hide() {
+    this.#toolbar.classList.add("hidden");
+  }
+  show() {
+    this.#toolbar.classList.remove("hidden");
+  }
+  #addDeleteButton() {
+    const button = document.createElement("button");
+    button.className = "delete";
+    button.tabIndex = 0;
+    this.#addListenersToElement(button);
+    button.addEventListener("click", e => {
+      this.#editor._uiManager.delete();
+    });
+    this.#buttons.append(button);
+  }
+  remove() {
+    this.#toolbar.remove();
+  }
+}
+
+;// CONCATENATED MODULE: ./src/display/editor/editor.js
+
 
 
 
@@ -10323,6 +10398,7 @@ class AnnotationEditor {
   #savedDimensions = null;
   #boundFocusin = this.focusin.bind(this);
   #boundFocusout = this.focusout.bind(this);
+  #editToolbar = null;
   #focusedResizerName = "";
   #hasBeenClicked = false;
   #isEditing = false;
@@ -10336,14 +10412,14 @@ class AnnotationEditor {
   #isDraggable = false;
   #zIndex = AnnotationEditor._zIndex++;
   static _borderLineWidth = -1;
-  static _colorManager = new _tools_js__WEBPACK_IMPORTED_MODULE_0__.ColorManager();
+  static _colorManager = new tools.ColorManager();
   static _zIndex = 1;
   static SMALL_EDITOR_SIZE = 0;
   static get _resizerKeyboardManager() {
     const resize = AnnotationEditor.prototype._resizeWithKeyboard;
-    const small = _tools_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorUIManager.TRANSLATE_SMALL;
-    const big = _tools_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorUIManager.TRANSLATE_BIG;
-    return (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_1__.shadow)(this, "_resizerKeyboardManager", new _tools_js__WEBPACK_IMPORTED_MODULE_0__.KeyboardManager([[["ArrowLeft", "mac+ArrowLeft"], resize, {
+    const small = tools.AnnotationEditorUIManager.TRANSLATE_SMALL;
+    const big = tools.AnnotationEditorUIManager.TRANSLATE_BIG;
+    return (0,util.shadow)(this, "_resizerKeyboardManager", new tools.KeyboardManager([[["ArrowLeft", "mac+ArrowLeft"], resize, {
       args: [-small, 0]
     }], [["ctrl+ArrowLeft", "mac+shift+ArrowLeft"], resize, {
       args: [-big, 0]
@@ -10363,7 +10439,7 @@ class AnnotationEditor {
   }
   constructor(parameters) {
     if (this.constructor === AnnotationEditor) {
-      (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_1__.unreachable)("Cannot initialize AnnotationEditor.");
+      (0,util.unreachable)("Cannot initialize AnnotationEditor.");
     }
     this.parent = parameters.parent;
     this.id = parameters.id;
@@ -10399,7 +10475,7 @@ class AnnotationEditor {
     return Object.getPrototypeOf(this).constructor._type;
   }
   static get _defaultLineColor() {
-    return (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_1__.shadow)(this, "_defaultLineColor", this._colorManager.getHexCode("CanvasText"));
+    return (0,util.shadow)(this, "_defaultLineColor", this._colorManager.getHexCode("CanvasText"));
   }
   static deleteAnnotationElement(editor) {
     const fakeEditor = new FakeEditor({
@@ -10432,7 +10508,7 @@ class AnnotationEditor {
     return false;
   }
   static paste(item, parent) {
-    (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_1__.unreachable)("Not implemented");
+    (0,util.unreachable)("Not implemented");
   }
   get propertiesToUpdate() {
     return [];
@@ -10687,7 +10763,7 @@ class AnnotationEditor {
     } = this;
     const scaledWidth = pageWidth * parentScale;
     const scaledHeight = pageHeight * parentScale;
-    return _shared_util_js__WEBPACK_IMPORTED_MODULE_1__.FeatureTest.isCSSRoundSupported ? [Math.round(scaledWidth), Math.round(scaledHeight)] : [scaledWidth, scaledHeight];
+    return util.FeatureTest.isCSSRoundSupported ? [Math.round(scaledWidth), Math.round(scaledHeight)] : [scaledWidth, scaledHeight];
   }
   setDims(width, height) {
     const [parentWidth, parentHeight] = this.parentDimensions;
@@ -10734,7 +10810,7 @@ class AnnotationEditor {
       div.classList.add("resizer", name);
       div.setAttribute("data-resizer-name", name);
       div.addEventListener("pointerdown", this.#resizerPointerdown.bind(this, name));
-      div.addEventListener("contextmenu", _display_utils_js__WEBPACK_IMPORTED_MODULE_2__.noContextMenu);
+      div.addEventListener("contextmenu", display_utils.noContextMenu);
       div.tabIndex = -1;
     }
     this.div.prepend(this.#resizersDiv);
@@ -10743,7 +10819,7 @@ class AnnotationEditor {
     event.preventDefault();
     const {
       isMac
-    } = _shared_util_js__WEBPACK_IMPORTED_MODULE_1__.FeatureTest.platform;
+    } = util.FeatureTest.platform;
     if (event.button !== 0 || event.ctrlKey && isMac) {
       return;
     }
@@ -10904,7 +10980,7 @@ class AnnotationEditor {
     altText.textContent = msg;
     altText.setAttribute("aria-label", msg);
     altText.tabIndex = "0";
-    altText.addEventListener("contextmenu", _display_utils_js__WEBPACK_IMPORTED_MODULE_2__.noContextMenu);
+    altText.addEventListener("contextmenu", display_utils.noContextMenu);
     altText.addEventListener("pointerdown", event => event.stopPropagation());
     const onClick = event => {
       this.#altTextButton.hidden = true;
@@ -11000,6 +11076,20 @@ class AnnotationEditor {
     });
     this.#altTextWasFromKeyBoard = false;
   }
+  addEditToolbar() {
+    if (this.#editToolbar || this.#isInEditMode) {
+      return;
+    }
+    this.#editToolbar = new EditorToolbar(this);
+    this.div.append(this.#editToolbar.render());
+  }
+  removeEditToolbar() {
+    if (!this.#editToolbar) {
+      return;
+    }
+    this.#editToolbar.remove();
+    this.#editToolbar = null;
+  }
   getClientDimensions() {
     return this.div.getBoundingClientRect();
   }
@@ -11036,13 +11126,13 @@ class AnnotationEditor {
     }
     const [tx, ty] = this.getInitialTranslation();
     this.translate(tx, ty);
-    (0,_tools_js__WEBPACK_IMPORTED_MODULE_0__.bindEvents)(this, this.div, ["pointerdown"]);
+    (0,tools.bindEvents)(this, this.div, ["pointerdown"]);
     return this.div;
   }
   pointerdown(event) {
     const {
       isMac
-    } = _shared_util_js__WEBPACK_IMPORTED_MODULE_1__.FeatureTest.platform;
+    } = util.FeatureTest.platform;
     if (event.button !== 0 || event.ctrlKey && isMac) {
       event.preventDefault();
       return;
@@ -11078,7 +11168,7 @@ class AnnotationEditor {
       if (!this._uiManager.endDragSession()) {
         const {
           isMac
-        } = _shared_util_js__WEBPACK_IMPORTED_MODULE_1__.FeatureTest.platform;
+        } = util.FeatureTest.platform;
         if (event.ctrlKey && !isMac || event.shiftKey || event.metaKey && isMac) {
           this.parent.toggleSelected(this);
         } else {
@@ -11168,7 +11258,7 @@ class AnnotationEditor {
     this.div?.addEventListener("focusout", this.#boundFocusout);
   }
   serialize(isForCopying = false, context = null) {
-    (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_1__.unreachable)("An editor must be serializable");
+    (0,util.unreachable)("An editor must be serializable");
   }
   static deserialize(data, parent, uiManager) {
     const editor = new this.prototype.constructor({
@@ -11204,6 +11294,7 @@ class AnnotationEditor {
       this.#moveInDOMTimeout = null;
     }
     this.#stopResizing();
+    this.removeEditToolbar();
   }
   get isResizable() {
     return false;
@@ -11212,7 +11303,7 @@ class AnnotationEditor {
     if (this.isResizable) {
       this.#createResizers();
       this.#resizersDiv.classList.remove("hidden");
-      (0,_tools_js__WEBPACK_IMPORTED_MODULE_0__.bindEvents)(this, this.div, ["keydown"]);
+      (0,tools.bindEvents)(this, this.div, ["keydown"]);
     }
   }
   keydown(event) {
@@ -11323,6 +11414,8 @@ class AnnotationEditor {
   select() {
     this.makeResizable();
     this.div?.classList.add("selectedEditor");
+    this.addEditToolbar();
+    this.#editToolbar?.show();
   }
   unselect() {
     this.#resizersDiv?.classList.add("hidden");
@@ -11330,6 +11423,7 @@ class AnnotationEditor {
     if (this.div?.contains(document.activeElement)) {
       this._uiManager.currentLayer.div.focus();
     }
+    this.#editToolbar?.hide();
   }
   updateParams(type, value) {}
   disableEditing() {
@@ -11799,7 +11893,9 @@ class AnnotationEditorUIManager {
     }], [["Backspace", "alt+Backspace", "ctrl+Backspace", "shift+Backspace", "mac+Backspace", "mac+alt+Backspace", "mac+ctrl+Backspace", "Delete", "ctrl+Delete", "shift+Delete", "mac+Delete"], proto.delete, {
       checker: textInputChecker
     }], [["Enter", "mac+Enter"], proto.addNewEditorFromKeyboard, {
-      checker: self => self.#container.contains(document.activeElement) && !self.isEnterHandled
+      checker: (self, {
+        target: el
+      }) => !(el instanceof HTMLButtonElement) && self.#container.contains(el) && !self.isEnterHandled
     }], [[" ", "mac+ "], proto.addNewEditorFromKeyboard, {
       checker: self => self.#container.contains(document.activeElement)
     }], [["Escape", "mac+Escape"], proto.unselectAll], [["ArrowLeft", "mac+ArrowLeft"], proto.translateSelectedEditors, {
@@ -15401,7 +15497,7 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '50f52b4';
+const pdfjsBuild = '26fcd26';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
