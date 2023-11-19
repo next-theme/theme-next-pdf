@@ -31227,7 +31227,7 @@ class PartialEvaluator {
       if (!response.ok) {
         warn(`fetchStandardFontData: failed to fetch file "${url}" with "${response.statusText}".`);
       } else {
-        data = await response.arrayBuffer();
+        data = new Uint8Array(await response.arrayBuffer());
       }
     } else {
       try {
@@ -55608,13 +55608,14 @@ class PDFDocument {
   async cleanup(manuallyTriggered = false) {
     return this.catalog ? this.catalog.cleanup(manuallyTriggered) : clearGlobalCaches();
   }
-  async #collectFieldObjects(name, fieldRef, promises, annotationGlobals) {
+  async #collectFieldObjects(name, fieldRef, promises, annotationGlobals, visitedRefs) {
     const {
       xref
     } = this;
-    if (!(fieldRef instanceof Ref)) {
+    if (!(fieldRef instanceof Ref) || visitedRefs.has(fieldRef)) {
       return;
     }
+    visitedRefs.put(fieldRef);
     const field = await xref.fetchAsync(fieldRef);
     if (!(field instanceof Dict)) {
       return;
@@ -55622,6 +55623,25 @@ class PDFDocument {
     if (field.has("T")) {
       const partName = stringToPDFString(await field.getAsync("T"));
       name = name === "" ? partName : `${name}.${partName}`;
+    } else {
+      let obj = field;
+      while (true) {
+        obj = obj.getRaw("Parent");
+        if (obj instanceof Ref) {
+          if (visitedRefs.has(obj)) {
+            break;
+          }
+          obj = await xref.fetchAsync(obj);
+        }
+        if (!(obj instanceof Dict)) {
+          break;
+        }
+        if (obj.has("T")) {
+          const partName = stringToPDFString(await obj.getAsync("T"));
+          name = name === "" ? partName : `${name}.${partName}`;
+          break;
+        }
+      }
     }
     if (!promises.has(name)) {
       promises.set(name, []);
@@ -55636,7 +55656,7 @@ class PDFDocument {
     const kids = await field.getAsync("Kids");
     if (Array.isArray(kids)) {
       for (const kid of kids) {
-        await this.#collectFieldObjects(name, kid, promises, annotationGlobals);
+        await this.#collectFieldObjects(name, kid, promises, annotationGlobals, visitedRefs);
       }
     }
   }
@@ -55648,10 +55668,11 @@ class PDFDocument {
       if (!annotationGlobals) {
         return null;
       }
+      const visitedRefs = new RefSet();
       const allFields = Object.create(null);
       const fieldPromises = new Map();
       for (const fieldRef of await acroForm.getAsync("Fields")) {
-        await this.#collectFieldObjects("", fieldRef, fieldPromises, annotationGlobals);
+        await this.#collectFieldObjects("", fieldRef, fieldPromises, annotationGlobals, visitedRefs);
       }
       const allPromises = [];
       for (const [name, promises] of fieldPromises) {
@@ -56994,7 +57015,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '26fcd26';
+const pdfjsBuild = '3459615';
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };

@@ -3581,7 +3581,9 @@ const PDFWorkerUtil = {
   };
   PDFWorkerUtil.createCDNWrapper = function (url) {
     const wrapper = `await import("${url}");`;
-    return URL.createObjectURL(new Blob([wrapper]));
+    return URL.createObjectURL(new Blob([wrapper], {
+      type: "text/javascript"
+    }));
   };
 }
 class PDFWorker {
@@ -4522,7 +4524,7 @@ class InternalRenderTask {
   }
 }
 const version = '4.0.0';
-const build = '26fcd26';
+const build = '3459615';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -7468,6 +7470,7 @@ for (const op in util.OPS) {
 /* harmony export */   PixelsPerInch: () => (/* binding */ PixelsPerInch),
 /* harmony export */   RenderingCancelledException: () => (/* binding */ RenderingCancelledException),
 /* harmony export */   StatTimer: () => (/* binding */ StatTimer),
+/* harmony export */   fetchData: () => (/* binding */ fetchData),
 /* harmony export */   getColorValues: () => (/* binding */ getColorValues),
 /* harmony export */   getCurrentTransform: () => (/* binding */ getCurrentTransform),
 /* harmony export */   getCurrentTransformInverse: () => (/* binding */ getCurrentTransformInverse),
@@ -7727,30 +7730,38 @@ class DOMCanvasFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.Bas
     return canvas;
   }
 }
-async function fetchData(url, asTypedArray = false) {
+async function fetchData(url, type = "text") {
   if (isValidFetchUrl(url, document.baseURI)) {
     const response = await fetch(url);
     if (!response.ok) {
       throw new Error(response.statusText);
     }
-    return asTypedArray ? new Uint8Array(await response.arrayBuffer()) : (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_1__.stringToBytes)(await response.text());
+    switch (type) {
+      case "arraybuffer":
+        return response.arrayBuffer();
+      case "json":
+        return response.json();
+    }
+    return response.text();
   }
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open("GET", url, true);
-    if (asTypedArray) {
-      request.responseType = "arraybuffer";
-    }
+    request.responseType = type;
     request.onreadystatechange = () => {
       if (request.readyState !== XMLHttpRequest.DONE) {
         return;
       }
       if (request.status === 200 || request.status === 0) {
         let data;
-        if (asTypedArray && request.response) {
-          data = new Uint8Array(request.response);
-        } else if (!asTypedArray && request.responseText) {
-          data = (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_1__.stringToBytes)(request.responseText);
+        switch (type) {
+          case "arraybuffer":
+          case "json":
+            data = request.response;
+            break;
+          default:
+            data = request.responseText;
+            break;
         }
         if (data) {
           resolve(data);
@@ -7764,9 +7775,9 @@ async function fetchData(url, asTypedArray = false) {
 }
 class DOMCMapReaderFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.BaseCMapReaderFactory {
   _fetchData(url, compressionType) {
-    return fetchData(url, this.isCompressed).then(data => {
+    return fetchData(url, this.isCompressed ? "arraybuffer" : "text").then(data => {
       return {
-        cMapData: data,
+        cMapData: data instanceof ArrayBuffer ? new Uint8Array(data) : (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_1__.stringToBytes)(data),
         compressionType
       };
     });
@@ -7774,7 +7785,9 @@ class DOMCMapReaderFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__
 }
 class DOMStandardFontDataFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.BaseStandardFontDataFactory {
   _fetchData(url) {
-    return fetchData(url, true);
+    return fetchData(url, "arraybuffer").then(data => {
+      return new Uint8Array(data);
+    });
   }
 }
 class DOMSVGFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.BaseSVGFactory {
@@ -10369,6 +10382,7 @@ class EditorToolbar {
     const button = document.createElement("button");
     button.className = "delete";
     button.tabIndex = 0;
+    button.setAttribute("data-l10n-id", "pdfjs-editor-remove-button");
     this.#addListenersToElement(button);
     button.addEventListener("click", e => {
       this.#editor._uiManager.delete();
@@ -15462,6 +15476,7 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony export */   XfaLayer: () => (/* reexport safe */ _display_xfa_layer_js__WEBPACK_IMPORTED_MODULE_8__.XfaLayer),
 /* harmony export */   build: () => (/* reexport safe */ _display_api_js__WEBPACK_IMPORTED_MODULE_1__.build),
 /* harmony export */   createValidAbsoluteUrl: () => (/* reexport safe */ _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.createValidAbsoluteUrl),
+/* harmony export */   fetchData: () => (/* reexport safe */ _display_display_utils_js__WEBPACK_IMPORTED_MODULE_2__.fetchData),
 /* harmony export */   getDocument: () => (/* reexport safe */ _display_api_js__WEBPACK_IMPORTED_MODULE_1__.getDocument),
 /* harmony export */   getFilenameFromUrl: () => (/* reexport safe */ _display_display_utils_js__WEBPACK_IMPORTED_MODULE_2__.getFilenameFromUrl),
 /* harmony export */   getPdfFilenameFromUrl: () => (/* reexport safe */ _display_display_utils_js__WEBPACK_IMPORTED_MODULE_2__.getPdfFilenameFromUrl),
@@ -15497,7 +15512,7 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '26fcd26';
+const pdfjsBuild = '3459615';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -16930,7 +16945,7 @@ const AnnotationPrefix = "pdfjs_internal_id_";
 /******/ // Load entry module and return exports
 /******/ // This entry module used 'module' so it can't be inlined
 /******/ var __webpack_exports__ = __webpack_require__(907);
-/******/ __webpack_exports__ = globalThis.pdfjsLib = await __webpack_exports__;
+/******/ __webpack_exports__ = globalThis.pdfjsLib = await (globalThis.pdfjsLibPromise = __webpack_exports__);
 /******/ var __webpack_exports__AbortException = __webpack_exports__.AbortException;
 /******/ var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;
 /******/ var __webpack_exports__AnnotationEditorParamsType = __webpack_exports__.AnnotationEditorParamsType;
@@ -16960,6 +16975,7 @@ const AnnotationPrefix = "pdfjs_internal_id_";
 /******/ var __webpack_exports__XfaLayer = __webpack_exports__.XfaLayer;
 /******/ var __webpack_exports__build = __webpack_exports__.build;
 /******/ var __webpack_exports__createValidAbsoluteUrl = __webpack_exports__.createValidAbsoluteUrl;
+/******/ var __webpack_exports__fetchData = __webpack_exports__.fetchData;
 /******/ var __webpack_exports__getDocument = __webpack_exports__.getDocument;
 /******/ var __webpack_exports__getFilenameFromUrl = __webpack_exports__.getFilenameFromUrl;
 /******/ var __webpack_exports__getPdfFilenameFromUrl = __webpack_exports__.getPdfFilenameFromUrl;
@@ -16973,7 +16989,7 @@ const AnnotationPrefix = "pdfjs_internal_id_";
 /******/ var __webpack_exports__shadow = __webpack_exports__.shadow;
 /******/ var __webpack_exports__updateTextLayer = __webpack_exports__.updateTextLayer;
 /******/ var __webpack_exports__version = __webpack_exports__.version;
-/******/ export { __webpack_exports__AbortException as AbortException, __webpack_exports__AnnotationEditorLayer as AnnotationEditorLayer, __webpack_exports__AnnotationEditorParamsType as AnnotationEditorParamsType, __webpack_exports__AnnotationEditorType as AnnotationEditorType, __webpack_exports__AnnotationEditorUIManager as AnnotationEditorUIManager, __webpack_exports__AnnotationLayer as AnnotationLayer, __webpack_exports__AnnotationMode as AnnotationMode, __webpack_exports__CMapCompressionType as CMapCompressionType, __webpack_exports__DOMSVGFactory as DOMSVGFactory, __webpack_exports__FeatureTest as FeatureTest, __webpack_exports__GlobalWorkerOptions as GlobalWorkerOptions, __webpack_exports__ImageKind as ImageKind, __webpack_exports__InvalidPDFException as InvalidPDFException, __webpack_exports__MissingPDFException as MissingPDFException, __webpack_exports__OPS as OPS, __webpack_exports__PDFDataRangeTransport as PDFDataRangeTransport, __webpack_exports__PDFDateString as PDFDateString, __webpack_exports__PDFWorker as PDFWorker, __webpack_exports__PasswordResponses as PasswordResponses, __webpack_exports__PermissionFlag as PermissionFlag, __webpack_exports__PixelsPerInch as PixelsPerInch, __webpack_exports__PromiseCapability as PromiseCapability, __webpack_exports__RenderingCancelledException as RenderingCancelledException, __webpack_exports__UnexpectedResponseException as UnexpectedResponseException, __webpack_exports__Util as Util, __webpack_exports__VerbosityLevel as VerbosityLevel, __webpack_exports__XfaLayer as XfaLayer, __webpack_exports__build as build, __webpack_exports__createValidAbsoluteUrl as createValidAbsoluteUrl, __webpack_exports__getDocument as getDocument, __webpack_exports__getFilenameFromUrl as getFilenameFromUrl, __webpack_exports__getPdfFilenameFromUrl as getPdfFilenameFromUrl, __webpack_exports__getXfaPageViewport as getXfaPageViewport, __webpack_exports__isDataScheme as isDataScheme, __webpack_exports__isPdfFile as isPdfFile, __webpack_exports__noContextMenu as noContextMenu, __webpack_exports__normalizeUnicode as normalizeUnicode, __webpack_exports__renderTextLayer as renderTextLayer, __webpack_exports__setLayerDimensions as setLayerDimensions, __webpack_exports__shadow as shadow, __webpack_exports__updateTextLayer as updateTextLayer, __webpack_exports__version as version };
+/******/ export { __webpack_exports__AbortException as AbortException, __webpack_exports__AnnotationEditorLayer as AnnotationEditorLayer, __webpack_exports__AnnotationEditorParamsType as AnnotationEditorParamsType, __webpack_exports__AnnotationEditorType as AnnotationEditorType, __webpack_exports__AnnotationEditorUIManager as AnnotationEditorUIManager, __webpack_exports__AnnotationLayer as AnnotationLayer, __webpack_exports__AnnotationMode as AnnotationMode, __webpack_exports__CMapCompressionType as CMapCompressionType, __webpack_exports__DOMSVGFactory as DOMSVGFactory, __webpack_exports__FeatureTest as FeatureTest, __webpack_exports__GlobalWorkerOptions as GlobalWorkerOptions, __webpack_exports__ImageKind as ImageKind, __webpack_exports__InvalidPDFException as InvalidPDFException, __webpack_exports__MissingPDFException as MissingPDFException, __webpack_exports__OPS as OPS, __webpack_exports__PDFDataRangeTransport as PDFDataRangeTransport, __webpack_exports__PDFDateString as PDFDateString, __webpack_exports__PDFWorker as PDFWorker, __webpack_exports__PasswordResponses as PasswordResponses, __webpack_exports__PermissionFlag as PermissionFlag, __webpack_exports__PixelsPerInch as PixelsPerInch, __webpack_exports__PromiseCapability as PromiseCapability, __webpack_exports__RenderingCancelledException as RenderingCancelledException, __webpack_exports__UnexpectedResponseException as UnexpectedResponseException, __webpack_exports__Util as Util, __webpack_exports__VerbosityLevel as VerbosityLevel, __webpack_exports__XfaLayer as XfaLayer, __webpack_exports__build as build, __webpack_exports__createValidAbsoluteUrl as createValidAbsoluteUrl, __webpack_exports__fetchData as fetchData, __webpack_exports__getDocument as getDocument, __webpack_exports__getFilenameFromUrl as getFilenameFromUrl, __webpack_exports__getPdfFilenameFromUrl as getPdfFilenameFromUrl, __webpack_exports__getXfaPageViewport as getXfaPageViewport, __webpack_exports__isDataScheme as isDataScheme, __webpack_exports__isPdfFile as isPdfFile, __webpack_exports__noContextMenu as noContextMenu, __webpack_exports__normalizeUnicode as normalizeUnicode, __webpack_exports__renderTextLayer as renderTextLayer, __webpack_exports__setLayerDimensions as setLayerDimensions, __webpack_exports__shadow as shadow, __webpack_exports__updateTextLayer as updateTextLayer, __webpack_exports__version as version };
 /******/ 
 
 //# sourceMappingURL=pdf.mjs.map
