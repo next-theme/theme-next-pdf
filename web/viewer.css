@@ -1534,7 +1534,8 @@
   align-items:center;
   justify-content:center;
   padding-inline:4px;
-  width:auto;
+  width:-moz-max-content;
+  width:max-content;
   height:24px;
   min-width:88px;
   z-index:1;
@@ -2156,6 +2157,7 @@
 
   --toolbar-icon-opacity:0.7;
   --doorhanger-icon-opacity:0.9;
+  --editor-toolbar-base-offset:105px;
 
   --main-color:rgb(12 12 13);
   --body-bg-color:rgb(212 212 215);
@@ -2290,7 +2292,6 @@
     --doorhanger-separator-color:rgb(92 92 97);
     --dialog-button-bg-color:rgb(92 92 97);
     --dialog-button-hover-bg-color:rgb(115 115 115);
-    --loading-icon:url(images/loading-dark.svg);
   }
 }
 
@@ -2332,7 +2333,6 @@
     --doorhanger-separator-color:rgb(92 92 97);
     --dialog-button-bg-color:rgb(92 92 97);
     --dialog-button-hover-bg-color:rgb(115 115 115);
-    --loading-icon:url(images/loading-dark.svg);
   }
 
 @media screen and (forced-colors: active){
@@ -2674,20 +2674,22 @@ body{
 #findInput{
   width:200px;
 }
+
 #findInput::-moz-placeholder{
-  font-style:normal;
-}
+    font-style:normal;
+  }
+
 #findInput::placeholder{
-  font-style:normal;
-}
-#findInput[data-status="pending"]{
-  background-image:var(--loading-icon);
-  background-repeat:no-repeat;
-  background-position:calc(50% + 48% * var(--dir-factor));
-}
+    font-style:normal;
+  }
+
+.loadingInput:has(> #findInput[data-status="pending"])::after{
+    visibility:visible;
+  }
+
 #findInput[data-status="notFound"]{
-  background-color:rgb(255 102 102);
-}
+    background-color:rgb(255 102 102);
+  }
 
 .secondaryToolbar,
 .editorParamsToolbar{
@@ -2751,15 +2753,15 @@ body{
 }
 
 #editorStampParamsToolbar{
-  inset-inline-end:40px;
+  inset-inline-end:calc(var(--editor-toolbar-base-offset) + 0px);
 }
 
 #editorInkParamsToolbar{
-  inset-inline-end:68px;
+  inset-inline-end:calc(var(--editor-toolbar-base-offset) + 28px);
 }
 
 #editorFreeTextParamsToolbar{
-  inset-inline-end:96px;
+  inset-inline-end:calc(var(--editor-toolbar-base-offset) + 56px);
 }
 
 #editorStampAddImage::before{
@@ -3311,17 +3313,40 @@ a:is(.toolbarButton, .secondaryToolbarButton)[href="#"]{
   background-size:0 0;
   transition-property:none;
 }
-#pageNumber.visiblePageIsLoading{
-  background-image:var(--loading-icon);
-  background-repeat:no-repeat;
-  background-position:calc(50% - 42% * var(--dir-factor));
-  background-size:16px 16px;
-  transition-property:background-size;
-  transition-delay:var(--loading-icon-delay);
-}
+
 #pageNumber::-webkit-inner-spin-button{
-  -webkit-appearance:none;
-}
+    -webkit-appearance:none;
+  }
+
+.loadingInput:has(> #pageNumber.loading)::after{
+    visibility:visible;
+
+    transition-property:visibility;
+    transition-delay:var(--loading-icon-delay);
+  }
+
+.loadingInput::after{
+    position:absolute;
+    visibility:hidden;
+    top:calc(50% - 8px);
+    width:16px;
+    height:16px;
+
+    content:"";
+    background-color:var(--toolbar-icon-bg-color);
+    -webkit-mask-size:cover;
+            mask-size:cover;
+    -webkit-mask-image:var(--loading-icon);
+            mask-image:var(--loading-icon);
+  }
+
+.loadingInput.start::after{
+    inset-inline-start:4px;
+  }
+
+.loadingInput.end::after{
+    inset-inline-end:4px;
+  }
 
 .toolbarField:focus{
   border-color:#0a84ff;
@@ -3662,6 +3687,9 @@ dialog :link{
 }
 
 @media all and (max-width: 750px){
+  :root{
+    --editor-toolbar-base-offset:40px;
+  }
   #outerContainer .hiddenMediumView{
     display:none;
   }
