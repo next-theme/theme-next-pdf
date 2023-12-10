@@ -790,10 +790,19 @@
       }
 
 .canvasWrapper svg.highlight{
+      --blend-mode:multiply;
+
       position:absolute;
-      mix-blend-mode:multiply;
+      mix-blend-mode:var(--blend-mode);
       fill-rule:evenodd;
     }
+
+@media screen and (forced-colors: active){
+
+.canvasWrapper svg.highlight{
+        --blend-mode:difference;
+    }
+      }
 
 .canvasWrapper svg.highlightOutline{
       position:absolute;
@@ -952,7 +961,6 @@
     --editor-toolbar-hover-bg-color:#e0e0e6;
     --editor-toolbar-hover-fg-color:var(--editor-toolbar-fg-color);
     --editor-toolbar-hover-outline:none;
-    --editor-toolbar-active-bg-color:#cfcfd8;
     --editor-toolbar-focus-outline-color:#0060df;
     --editor-toolbar-shadow:0 2px 6px 0 rgb(58 57 68 / 0.2);
     --editor-toolbar-vert-offset:6px;
@@ -988,7 +996,6 @@
       --editor-toolbar-bg-color:#2b2a33;
       --editor-toolbar-fg-color:#fbfbfe;
       --editor-toolbar-hover-bg-color:#52525e;
-      --editor-toolbar-active-bg-color:#5b5b66;
       --editor-toolbar-focus-outline-color:#0df;
   }
     }
@@ -998,7 +1005,6 @@
       --editor-toolbar-bg-color:#2b2a33;
       --editor-toolbar-fg-color:#fbfbfe;
       --editor-toolbar-hover-bg-color:#52525e;
-      --editor-toolbar-active-bg-color:#5b5b66;
       --editor-toolbar-focus-outline-color:#0df;
   }
 
@@ -1013,7 +1019,6 @@
       --editor-toolbar-hover-bg-color:ButtonFace;
       --editor-toolbar-hover-fg-color:AccentColor;
       --editor-toolbar-hover-outline:2px solid var(--editor-toolbar-hover-border-color);
-      --editor-toolbar-active-bg-color:ButtonFace;
       --editor-toolbar-focus-outline-color:ButtonBorder;
       --editor-toolbar-shadow:none;
   }
@@ -1882,6 +1887,50 @@
             border-color:var(--button-save-hover-border-color);
           }
 
+.colorPicker{
+  --hover-outline-color:#0250bb;
+  --selected-outline-color:#0060df;
+  --swatch-border-color:#cfcfd8;
+}
+
+@media (prefers-color-scheme: dark){
+
+:where(html:not(.is-light)) .colorPicker{
+    --hover-outline-color:#80ebff;
+    --selected-outline-color:#aaf2ff;
+    --swatch-border-color:#52525e;
+}
+  }
+
+:where(html.is-dark) .colorPicker{
+    --hover-outline-color:#80ebff;
+    --selected-outline-color:#aaf2ff;
+    --swatch-border-color:#52525e;
+}
+
+@media screen and (forced-colors: active){
+
+.colorPicker{
+    --hover-outline-color:Highlight;
+    --selected-outline-color:var(--hover-outline-color);
+    --swatch-border-color:ButtonText;
+}
+  }
+
+.colorPicker .swatch{
+    width:16px;
+    height:16px;
+    border:1px solid var(--swatch-border-color);
+    border-radius:100%;
+    outline-offset:2px;
+    box-sizing:border-box;
+    forced-color-adjust:none;
+  }
+
+.colorPicker button:is(:hover, .selected) > .swatch{
+    border:none;
+  }
+
 .annotationEditorLayer[data-main-rotation="0"] .highlightEditor > .editToolbar{
       rotate:0deg;
     }
@@ -1930,8 +1979,147 @@
       }
 
 .annotationEditorLayer .highlightEditor .editToolbar{
+      --editor-toolbar-colorpicker-arrow-image:url(images/toolbarButton-menuArrow.svg);
+
       transform-origin:center !important;
     }
+
+.annotationEditorLayer .highlightEditor .editToolbar .buttons .colorPicker{
+          position:relative;
+          width:auto;
+          display:flex;
+          justify-content:center;
+          align-items:center;
+          gap:4px;
+          padding:4px;
+        }
+
+.annotationEditorLayer .highlightEditor .editToolbar .buttons .colorPicker::after{
+            content:"";
+            -webkit-mask-image:var(--editor-toolbar-colorpicker-arrow-image);
+                    mask-image:var(--editor-toolbar-colorpicker-arrow-image);
+            -webkit-mask-repeat:no-repeat;
+                    mask-repeat:no-repeat;
+            -webkit-mask-position:center;
+                    mask-position:center;
+            display:inline-block;
+            background-color:var(--editor-toolbar-fg-color);
+            width:12px;
+            height:12px;
+          }
+
+.annotationEditorLayer .highlightEditor .editToolbar .buttons .colorPicker:hover::after{
+            background-color:var(--editor-toolbar-hover-fg-color);
+          }
+
+.annotationEditorLayer .highlightEditor .editToolbar .buttons .colorPicker:has(.dropdown:not(.hidden)){
+            background-color:var(--editor-toolbar-hover-bg-color);
+          }
+
+.annotationEditorLayer .highlightEditor .editToolbar .buttons .colorPicker .dropdown{
+            position:absolute;
+            display:flex;
+            justify-content:center;
+            align-items:center;
+            flex-direction:column;
+            gap:11px;
+            padding-block:8px;
+            border-radius:6px;
+            background-color:var(--editor-toolbar-bg-color);
+            border:1px solid var(--editor-toolbar-border-color);
+            box-shadow:var(--editor-toolbar-shadow);
+            inset-block-start:calc(100% + 4px);
+            width:calc(100% + 2 * var(--editor-toolbar-padding));
+          }
+
+.annotationEditorLayer .highlightEditor .editToolbar .buttons .colorPicker .dropdown button{
+              width:100%;
+              height:auto;
+              border:none;
+              cursor:pointer;
+              display:flex;
+              justify-content:center;
+              align-items:center;
+              background:none;
+            }
+
+.annotationEditorLayer .highlightEditor .editToolbar .buttons .colorPicker .dropdown button:is(:active, :focus-visible){
+                outline:none;
+              }
+
+.annotationEditorLayer .highlightEditor .editToolbar .buttons .colorPicker .dropdown button > .swatch{
+                outline-offset:2px;
+              }
+
+.annotationEditorLayer .highlightEditor .editToolbar .buttons .colorPicker .dropdown button[aria-selected="true"] > .swatch{
+                outline:2px solid var(--selected-outline-color);
+              }
+
+.annotationEditorLayer .highlightEditor .editToolbar .buttons .colorPicker .dropdown button:is(:hover, :active, :focus-visible) > .swatch{
+                outline:2px solid var(--hover-outline-color);
+              }
+
+.editorParamsToolbar:has(#highlightParamsToolbarContainer){
+  padding:unset;
+}
+
+#highlightParamsToolbarContainer{
+  height:auto;
+  padding-inline:10px;
+  padding-block:10px 16px;
+  display:flex;
+  flex-direction:column;
+  box-sizing:border-box;
+}
+
+#highlightParamsToolbarContainer .colorPicker{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+
+#highlightParamsToolbarContainer .colorPicker #highlightColorPickerLabel{
+      width:-moz-fit-content;
+      width:fit-content;
+      inset-inline-start:0;
+    }
+
+#highlightParamsToolbarContainer .colorPicker .dropdown{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      flex-direction:row;
+      height:auto;
+    }
+
+#highlightParamsToolbarContainer .colorPicker .dropdown button{
+        width:auto;
+        height:auto;
+        border:none;
+        cursor:pointer;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        background:none;
+        flex:0 0 auto;
+      }
+
+#highlightParamsToolbarContainer .colorPicker .dropdown button .swatch{
+          width:24px;
+          height:24px;
+        }
+
+#highlightParamsToolbarContainer .colorPicker .dropdown button:is(:active, :focus-visible){
+          outline:none;
+        }
+
+#highlightParamsToolbarContainer .colorPicker .dropdown button[aria-selected="true"] > .swatch{
+          outline:2px solid var(--selected-outline-color);
+        }
+
+#highlightParamsToolbarContainer .colorPicker .dropdown button:is(:hover, :active, :focus-visible) > .swatch{
+          outline:2px solid var(--hover-outline-color);
+        }
 
 :root{
   --viewer-container-height:0;
@@ -2669,6 +2857,11 @@ body{
 .editorParamsToolbarContainer .editorParamsLabel{
   padding-inline-end:10px;
   flex:none;
+  font:menu;
+  font-size:13px;
+  font-style:normal;
+  font-weight:400;
+  line-height:150%;
   color:var(--main-color);
 }
 
