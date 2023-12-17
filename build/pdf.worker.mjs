@@ -57145,7 +57145,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '39a1fc6';
+const pdfjsBuild = '91188cf';
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };
