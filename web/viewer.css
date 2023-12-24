@@ -333,8 +333,8 @@
 .annotationLayer .buttonWidgetAnnotation.radioButton input:checked::before{
     border-radius:50%;
     height:50%;
-    left:30%;
-    top:20%;
+    left:25%;
+    top:25%;
     width:50%;
   }
 
@@ -3663,6 +3663,14 @@ a:focus > .thumbnail > .thumbnailImage,
   border-radius:2px;
   color:var(--treeitem-hover-color);
 }
+
+#outlineOptionsContainer{
+  display:none;
+}
+
+#sidebarContainer:has(#outlineView:not(.hidden)) #outlineOptionsContainer{
+    display:inherit;
+  }
 
 .dialogButton{
   width:auto;

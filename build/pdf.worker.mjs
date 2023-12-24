@@ -31435,6 +31435,7 @@ class PartialEvaluator {
       }
       const objId = `mask_${this.idFactory.createObjId()}`;
       operatorList.addDependency(objId);
+      imgData.dataLen = imgData.bitmap ? imgData.width * imgData.height * 4 : imgData.data.length;
       this._sendImgData(objId, imgData);
       args = [{
         data: objId,
@@ -31476,14 +31477,32 @@ class PartialEvaluator {
       cacheGlobally = false;
     if (this.parsingType3Font) {
       objId = `${this.idFactory.getDocId()}_type3_${objId}`;
-    } else if (imageRef) {
+    } else if (cacheKey && imageRef) {
       cacheGlobally = this.globalImageCache.shouldCache(imageRef, this.pageIndex);
       if (cacheGlobally) {
+        assert(!isInline, "Cannot cache an inline image globally.");
         objId = `${this.idFactory.getDocId()}_${objId}`;
       }
     }
     operatorList.addDependency(objId);
     args = [objId, w, h];
+    operatorList.addImageOps(OPS.paintImageXObject, args, optionalContent);
+    if (cacheGlobally && w * h > 250000) {
+      const localLength = await this.handler.sendWithPromise("commonobj", [objId, "CopyLocalImage", {
+        imageRef
+      }]);
+      if (localLength) {
+        this.globalImageCache.setData(imageRef, {
+          objId,
+          fn: OPS.paintImageXObject,
+          args,
+          optionalContent,
+          byteSize: 0
+        });
+        this.globalImageCache.addByteSize(imageRef, localLength);
+        return;
+      }
+    }
     PDFImage.buildImage({
       xref: this.xref,
       res: resources,
@@ -31493,16 +31512,16 @@ class PartialEvaluator {
       localColorSpaceCache
     }).then(async imageObj => {
       imgData = await imageObj.createImageData(false, this.options.isOffscreenCanvasSupported);
-      if (cacheKey && imageRef && cacheGlobally) {
-        const length = imgData.bitmap ? imgData.width * imgData.height * 4 : imgData.data.length;
-        this.globalImageCache.addByteSize(imageRef, length);
+      imgData.dataLen = imgData.bitmap ? imgData.width * imgData.height * 4 : imgData.data.length;
+      imgData.ref = imageRef;
+      if (cacheGlobally) {
+        this.globalImageCache.addByteSize(imageRef, imgData.dataLen);
       }
       return this._sendImgData(objId, imgData, cacheGlobally);
     }).catch(reason => {
       warn(`Unable to decode image "${objId}": "${reason}".`);
       return this._sendImgData(objId, null, cacheGlobally);
     });
-    operatorList.addImageOps(OPS.paintImageXObject, args, optionalContent);
     if (cacheKey) {
       const cacheData = {
         fn: OPS.paintImageXObject,
@@ -31513,7 +31532,6 @@ class PartialEvaluator {
       if (imageRef) {
         this._regionalImageCache.set(null, imageRef, cacheData);
         if (cacheGlobally) {
-          assert(!isInline, "Cannot cache an inline image globally.");
           this.globalImageCache.setData(imageRef, {
             objId,
             fn: OPS.paintImageXObject,
@@ -57145,7 +57163,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '91188cf';
+const pdfjsBuild = '3b94e9f';
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };

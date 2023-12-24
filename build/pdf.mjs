@@ -4057,10 +4057,10 @@ class WorkerTransport {
     });
     messageHandler.on("commonobj", ([id, type, exportedData]) => {
       if (this.destroyed) {
-        return;
+        return null;
       }
       if (this.commonObjs.has(id)) {
-        return;
+        return null;
       }
       switch (type) {
         case "Font":
@@ -4089,6 +4089,24 @@ class WorkerTransport {
             this.commonObjs.resolve(id, font);
           });
           break;
+        case "CopyLocalImage":
+          const {
+            imageRef
+          } = exportedData;
+          (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.assert)(imageRef, "The imageRef must be defined.");
+          for (const pageProxy of this.#pageCache.values()) {
+            for (const [, data] of pageProxy.objs) {
+              if (data.ref !== imageRef) {
+                continue;
+              }
+              if (!data.dataLen) {
+                return null;
+              }
+              this.commonObjs.resolve(id, structuredClone(data));
+              return data.dataLen;
+            }
+          }
+          break;
         case "FontPath":
         case "Image":
         case "Pattern":
@@ -4097,6 +4115,7 @@ class WorkerTransport {
         default:
           throw new Error(`Got unknown common object type ${type}`);
       }
+      return null;
     });
     messageHandler.on("obj", ([id, pageIndex, type, imageData]) => {
       if (this.destroyed) {
@@ -4113,20 +4132,8 @@ class WorkerTransport {
       switch (type) {
         case "Image":
           pageProxy.objs.resolve(id, imageData);
-          if (imageData) {
-            let length;
-            if (imageData.bitmap) {
-              const {
-                width,
-                height
-              } = imageData;
-              length = width * height * 4;
-            } else {
-              length = imageData.data?.length || 0;
-            }
-            if (length > _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.MAX_IMAGE_SIZE_TO_CACHE) {
-              pageProxy._maybeCleanupAfterRender = true;
-            }
+          if (imageData?.dataLen > _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.MAX_IMAGE_SIZE_TO_CACHE) {
+            pageProxy._maybeCleanupAfterRender = true;
           }
           break;
         case "Pattern":
@@ -4354,7 +4361,7 @@ class PDFObjects {
   }
   has(objId) {
     const obj = this.#objs[objId];
-    return obj?.capability.settled || false;
+    return obj?.capability.settled ?? false;
   }
   resolve(objId, data = null) {
     const obj = this.#ensureObj(objId);
@@ -4369,6 +4376,18 @@ class PDFObjects {
       data?.bitmap?.close();
     }
     this.#objs = Object.create(null);
+  }
+  *[Symbol.iterator]() {
+    for (const objId in this.#objs) {
+      const {
+        capability,
+        data
+      } = this.#objs[objId];
+      if (!capability.settled) {
+        continue;
+      }
+      yield [objId, data];
+    }
   }
 }
 class RenderTask {
@@ -4531,7 +4550,7 @@ class InternalRenderTask {
   }
 }
 const version = '4.0.0';
-const build = '91188cf';
+const build = '3b94e9f';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -13064,7 +13083,7 @@ class AnnotationEditorUIManager {
     this.#activeEditor = null;
     this.#selectedEditors.clear();
     this.#commandManager.destroy();
-    this.#altTextManager.destroy();
+    this.#altTextManager?.destroy();
     if (this.#focusMainContainerTimeoutId) {
       clearTimeout(this.#focusMainContainerTimeoutId);
       this.#focusMainContainerTimeoutId = null;
@@ -16628,7 +16647,7 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '91188cf';
+const pdfjsBuild = '3b94e9f';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
