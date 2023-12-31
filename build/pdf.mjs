@@ -4550,7 +4550,7 @@ class InternalRenderTask {
   }
 }
 const version = '4.0.0';
-const build = '3b94e9f';
+const build = '9e14d04';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -16647,7 +16647,7 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '3b94e9f';
+const pdfjsBuild = '9e14d04';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
