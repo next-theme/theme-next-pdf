@@ -2685,17 +2685,19 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var _font_loader_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(742);
 /* harmony import */ var display_node_utils__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(738);
 /* harmony import */ var _canvas_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(250);
-/* harmony import */ var _worker_options_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(368);
-/* harmony import */ var _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(694);
-/* harmony import */ var _metadata_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(472);
-/* harmony import */ var _optional_content_config_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(890);
-/* harmony import */ var _transport_stream_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(92);
-/* harmony import */ var display_fetch_stream__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(171);
-/* harmony import */ var display_network__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(474);
-/* harmony import */ var display_node_stream__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(498);
-/* harmony import */ var _xfa_text_js__WEBPACK_IMPORTED_MODULE_14__ = __webpack_require__(521);
-var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([display_node_utils__WEBPACK_IMPORTED_MODULE_4__, display_node_stream__WEBPACK_IMPORTED_MODULE_13__]);
-([display_node_utils__WEBPACK_IMPORTED_MODULE_4__, display_node_stream__WEBPACK_IMPORTED_MODULE_13__] = __webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__);
+/* harmony import */ var _text_layer_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(739);
+/* harmony import */ var _worker_options_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(368);
+/* harmony import */ var _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(694);
+/* harmony import */ var _metadata_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(472);
+/* harmony import */ var _optional_content_config_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(890);
+/* harmony import */ var _transport_stream_js__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(92);
+/* harmony import */ var display_fetch_stream__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(171);
+/* harmony import */ var display_network__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(474);
+/* harmony import */ var display_node_stream__WEBPACK_IMPORTED_MODULE_14__ = __webpack_require__(498);
+/* harmony import */ var _xfa_text_js__WEBPACK_IMPORTED_MODULE_15__ = __webpack_require__(521);
+var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([display_node_utils__WEBPACK_IMPORTED_MODULE_4__, display_node_stream__WEBPACK_IMPORTED_MODULE_14__]);
+([display_node_utils__WEBPACK_IMPORTED_MODULE_4__, display_node_stream__WEBPACK_IMPORTED_MODULE_14__] = __webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__);
+
 
 
 
@@ -2794,7 +2796,7 @@ function getDocument(src) {
   if (!worker) {
     const workerParams = {
       verbosity,
-      port: _worker_options_js__WEBPACK_IMPORTED_MODULE_6__.GlobalWorkerOptions.workerPort
+      port: _worker_options_js__WEBPACK_IMPORTED_MODULE_7__.GlobalWorkerOptions.workerPort
     };
     worker = workerParams.port ? PDFWorker.fromPort(workerParams) : new PDFWorker(workerParams);
     task._worker = worker;
@@ -2841,7 +2843,7 @@ function getDocument(src) {
     const networkStreamPromise = new Promise(function (resolve) {
       let networkStream;
       if (rangeTransport) {
-        networkStream = new _transport_stream_js__WEBPACK_IMPORTED_MODULE_10__.PDFDataTransportStream({
+        networkStream = new _transport_stream_js__WEBPACK_IMPORTED_MODULE_11__.PDFDataTransportStream({
           length,
           initialData: rangeTransport.initialData,
           progressiveDone: rangeTransport.progressiveDone,
@@ -2852,9 +2854,9 @@ function getDocument(src) {
       } else if (!data) {
         const createPDFNetworkStream = params => {
           if (_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.isNodeJS) {
-            return new display_node_stream__WEBPACK_IMPORTED_MODULE_13__.PDFNodeStream(params);
+            return new display_node_stream__WEBPACK_IMPORTED_MODULE_14__.PDFNodeStream(params);
           }
-          return (0,_display_utils_js__WEBPACK_IMPORTED_MODULE_2__.isValidFetchUrl)(params.url) ? new display_fetch_stream__WEBPACK_IMPORTED_MODULE_11__.PDFFetchStream(params) : new display_network__WEBPACK_IMPORTED_MODULE_12__.PDFNetworkStream(params);
+          return (0,_display_utils_js__WEBPACK_IMPORTED_MODULE_2__.isValidFetchUrl)(params.url) ? new display_fetch_stream__WEBPACK_IMPORTED_MODULE_12__.PDFFetchStream(params) : new display_network__WEBPACK_IMPORTED_MODULE_13__.PDFNetworkStream(params);
         };
         networkStream = createPDFNetworkStream({
           url,
@@ -2872,7 +2874,7 @@ function getDocument(src) {
       if (task.destroyed) {
         throw new Error("Loading aborted");
       }
-      const messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__.MessageHandler(docId, workerId, worker.port);
+      const messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_8__.MessageHandler(docId, workerId, worker.port);
       const transport = new WorkerTransport(messageHandler, task, networkStream, transportParams, transportFactory);
       task._transport = transport;
       messageHandler.send("Ready", null);
@@ -3322,7 +3324,7 @@ class PDFPageProxy {
   getTextContent(params = {}) {
     if (this._transport._htmlForXfa) {
       return this.getXfa().then(xfa => {
-        return _xfa_text_js__WEBPACK_IMPORTED_MODULE_14__.XfaText.textContent(xfa);
+        return _xfa_text_js__WEBPACK_IMPORTED_MODULE_15__.XfaText.textContent(xfa);
       });
     }
     const readableStream = this.streamTextContent(params);
@@ -3571,7 +3573,7 @@ const PDFWorkerUtil = {
 {
   if (_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.isNodeJS) {
     PDFWorkerUtil.isWorkerDisabled = true;
-    _worker_options_js__WEBPACK_IMPORTED_MODULE_6__.GlobalWorkerOptions.workerSrc ||= "./pdf.worker.mjs";
+    _worker_options_js__WEBPACK_IMPORTED_MODULE_7__.GlobalWorkerOptions.workerSrc ||= "./pdf.worker.mjs";
   }
   PDFWorkerUtil.isSameOrigin = function (baseUrl, otherUrl) {
     let base;
@@ -3628,7 +3630,7 @@ class PDFWorker {
   }
   _initializeFromPort(port) {
     this._port = port;
-    this._messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__.MessageHandler("main", "worker", port);
+    this._messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_8__.MessageHandler("main", "worker", port);
     this._messageHandler.on("ready", function () {});
     this._readyCapability.resolve();
     this._messageHandler.send("configure", {
@@ -3647,7 +3649,7 @@ class PDFWorker {
         const worker = new Worker(workerSrc, {
           type: "module"
         });
-        const messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__.MessageHandler("main", "worker", worker);
+        const messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_8__.MessageHandler("main", "worker", worker);
         const terminateEarly = () => {
           worker.removeEventListener("error", onWorkerError);
           messageHandler.destroy();
@@ -3721,9 +3723,9 @@ class PDFWorker {
       const port = new LoopbackPort();
       this._port = port;
       const id = `fake${PDFWorkerUtil.fakeWorkerId++}`;
-      const workerHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__.MessageHandler(id + "_worker", id, port);
+      const workerHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_8__.MessageHandler(id + "_worker", id, port);
       WorkerMessageHandler.setup(workerHandler, port);
-      const messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__.MessageHandler(id, id + "_worker", port);
+      const messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_8__.MessageHandler(id, id + "_worker", port);
       this._messageHandler = messageHandler;
       this._readyCapability.resolve();
       messageHandler.send("configure", {
@@ -3760,8 +3762,8 @@ class PDFWorker {
     return new PDFWorker(params);
   }
   static get workerSrc() {
-    if (_worker_options_js__WEBPACK_IMPORTED_MODULE_6__.GlobalWorkerOptions.workerSrc) {
-      return _worker_options_js__WEBPACK_IMPORTED_MODULE_6__.GlobalWorkerOptions.workerSrc;
+    if (_worker_options_js__WEBPACK_IMPORTED_MODULE_7__.GlobalWorkerOptions.workerSrc) {
+      return _worker_options_js__WEBPACK_IMPORTED_MODULE_7__.GlobalWorkerOptions.workerSrc;
     }
     throw new Error('No "GlobalWorkerOptions.workerSrc" specified.');
   }
@@ -3885,6 +3887,7 @@ class WorkerTransport {
       this.fontLoader.clear();
       this.#methodPromises.clear();
       this.filterFactory.destroy();
+      (0,_text_layer_js__WEBPACK_IMPORTED_MODULE_6__.cleanupTextLayer)();
       this._networkStream?.cancelAllRequests(new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AbortException("Worker was terminated."));
       if (this.messageHandler) {
         this.messageHandler.destroy();
@@ -4284,7 +4287,7 @@ class WorkerTransport {
   }
   getOptionalContentConfig() {
     return this.messageHandler.sendWithPromise("GetOptionalContentConfig", null).then(results => {
-      return new _optional_content_config_js__WEBPACK_IMPORTED_MODULE_9__.OptionalContentConfig(results);
+      return new _optional_content_config_js__WEBPACK_IMPORTED_MODULE_10__.OptionalContentConfig(results);
     });
   }
   getPermissions() {
@@ -4299,7 +4302,7 @@ class WorkerTransport {
     const promise = this.messageHandler.sendWithPromise(name, null).then(results => {
       return {
         info: results[0],
-        metadata: results[1] ? new _metadata_js__WEBPACK_IMPORTED_MODULE_8__.Metadata(results[1]) : null,
+        metadata: results[1] ? new _metadata_js__WEBPACK_IMPORTED_MODULE_9__.Metadata(results[1]) : null,
         contentDispositionFilename: this._fullReader?.filename ?? null,
         contentLength: this._fullReader?.contentLength ?? null
       };
@@ -4327,6 +4330,7 @@ class WorkerTransport {
     }
     this.#methodPromises.clear();
     this.filterFactory.destroy(true);
+    (0,_text_layer_js__WEBPACK_IMPORTED_MODULE_6__.cleanupTextLayer)();
   }
   get loadingParams() {
     const {
@@ -4550,7 +4554,7 @@ class InternalRenderTask {
   }
 }
 const version = '4.0.0';
-const build = '9e14d04';
+const build = '29faa38';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -8413,8 +8417,8 @@ class FreeTextEditor extends editor_editor.AnnotationEditor {
     this.#color = params.color || FreeTextEditor._defaultColor || editor_editor.AnnotationEditor._defaultLineColor;
     this.#fontSize = params.fontSize || FreeTextEditor._defaultFontSize;
   }
-  static initialize(l10n) {
-    editor_editor.AnnotationEditor.initialize(l10n, {
+  static initialize(l10n, uiManager) {
+    editor_editor.AnnotationEditor.initialize(l10n, uiManager, {
       strings: ["pdfjs-free-text-default-content"]
     });
     const style = getComputedStyle(document.documentElement);
@@ -8757,6 +8761,12 @@ class FreeTextEditor extends editor_editor.AnnotationEditor {
       this.editorDiv.append(div);
     }
   }
+  #serializeContent() {
+    return this.#content.replaceAll("\xa0", " ");
+  }
+  static #deserializeContent(content) {
+    return content.replaceAll(" ", "\xa0");
+  }
   get contentDiv() {
     return this.editorDiv;
   }
@@ -8800,7 +8810,7 @@ class FreeTextEditor extends editor_editor.AnnotationEditor {
     const editor = super.deserialize(data, parent, uiManager);
     editor.#fontSize = data.fontSize;
     editor.#color = util.Util.makeHexColor(...data.color);
-    editor.#content = data.value;
+    editor.#content = FreeTextEditor.#deserializeContent(data.value);
     editor.annotationElementId = data.id || null;
     editor.#initialData = initialData;
     return editor;
@@ -8823,7 +8833,7 @@ class FreeTextEditor extends editor_editor.AnnotationEditor {
       annotationType: util.AnnotationEditorType.FREETEXT,
       color,
       fontSize: this.#fontSize,
-      value: this.#content,
+      value: this.#serializeContent(),
       pageIndex: this.pageIndex,
       rect,
       rotation: this.rotation,
@@ -8893,7 +8903,6 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       ...params,
       name: "highlightEditor"
     });
-    HighlightEditor._defaultColor ||= this._uiManager.highlightColors?.values().next().value || "#fff066";
     this.color = params.color || HighlightEditor._defaultColor;
     this.#opacity = params.opacity || HighlightEditor._defaultOpacity;
     this.#boxes = params.boxes || null;
@@ -8918,8 +8927,9 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     } = this.#focusOutlines.box;
     this.#lastPoint = [(lastPoint[0] - this.x) / this.width, (lastPoint[1] - this.y) / this.height];
   }
-  static initialize(l10n) {
-    editor_editor.AnnotationEditor.initialize(l10n);
+  static initialize(l10n, uiManager) {
+    editor_editor.AnnotationEditor.initialize(l10n, uiManager);
+    HighlightEditor._defaultColor ||= uiManager.highlightColors?.values().next().value || "#fff066";
   }
   static updateDefaultParams(type, value) {
     switch (type) {
@@ -9121,10 +9131,11 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     super.unselect();
     this.parent?.drawLayer.removeClass(this.#outlineId, "selected");
   }
-  #serializeBoxes() {
+  #serializeBoxes(rect) {
     const [pageWidth, pageHeight] = this.pageDimensions;
     const boxes = this.#boxes;
     const quadPoints = new Array(boxes.length * 8);
+    const [tx, ty] = rect;
     let i = 0;
     for (const {
       x,
@@ -9132,8 +9143,8 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       width,
       height
     } of boxes) {
-      const sx = x * pageWidth;
-      const sy = (1 - y - height) * pageHeight;
+      const sx = tx + x * pageWidth;
+      const sy = ty + (1 - y - height) * pageHeight;
       quadPoints[i] = quadPoints[i + 4] = sx;
       quadPoints[i + 1] = quadPoints[i + 3] = sy;
       quadPoints[i + 2] = quadPoints[i + 6] = sx + width * pageWidth;
@@ -9142,12 +9153,11 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     }
     return quadPoints;
   }
-  #serializeOutlines() {
+  #serializeOutlines(rect) {
     const [pageWidth, pageHeight] = this.pageDimensions;
     const width = this.width * pageWidth;
     const height = this.height * pageHeight;
-    const tx = this.x * pageWidth;
-    const ty = (1 - this.y - this.height) * pageHeight;
+    const [tx, ty] = rect;
     const outlines = [];
     for (const outline of this.#highlightOutlines.outlines) {
       const points = new Array(outline.length);
@@ -9162,20 +9172,20 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
   static deserialize(data, parent, uiManager) {
     const editor = super.deserialize(data, parent, uiManager);
     const {
-      rect,
+      rect: [blX, blY, trX, trY],
       color,
       quadPoints
     } = data;
     editor.color = util.Util.makeHexColor(...color);
     editor.#opacity = data.opacity;
     const [pageWidth, pageHeight] = editor.pageDimensions;
-    editor.width = (rect[2] - rect[0]) / pageWidth;
-    editor.height = (rect[3] - rect[1]) / pageHeight;
+    editor.width = (trX - blX) / pageWidth;
+    editor.height = (trY - blY) / pageHeight;
     const boxes = editor.#boxes = [];
     for (let i = 0; i < quadPoints.length; i += 8) {
       boxes.push({
-        x: quadPoints[4] / pageWidth,
-        y: 1 - quadPoints[i + 5] / pageHeight,
+        x: (quadPoints[4] - trX) / pageWidth,
+        y: (trY - (1 - quadPoints[i + 5])) / pageHeight,
         width: (quadPoints[i + 2] - quadPoints[i]) / pageWidth,
         height: (quadPoints[i + 5] - quadPoints[i + 1]) / pageHeight
       });
@@ -9193,8 +9203,8 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       annotationType: util.AnnotationEditorType.HIGHLIGHT,
       color,
       opacity: this.#opacity,
-      quadPoints: this.#serializeBoxes(),
-      outlines: this.#serializeOutlines(),
+      quadPoints: this.#serializeBoxes(rect),
+      outlines: this.#serializeOutlines(rect),
       pageIndex: this.pageIndex,
       rect,
       rotation: 0,
@@ -9253,8 +9263,8 @@ class InkEditor extends editor_editor.AnnotationEditor {
     this.y = 0;
     this._willKeepAspectRatio = true;
   }
-  static initialize(l10n) {
-    editor_editor.AnnotationEditor.initialize(l10n);
+  static initialize(l10n, uiManager) {
+    editor_editor.AnnotationEditor.initialize(l10n, uiManager);
   }
   static updateDefaultParams(type, value) {
     switch (type) {
@@ -10027,8 +10037,8 @@ class StampEditor extends editor_editor.AnnotationEditor {
     this.#bitmapUrl = params.bitmapUrl;
     this.#bitmapFile = params.bitmapFile;
   }
-  static initialize(l10n) {
-    editor_editor.AnnotationEditor.initialize(l10n);
+  static initialize(l10n, uiManager) {
+    editor_editor.AnnotationEditor.initialize(l10n, uiManager);
   }
   static get supportedTypes() {
     const types = ["apng", "avif", "bmp", "gif", "jpeg", "png", "svg+xml", "webp", "x-icon"];
@@ -10433,7 +10443,7 @@ class AnnotationEditorLayer {
     if (!AnnotationEditorLayer._initialized) {
       AnnotationEditorLayer._initialized = true;
       for (const editorType of editorTypes) {
-        editorType.initialize(l10n);
+        editorType.initialize(l10n, uiManager);
       }
     }
     uiManager.registerEditorTypes(editorTypes);
@@ -11505,7 +11515,7 @@ class AnnotationEditor {
     fakeEditor.deleted = true;
     fakeEditor._uiManager.addToAnnotationStorage(fakeEditor);
   }
-  static initialize(l10n, options = null) {
+  static initialize(l10n, _uiManager, options) {
     AnnotationEditor._l10nPromise ||= new Map(["pdfjs-editor-alt-text-button-label", "pdfjs-editor-alt-text-edit-button-label", "pdfjs-editor-alt-text-decorative-tooltip", "pdfjs-editor-resizer-label-topLeft", "pdfjs-editor-resizer-label-topMiddle", "pdfjs-editor-resizer-label-topRight", "pdfjs-editor-resizer-label-middleRight", "pdfjs-editor-resizer-label-bottomRight", "pdfjs-editor-resizer-label-bottomMiddle", "pdfjs-editor-resizer-label-bottomLeft", "pdfjs-editor-resizer-label-middleLeft"].map(str => [str, l10n.get(str.replaceAll(/([A-Z])/g, c => `-${c.toLowerCase()}`))]));
     if (options?.strings) {
       for (const str of options.strings) {
@@ -15647,6 +15657,7 @@ class OptionalContentConfig {
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   cleanupTextLayer: () => (/* binding */ cleanupTextLayer),
 /* harmony export */   renderTextLayer: () => (/* binding */ renderTextLayer),
 /* harmony export */   updateTextLayer: () => (/* binding */ updateTextLayer)
 /* harmony export */ });
@@ -15659,27 +15670,30 @@ const MAX_TEXT_DIVS_TO_RENDER = 100000;
 const DEFAULT_FONT_SIZE = 30;
 const DEFAULT_FONT_ASCENT = 0.8;
 const ascentCache = new Map();
-function getCtx(size, isOffscreenCanvasSupported) {
-  let ctx;
-  if (isOffscreenCanvasSupported && _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.FeatureTest.isOffscreenCanvasSupported) {
-    ctx = new OffscreenCanvas(size, size).getContext("2d", {
-      alpha: false
-    });
-  } else {
+let _canvasContext = null;
+function getCtx() {
+  if (!_canvasContext) {
     const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = size;
-    ctx = canvas.getContext("2d", {
+    canvas.className = "hiddenCanvasElement";
+    document.body.append(canvas);
+    _canvasContext = canvas.getContext("2d", {
       alpha: false
     });
   }
-  return ctx;
+  return _canvasContext;
 }
-function getAscent(fontFamily, isOffscreenCanvasSupported) {
+function cleanupTextLayer() {
+  _canvasContext?.canvas.remove();
+  _canvasContext = null;
+}
+function getAscent(fontFamily) {
   const cachedAscent = ascentCache.get(fontFamily);
   if (cachedAscent) {
     return cachedAscent;
   }
-  const ctx = getCtx(DEFAULT_FONT_SIZE, isOffscreenCanvasSupported);
+  const ctx = getCtx();
+  const savedFont = ctx.font;
+  ctx.canvas.width = ctx.canvas.height = DEFAULT_FONT_SIZE;
   ctx.font = `${DEFAULT_FONT_SIZE}px ${fontFamily}`;
   const metrics = ctx.measureText("");
   let ascent = metrics.fontBoundingBoxAscent;
@@ -15688,6 +15702,7 @@ function getAscent(fontFamily, isOffscreenCanvasSupported) {
     const ratio = ascent / (ascent + descent);
     ascentCache.set(fontFamily, ratio);
     ctx.canvas.width = ctx.canvas.height = 0;
+    ctx.font = savedFont;
     return ratio;
   }
   ctx.strokeStyle = "red";
@@ -15712,6 +15727,7 @@ function getAscent(fontFamily, isOffscreenCanvasSupported) {
     }
   }
   ctx.canvas.width = ctx.canvas.height = 0;
+  ctx.font = savedFont;
   if (ascent) {
     const ratio = ascent / (ascent + descent);
     ascentCache.set(fontFamily, ratio);
@@ -15738,7 +15754,7 @@ function appendText(task, geom, styles) {
   }
   const fontFamily = task._fontInspectorEnabled && style.fontSubstitution || style.fontFamily;
   const fontHeight = Math.hypot(tx[2], tx[3]);
-  const fontAscent = fontHeight * getAscent(fontFamily, task._isOffscreenCanvasSupported);
+  const fontAscent = fontHeight * getAscent(fontFamily);
   let left, top;
   if (angle === 0) {
     left = tx[4];
@@ -15851,15 +15867,13 @@ class TextLayerRenderTask {
     viewport,
     textDivs,
     textDivProperties,
-    textContentItemsStr,
-    isOffscreenCanvasSupported
+    textContentItemsStr
   }) {
     this._textContentSource = textContentSource;
     this._isReadableStream = textContentSource instanceof ReadableStream;
     this._container = this._rootContainer = container;
     this._textDivs = textDivs || [];
     this._textContentItemsStr = textContentItemsStr || [];
-    this._isOffscreenCanvasSupported = isOffscreenCanvasSupported;
     this._fontInspectorEnabled = !!globalThis.FontInspector?.enabled;
     this._reader = null;
     this._textDivProperties = textDivProperties || new WeakMap();
@@ -15871,7 +15885,7 @@ class TextLayerRenderTask {
       div: null,
       scale: viewport.scale * (globalThis.devicePixelRatio || 1),
       properties: null,
-      ctx: getCtx(0, isOffscreenCanvasSupported)
+      ctx: getCtx()
     };
     const {
       pageWidth,
@@ -15977,7 +15991,6 @@ function updateTextLayer({
   viewport,
   textDivs,
   textDivProperties,
-  isOffscreenCanvasSupported,
   mustRotate = true,
   mustRescale = true
 }) {
@@ -15987,7 +16000,7 @@ function updateTextLayer({
     });
   }
   if (mustRescale) {
-    const ctx = getCtx(0, isOffscreenCanvasSupported);
+    const ctx = getCtx();
     const scale = viewport.scale * (globalThis.devicePixelRatio || 1);
     const params = {
       prevFontSize: null,
@@ -16647,7 +16660,7 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '9e14d04';
+const pdfjsBuild = '29faa38';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });

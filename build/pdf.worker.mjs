@@ -32540,7 +32540,8 @@ class PartialEvaluator {
     seenStyles = new Set(),
     viewBox,
     markedContentData = null,
-    disableNormalization = false
+    disableNormalization = false,
+    keepWhiteSpace = false
   }) {
     resources ||= Dict.empty;
     stateManager ||= new StateManager(new TextState());
@@ -32579,10 +32580,10 @@ class PartialEvaluator {
       const ret = twoLastChars[twoLastCharsPos] !== " " && twoLastChars[nextPos] === " ";
       twoLastChars[twoLastCharsPos] = char;
       twoLastCharsPos = nextPos;
-      return ret;
+      return !keepWhiteSpace && ret;
     }
     function shouldAddWhitepsace() {
-      return twoLastChars[twoLastCharsPos] !== " " && twoLastChars[(twoLastCharsPos + 1) % 2] === " ";
+      return !keepWhiteSpace && twoLastChars[twoLastCharsPos] !== " " && twoLastChars[(twoLastCharsPos + 1) % 2] === " ";
     }
     function resetLastChars() {
       twoLastChars[0] = twoLastChars[1] = " ";
@@ -32894,7 +32895,7 @@ class PartialEvaluator {
           glyphWidth = glyph.vmetric ? glyph.vmetric[0] : -glyphWidth;
         }
         let scaledDim = glyphWidth * scale;
-        if (category.isWhitespace) {
+        if (!keepWhiteSpace && category.isWhitespace) {
           if (!font.vertical) {
             charSpacing += scaledDim + textState.wordSpacing;
             textState.translateTextMatrix(charSpacing * textState.textHScale, 0);
@@ -33216,7 +33217,8 @@ class PartialEvaluator {
                 seenStyles,
                 viewBox,
                 markedContentData,
-                disableNormalization
+                disableNormalization,
+                keepWhiteSpace
               }).then(function () {
                 if (!sinkWrapper.enqueueInvoked) {
                   emptyXObjectCache.set(name, xobj.dict.objId, true);
@@ -35131,6 +35133,21 @@ endcmap CMapName currentdict /CMap defineresource pop end end`;
       }
     }
     return this.resources;
+  }
+  static getFirstPositionInfo(rect, rotation, fontSize) {
+    const [x1, y1, x2, y2] = rect;
+    let w = x2 - x1;
+    let h = y2 - y1;
+    if (rotation % 180 !== 0) {
+      [w, h] = [h, w];
+    }
+    const lineHeight = LINE_FACTOR * fontSize;
+    const lineDescent = LINE_DESCENT_FACTOR * fontSize;
+    return {
+      coords: [0, h + lineDescent - lineHeight],
+      bbox: [0, 0, w, h],
+      matrix: rotation !== 0 ? getRotationMatrix(rotation, h, lineHeight) : undefined
+    };
   }
   createAppearance(text, rect, rotation, fontSize, bgColor, strokeAlpha) {
     const ctx = this._createContext();
@@ -51174,6 +51191,7 @@ class Annotation {
       task,
       resources,
       includeMarkedContent: true,
+      keepWhiteSpace: true,
       sink,
       viewBox
     });
@@ -51183,17 +51201,21 @@ class Annotation {
     }
     if (text.length > 1 || text[0]) {
       const appearanceDict = this.appearance.dict;
-      const bbox = appearanceDict.getArray("BBox") || [0, 0, 1, 1];
-      const matrix = appearanceDict.getArray("Matrix") || [1, 0, 0, 1, 0, 0];
-      const rect = this.data.rect;
-      const transform = getTransformMatrix(rect, bbox, matrix);
-      transform[4] -= rect[0];
-      transform[5] -= rect[1];
-      firstPosition = Util.applyTransform(firstPosition, transform);
-      firstPosition = Util.applyTransform(firstPosition, matrix);
-      this.data.textPosition = firstPosition;
+      this.data.textPosition = this._transformPoint(firstPosition, appearanceDict.getArray("BBox"), appearanceDict.getArray("Matrix"));
       this.data.textContent = text;
     }
+  }
+  _transformPoint(coords, bbox, matrix) {
+    const {
+      rect
+    } = this.data;
+    bbox ||= [0, 0, 1, 1];
+    matrix ||= [1, 0, 0, 1, 0, 0];
+    const transform = getTransformMatrix(rect, bbox, matrix);
+    transform[4] -= rect[0];
+    transform[5] -= rect[1];
+    coords = Util.applyTransform(coords, transform);
+    return Util.applyTransform(coords, matrix);
   }
   getFieldObject() {
     if (this.data.kidIds) {
@@ -52863,29 +52885,41 @@ class FreeTextAnnotation extends MarkupAnnotation {
     } = params;
     this.data.annotationType = AnnotationType.FREETEXT;
     this.setDefaultAppearance(params);
-    if (this.appearance) {
+    this._hasAppearance = !!this.appearance;
+    if (this._hasAppearance) {
       const {
         fontColor,
         fontSize
       } = parseAppearanceStream(this.appearance, evaluatorOptions, xref);
       this.data.defaultAppearanceData.fontColor = fontColor;
       this.data.defaultAppearanceData.fontSize = fontSize || 10;
-    } else if (this._isOffscreenCanvasSupported) {
-      const strokeAlpha = params.dict.get("CA");
-      const fakeUnicodeFont = new FakeUnicodeFont(xref, "sans-serif");
+    } else {
       this.data.defaultAppearanceData.fontSize ||= 10;
       const {
         fontColor,
         fontSize
       } = this.data.defaultAppearanceData;
-      this.appearance = fakeUnicodeFont.createAppearance(this._contents.str, this.rectangle, this.rotation, fontSize, fontColor, strokeAlpha);
-      this._streams.push(this.appearance, FakeUnicodeFont.toUnicodeStream);
-    } else {
-      warn("FreeTextAnnotation: OffscreenCanvas is not supported, annotation may not render correctly.");
+      if (this._contents.str) {
+        this.data.textContent = this._contents.str.split(/\r\n?|\n/);
+        const {
+          coords,
+          bbox,
+          matrix
+        } = FakeUnicodeFont.getFirstPositionInfo(this.rectangle, this.rotation, fontSize);
+        this.data.textPosition = this._transformPoint(coords, bbox, matrix);
+      }
+      if (this._isOffscreenCanvasSupported) {
+        const strokeAlpha = params.dict.get("CA");
+        const fakeUnicodeFont = new FakeUnicodeFont(xref, "sans-serif");
+        this.appearance = fakeUnicodeFont.createAppearance(this._contents.str, this.rectangle, this.rotation, fontSize, fontColor, strokeAlpha);
+        this._streams.push(this.appearance, FakeUnicodeFont.toUnicodeStream);
+      } else {
+        warn("FreeTextAnnotation: OffscreenCanvas is not supported, annotation may not render correctly.");
+      }
     }
   }
   get hasTextContent() {
-    return !!this.appearance;
+    return this._hasAppearance;
   }
   static createNewDict(annotation, xref, {
     apRef,
@@ -57163,7 +57197,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '9e14d04';
+const pdfjsBuild = '29faa38';
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };

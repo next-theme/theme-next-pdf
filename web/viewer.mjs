@@ -2274,7 +2274,6 @@ const PDFViewerApplication = {
       annotationEditorHighlightColors: _app_options_js__WEBPACK_IMPORTED_MODULE_2__.AppOptions.get("highlightEditorColors"),
       imageResourcesPath: _app_options_js__WEBPACK_IMPORTED_MODULE_2__.AppOptions.get("imageResourcesPath"),
       enablePrintAutoRotate: _app_options_js__WEBPACK_IMPORTED_MODULE_2__.AppOptions.get("enablePrintAutoRotate"),
-      isOffscreenCanvasSupported,
       maxCanvasPixels: _app_options_js__WEBPACK_IMPORTED_MODULE_2__.AppOptions.get("maxCanvasPixels"),
       enablePermissions: _app_options_js__WEBPACK_IMPORTED_MODULE_2__.AppOptions.get("enablePermissions"),
       pageColors
@@ -8439,7 +8438,6 @@ class PDFPageView {
     this.#textLayerMode = options.textLayerMode ?? _ui_utils_js__WEBPACK_IMPORTED_MODULE_1__.TextLayerMode.ENABLE;
     this.#annotationMode = options.annotationMode ?? pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__.AnnotationMode.ENABLE_FORMS;
     this.imageResourcesPath = options.imageResourcesPath || "";
-    this.isOffscreenCanvasSupported = options.isOffscreenCanvasSupported ?? true;
     this.maxCanvasPixels = options.maxCanvasPixels ?? MAX_CANVAS_PIXELS;
     this.pageColors = options.pageColors || null;
     this.eventBus = options.eventBus;
@@ -8984,7 +8982,6 @@ class PDFPageView {
       this.textLayer = new _text_layer_builder_js__WEBPACK_IMPORTED_MODULE_10__.TextLayerBuilder({
         highlighter: this._textHighlighter,
         accessibilityManager: this._accessibilityManager,
-        isOffscreenCanvasSupported: this.isOffscreenCanvasSupported,
         enablePermissions: this.#textLayerMode === _ui_utils_js__WEBPACK_IMPORTED_MODULE_1__.TextLayerMode.ENABLE_PERMISSIONS
       });
       this.textLayer.onAppend = textLayerDiv => {
@@ -11203,7 +11200,6 @@ class PDFViewer {
     this.imageResourcesPath = options.imageResourcesPath || "";
     this.enablePrintAutoRotate = options.enablePrintAutoRotate || false;
     this.removePageBorders = options.removePageBorders || false;
-    this.isOffscreenCanvasSupported = options.isOffscreenCanvasSupported ?? true;
     this.maxCanvasPixels = options.maxCanvasPixels;
     this.l10n = options.l10n || web_l10n_utils__WEBPACK_IMPORTED_MODULE_2__.NullL10n;
     this.#enablePermissions = options.enablePermissions || false;
@@ -11615,7 +11611,6 @@ class PDFViewer {
           textLayerMode,
           annotationMode,
           imageResourcesPath: this.imageResourcesPath,
-          isOffscreenCanvasSupported: this.isOffscreenCanvasSupported,
           maxCanvasPixels: this.maxCanvasPixels,
           pageColors: this.pageColors,
           l10n: this.l10n,
@@ -13703,7 +13698,6 @@ class TextLayerBuilder {
   constructor({
     highlighter = null,
     accessibilityManager = null,
-    isOffscreenCanvasSupported = true,
     enablePermissions = false
   }) {
     this.textContentItemsStr = [];
@@ -13713,7 +13707,6 @@ class TextLayerBuilder {
     this.textLayerRenderTask = null;
     this.highlighter = highlighter;
     this.accessibilityManager = accessibilityManager;
-    this.isOffscreenCanvasSupported = isOffscreenCanvasSupported;
     this.#enablePermissions = enablePermissions === true;
     this.onAppend = null;
     this.div = document.createElement("div");
@@ -13747,7 +13740,6 @@ class TextLayerBuilder {
           viewport,
           textDivs: this.textDivs,
           textDivProperties: this.textDivProperties,
-          isOffscreenCanvasSupported: this.isOffscreenCanvasSupported,
           mustRescale,
           mustRotate
         });
@@ -13766,8 +13758,7 @@ class TextLayerBuilder {
       viewport,
       textDivs: this.textDivs,
       textDivProperties: this.textDivProperties,
-      textContentItemsStr: this.textContentItemsStr,
-      isOffscreenCanvasSupported: this.isOffscreenCanvasSupported
+      textContentItemsStr: this.textContentItemsStr
     });
     await this.textLayerRenderTask.promise;
     this.#finishRendering();
@@ -14739,7 +14730,7 @@ var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([web_
 
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '9e14d04';
+const pdfjsBuild = '29faa38';
 const AppConstants = {
   LinkTarget: _pdf_link_service_js__WEBPACK_IMPORTED_MODULE_4__.LinkTarget,
   RenderingStates: _ui_utils_js__WEBPACK_IMPORTED_MODULE_2__.RenderingStates,
