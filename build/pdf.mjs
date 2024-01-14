@@ -2686,17 +2686,17 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var display_node_utils__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(738);
 /* harmony import */ var _canvas_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(250);
 /* harmony import */ var _text_layer_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(739);
-/* harmony import */ var _worker_options_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(368);
-/* harmony import */ var _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(694);
-/* harmony import */ var _metadata_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(472);
-/* harmony import */ var _optional_content_config_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(890);
-/* harmony import */ var _transport_stream_js__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(92);
-/* harmony import */ var display_fetch_stream__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(171);
-/* harmony import */ var display_network__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(474);
-/* harmony import */ var display_node_stream__WEBPACK_IMPORTED_MODULE_14__ = __webpack_require__(498);
+/* harmony import */ var _worker_options_js__WEBPACK_IMPORTED_MODULE_14__ = __webpack_require__(368);
+/* harmony import */ var _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(694);
+/* harmony import */ var _metadata_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(472);
+/* harmony import */ var _optional_content_config_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(890);
+/* harmony import */ var _transport_stream_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(92);
+/* harmony import */ var display_fetch_stream__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(171);
+/* harmony import */ var display_network__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(474);
+/* harmony import */ var display_node_stream__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(498);
 /* harmony import */ var _xfa_text_js__WEBPACK_IMPORTED_MODULE_15__ = __webpack_require__(521);
-var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([display_node_utils__WEBPACK_IMPORTED_MODULE_4__, display_node_stream__WEBPACK_IMPORTED_MODULE_14__]);
-([display_node_utils__WEBPACK_IMPORTED_MODULE_4__, display_node_stream__WEBPACK_IMPORTED_MODULE_14__] = __webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__);
+var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([display_node_utils__WEBPACK_IMPORTED_MODULE_4__, display_node_stream__WEBPACK_IMPORTED_MODULE_13__]);
+([display_node_utils__WEBPACK_IMPORTED_MODULE_4__, display_node_stream__WEBPACK_IMPORTED_MODULE_13__] = __webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__);
 
 
 
@@ -2796,7 +2796,7 @@ function getDocument(src) {
   if (!worker) {
     const workerParams = {
       verbosity,
-      port: _worker_options_js__WEBPACK_IMPORTED_MODULE_7__.GlobalWorkerOptions.workerPort
+      port: _worker_options_js__WEBPACK_IMPORTED_MODULE_14__.GlobalWorkerOptions.workerPort
     };
     worker = workerParams.port ? PDFWorker.fromPort(workerParams) : new PDFWorker(workerParams);
     task._worker = worker;
@@ -2843,7 +2843,7 @@ function getDocument(src) {
     const networkStreamPromise = new Promise(function (resolve) {
       let networkStream;
       if (rangeTransport) {
-        networkStream = new _transport_stream_js__WEBPACK_IMPORTED_MODULE_11__.PDFDataTransportStream({
+        networkStream = new _transport_stream_js__WEBPACK_IMPORTED_MODULE_10__.PDFDataTransportStream({
           length,
           initialData: rangeTransport.initialData,
           progressiveDone: rangeTransport.progressiveDone,
@@ -2854,9 +2854,9 @@ function getDocument(src) {
       } else if (!data) {
         const createPDFNetworkStream = params => {
           if (_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.isNodeJS) {
-            return new display_node_stream__WEBPACK_IMPORTED_MODULE_14__.PDFNodeStream(params);
+            return new display_node_stream__WEBPACK_IMPORTED_MODULE_13__.PDFNodeStream(params);
           }
-          return (0,_display_utils_js__WEBPACK_IMPORTED_MODULE_2__.isValidFetchUrl)(params.url) ? new display_fetch_stream__WEBPACK_IMPORTED_MODULE_12__.PDFFetchStream(params) : new display_network__WEBPACK_IMPORTED_MODULE_13__.PDFNetworkStream(params);
+          return (0,_display_utils_js__WEBPACK_IMPORTED_MODULE_2__.isValidFetchUrl)(params.url) ? new display_fetch_stream__WEBPACK_IMPORTED_MODULE_11__.PDFFetchStream(params) : new display_network__WEBPACK_IMPORTED_MODULE_12__.PDFNetworkStream(params);
         };
         networkStream = createPDFNetworkStream({
           url,
@@ -2874,7 +2874,7 @@ function getDocument(src) {
       if (task.destroyed) {
         throw new Error("Loading aborted");
       }
-      const messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_8__.MessageHandler(docId, workerId, worker.port);
+      const messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__.MessageHandler(docId, workerId, worker.port);
       const transport = new WorkerTransport(messageHandler, task, networkStream, transportParams, transportFactory);
       task._transport = transport;
       messageHandler.send("Ready", null);
@@ -3573,7 +3573,7 @@ const PDFWorkerUtil = {
 {
   if (_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.isNodeJS) {
     PDFWorkerUtil.isWorkerDisabled = true;
-    _worker_options_js__WEBPACK_IMPORTED_MODULE_7__.GlobalWorkerOptions.workerSrc ||= "./pdf.worker.mjs";
+    _worker_options_js__WEBPACK_IMPORTED_MODULE_14__.GlobalWorkerOptions.workerSrc ||= "./pdf.worker.mjs";
   }
   PDFWorkerUtil.isSameOrigin = function (baseUrl, otherUrl) {
     let base;
@@ -3630,7 +3630,7 @@ class PDFWorker {
   }
   _initializeFromPort(port) {
     this._port = port;
-    this._messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_8__.MessageHandler("main", "worker", port);
+    this._messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__.MessageHandler("main", "worker", port);
     this._messageHandler.on("ready", function () {});
     this._readyCapability.resolve();
     this._messageHandler.send("configure", {
@@ -3649,7 +3649,7 @@ class PDFWorker {
         const worker = new Worker(workerSrc, {
           type: "module"
         });
-        const messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_8__.MessageHandler("main", "worker", worker);
+        const messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__.MessageHandler("main", "worker", worker);
         const terminateEarly = () => {
           worker.removeEventListener("error", onWorkerError);
           messageHandler.destroy();
@@ -3723,9 +3723,9 @@ class PDFWorker {
       const port = new LoopbackPort();
       this._port = port;
       const id = `fake${PDFWorkerUtil.fakeWorkerId++}`;
-      const workerHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_8__.MessageHandler(id + "_worker", id, port);
+      const workerHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__.MessageHandler(id + "_worker", id, port);
       WorkerMessageHandler.setup(workerHandler, port);
-      const messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_8__.MessageHandler(id, id + "_worker", port);
+      const messageHandler = new _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__.MessageHandler(id, id + "_worker", port);
       this._messageHandler = messageHandler;
       this._readyCapability.resolve();
       messageHandler.send("configure", {
@@ -3762,8 +3762,8 @@ class PDFWorker {
     return new PDFWorker(params);
   }
   static get workerSrc() {
-    if (_worker_options_js__WEBPACK_IMPORTED_MODULE_7__.GlobalWorkerOptions.workerSrc) {
-      return _worker_options_js__WEBPACK_IMPORTED_MODULE_7__.GlobalWorkerOptions.workerSrc;
+    if (_worker_options_js__WEBPACK_IMPORTED_MODULE_14__.GlobalWorkerOptions.workerSrc) {
+      return _worker_options_js__WEBPACK_IMPORTED_MODULE_14__.GlobalWorkerOptions.workerSrc;
     }
     throw new Error('No "GlobalWorkerOptions.workerSrc" specified.');
   }
@@ -4287,7 +4287,7 @@ class WorkerTransport {
   }
   getOptionalContentConfig() {
     return this.messageHandler.sendWithPromise("GetOptionalContentConfig", null).then(results => {
-      return new _optional_content_config_js__WEBPACK_IMPORTED_MODULE_10__.OptionalContentConfig(results);
+      return new _optional_content_config_js__WEBPACK_IMPORTED_MODULE_9__.OptionalContentConfig(results);
     });
   }
   getPermissions() {
@@ -4302,7 +4302,7 @@ class WorkerTransport {
     const promise = this.messageHandler.sendWithPromise(name, null).then(results => {
       return {
         info: results[0],
-        metadata: results[1] ? new _metadata_js__WEBPACK_IMPORTED_MODULE_9__.Metadata(results[1]) : null,
+        metadata: results[1] ? new _metadata_js__WEBPACK_IMPORTED_MODULE_8__.Metadata(results[1]) : null,
         contentDispositionFilename: this._fullReader?.filename ?? null,
         contentLength: this._fullReader?.contentLength ?? null
       };
@@ -4554,7 +4554,7 @@ class InternalRenderTask {
   }
 }
 const version = '4.0.0';
-const build = '29faa38';
+const build = '56ca2fd';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -8222,20 +8222,7 @@ class DrawLayer {
     DrawLayer.#setBox(svg, box);
     return svg;
   }
-  highlight({
-    outlines,
-    box
-  }, color, opacity) {
-    const id = this.#id++;
-    const root = this.#createSVG(box);
-    root.classList.add("highlight");
-    const defs = DrawLayer._svgFactory.createElement("defs");
-    root.append(defs);
-    const path = DrawLayer._svgFactory.createElement("path");
-    defs.append(path);
-    const pathId = `path_p${this.pageIndex}_${id}`;
-    path.setAttribute("id", pathId);
-    path.setAttribute("d", DrawLayer.#extractPathFromHighlightOutlines(outlines));
+  #createClipPath(defs, pathId) {
     const clipPath = DrawLayer._svgFactory.createElement("clipPath");
     defs.append(clipPath);
     const clipPathId = `clip_${pathId}`;
@@ -8245,6 +8232,20 @@ class DrawLayer {
     clipPath.append(clipPathUse);
     clipPathUse.setAttribute("href", `#${pathId}`);
     clipPathUse.classList.add("clip");
+    return clipPathId;
+  }
+  highlight(outlines, color, opacity) {
+    const id = this.#id++;
+    const root = this.#createSVG(outlines.box);
+    root.classList.add("highlight");
+    const defs = DrawLayer._svgFactory.createElement("defs");
+    root.append(defs);
+    const path = DrawLayer._svgFactory.createElement("path");
+    defs.append(path);
+    const pathId = `path_p${this.pageIndex}_${id}`;
+    path.setAttribute("id", pathId);
+    path.setAttribute("d", outlines.toSVGPath());
+    const clipPathId = this.#createClipPath(defs, pathId);
     const use = DrawLayer._svgFactory.createElement("use");
     root.append(use);
     root.setAttribute("fill", color);
@@ -8256,12 +8257,9 @@ class DrawLayer {
       clipPathId: `url(#${clipPathId})`
     };
   }
-  highlightOutline({
-    outlines,
-    box
-  }) {
+  highlightOutline(outlines) {
     const id = this.#id++;
-    const root = this.#createSVG(box);
+    const root = this.#createSVG(outlines.box);
     root.classList.add("highlightOutline");
     const defs = DrawLayer._svgFactory.createElement("defs");
     root.append(defs);
@@ -8269,7 +8267,7 @@ class DrawLayer {
     defs.append(path);
     const pathId = `path_p${this.pageIndex}_${id}`;
     path.setAttribute("id", pathId);
-    path.setAttribute("d", DrawLayer.#extractPathFromHighlightOutlines(outlines));
+    path.setAttribute("d", outlines.toSVGPath());
     path.setAttribute("vector-effect", "non-scaling-stroke");
     const use1 = DrawLayer._svgFactory.createElement("use");
     root.append(use1);
@@ -8280,26 +8278,6 @@ class DrawLayer {
     use2.classList.add("secondaryOutline");
     this.#mapping.set(id, root);
     return id;
-  }
-  static #extractPathFromHighlightOutlines(polygons) {
-    const buffer = [];
-    for (const polygon of polygons) {
-      let [prevX, prevY] = polygon;
-      buffer.push(`M${prevX} ${prevY}`);
-      for (let i = 2; i < polygon.length; i += 2) {
-        const x = polygon[i];
-        const y = polygon[i + 1];
-        if (x === prevX) {
-          buffer.push(`V${y}`);
-          prevY = y;
-        } else if (y === prevY) {
-          buffer.push(`H${x}`);
-          prevX = x;
-        }
-      }
-      buffer.push("Z");
-    }
-    return buffer.join(" ");
   }
   updateBox(id, box) {
     DrawLayer.#setBox(this.#mapping.get(id), box);
@@ -8959,12 +8937,12 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     this.addCommands({
       cmd: () => {
         this.color = color;
-        this.parent.drawLayer.changeColor(this.#id, color);
+        this.parent?.drawLayer.changeColor(this.#id, color);
         this.#colorPicker?.updateColor(color);
       },
       undo: () => {
         this.color = savedColor;
-        this.parent.drawLayer.changeColor(this.#id, savedColor);
+        this.parent?.drawLayer.changeColor(this.#id, savedColor);
         this.#colorPicker?.updateColor(savedColor);
       },
       mustExec: true,
@@ -9155,19 +9133,7 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
   }
   #serializeOutlines(rect) {
     const [pageWidth, pageHeight] = this.pageDimensions;
-    const width = this.width * pageWidth;
-    const height = this.height * pageHeight;
-    const [tx, ty] = rect;
-    const outlines = [];
-    for (const outline of this.#highlightOutlines.outlines) {
-      const points = new Array(outline.length);
-      for (let i = 0; i < outline.length; i += 2) {
-        points[i] = tx + outline[i] * width;
-        points[i + 1] = ty + (1 - outline[i + 1]) * height;
-      }
-      outlines.push(points);
-    }
-    return outlines;
+    return this.#highlightOutlines.serialize(rect[0], rect[1], this.width * pageWidth, this.height * pageHeight);
   }
   static deserialize(data, parent, uiManager) {
     const editor = super.deserialize(data, parent, uiManager);
@@ -12539,10 +12505,7 @@ class Outliner {
       }
       outline.push(lastPointX, lastPointY);
     }
-    return {
-      outlines,
-      box: this.#box
-    };
+    return new HighlightOutline(outlines, this.#box);
   }
   #binarySearch(y) {
     const array = this.#intervals;
@@ -12620,6 +12583,58 @@ class Outliner {
       }
     }
     return results;
+  }
+}
+class Outline {
+  toSVGPath() {
+    throw new Error("Abstract method `toSVGPath` must be implemented.");
+  }
+  get box() {
+    throw new Error("Abstract getter `box` must be implemented.");
+  }
+}
+class HighlightOutline extends Outline {
+  #box;
+  #outlines;
+  constructor(outlines, box) {
+    super();
+    this.#outlines = outlines;
+    this.#box = box;
+  }
+  toSVGPath() {
+    const buffer = [];
+    for (const polygon of this.#outlines) {
+      let [prevX, prevY] = polygon;
+      buffer.push(`M${prevX} ${prevY}`);
+      for (let i = 2; i < polygon.length; i += 2) {
+        const x = polygon[i];
+        const y = polygon[i + 1];
+        if (x === prevX) {
+          buffer.push(`V${y}`);
+          prevY = y;
+        } else if (y === prevY) {
+          buffer.push(`H${x}`);
+          prevX = x;
+        }
+      }
+      buffer.push("Z");
+    }
+    return buffer.join(" ");
+  }
+  serialize(x, y, width, height) {
+    const outlines = [];
+    for (const outline of this.#outlines) {
+      const points = new Array(outline.length);
+      for (let i = 0; i < outline.length; i += 2) {
+        points[i] = x + outline[i] * width;
+        points[i + 1] = y + (1 - outline[i + 1]) * height;
+      }
+      outlines.push(points);
+    }
+    return outlines;
+  }
+  get box() {
+    return this.#box;
   }
 }
 
@@ -16303,9 +16318,28 @@ class PDFDataTransportStreamRangeReader {
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   GlobalWorkerOptions: () => (/* binding */ GlobalWorkerOptions)
 /* harmony export */ });
-const GlobalWorkerOptions = Object.create(null);
-GlobalWorkerOptions.workerPort = null;
-GlobalWorkerOptions.workerSrc = "";
+class GlobalWorkerOptions {
+  static #port = null;
+  static #src = "";
+  static get workerPort() {
+    return this.#port;
+  }
+  static set workerPort(val) {
+    if (!(typeof Worker !== "undefined" && val instanceof Worker) && val !== null) {
+      throw new Error("Invalid `workerPort` type.");
+    }
+    this.#port = val;
+  }
+  static get workerSrc() {
+    return this.#src;
+  }
+  static set workerSrc(val) {
+    if (typeof val !== "string") {
+      throw new Error("Invalid `workerSrc` type.");
+    }
+    this.#src = val;
+  }
+}
 
 
 /***/ }),
@@ -16660,7 +16694,7 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '29faa38';
+const pdfjsBuild = '56ca2fd';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });

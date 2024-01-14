@@ -51180,7 +51180,7 @@ class Annotation {
           firstPosition ||= item.transform.slice(-2);
           buffer.push(item.str);
           if (item.hasEOL) {
-            text.push(buffer.join(""));
+            text.push(buffer.join("").trimEnd());
             buffer.length = 0;
           }
         }
@@ -51197,7 +51197,7 @@ class Annotation {
     });
     this.reset();
     if (buffer.length) {
-      text.push(buffer.join(""));
+      text.push(buffer.join("").trimEnd());
     }
     if (text.length > 1 || text[0]) {
       const appearanceDict = this.appearance.dict;
@@ -52900,7 +52900,7 @@ class FreeTextAnnotation extends MarkupAnnotation {
         fontSize
       } = this.data.defaultAppearanceData;
       if (this._contents.str) {
-        this.data.textContent = this._contents.str.split(/\r\n?|\n/);
+        this.data.textContent = this._contents.str.split(/\r\n?|\n/).map(line => line.trimEnd());
         const {
           coords,
           bbox,
@@ -57197,7 +57197,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '29faa38';
+const pdfjsBuild = '56ca2fd';
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };
