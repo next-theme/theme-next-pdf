@@ -18,7 +18,7 @@
   text-align:initial;
   inset:0;
   overflow:hidden;
-  opacity:0.25;
+  opacity:1;
   line-height:1;
   -webkit-text-size-adjust:none;
      -moz-text-size-adjust:none;
@@ -26,7 +26,12 @@
   forced-color-adjust:none;
   transform-origin:0 0;
   z-index:2;
+  caret-color:CanvasText;
 }
+
+.textLayer.drawing{
+    touch-action:none;
+  }
 
 .textLayer :is(span, br){
     color:transparent;
@@ -42,20 +47,29 @@
   }
 
 .textLayer .highlight{
-    --highlight-bg-color:rgb(180 0 170);
-    --highlight-selected-bg-color:rgb(0 100 0);
+    --highlight-bg-color:rgb(180 0 170 / 0.25);
+    --highlight-selected-bg-color:rgb(0 100 0 / 0.25);
+    --highlight-backdrop-filter:none;
+    --highlight-selected-backdrop-filter:none;
+    --mix-blend-mode:exclusion;
 
     margin:-1px;
     padding:1px;
     background-color:var(--highlight-bg-color);
+    -webkit-backdrop-filter:var(--highlight-backdrop-filter);
+            backdrop-filter:var(--highlight-backdrop-filter);
     border-radius:4px;
   }
 
 @media screen and (forced-colors: active){
 
 .textLayer .highlight{
-      --highlight-bg-color:Highlight;
-      --highlight-selected-bg-color:ButtonText;
+      --highlight-bg-color:transparent;
+      --highlight-selected-bg-color:transparent;
+      --highlight-backdrop-filter:var(--hcm-highlight-filter);
+      --highlight-selected-backdrop-filter:var(
+        --hcm-highlight-selected-filter
+      );
   }
     }
 
@@ -77,16 +91,18 @@
 
 .textLayer .highlight.selected{
       background-color:var(--highlight-selected-bg-color);
+      -webkit-backdrop-filter:var(--highlight-selected-backdrop-filter);
+              backdrop-filter:var(--highlight-selected-backdrop-filter);
     }
 
 .textLayer ::-moz-selection{
-    background:blue;
-    background:AccentColor;
+    background:rgba(0 0 255 / 0.25);
+    background:color-mix(in srgb, AccentColor, transparent 75%);
   }
 
 .textLayer ::selection{
-    background:blue;
-    background:AccentColor;
+    background:rgba(0 0 255 / 0.25);
+    background:color-mix(in srgb, AccentColor, transparent 75%);
   }
 
 .textLayer br::-moz-selection{
@@ -137,7 +153,6 @@
     --input-disabled-border-color:GrayText;
     --input-hover-border-color:Highlight;
     --link-outline:1.5px solid LinkText;
-    --hcm-highlight-filter:invert(100%);
 }
 
     .annotationLayer .textWidgetAnnotation :is(input, textarea):required, .annotationLayer .choiceWidgetAnnotation select:required, .annotationLayer .buttonWidgetAnnotation:is(.checkBox, .radioButton) input:required{
@@ -794,7 +809,6 @@
 
       position:absolute;
       mix-blend-mode:var(--blend-mode);
-      fill-rule:evenodd;
     }
 
 @media screen and (forced-colors: active){
@@ -802,6 +816,10 @@
 .canvasWrapper svg.highlight{
         --blend-mode:difference;
     }
+      }
+
+.canvasWrapper svg.highlight:not(.free){
+        fill-rule:evenodd;
       }
 
 .canvasWrapper svg.highlightOutline{
@@ -924,6 +942,10 @@
 
 .annotationEditorLayer .draggable.selectedEditor:is(.freeTextEditor, .inkEditor, .stampEditor){
     cursor:move;
+  }
+
+.annotationEditorLayer .moving:is(.freeTextEditor, .inkEditor, .stampEditor){
+    touch-action:none;
   }
 
 .annotationEditorLayer .selectedEditor:is(.freeTextEditor, .inkEditor, .stampEditor){
@@ -1931,19 +1953,19 @@
     border:none;
   }
 
-.annotationEditorLayer[data-main-rotation="0"] .highlightEditor > .editToolbar{
+.annotationEditorLayer[data-main-rotation="0"] .highlightEditor:not(.free) > .editToolbar{
       rotate:0deg;
     }
 
-.annotationEditorLayer[data-main-rotation="90"] .highlightEditor > .editToolbar{
+.annotationEditorLayer[data-main-rotation="90"] .highlightEditor:not(.free) > .editToolbar{
       rotate:270deg;
     }
 
-.annotationEditorLayer[data-main-rotation="180"] .highlightEditor > .editToolbar{
+.annotationEditorLayer[data-main-rotation="180"] .highlightEditor:not(.free) > .editToolbar{
       rotate:180deg;
     }
 
-.annotationEditorLayer[data-main-rotation="270"] .highlightEditor > .editToolbar{
+.annotationEditorLayer[data-main-rotation="270"] .highlightEditor:not(.free) > .editToolbar{
       rotate:90deg;
     }
 
@@ -1951,15 +1973,18 @@
     position:absolute;
     background:transparent;
     z-index:1;
-    transform-origin:0 0;
     cursor:auto;
     max-width:100%;
     max-height:100%;
     border:none;
     outline:none;
     pointer-events:none;
-    transform:none;
+    transform-origin:0 0;
   }
+
+.annotationEditorLayer .highlightEditor:not(.free){
+      transform:none;
+    }
 
 .annotationEditorLayer .highlightEditor .internal{
       position:absolute;
@@ -2015,6 +2040,10 @@
 .annotationEditorLayer .highlightEditor .editToolbar .buttons .colorPicker:has(.dropdown:not(.hidden)){
             background-color:var(--editor-toolbar-hover-bg-color);
           }
+
+.annotationEditorLayer .highlightEditor .editToolbar .buttons .colorPicker:has(.dropdown:not(.hidden))::after{
+              scale:-1;
+            }
 
 .annotationEditorLayer .highlightEditor .editToolbar .buttons .colorPicker .dropdown{
             position:absolute;
@@ -2163,7 +2192,16 @@
   --scale-factor:1;
 
   padding-bottom:var(--pdfViewer-padding-bottom);
+
+  --hcm-highlight-filter:none;
 }
+
+@media screen and (forced-colors: active){
+
+.pdfViewer{
+    --hcm-highlight-filter:invert(100%);
+}
+  }
 
 .pdfViewer .canvasWrapper{
   overflow:hidden;

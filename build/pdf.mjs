@@ -2725,7 +2725,7 @@ function getDocument(src) {
     src = {
       url: src
     };
-  } else if ((0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.isArrayBuffer)(src)) {
+  } else if (src instanceof ArrayBuffer || ArrayBuffer.isView(src)) {
     src = {
       data: src
     };
@@ -2803,7 +2803,7 @@ function getDocument(src) {
   }
   const fetchDocParams = {
     docId,
-    apiVersion: '4.0.0',
+    apiVersion: '4.1.0',
     data,
     password,
     disableAutoFetch,
@@ -2915,7 +2915,7 @@ function getDataProp(val) {
   if (typeof val === "string") {
     return (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.stringToBytes)(val);
   }
-  if (typeof val === "object" && !isNaN(val?.length) || (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.isArrayBuffer)(val)) {
+  if (val instanceof ArrayBuffer || ArrayBuffer.isView(val) || typeof val === "object" && !isNaN(val?.length)) {
     return new Uint8Array(val);
   }
   throw new Error("Invalid PDF binary data: either TypedArray, " + "string, or array-like object is expected in the data property.");
@@ -4553,8 +4553,8 @@ class InternalRenderTask {
     }
   }
 }
-const version = '4.0.0';
-const build = '56ca2fd';
+const version = '4.1.0';
+const build = '6e46304';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -4585,7 +4585,7 @@ class BaseFilterFactory {
   addHCMFilter(fgColor, bgColor) {
     return "none";
   }
-  addHighlightHCMFilter(fgColor, bgColor, newFgColor, newBgColor) {
+  addHighlightHCMFilter(filterName, fgColor, bgColor, newFgColor, newBgColor) {
     return "none";
   }
   destroy(keepHCM = false) {}
@@ -7530,12 +7530,7 @@ class DOMFilterFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.Bas
   #_defs;
   #docId;
   #document;
-  #hcmFilter;
-  #hcmKey;
-  #hcmUrl;
-  #hcmHighlightFilter;
-  #hcmHighlightKey;
-  #hcmHighlightUrl;
+  #_hcmCache;
   #id = 0;
   constructor({
     docId,
@@ -7547,6 +7542,9 @@ class DOMFilterFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.Bas
   }
   get #cache() {
     return this.#_cache ||= new Map();
+  }
+  get #hcmCache() {
+    return this.#_hcmCache ||= new Map();
   }
   get #defs() {
     if (!this.#_defs) {
@@ -7616,14 +7614,26 @@ class DOMFilterFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.Bas
   }
   addHCMFilter(fgColor, bgColor) {
     const key = `${fgColor}-${bgColor}`;
-    if (this.#hcmKey === key) {
-      return this.#hcmUrl;
+    const filterName = "base";
+    let info = this.#hcmCache.get(filterName);
+    if (info?.key === key) {
+      return info.url;
     }
-    this.#hcmKey = key;
-    this.#hcmUrl = "none";
-    this.#hcmFilter?.remove();
+    if (info) {
+      info.filter?.remove();
+      info.key = key;
+      info.url = "none";
+      info.filter = null;
+    } else {
+      info = {
+        key,
+        url: "none",
+        filter: null
+      };
+      this.#hcmCache.set(filterName, info);
+    }
     if (!fgColor || !bgColor) {
-      return this.#hcmUrl;
+      return info.url;
     }
     const fgRGB = this.#getRGB(fgColor);
     fgColor = _shared_util_js__WEBPACK_IMPORTED_MODULE_1__.Util.makeHexColor(...fgRGB);
@@ -7631,7 +7641,7 @@ class DOMFilterFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.Bas
     bgColor = _shared_util_js__WEBPACK_IMPORTED_MODULE_1__.Util.makeHexColor(...bgRGB);
     this.#defs.style.color = "";
     if (fgColor === "#000000" && bgColor === "#ffffff" || fgColor === bgColor) {
-      return this.#hcmUrl;
+      return info.url;
     }
     const map = new Array(256);
     for (let i = 0; i <= 255; i++) {
@@ -7640,7 +7650,7 @@ class DOMFilterFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.Bas
     }
     const table = map.join(",");
     const id = `g_${this.#docId}_hcm_filter`;
-    const filter = this.#hcmHighlightFilter = this.#createFilter(id);
+    const filter = info.filter = this.#createFilter(id);
     this.#addTransferMapConversion(table, table, table, filter);
     this.#addGrayConversion(filter);
     const getSteps = (c, n) => {
@@ -7653,19 +7663,30 @@ class DOMFilterFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.Bas
       return arr.join(",");
     };
     this.#addTransferMapConversion(getSteps(0, 5), getSteps(1, 5), getSteps(2, 5), filter);
-    this.#hcmUrl = `url(#${id})`;
-    return this.#hcmUrl;
+    info.url = `url(#${id})`;
+    return info.url;
   }
-  addHighlightHCMFilter(fgColor, bgColor, newFgColor, newBgColor) {
+  addHighlightHCMFilter(filterName, fgColor, bgColor, newFgColor, newBgColor) {
     const key = `${fgColor}-${bgColor}-${newFgColor}-${newBgColor}`;
-    if (this.#hcmHighlightKey === key) {
-      return this.#hcmHighlightUrl;
+    let info = this.#hcmCache.get(filterName);
+    if (info?.key === key) {
+      return info.url;
     }
-    this.#hcmHighlightKey = key;
-    this.#hcmHighlightUrl = "none";
-    this.#hcmHighlightFilter?.remove();
+    if (info) {
+      info.filter?.remove();
+      info.key = key;
+      info.url = "none";
+      info.filter = null;
+    } else {
+      info = {
+        key,
+        url: "none",
+        filter: null
+      };
+      this.#hcmCache.set(filterName, info);
+    }
     if (!fgColor || !bgColor) {
-      return this.#hcmHighlightUrl;
+      return info.url;
     }
     const [fgRGB, bgRGB] = [fgColor, bgColor].map(this.#getRGB.bind(this));
     let fgGray = Math.round(0.2126 * fgRGB[0] + 0.7152 * fgRGB[1] + 0.0722 * fgRGB[2]);
@@ -7694,15 +7715,15 @@ class DOMFilterFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.Bas
       }
       return arr.join(",");
     };
-    const id = `g_${this.#docId}_hcm_highlight_filter`;
-    const filter = this.#hcmHighlightFilter = this.#createFilter(id);
+    const id = `g_${this.#docId}_hcm_${filterName}_filter`;
+    const filter = info.filter = this.#createFilter(id);
     this.#addGrayConversion(filter);
     this.#addTransferMapConversion(getSteps(newFgRGB[0], newBgRGB[0], 5), getSteps(newFgRGB[1], newBgRGB[1], 5), getSteps(newFgRGB[2], newBgRGB[2], 5), filter);
-    this.#hcmHighlightUrl = `url(#${id})`;
-    return this.#hcmHighlightUrl;
+    info.url = `url(#${id})`;
+    return info.url;
   }
   destroy(keepHCM = false) {
-    if (keepHCM && (this.#hcmUrl || this.#hcmHighlightUrl)) {
+    if (keepHCM && this.#hcmCache.size !== 0) {
       return;
     }
     if (this.#_defs) {
@@ -8179,6 +8200,7 @@ class DrawLayer {
   #parent = null;
   #id = 0;
   #mapping = new Map();
+  #toUpdate = new Map();
   constructor({
     pageIndex
   }) {
@@ -8203,11 +8225,11 @@ class DrawLayer {
     return (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_1__.shadow)(this, "_svgFactory", new _display_utils_js__WEBPACK_IMPORTED_MODULE_0__.DOMSVGFactory());
   }
   static #setBox(element, {
-    x,
-    y,
-    width,
-    height
-  }) {
+    x = 0,
+    y = 0,
+    width = 1,
+    height = 1
+  } = {}) {
     const {
       style
     } = element;
@@ -8234,10 +8256,13 @@ class DrawLayer {
     clipPathUse.classList.add("clip");
     return clipPathId;
   }
-  highlight(outlines, color, opacity) {
+  highlight(outlines, color, opacity, isPathUpdatable = false) {
     const id = this.#id++;
     const root = this.#createSVG(outlines.box);
     root.classList.add("highlight");
+    if (outlines.free) {
+      root.classList.add("free");
+    }
     const defs = DrawLayer._svgFactory.createElement("defs");
     root.append(defs);
     const path = DrawLayer._svgFactory.createElement("path");
@@ -8245,6 +8270,9 @@ class DrawLayer {
     const pathId = `path_p${this.pageIndex}_${id}`;
     path.setAttribute("id", pathId);
     path.setAttribute("d", outlines.toSVGPath());
+    if (isPathUpdatable) {
+      this.#toUpdate.set(id, path);
+    }
     const clipPathId = this.#createClipPath(defs, pathId);
     const use = DrawLayer._svgFactory.createElement("use");
     root.append(use);
@@ -8278,6 +8306,19 @@ class DrawLayer {
     use2.classList.add("secondaryOutline");
     this.#mapping.set(id, root);
     return id;
+  }
+  finalizeLine(id, line) {
+    const path = this.#toUpdate.get(id);
+    this.#toUpdate.delete(id);
+    this.updateBox(id, line.box);
+    path.setAttribute("d", line.toSVGPath());
+  }
+  removeFreeHighlight(id) {
+    this.remove(id);
+    this.#toUpdate.delete(id);
+  }
+  updatePath(id, line) {
+    this.#toUpdate.get(id).setAttribute("d", line.toSVGPath());
   }
   updateBox(id, box) {
     DrawLayer.#setBox(this.#mapping.get(id), box);
@@ -8552,13 +8593,12 @@ class FreeTextEditor extends editor_editor.AnnotationEditor {
     super.remove();
   }
   #extractText() {
-    const divs = this.editorDiv.getElementsByTagName("div");
-    if (divs.length === 0) {
-      return this.editorDiv.innerText;
-    }
     const buffer = [];
-    for (const div of divs) {
-      buffer.push(div.innerText.replace(/\r\n?|\n/, ""));
+    this.editorDiv.normalize();
+    const EOL_PATTERN = /\r\n?|\n/g;
+    for (const child of this.editorDiv.childNodes) {
+      const content = child.nodeType === Node.TEXT_NODE ? child.nodeValue : child.innerText;
+      buffer.push(content.replaceAll(EOL_PATTERN, ""));
     }
     return buffer.join("\n");
   }
@@ -8850,11 +8890,14 @@ class FreeTextEditor extends editor_editor.AnnotationEditor {
   }
 }
 
-// EXTERNAL MODULE: ./src/display/editor/color_picker.js
-var color_picker = __webpack_require__(97);
 // EXTERNAL MODULE: ./src/display/editor/outliner.js
 var editor_outliner = __webpack_require__(405);
+// EXTERNAL MODULE: ./src/display/editor/color_picker.js
+var color_picker = __webpack_require__(97);
+// EXTERNAL MODULE: ./src/display/display_utils.js
+var display_utils = __webpack_require__(473);
 ;// CONCATENATED MODULE: ./src/display/editor/highlight.js
+
 
 
 
@@ -8868,14 +8911,19 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
   #highlightDiv = null;
   #highlightOutlines = null;
   #id = null;
+  #isFreeHighlight = false;
   #lastPoint = null;
   #opacity;
   #outlineId = null;
   static _defaultColor = null;
   static _defaultOpacity = 1;
+  static _defaultThickness = 10;
   static _l10nPromise;
   static _type = "highlight";
   static _editorType = util.AnnotationEditorType.HIGHLIGHT;
+  static _freeHighlightId = -1;
+  static _freeHighlight = null;
+  static _freeHighlightClipId = "";
   constructor(params) {
     super({
       ...params,
@@ -8885,9 +8933,15 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     this.#opacity = params.opacity || HighlightEditor._defaultOpacity;
     this.#boxes = params.boxes || null;
     this._isDraggable = false;
-    this.#createOutlines();
-    this.#addToDrawLayer();
-    this.rotate(this.rotation);
+    if (params.highlightId > -1) {
+      this.#isFreeHighlight = true;
+      this.#createFreeOutlines(params);
+      this.#addToDrawLayer();
+    } else {
+      this.#createOutlines();
+      this.#addToDrawLayer();
+      this.rotate(this.rotation);
+    }
   }
   #createOutlines() {
     const outliner = new editor_outliner.Outliner(this.#boxes, 0.001);
@@ -8905,6 +8959,59 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     } = this.#focusOutlines.box;
     this.#lastPoint = [(lastPoint[0] - this.x) / this.width, (lastPoint[1] - this.y) / this.height];
   }
+  #createFreeOutlines({
+    highlight,
+    highlightId,
+    clipPathId
+  }) {
+    this.#highlightOutlines = highlight.getOutlines(this._uiManager.direction === "ltr");
+    this.#id = highlightId;
+    this.#clipPathId = clipPathId;
+    const {
+      x,
+      y,
+      width,
+      height,
+      lastPoint
+    } = this.#highlightOutlines.box;
+    this.parent.drawLayer.finalizeLine(this.#id, this.#highlightOutlines);
+    switch (this.rotation) {
+      case 0:
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        break;
+      case 90:
+        {
+          const [pageWidth, pageHeight] = this.parentDimensions;
+          this.x = y;
+          this.y = 1 - x;
+          this.width = width * pageHeight / pageWidth;
+          this.height = height * pageWidth / pageHeight;
+          break;
+        }
+      case 180:
+        this.x = 1 - x;
+        this.y = 1 - y;
+        this.width = width;
+        this.height = height;
+        break;
+      case 270:
+        {
+          const [pageWidth, pageHeight] = this.parentDimensions;
+          this.x = 1 - y;
+          this.y = x;
+          this.width = width * pageHeight / pageWidth;
+          this.height = height * pageWidth / pageHeight;
+          break;
+        }
+    }
+    const innerMargin = 1.5;
+    this.#focusOutlines = highlight.getFocusOutline(HighlightEditor._defaultThickness + innerMargin);
+    this.#outlineId = this.parent.drawLayer.highlightOutline(this.#focusOutlines);
+    this.#lastPoint = lastPoint;
+  }
   static initialize(l10n, uiManager) {
     editor_editor.AnnotationEditor.initialize(l10n, uiManager);
     HighlightEditor._defaultColor ||= uiManager.highlightColors?.values().next().value || "#fff066";
@@ -8916,6 +9023,7 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
         break;
     }
   }
+  translateInPage(x, y) {}
   get toolbarPosition() {
     return this.#lastPoint;
   }
@@ -8973,10 +9081,10 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     this.div.classList.toggle("disabled", false);
   }
   fixAndSetPosition() {
-    return super.fixAndSetPosition(0);
+    return super.fixAndSetPosition(this.#getRotation());
   }
   getRect(tx, ty) {
-    return super.getRect(tx, ty, 0);
+    return super.getRect(tx, ty, this.#getRotation());
   }
   onceAdded() {
     this.parent.addUndoableEditor(this);
@@ -9029,10 +9137,10 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       id: this.#id,
       clipPathId: this.#clipPathId
     } = parent.drawLayer.highlight(this.#highlightOutlines, this.color, this.#opacity));
+    this.#outlineId = parent.drawLayer.highlightOutline(this.#focusOutlines);
     if (this.#highlightDiv) {
       this.#highlightDiv.style.clipPath = this.#clipPathId;
     }
-    this.#outlineId = parent.drawLayer.highlightOutline(this.#focusOutlines);
   }
   static #rotateBbox({
     x,
@@ -9074,9 +9182,16 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     const {
       drawLayer
     } = this.parent;
+    let box;
+    if (this.#isFreeHighlight) {
+      angle = (angle - this.rotation + 360) % 360;
+      box = HighlightEditor.#rotateBbox(this.#highlightOutlines.box, angle);
+    } else {
+      box = HighlightEditor.#rotateBbox(this, angle);
+    }
     drawLayer.rotate(this.#id, angle);
     drawLayer.rotate(this.#outlineId, angle);
-    drawLayer.updateBox(this.#id, HighlightEditor.#rotateBbox(this, angle));
+    drawLayer.updateBox(this.#id, box);
     drawLayer.updateBox(this.#outlineId, HighlightEditor.#rotateBbox(this.#focusOutlines.box, angle));
   }
   render() {
@@ -9084,6 +9199,9 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       return this.div;
     }
     const div = super.render();
+    if (this.#isFreeHighlight) {
+      div.classList.add("free");
+    }
     const highlightDiv = this.#highlightDiv = document.createElement("div");
     div.append(highlightDiv);
     highlightDiv.className = "internal";
@@ -9109,7 +9227,13 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     super.unselect();
     this.parent?.drawLayer.removeClass(this.#outlineId, "selected");
   }
+  #getRotation() {
+    return this.#isFreeHighlight ? this.rotation : 0;
+  }
   #serializeBoxes(rect) {
+    if (this.#isFreeHighlight) {
+      return null;
+    }
     const [pageWidth, pageHeight] = this.pageDimensions;
     const boxes = this.#boxes;
     const quadPoints = new Array(boxes.length * 8);
@@ -9132,8 +9256,70 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     return quadPoints;
   }
   #serializeOutlines(rect) {
-    const [pageWidth, pageHeight] = this.pageDimensions;
-    return this.#highlightOutlines.serialize(rect[0], rect[1], this.width * pageWidth, this.height * pageHeight);
+    return this.#highlightOutlines.serialize(rect, this.#getRotation());
+  }
+  static startHighlighting(parent, {
+    target: textLayer,
+    x,
+    y
+  }) {
+    const {
+      x: layerX,
+      y: layerY,
+      width: parentWidth,
+      height: parentHeight
+    } = textLayer.getBoundingClientRect();
+    const pointerMove = e => {
+      this.#highlightMove(parent, e);
+    };
+    const pointerDownOptions = {
+      capture: true,
+      passive: false
+    };
+    const pointerDown = e => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    const pointerUpCallback = e => {
+      textLayer.removeEventListener("pointermove", pointerMove);
+      window.removeEventListener("blur", pointerUpCallback);
+      window.removeEventListener("pointerup", pointerUpCallback);
+      window.removeEventListener("pointerdown", pointerDown, pointerDownOptions);
+      window.removeEventListener("contextmenu", display_utils.noContextMenu);
+      this.#endHighlight(parent, e);
+    };
+    window.addEventListener("blur", pointerUpCallback);
+    window.addEventListener("pointerup", pointerUpCallback);
+    window.addEventListener("pointerdown", pointerDown, pointerDownOptions);
+    window.addEventListener("contextmenu", display_utils.noContextMenu);
+    textLayer.addEventListener("pointermove", pointerMove);
+    this._freeHighlight = new editor_outliner.FreeOutliner({
+      x,
+      y
+    }, [layerX, layerY, parentWidth, parentHeight], parent.scale, this._defaultThickness, 0.001);
+    ({
+      id: this._freeHighlightId,
+      clipPathId: this._freeHighlightClipId
+    } = parent.drawLayer.highlight(this._freeHighlight, this._defaultColor, this._defaultOpacity, true));
+  }
+  static #highlightMove(parent, event) {
+    if (this._freeHighlight.add(event)) {
+      parent.drawLayer.updatePath(this._freeHighlightId, this._freeHighlight);
+    }
+  }
+  static #endHighlight(parent, event) {
+    if (!this._freeHighlight.isEmpty()) {
+      parent.createAndAddNewEditor(event, false, {
+        highlightId: this._freeHighlightId,
+        highlight: this._freeHighlight,
+        clipPathId: this._freeHighlightClipId
+      });
+    } else {
+      parent.drawLayer.removeFreeHighlight(this._freeHighlightId);
+    }
+    this._freeHighlightId = -1;
+    this._freeHighlight = null;
+    this._freeHighlightClipId = "";
   }
   static deserialize(data, parent, uiManager) {
     const editor = super.deserialize(data, parent, uiManager);
@@ -9169,11 +9355,12 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       annotationType: util.AnnotationEditorType.HIGHLIGHT,
       color,
       opacity: this.#opacity,
+      thickness: 2 * HighlightEditor._defaultThickness,
       quadPoints: this.#serializeBoxes(rect),
       outlines: this.#serializeOutlines(rect),
       pageIndex: this.pageIndex,
       rect,
-      rotation: 0,
+      rotation: this.#getRotation(),
       structTreeParentId: this._structTreeParentId
     };
   }
@@ -9182,8 +9369,6 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
   }
 }
 
-// EXTERNAL MODULE: ./src/display/display_utils.js
-var display_utils = __webpack_require__(473);
 ;// CONCATENATED MODULE: ./src/display/editor/ink.js
 
 
@@ -9833,6 +10018,13 @@ class InkEditor extends editor_editor.AnnotationEditor {
       const points = [];
       for (let j = 0, jj = bezier.length; j < jj; j++) {
         const [first, control1, control2, second] = bezier[j];
+        if (first[0] === second[0] && first[1] === second[1] && jj === 1) {
+          const p0 = s * first[0] + shiftX;
+          const p1 = s * first[1] + shiftY;
+          buffer.push(p0, p1);
+          points.push(p0, p1);
+          break;
+        }
         const p10 = s * first[0] + shiftX;
         const p11 = s * first[1] + shiftY;
         const p20 = s * control1[0] + shiftX;
@@ -10384,6 +10576,7 @@ class AnnotationEditorLayer {
   #boundPointerup = this.pointerup.bind(this);
   #boundPointerUpAfterSelection = this.pointerUpAfterSelection.bind(this);
   #boundPointerdown = this.pointerdown.bind(this);
+  #boundTextLayerPointerDown = this.#textLayerPointerDown.bind(this);
   #editorFocusTimeoutId = null;
   #boundSelectionStart = this.selectionStart.bind(this);
   #editors = new Map();
@@ -10475,7 +10668,7 @@ class AnnotationEditorLayer {
         }
       }
     }
-    const editor = this.#createAndAddNewEditor({
+    const editor = this.createAndAddNewEditor({
       offsetX: 0,
       offsetY: 0
     }, false);
@@ -10570,11 +10763,28 @@ class AnnotationEditorLayer {
   enableTextSelection() {
     if (this.#textLayer?.div) {
       document.addEventListener("selectstart", this.#boundSelectionStart);
+      this.#textLayer.div.addEventListener("pointerdown", this.#boundTextLayerPointerDown);
+      this.#textLayer.div.classList.add("drawing");
     }
   }
   disableTextSelection() {
     if (this.#textLayer?.div) {
       document.removeEventListener("selectstart", this.#boundSelectionStart);
+      this.#textLayer.div.removeEventListener("pointerdown", this.#boundTextLayerPointerDown);
+      this.#textLayer.div.classList.remove("drawing");
+    }
+  }
+  #textLayerPointerDown(event) {
+    this.#uiManager.unselectAll();
+    if (event.target === this.#textLayer.div) {
+      const {
+        isMac
+      } = util.FeatureTest.platform;
+      if (event.button !== 0 || event.ctrlKey && isMac) {
+        return;
+      }
+      HighlightEditor.startHighlighting(this, event);
+      event.preventDefault();
     }
   }
   enableClick() {
@@ -10721,7 +10931,7 @@ class AnnotationEditorLayer {
   deserialize(data) {
     return AnnotationEditorLayer.#editorTypes.get(data.annotationType ?? data.annotationEditorType)?.deserialize(data, this, this.#uiManager) || null;
   }
-  #createAndAddNewEditor(event, isCentered, data = {}) {
+  createAndAddNewEditor(event, isCentered, data = {}) {
     const id = this.getNextId();
     const editor = this.#createNewEditor({
       parent: this,
@@ -10757,7 +10967,7 @@ class AnnotationEditorLayer {
     };
   }
   addNewEditor() {
-    this.#createAndAddNewEditor(this.#getCenterPoint(), true);
+    this.createAndAddNewEditor(this.#getCenterPoint(), true);
   }
   setSelected(editor) {
     this.#uiManager.setSelected(editor);
@@ -10843,7 +11053,7 @@ class AnnotationEditorLayer {
       boxes.push(rotator(x, y, width, height));
     }
     if (boxes.length !== 0) {
-      this.#createAndAddNewEditor(event, false, {
+      this.createAndAddNewEditor(event, false, {
         boxes
       });
     }
@@ -10871,7 +11081,7 @@ class AnnotationEditorLayer {
       this.#uiManager.unselectAll();
       return;
     }
-    this.#createAndAddNewEditor(event, false);
+    this.createAndAddNewEditor(event, false);
   }
   pointerdown(event) {
     if (this.#uiManager.getMode() === util.AnnotationEditorType.HIGHLIGHT) {
@@ -10964,6 +11174,9 @@ class AnnotationEditorLayer {
     } = this.viewport.rawDims;
     return [pageWidth, pageHeight];
   }
+  get scale() {
+    return this.#uiManager.viewParameters.realScale;
+  }
 }
 
 
@@ -10983,6 +11196,7 @@ class AnnotationEditorLayer {
 
 class ColorPicker {
   #boundKeyDown = this.#keyDown.bind(this);
+  #boundPointerDown = this.#pointerDown.bind(this);
   #button = null;
   #buttonSwatch = null;
   #defaultColor;
@@ -10991,6 +11205,7 @@ class ColorPicker {
   #isMainColorPicker = false;
   #eventBus;
   #uiManager = null;
+  #type;
   static get _keyboardManager() {
     return (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.shadow)(this, "_keyboardManager", new _tools_js__WEBPACK_IMPORTED_MODULE_1__.KeyboardManager([[["Escape", "mac+Escape"], ColorPicker.prototype._hideDropdownFromKeyboard], [[" ", "mac+ "], ColorPicker.prototype._colorSelectFromKeyboard], [["ArrowDown", "ArrowRight", "mac+ArrowDown", "mac+ArrowRight"], ColorPicker.prototype._moveToNext], [["ArrowUp", "ArrowLeft", "mac+ArrowUp", "mac+ArrowLeft"], ColorPicker.prototype._moveToPrevious], [["Home", "mac+Home"], ColorPicker.prototype._moveToBeginning], [["End", "mac+End"], ColorPicker.prototype._moveToEnd]]));
   }
@@ -10998,7 +11213,13 @@ class ColorPicker {
     editor = null,
     uiManager = null
   }) {
-    this.#isMainColorPicker = !editor;
+    if (editor) {
+      this.#isMainColorPicker = false;
+      this.#type = _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorParamsType.HIGHLIGHT_COLOR;
+    } else {
+      this.#isMainColorPicker = true;
+      this.#type = _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorParamsType.HIGHLIGHT_DEFAULT_COLOR;
+    }
     this.#uiManager = editor?._uiManager || uiManager;
     this.#eventBus = this.#uiManager._eventBus;
     this.#defaultColor = editor?.color || this.#uiManager?.highlightColors.values().next().value || "#FFFF98";
@@ -11010,6 +11231,7 @@ class ColorPicker {
     button.setAttribute("data-l10n-id", "pdfjs-editor-colorpicker-button");
     button.setAttribute("aria-haspopup", true);
     button.addEventListener("click", this.#openDropdown.bind(this));
+    button.addEventListener("keydown", this.#boundKeyDown);
     const swatch = this.#buttonSwatch = document.createElement("span");
     swatch.className = "swatch";
     swatch.style.backgroundColor = this.#defaultColor;
@@ -11017,12 +11239,12 @@ class ColorPicker {
     return button;
   }
   renderMainDropdown() {
-    const dropdown = this.#dropdown = this.#getDropdownRoot(_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorParamsType.HIGHLIGHT_DEFAULT_COLOR);
+    const dropdown = this.#dropdown = this.#getDropdownRoot();
     dropdown.setAttribute("aria-orientation", "horizontal");
     dropdown.setAttribute("aria-labelledby", "highlightColorPickerLabel");
     return dropdown;
   }
-  #getDropdownRoot(paramType) {
+  #getDropdownRoot() {
     const div = document.createElement("div");
     div.addEventListener("contextmenu", _display_utils_js__WEBPACK_IMPORTED_MODULE_2__.noContextMenu);
     div.className = "dropdown";
@@ -11042,21 +11264,25 @@ class ColorPicker {
       swatch.className = "swatch";
       swatch.style.backgroundColor = color;
       button.setAttribute("aria-selected", color === this.#defaultColor);
-      button.addEventListener("click", this.#colorSelect.bind(this, paramType, color));
+      button.addEventListener("click", this.#colorSelect.bind(this, color));
       div.append(button);
     }
     div.addEventListener("keydown", this.#boundKeyDown);
     return div;
   }
-  #colorSelect(type, color, event) {
+  #colorSelect(color, event) {
     event.stopPropagation();
     this.#eventBus.dispatch("switchannotationeditorparams", {
       source: this,
-      type,
+      type: this.#type,
       value: color
     });
   }
   _colorSelectFromKeyboard(event) {
+    if (event.target === this.#button) {
+      this.#openDropdown(event);
+      return;
+    }
     const color = event.target.getAttribute("data-color");
     if (!color) {
       return;
@@ -11064,6 +11290,10 @@ class ColorPicker {
     this.#colorSelect(color, event);
   }
   _moveToNext(event) {
+    if (!this.#isDropdownVisible) {
+      this.#openDropdown(event);
+      return;
+    }
     if (event.target === this.#button) {
       this.#dropdown.firstChild?.focus();
       return;
@@ -11071,40 +11301,66 @@ class ColorPicker {
     event.target.nextSibling?.focus();
   }
   _moveToPrevious(event) {
+    if (event.target === this.#dropdown?.firstChild || event.target === this.#button) {
+      if (this.#isDropdownVisible) {
+        this._hideDropdownFromKeyboard();
+      }
+      return;
+    }
+    if (!this.#isDropdownVisible) {
+      this.#openDropdown(event);
+    }
     event.target.previousSibling?.focus();
   }
-  _moveToBeginning() {
+  _moveToBeginning(event) {
+    if (!this.#isDropdownVisible) {
+      this.#openDropdown(event);
+      return;
+    }
     this.#dropdown.firstChild?.focus();
   }
-  _moveToEnd() {
+  _moveToEnd(event) {
+    if (!this.#isDropdownVisible) {
+      this.#openDropdown(event);
+      return;
+    }
     this.#dropdown.lastChild?.focus();
   }
   #keyDown(event) {
     ColorPicker._keyboardManager.exec(this, event);
   }
   #openDropdown(event) {
-    if (this.#dropdown && !this.#dropdown.classList.contains("hidden")) {
+    if (this.#isDropdownVisible) {
       this.hideDropdown();
       return;
     }
-    this.#button.addEventListener("keydown", this.#boundKeyDown);
     this.#dropdownWasFromKeyboard = event.detail === 0;
+    window.addEventListener("pointerdown", this.#boundPointerDown);
     if (this.#dropdown) {
       this.#dropdown.classList.remove("hidden");
       return;
     }
-    const root = this.#dropdown = this.#getDropdownRoot(_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorParamsType.HIGHLIGHT_COLOR);
+    const root = this.#dropdown = this.#getDropdownRoot();
     this.#button.append(root);
   }
-  hideDropdown() {
-    this.#dropdown?.classList.add("hidden");
-  }
-  _hideDropdownFromKeyboard() {
-    if (this.#isMainColorPicker || !this.#dropdown || this.#dropdown.classList.contains("hidden")) {
+  #pointerDown(event) {
+    if (this.#dropdown?.contains(event.target)) {
       return;
     }
     this.hideDropdown();
-    this.#button.removeEventListener("keydown", this.#boundKeyDown);
+  }
+  hideDropdown() {
+    this.#dropdown?.classList.add("hidden");
+    window.removeEventListener("pointerdown", this.#boundPointerDown);
+  }
+  get #isDropdownVisible() {
+    return this.#dropdown && !this.#dropdown.classList.contains("hidden");
+  }
+  _hideDropdownFromKeyboard() {
+    if (this.#isMainColorPicker || !this.#isDropdownVisible) {
+      return;
+    }
+    this.hideDropdown();
     this.#button.focus({
       preventScroll: true,
       focusVisible: this.#dropdownWasFromKeyboard
@@ -11400,6 +11656,8 @@ class AnnotationEditor {
   #isInEditMode = false;
   #isResizerEnabledForKeyboard = false;
   #moveInDOMTimeout = null;
+  #prevDragX = 0;
+  #prevDragY = 0;
   _initialOptions = Object.create(null);
   _uiManager = null;
   _focusEventsAllowed = true;
@@ -12054,12 +12312,21 @@ class AnnotationEditor {
     this._uiManager.setUpDragSession();
     let pointerMoveOptions, pointerMoveCallback;
     if (isSelected) {
+      this.div.classList.add("moving");
       pointerMoveOptions = {
         passive: true,
         capture: true
       };
+      this.#prevDragX = event.clientX;
+      this.#prevDragY = event.clientY;
       pointerMoveCallback = e => {
-        const [tx, ty] = this.screenToPageTranslation(e.movementX, e.movementY);
+        const {
+          clientX: x,
+          clientY: y
+        } = e;
+        const [tx, ty] = this.screenToPageTranslation(x - this.#prevDragX, y - this.#prevDragY);
+        this.#prevDragX = x;
+        this.#prevDragY = y;
         this._uiManager.dragSelectedEditors(tx, ty);
       };
       window.addEventListener("pointermove", pointerMoveCallback, pointerMoveOptions);
@@ -12068,6 +12335,7 @@ class AnnotationEditor {
       window.removeEventListener("pointerup", pointerUpCallback);
       window.removeEventListener("blur", pointerUpCallback);
       if (isSelected) {
+        this.div.classList.remove("moving");
         window.removeEventListener("pointermove", pointerMoveCallback, pointerMoveOptions);
       }
       this.#hasBeenClicked = false;
@@ -12395,8 +12663,11 @@ class FakeEditor extends AnnotationEditor {
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   FreeOutliner: () => (/* binding */ FreeOutliner),
 /* harmony export */   Outliner: () => (/* binding */ Outliner)
 /* harmony export */ });
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
+
 class Outliner {
   #box;
   #verticalEdges = [];
@@ -12592,6 +12863,12 @@ class Outline {
   get box() {
     throw new Error("Abstract getter `box` must be implemented.");
   }
+  serialize(_bbox, _rotation) {
+    throw new Error("Abstract method `serialize` must be implemented.");
+  }
+  get free() {
+    return this instanceof FreeHighlightOutline;
+  }
 }
 class HighlightOutline extends Outline {
   #box;
@@ -12621,13 +12898,15 @@ class HighlightOutline extends Outline {
     }
     return buffer.join(" ");
   }
-  serialize(x, y, width, height) {
+  serialize([blX, blY, trX, trY], _rotation) {
     const outlines = [];
+    const width = trX - blX;
+    const height = trY - blY;
     for (const outline of this.#outlines) {
       const points = new Array(outline.length);
       for (let i = 0; i < outline.length; i += 2) {
-        points[i] = x + outline[i] * width;
-        points[i + 1] = y + (1 - outline[i + 1]) * height;
+        points[i] = blX + outline[i] * width;
+        points[i + 1] = trY - outline[i + 1] * height;
       }
       outlines.push(points);
     }
@@ -12635,6 +12914,326 @@ class HighlightOutline extends Outline {
   }
   get box() {
     return this.#box;
+  }
+}
+class FreeOutliner {
+  #box;
+  #bottom = [];
+  #innerMargin;
+  #top = [];
+  #last = new Float64Array(18);
+  #min;
+  #min_dist;
+  #scaleFactor;
+  #thickness;
+  #points = [];
+  static #MIN_DIST = 8;
+  static #MIN_DIFF = 2;
+  static #MIN = FreeOutliner.#MIN_DIST + FreeOutliner.#MIN_DIFF;
+  constructor({
+    x,
+    y
+  }, box, scaleFactor, thickness, innerMargin = 0) {
+    this.#box = box;
+    this.#thickness = thickness * scaleFactor;
+    this.#last.set([NaN, NaN, NaN, NaN, x, y], 6);
+    this.#innerMargin = innerMargin;
+    this.#min_dist = FreeOutliner.#MIN_DIST * scaleFactor;
+    this.#min = FreeOutliner.#MIN * scaleFactor;
+    this.#scaleFactor = scaleFactor;
+    this.#points.push(x, y);
+  }
+  get free() {
+    return true;
+  }
+  isEmpty() {
+    return isNaN(this.#last[8]);
+  }
+  add({
+    x,
+    y
+  }) {
+    const [layerX, layerY, layerWidth, layerHeight] = this.#box;
+    let [x1, y1, x2, y2] = this.#last.subarray(8, 12);
+    const diffX = x - x2;
+    const diffY = y - y2;
+    const d = Math.hypot(diffX, diffY);
+    if (d < this.#min) {
+      return false;
+    }
+    const diffD = d - this.#min_dist;
+    const K = diffD / d;
+    const shiftX = K * diffX;
+    const shiftY = K * diffY;
+    let x0 = x1;
+    let y0 = y1;
+    x1 = x2;
+    y1 = y2;
+    x2 += shiftX;
+    y2 += shiftY;
+    this.#points?.push(x, y);
+    const nX = -shiftY / diffD;
+    const nY = shiftX / diffD;
+    const thX = nX * this.#thickness;
+    const thY = nY * this.#thickness;
+    this.#last.set(this.#last.subarray(2, 8), 0);
+    this.#last.set([x2 + thX, y2 + thY], 4);
+    this.#last.set(this.#last.subarray(14, 18), 12);
+    this.#last.set([x2 - thX, y2 - thY], 16);
+    if (isNaN(this.#last[6])) {
+      if (this.#top.length === 0) {
+        this.#last.set([x1 + thX, y1 + thY], 2);
+        this.#top.push(NaN, NaN, NaN, NaN, (x1 + thX - layerX) / layerWidth, (y1 + thY - layerY) / layerHeight);
+        this.#last.set([x1 - thX, y1 - thY], 14);
+        this.#bottom.push(NaN, NaN, NaN, NaN, (x1 - thX - layerX) / layerWidth, (y1 - thY - layerY) / layerHeight);
+      }
+      this.#last.set([x0, y0, x1, y1, x2, y2], 6);
+      return !this.isEmpty();
+    }
+    this.#last.set([x0, y0, x1, y1, x2, y2], 6);
+    const angle = Math.abs(Math.atan2(y0 - y1, x0 - x1) - Math.atan2(shiftY, shiftX));
+    if (angle < Math.PI / 2) {
+      [x1, y1, x2, y2] = this.#last.subarray(2, 6);
+      this.#top.push(NaN, NaN, NaN, NaN, ((x1 + x2) / 2 - layerX) / layerWidth, ((y1 + y2) / 2 - layerY) / layerHeight);
+      [x1, y1, x0, y0] = this.#last.subarray(14, 18);
+      this.#bottom.push(NaN, NaN, NaN, NaN, ((x0 + x1) / 2 - layerX) / layerWidth, ((y0 + y1) / 2 - layerY) / layerHeight);
+      return true;
+    }
+    [x0, y0, x1, y1, x2, y2] = this.#last.subarray(0, 6);
+    this.#top.push(((x0 + 5 * x1) / 6 - layerX) / layerWidth, ((y0 + 5 * y1) / 6 - layerY) / layerHeight, ((5 * x1 + x2) / 6 - layerX) / layerWidth, ((5 * y1 + y2) / 6 - layerY) / layerHeight, ((x1 + x2) / 2 - layerX) / layerWidth, ((y1 + y2) / 2 - layerY) / layerHeight);
+    [x2, y2, x1, y1, x0, y0] = this.#last.subarray(12, 18);
+    this.#bottom.push(((x0 + 5 * x1) / 6 - layerX) / layerWidth, ((y0 + 5 * y1) / 6 - layerY) / layerHeight, ((5 * x1 + x2) / 6 - layerX) / layerWidth, ((5 * y1 + y2) / 6 - layerY) / layerHeight, ((x1 + x2) / 2 - layerX) / layerWidth, ((y1 + y2) / 2 - layerY) / layerHeight);
+    return true;
+  }
+  toSVGPath() {
+    if (this.isEmpty()) {
+      return "";
+    }
+    const top = this.#top;
+    const bottom = this.#bottom;
+    const lastTop = this.#last.subarray(4, 6);
+    const lastBottom = this.#last.subarray(16, 18);
+    const [x, y, width, height] = this.#box;
+    if (isNaN(this.#last[6]) && !this.isEmpty()) {
+      return `M${(this.#last[2] - x) / width} ${(this.#last[3] - y) / height} L${(this.#last[4] - x) / width} ${(this.#last[5] - y) / height} L${(this.#last[16] - x) / width} ${(this.#last[17] - y) / height} L${(this.#last[14] - x) / width} ${(this.#last[15] - y) / height} Z`;
+    }
+    const buffer = [];
+    buffer.push(`M${top[4]} ${top[5]}`);
+    for (let i = 6; i < top.length; i += 6) {
+      if (isNaN(top[i])) {
+        buffer.push(`L${top[i + 4]} ${top[i + 5]}`);
+      } else {
+        buffer.push(`C${top[i]} ${top[i + 1]} ${top[i + 2]} ${top[i + 3]} ${top[i + 4]} ${top[i + 5]}`);
+      }
+    }
+    buffer.push(`L${(lastTop[0] - x) / width} ${(lastTop[1] - y) / height} L${(lastBottom[0] - x) / width} ${(lastBottom[1] - y) / height}`);
+    for (let i = bottom.length - 6; i >= 6; i -= 6) {
+      if (isNaN(bottom[i])) {
+        buffer.push(`L${bottom[i + 4]} ${bottom[i + 5]}`);
+      } else {
+        buffer.push(`C${bottom[i]} ${bottom[i + 1]} ${bottom[i + 2]} ${bottom[i + 3]} ${bottom[i + 4]} ${bottom[i + 5]}`);
+      }
+    }
+    buffer.push(`L${bottom[4]} ${bottom[5]} Z`);
+    return buffer.join(" ");
+  }
+  getFocusOutline(thickness) {
+    const [x, y] = this.#points;
+    const outliner = new FreeOutliner({
+      x,
+      y
+    }, this.#box, this.#scaleFactor, thickness, 0.0025);
+    outliner.#points = null;
+    for (let i = 2; i < this.#points.length; i += 2) {
+      outliner.add({
+        x: this.#points[i],
+        y: this.#points[i + 1]
+      });
+    }
+    return outliner.getOutlines();
+  }
+  getOutlines(isLTR) {
+    const top = this.#top;
+    const bottom = this.#bottom;
+    const last = this.#last;
+    const lastTop = last.subarray(4, 6);
+    const lastBottom = last.subarray(16, 18);
+    const [layerX, layerY, layerWidth, layerHeight] = this.#box;
+    const points = new Float64Array(this.#points?.length ?? 0);
+    for (let i = 0, ii = points.length; i < ii; i += 2) {
+      points[i] = (this.#points[i] - layerX) / layerWidth;
+      points[i + 1] = (this.#points[i + 1] - layerY) / layerHeight;
+    }
+    if (isNaN(last[6]) && !this.isEmpty()) {
+      const outline = new Float64Array(24);
+      outline.set([NaN, NaN, NaN, NaN, (last[2] - layerX) / layerWidth, (last[3] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (last[4] - layerX) / layerWidth, (last[5] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (last[16] - layerX) / layerWidth, (last[17] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (last[14] - layerX) / layerWidth, (last[15] - layerY) / layerHeight], 0);
+      return new FreeHighlightOutline(outline, points, this.#innerMargin, isLTR);
+    }
+    const outline = new Float64Array(this.#top.length + 12 + this.#bottom.length);
+    let N = top.length;
+    for (let i = 0; i < N; i += 2) {
+      if (isNaN(top[i])) {
+        outline[i] = outline[i + 1] = NaN;
+        continue;
+      }
+      outline[i] = top[i];
+      outline[i + 1] = top[i + 1];
+    }
+    outline.set([NaN, NaN, NaN, NaN, (lastTop[0] - layerX) / layerWidth, (lastTop[1] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (lastBottom[0] - layerX) / layerWidth, (lastBottom[1] - layerY) / layerHeight], N);
+    N += 12;
+    for (let i = bottom.length - 6; i >= 6; i -= 6) {
+      for (let j = 0; j < 6; j += 2) {
+        if (isNaN(bottom[i + j])) {
+          outline[N] = outline[N + 1] = NaN;
+          N += 2;
+          continue;
+        }
+        outline[N] = bottom[i + j];
+        outline[N + 1] = bottom[i + j + 1];
+        N += 2;
+      }
+    }
+    outline.set([NaN, NaN, NaN, NaN, bottom[4], bottom[5]], N);
+    return new FreeHighlightOutline(outline, points, this.#innerMargin, isLTR);
+  }
+}
+class FreeHighlightOutline extends Outline {
+  #bbox = null;
+  #innerMargin;
+  #points;
+  #outline;
+  constructor(outline, points, innerMargin, isLTR) {
+    super();
+    this.#outline = outline;
+    this.#points = points;
+    this.#innerMargin = innerMargin;
+    this.#computeMinMax(isLTR);
+    const {
+      x,
+      y,
+      width,
+      height
+    } = this.#bbox;
+    for (let i = 0, ii = outline.length; i < ii; i += 2) {
+      outline[i] = (outline[i] - x) / width;
+      outline[i + 1] = (outline[i + 1] - y) / height;
+    }
+    for (let i = 0, ii = points.length; i < ii; i += 2) {
+      points[i] = (points[i] - x) / width;
+      points[i + 1] = (points[i + 1] - y) / height;
+    }
+  }
+  toSVGPath() {
+    const buffer = [`M${this.#outline[4]} ${this.#outline[5]}`];
+    for (let i = 6, ii = this.#outline.length; i < ii; i += 6) {
+      if (isNaN(this.#outline[i])) {
+        buffer.push(`L${this.#outline[i + 4]} ${this.#outline[i + 5]}`);
+        continue;
+      }
+      buffer.push(`C${this.#outline[i]} ${this.#outline[i + 1]} ${this.#outline[i + 2]} ${this.#outline[i + 3]} ${this.#outline[i + 4]} ${this.#outline[i + 5]}`);
+    }
+    buffer.push("Z");
+    return buffer.join(" ");
+  }
+  serialize([blX, blY, trX, trY], rotation) {
+    const width = trX - blX;
+    const height = trY - blY;
+    let outline;
+    let points;
+    switch (rotation) {
+      case 0:
+        outline = this.#rescale(this.#outline, blX, trY, width, -height);
+        points = this.#rescale(this.#points, blX, trY, width, -height);
+        break;
+      case 90:
+        outline = this.#rescaleAndSwap(this.#outline, blX, blY, width, height);
+        points = this.#rescaleAndSwap(this.#points, blX, blY, width, height);
+        break;
+      case 180:
+        outline = this.#rescale(this.#outline, trX, blY, -width, height);
+        points = this.#rescale(this.#points, trX, blY, -width, height);
+        break;
+      case 270:
+        outline = this.#rescaleAndSwap(this.#outline, trX, trY, -width, -height);
+        points = this.#rescaleAndSwap(this.#points, trX, trY, -width, -height);
+        break;
+    }
+    return {
+      outline: Array.from(outline),
+      points: [Array.from(points)]
+    };
+  }
+  #rescale(src, tx, ty, sx, sy) {
+    const dest = new Float64Array(src.length);
+    for (let i = 0, ii = src.length; i < ii; i += 2) {
+      dest[i] = tx + src[i] * sx;
+      dest[i + 1] = ty + src[i + 1] * sy;
+    }
+    return dest;
+  }
+  #rescaleAndSwap(src, tx, ty, sx, sy) {
+    const dest = new Float64Array(src.length);
+    for (let i = 0, ii = src.length; i < ii; i += 2) {
+      dest[i] = tx + src[i + 1] * sx;
+      dest[i + 1] = ty + src[i] * sy;
+    }
+    return dest;
+  }
+  #computeMinMax(isLTR) {
+    const outline = this.#outline;
+    let lastX = outline[4];
+    let lastY = outline[5];
+    let minX = lastX;
+    let minY = lastY;
+    let maxX = lastX;
+    let maxY = lastY;
+    let lastPointX = lastX;
+    let lastPointY = lastY;
+    const ltrCallback = isLTR ? Math.max : Math.min;
+    for (let i = 6, ii = outline.length; i < ii; i += 6) {
+      if (isNaN(outline[i])) {
+        minX = Math.min(minX, outline[i + 4]);
+        minY = Math.min(minY, outline[i + 5]);
+        maxX = Math.max(maxX, outline[i + 4]);
+        maxY = Math.max(maxY, outline[i + 5]);
+        if (lastPointY < outline[i + 5]) {
+          lastPointX = outline[i + 4];
+          lastPointY = outline[i + 5];
+        } else if (lastPointY === outline[i + 5]) {
+          lastPointX = ltrCallback(lastPointX, outline[i + 4]);
+        }
+      } else {
+        const bbox = _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.Util.bezierBoundingBox(lastX, lastY, ...outline.slice(i, i + 6));
+        minX = Math.min(minX, bbox[0]);
+        minY = Math.min(minY, bbox[1]);
+        maxX = Math.max(maxX, bbox[2]);
+        maxY = Math.max(maxY, bbox[3]);
+        if (lastPointY < bbox[3]) {
+          lastPointX = bbox[2];
+          lastPointY = bbox[3];
+        } else if (lastPointY === bbox[3]) {
+          lastPointX = ltrCallback(lastPointX, bbox[2]);
+        }
+      }
+      lastX = outline[i + 4];
+      lastY = outline[i + 5];
+    }
+    const x = minX - this.#innerMargin,
+      y = minY - this.#innerMargin,
+      width = maxX - minX + 2 * this.#innerMargin,
+      height = maxY - minY + 2 * this.#innerMargin;
+    lastPointX = (lastPointX - x) / width;
+    lastPointY = (lastPointY - y) / height;
+    this.#bbox = {
+      x,
+      y,
+      width,
+      height,
+      lastPoint: [lastPointX, lastPointY]
+    };
+  }
+  get box() {
+    return this.#bbox;
   }
 }
 
@@ -16632,12 +17231,12 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony export */   DOMSVGFactory: () => (/* reexport safe */ _display_display_utils_js__WEBPACK_IMPORTED_MODULE_2__.DOMSVGFactory),
 /* harmony export */   DrawLayer: () => (/* reexport safe */ _display_draw_layer_js__WEBPACK_IMPORTED_MODULE_8__.DrawLayer),
 /* harmony export */   FeatureTest: () => (/* reexport safe */ _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.FeatureTest),
-/* harmony export */   GlobalWorkerOptions: () => (/* reexport safe */ _display_worker_options_js__WEBPACK_IMPORTED_MODULE_9__.GlobalWorkerOptions),
+/* harmony export */   GlobalWorkerOptions: () => (/* reexport safe */ _display_worker_options_js__WEBPACK_IMPORTED_MODULE_10__.GlobalWorkerOptions),
 /* harmony export */   ImageKind: () => (/* reexport safe */ _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.ImageKind),
 /* harmony export */   InvalidPDFException: () => (/* reexport safe */ _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.InvalidPDFException),
 /* harmony export */   MissingPDFException: () => (/* reexport safe */ _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.MissingPDFException),
 /* harmony export */   OPS: () => (/* reexport safe */ _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.OPS),
-/* harmony export */   Outliner: () => (/* reexport safe */ _display_editor_outliner_js__WEBPACK_IMPORTED_MODULE_10__.Outliner),
+/* harmony export */   Outliner: () => (/* reexport safe */ _display_editor_outliner_js__WEBPACK_IMPORTED_MODULE_9__.Outliner),
 /* harmony export */   PDFDataRangeTransport: () => (/* reexport safe */ _display_api_js__WEBPACK_IMPORTED_MODULE_1__.PDFDataRangeTransport),
 /* harmony export */   PDFDateString: () => (/* reexport safe */ _display_display_utils_js__WEBPACK_IMPORTED_MODULE_2__.PDFDateString),
 /* harmony export */   PDFWorker: () => (/* reexport safe */ _display_api_js__WEBPACK_IMPORTED_MODULE_1__.PDFWorker),
@@ -16676,8 +17275,8 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var _display_annotation_layer_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(640);
 /* harmony import */ var _display_editor_color_picker_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(97);
 /* harmony import */ var _display_draw_layer_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(423);
-/* harmony import */ var _display_worker_options_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(368);
-/* harmony import */ var _display_editor_outliner_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(405);
+/* harmony import */ var _display_worker_options_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(368);
+/* harmony import */ var _display_editor_outliner_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(405);
 /* harmony import */ var _display_xfa_layer_js__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(160);
 var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([_display_api_js__WEBPACK_IMPORTED_MODULE_1__]);
 _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__)[0];
@@ -16693,8 +17292,8 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 
-const pdfjsVersion = '4.0.0';
-const pdfjsBuild = '56ca2fd';
+const pdfjsVersion = '4.1.0';
+const pdfjsBuild = '6e46304';
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -17119,8 +17718,6 @@ class MessageHandler {
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   MurmurHash3_64: () => (/* binding */ MurmurHash3_64)
 /* harmony export */ });
-/* harmony import */ var _util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
-
 const SEED = 0xc3d2e1f0;
 const MASK_HIGH = 0xffff0000;
 const MASK_LOW = 0xffff;
@@ -17143,11 +17740,11 @@ class MurmurHash3_64 {
           data[length++] = code & 0xff;
         }
       }
-    } else if ((0,_util_js__WEBPACK_IMPORTED_MODULE_0__.isArrayBuffer)(input)) {
+    } else if (ArrayBuffer.isView(input)) {
       data = input.slice();
       length = data.byteLength;
     } else {
-      throw new Error("Wrong data format in MurmurHash3_64_update. " + "Input must be a string or array.");
+      throw new Error("Invalid data format, must be a string or TypedArray.");
     }
     const blockCounts = length >> 2;
     const tailLength = length - blockCounts * 4;
@@ -17256,7 +17853,6 @@ class MurmurHash3_64 {
 /* harmony export */   getUuid: () => (/* binding */ getUuid),
 /* harmony export */   getVerbosityLevel: () => (/* binding */ getVerbosityLevel),
 /* harmony export */   info: () => (/* binding */ info),
-/* harmony export */   isArrayBuffer: () => (/* binding */ isArrayBuffer),
 /* harmony export */   isNodeJS: () => (/* binding */ isNodeJS),
 /* harmony export */   normalizeUnicode: () => (/* binding */ normalizeUnicode),
 /* harmony export */   objectFromMap: () => (/* binding */ objectFromMap),
@@ -17959,9 +18555,6 @@ function stringToUTF8String(str) {
 }
 function utf8StringToString(str) {
   return unescape(encodeURIComponent(str));
-}
-function isArrayBuffer(v) {
-  return typeof v === "object" && v?.byteLength !== undefined;
 }
 function isArrayEqual(arr1, arr2) {
   if (arr1.length !== arr2.length) {
