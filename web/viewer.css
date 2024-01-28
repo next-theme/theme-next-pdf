@@ -29,7 +29,7 @@
   caret-color:CanvasText;
 }
 
-.textLayer.drawing{
+.textLayer.highlighting{
     touch-action:none;
   }
 
@@ -51,7 +51,6 @@
     --highlight-selected-bg-color:rgb(0 100 0 / 0.25);
     --highlight-backdrop-filter:none;
     --highlight-selected-backdrop-filter:none;
-    --mix-blend-mode:exclusion;
 
     margin:-1px;
     padding:1px;
@@ -868,7 +867,21 @@
   );
   --editorFreeText-editing-cursor:text;
   --editorInk-editing-cursor:url(images/cursor-editorInk.svg) 0 16, pointer;
+  --editorHighlight-editing-cursor:url(images/cursor-editorTextHighlight.svg) 23 23, text;
+  --editorFreeHighlight-editing-cursor:url(images/toolbarButton-editorHighlight.svg) 0 16, pointer;
 }
+
+.textLayer.highlighting{
+  cursor:var(--editorFreeHighlight-editing-cursor);
+}
+
+.textLayer.highlighting:not(.free) span{
+    cursor:var(--editorHighlight-editing-cursor);
+  }
+
+.textLayer.highlighting.free span{
+    cursor:var(--editorFreeHighlight-editing-cursor);
+  }
 
 @media (-webkit-min-device-pixel-ratio: 1.1), (min-resolution: 1.1dppx){
   :root{
@@ -2096,22 +2109,23 @@
   height:auto;
   padding-inline:10px;
   padding-block:10px 16px;
+  gap:16px;
   display:flex;
   flex-direction:column;
   box-sizing:border-box;
 }
+
+#highlightParamsToolbarContainer .editorParamsLabel{
+    width:-moz-fit-content;
+    width:fit-content;
+    inset-inline-start:0;
+  }
 
 #highlightParamsToolbarContainer .colorPicker{
     display:flex;
     flex-direction:column;
     gap:8px;
   }
-
-#highlightParamsToolbarContainer .colorPicker #highlightColorPickerLabel{
-      width:-moz-fit-content;
-      width:fit-content;
-      inset-inline-start:0;
-    }
 
 #highlightParamsToolbarContainer .colorPicker .dropdown{
       display:flex;
@@ -2149,6 +2163,70 @@
 #highlightParamsToolbarContainer .colorPicker .dropdown button:is(:hover, :active, :focus-visible) > .swatch{
           outline:2px solid var(--hover-outline-color);
         }
+
+#highlightParamsToolbarContainer #editorHighlightThickness{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:4px;
+    align-self:stretch;
+  }
+
+#highlightParamsToolbarContainer #editorHighlightThickness .editorParamsLabel{
+      width:100%;
+      height:auto;
+      align-self:stretch;
+    }
+
+#highlightParamsToolbarContainer #editorHighlightThickness .thicknessPicker{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      align-self:stretch;
+
+      --example-color:#bfbfc9;
+    }
+
+@media (prefers-color-scheme: dark){
+
+:where(html:not(.is-light)) #highlightParamsToolbarContainer #editorHighlightThickness .thicknessPicker{
+        --example-color:#80808e;
+    }
+      }
+
+:where(html.is-dark) #highlightParamsToolbarContainer #editorHighlightThickness .thicknessPicker{
+        --example-color:#80808e;
+    }
+
+@media screen and (forced-colors: active){
+
+#highlightParamsToolbarContainer #editorHighlightThickness .thicknessPicker{
+        --example-color:HighlightText;
+    }
+      }
+
+#highlightParamsToolbarContainer #editorHighlightThickness .thicknessPicker::before{
+        content:"";
+        width:8px;
+        aspect-ratio:1;
+        display:block;
+        border-radius:100%;
+        background-color:var(--example-color);
+      }
+
+#highlightParamsToolbarContainer #editorHighlightThickness .thicknessPicker .editorParamsSlider{
+        width:unset;
+        height:14px;
+      }
+
+#highlightParamsToolbarContainer #editorHighlightThickness .thicknessPicker::after{
+        content:"";
+        width:24px;
+        aspect-ratio:1;
+        display:block;
+        border-radius:100%;
+        background-color:var(--example-color);
+      }
 
 :root{
   --viewer-container-height:0;
@@ -2194,6 +2272,7 @@
   padding-bottom:var(--pdfViewer-padding-bottom);
 
   --hcm-highlight-filter:none;
+  --hcm-highlight-selected-filter:none;
 }
 
 @media screen and (forced-colors: active){

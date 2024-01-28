@@ -22,7 +22,7 @@
 
 /******/ var __webpack_modules__ = ({
 
-/***/ 640:
+/***/ 653:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 
@@ -35,11 +35,11 @@ __webpack_require__.d(__webpack_exports__, {
 });
 
 // EXTERNAL MODULE: ./src/shared/util.js
-var util = __webpack_require__(266);
+var util = __webpack_require__(394);
 // EXTERNAL MODULE: ./src/display/display_utils.js
-var display_utils = __webpack_require__(473);
+var display_utils = __webpack_require__(500);
 // EXTERNAL MODULE: ./src/display/annotation_storage.js
-var annotation_storage = __webpack_require__(780);
+var annotation_storage = __webpack_require__(296);
 ;// CONCATENATED MODULE: ./src/shared/scripting_utils.js
 function makeColorComp(n) {
   return Math.floor(Math.max(0, Math.min(1, n)) * 255).toString(16).padStart(2, "0");
@@ -100,7 +100,7 @@ class ColorConverters {
 }
 
 // EXTERNAL MODULE: ./src/display/xfa_layer.js
-var xfa_layer = __webpack_require__(160);
+var xfa_layer = __webpack_require__(283);
 ;// CONCATENATED MODULE: ./src/display/annotation_layer.js
 
 
@@ -1565,12 +1565,10 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
     let selectedValues = getValue(false);
     const getItems = event => {
       const options = event.target.options;
-      return Array.prototype.map.call(options, option => {
-        return {
-          displayValue: option.textContent,
-          exportValue: option.value
-        };
-      });
+      return Array.prototype.map.call(options, option => ({
+        displayValue: option.textContent,
+        exportValue: option.value
+      }));
     };
     if (this.enableScripting && this.hasJSActions) {
       selectElement.addEventListener("updatefromsandbox", jsEvent => {
@@ -2502,7 +2500,7 @@ class AnnotationLayer {
 
 /***/ }),
 
-/***/ 780:
+/***/ 296:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -2510,9 +2508,9 @@ class AnnotationLayer {
 /* harmony export */   PrintAnnotationStorage: () => (/* binding */ PrintAnnotationStorage),
 /* harmony export */   SerializableEmpty: () => (/* binding */ SerializableEmpty)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
-/* harmony import */ var _editor_editor_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(115);
-/* harmony import */ var _shared_murmurhash3_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(825);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _editor_editor_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(959);
+/* harmony import */ var _shared_murmurhash3_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(222);
 
 
 
@@ -2667,7 +2665,7 @@ class PrintAnnotationStorage extends AnnotationStorage {
 
 /***/ }),
 
-/***/ 406:
+/***/ 787:
 /***/ ((__webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
@@ -2679,22 +2677,22 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony export */   version: () => (/* binding */ version)
 /* harmony export */ });
 /* unused harmony exports DefaultCanvasFactory, DefaultCMapReaderFactory, DefaultFilterFactory, DefaultStandardFontDataFactory, LoopbackPort, PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, PDFWorkerUtil, RenderTask */
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
-/* harmony import */ var _annotation_storage_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(780);
-/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(473);
-/* harmony import */ var _font_loader_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(742);
-/* harmony import */ var display_node_utils__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(738);
-/* harmony import */ var _canvas_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(250);
-/* harmony import */ var _text_layer_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(739);
-/* harmony import */ var _worker_options_js__WEBPACK_IMPORTED_MODULE_14__ = __webpack_require__(368);
-/* harmony import */ var _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(694);
-/* harmony import */ var _metadata_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(472);
-/* harmony import */ var _optional_content_config_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(890);
-/* harmony import */ var _transport_stream_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(92);
-/* harmony import */ var display_fetch_stream__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(171);
-/* harmony import */ var display_network__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(474);
-/* harmony import */ var display_node_stream__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(498);
-/* harmony import */ var _xfa_text_js__WEBPACK_IMPORTED_MODULE_15__ = __webpack_require__(521);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _annotation_storage_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(296);
+/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(500);
+/* harmony import */ var _font_loader_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(355);
+/* harmony import */ var display_node_utils__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(476);
+/* harmony import */ var _canvas_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(287);
+/* harmony import */ var _text_layer_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(350);
+/* harmony import */ var _worker_options_js__WEBPACK_IMPORTED_MODULE_14__ = __webpack_require__(983);
+/* harmony import */ var _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(399);
+/* harmony import */ var _metadata_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(590);
+/* harmony import */ var _optional_content_config_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(866);
+/* harmony import */ var _transport_stream_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(224);
+/* harmony import */ var display_fetch_stream__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(664);
+/* harmony import */ var display_network__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(278);
+/* harmony import */ var display_node_stream__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(516);
+/* harmony import */ var _xfa_text_js__WEBPACK_IMPORTED_MODULE_15__ = __webpack_require__(473);
 var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([display_node_utils__WEBPACK_IMPORTED_MODULE_4__, display_node_stream__WEBPACK_IMPORTED_MODULE_13__]);
 ([display_node_utils__WEBPACK_IMPORTED_MODULE_4__, display_node_stream__WEBPACK_IMPORTED_MODULE_13__] = __webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__);
 
@@ -2803,7 +2801,7 @@ function getDocument(src) {
   }
   const fetchDocParams = {
     docId,
-    apiVersion: '4.1.0',
+    apiVersion: "4.1.0",
     data,
     password,
     disableAutoFetch,
@@ -3323,9 +3321,7 @@ class PDFPageProxy {
   }
   getTextContent(params = {}) {
     if (this._transport._htmlForXfa) {
-      return this.getXfa().then(xfa => {
-        return _xfa_text_js__WEBPACK_IMPORTED_MODULE_15__.XfaText.textContent(xfa);
-      });
+      return this.getXfa().then(xfa => _xfa_text_js__WEBPACK_IMPORTED_MODULE_15__.XfaText.textContent(xfa));
     }
     const readableStream = this.streamTextContent(params);
     return new Promise(function (resolve, reject) {
@@ -4081,11 +4077,9 @@ class WorkerTransport {
             ignoreErrors: params.ignoreErrors,
             inspectFont
           });
-          this.fontLoader.bind(font).catch(reason => {
-            return messageHandler.sendWithPromise("FontFallback", {
-              id
-            });
-          }).finally(() => {
+          this.fontLoader.bind(font).catch(() => messageHandler.sendWithPromise("FontFallback", {
+            id
+          })).finally(() => {
             if (!params.fontExtraProperties && font.data) {
               font.data = null;
             }
@@ -4286,9 +4280,7 @@ class WorkerTransport {
     return this.messageHandler.sendWithPromise("GetOutline", null);
   }
   getOptionalContentConfig() {
-    return this.messageHandler.sendWithPromise("GetOptionalContentConfig", null).then(results => {
-      return new _optional_content_config_js__WEBPACK_IMPORTED_MODULE_9__.OptionalContentConfig(results);
-    });
+    return this.messageHandler.sendWithPromise("GetOptionalContentConfig", null).then(results => new _optional_content_config_js__WEBPACK_IMPORTED_MODULE_9__.OptionalContentConfig(results));
   }
   getPermissions() {
     return this.messageHandler.sendWithPromise("GetPermissions", null);
@@ -4299,14 +4291,12 @@ class WorkerTransport {
     if (cachedPromise) {
       return cachedPromise;
     }
-    const promise = this.messageHandler.sendWithPromise(name, null).then(results => {
-      return {
-        info: results[0],
-        metadata: results[1] ? new _metadata_js__WEBPACK_IMPORTED_MODULE_8__.Metadata(results[1]) : null,
-        contentDispositionFilename: this._fullReader?.filename ?? null,
-        contentLength: this._fullReader?.contentLength ?? null
-      };
-    });
+    const promise = this.messageHandler.sendWithPromise(name, null).then(results => ({
+      info: results[0],
+      metadata: results[1] ? new _metadata_js__WEBPACK_IMPORTED_MODULE_8__.Metadata(results[1]) : null,
+      contentDispositionFilename: this._fullReader?.filename ?? null,
+      contentLength: this._fullReader?.contentLength ?? null
+    }));
     this.#methodPromises.set(name, promise);
     return promise;
   }
@@ -4553,15 +4543,15 @@ class InternalRenderTask {
     }
   }
 }
-const version = '4.1.0';
-const build = '6e46304';
+const version = "4.1.0";
+const build = "a6e0b02";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
 
 /***/ }),
 
-/***/ 822:
+/***/ 470:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -4571,7 +4561,7 @@ __webpack_async_result__();
 /* harmony export */   BaseSVGFactory: () => (/* binding */ BaseSVGFactory),
 /* harmony export */   BaseStandardFontDataFactory: () => (/* binding */ BaseStandardFontDataFactory)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
 
 class BaseFilterFactory {
   constructor() {
@@ -4720,7 +4710,7 @@ class BaseSVGFactory {
 
 /***/ }),
 
-/***/ 250:
+/***/ 287:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 
@@ -4730,9 +4720,9 @@ __webpack_require__.d(__webpack_exports__, {
 });
 
 // EXTERNAL MODULE: ./src/shared/util.js
-var util = __webpack_require__(266);
+var util = __webpack_require__(394);
 // EXTERNAL MODULE: ./src/display/display_utils.js
-var display_utils = __webpack_require__(473);
+var display_utils = __webpack_require__(500);
 ;// CONCATENATED MODULE: ./src/display/pattern_helper.js
 
 
@@ -5639,17 +5629,13 @@ class CanvasExtraState {
   updateScalingPathMinMax(transform, minMax) {
     util.Util.scaleMinMax(transform, minMax);
     this.minX = Math.min(this.minX, minMax[0]);
-    this.maxX = Math.max(this.maxX, minMax[1]);
-    this.minY = Math.min(this.minY, minMax[2]);
+    this.minY = Math.min(this.minY, minMax[1]);
+    this.maxX = Math.max(this.maxX, minMax[2]);
     this.maxY = Math.max(this.maxY, minMax[3]);
   }
   updateCurvePathMinMax(transform, x0, y0, x1, y1, x2, y2, x3, y3, minMax) {
-    const box = util.Util.bezierBoundingBox(x0, y0, x1, y1, x2, y2, x3, y3);
+    const box = util.Util.bezierBoundingBox(x0, y0, x1, y1, x2, y2, x3, y3, minMax);
     if (minMax) {
-      minMax[0] = Math.min(minMax[0], box[0], box[2]);
-      minMax[1] = Math.max(minMax[1], box[0], box[2]);
-      minMax[2] = Math.min(minMax[2], box[1], box[3]);
-      minMax[3] = Math.max(minMax[3], box[1], box[3]);
       return;
     }
     this.updateRectMinMax(transform, box);
@@ -6877,12 +6863,10 @@ class CanvasGraphics {
       const color = IR[1];
       const baseTransform = this.baseTransform || (0,display_utils.getCurrentTransform)(this.ctx);
       const canvasGraphicsFactory = {
-        createCanvasGraphics: ctx => {
-          return new CanvasGraphics(ctx, this.commonObjs, this.objs, this.canvasFactory, this.filterFactory, {
-            optionalContentConfig: this.optionalContentConfig,
-            markedContentStack: this.markedContentStack
-          });
-        }
+        createCanvasGraphics: ctx => new CanvasGraphics(ctx, this.commonObjs, this.objs, this.canvasFactory, this.filterFactory, {
+          optionalContentConfig: this.optionalContentConfig,
+          markedContentStack: this.markedContentStack
+        })
       };
       pattern = new TilingPattern(IR, color, this.ctx, canvasGraphicsFactory, baseTransform);
     } else {
@@ -7486,7 +7470,7 @@ for (const op in util.OPS) {
 
 /***/ }),
 
-/***/ 473:
+/***/ 500:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -7515,8 +7499,8 @@ for (const op in util.OPS) {
 /* harmony export */   setLayerDimensions: () => (/* binding */ setLayerDimensions)
 /* harmony export */ });
 /* unused harmony export deprecated */
-/* harmony import */ var _base_factory_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(822);
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(266);
+/* harmony import */ var _base_factory_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(470);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(394);
 
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -7829,19 +7813,15 @@ async function fetchData(url, type = "text") {
 }
 class DOMCMapReaderFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.BaseCMapReaderFactory {
   _fetchData(url, compressionType) {
-    return fetchData(url, this.isCompressed ? "arraybuffer" : "text").then(data => {
-      return {
-        cMapData: data instanceof ArrayBuffer ? new Uint8Array(data) : (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_1__.stringToBytes)(data),
-        compressionType
-      };
-    });
+    return fetchData(url, this.isCompressed ? "arraybuffer" : "text").then(data => ({
+      cMapData: data instanceof ArrayBuffer ? new Uint8Array(data) : (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_1__.stringToBytes)(data),
+      compressionType
+    }));
   }
 }
 class DOMStandardFontDataFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.BaseStandardFontDataFactory {
   _fetchData(url) {
-    return fetchData(url, "arraybuffer").then(data => {
-      return new Uint8Array(data);
-    });
+    return fetchData(url, "arraybuffer").then(data => new Uint8Array(data));
   }
 }
 class DOMSVGFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.BaseSVGFactory {
@@ -8186,14 +8166,14 @@ function setLayerDimensions(div, viewport, mustFlip = false, mustRotate = true) 
 
 /***/ }),
 
-/***/ 423:
+/***/ 574:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   DrawLayer: () => (/* binding */ DrawLayer)
 /* harmony export */ });
-/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(473);
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(266);
+/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(500);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(394);
 
 
 class DrawLayer {
@@ -8313,6 +8293,13 @@ class DrawLayer {
     this.updateBox(id, line.box);
     path.setAttribute("d", line.toSVGPath());
   }
+  updateLine(id, line) {
+    const root = this.#mapping.get(id);
+    const defs = root.firstChild;
+    const path = defs.firstChild;
+    this.updateBox(id, line.box);
+    path.setAttribute("d", line.toSVGPath());
+  }
   removeFreeHighlight(id) {
     this.remove(id);
     this.#toUpdate.delete(id);
@@ -8357,7 +8344,7 @@ class DrawLayer {
 
 /***/ }),
 
-/***/ 629:
+/***/ 861:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 
@@ -8367,13 +8354,13 @@ __webpack_require__.d(__webpack_exports__, {
 });
 
 // EXTERNAL MODULE: ./src/shared/util.js
-var util = __webpack_require__(266);
+var util = __webpack_require__(394);
 // EXTERNAL MODULE: ./src/display/editor/editor.js + 2 modules
-var editor_editor = __webpack_require__(115);
+var editor_editor = __webpack_require__(959);
 // EXTERNAL MODULE: ./src/display/editor/tools.js
-var tools = __webpack_require__(812);
+var tools = __webpack_require__(213);
 // EXTERNAL MODULE: ./src/display/annotation_layer.js + 1 modules
-var annotation_layer = __webpack_require__(640);
+var annotation_layer = __webpack_require__(653);
 ;// CONCATENATED MODULE: ./src/display/editor/freetext.js
 
 
@@ -8478,12 +8465,9 @@ class FreeTextEditor extends editor_editor.AnnotationEditor {
     };
     const savedFontsize = this.#fontSize;
     this.addCommands({
-      cmd: () => {
-        setFontsize(fontSize);
-      },
-      undo: () => {
-        setFontsize(savedFontsize);
-      },
+      cmd: setFontsize.bind(this, fontSize),
+      undo: setFontsize.bind(this, savedFontsize),
+      post: this._uiManager.updateUI.bind(this._uiManager, this),
       mustExec: true,
       type: util.AnnotationEditorParamsType.FREETEXT_SIZE,
       overwriteIfSameType: true,
@@ -8491,14 +8475,14 @@ class FreeTextEditor extends editor_editor.AnnotationEditor {
     });
   }
   #updateColor(color) {
+    const setColor = col => {
+      this.#color = this.editorDiv.style.color = col;
+    };
     const savedColor = this.#color;
     this.addCommands({
-      cmd: () => {
-        this.#color = this.editorDiv.style.color = color;
-      },
-      undo: () => {
-        this.#color = this.editorDiv.style.color = savedColor;
-      },
+      cmd: setColor.bind(this, color),
+      undo: setColor.bind(this, savedColor),
+      post: this._uiManager.updateUI.bind(this._uiManager, this),
       mustExec: true,
       type: util.AnnotationEditorParamsType.FREETEXT_COLOR,
       overwriteIfSameType: true,
@@ -8891,11 +8875,11 @@ class FreeTextEditor extends editor_editor.AnnotationEditor {
 }
 
 // EXTERNAL MODULE: ./src/display/editor/outliner.js
-var editor_outliner = __webpack_require__(405);
+var editor_outliner = __webpack_require__(651);
 // EXTERNAL MODULE: ./src/display/editor/color_picker.js
-var color_picker = __webpack_require__(97);
+var color_picker = __webpack_require__(705);
 // EXTERNAL MODULE: ./src/display/display_utils.js
-var display_utils = __webpack_require__(473);
+var display_utils = __webpack_require__(500);
 ;// CONCATENATED MODULE: ./src/display/editor/highlight.js
 
 
@@ -8915,9 +8899,10 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
   #lastPoint = null;
   #opacity;
   #outlineId = null;
+  #thickness;
   static _defaultColor = null;
   static _defaultOpacity = 1;
-  static _defaultThickness = 10;
+  static _defaultThickness = 12;
   static _l10nPromise;
   static _type = "highlight";
   static _editorType = util.AnnotationEditorType.HIGHLIGHT;
@@ -8930,6 +8915,7 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       name: "highlightEditor"
     });
     this.color = params.color || HighlightEditor._defaultColor;
+    this.#thickness = params.thickness || HighlightEditor._defaultThickness;
     this.#opacity = params.opacity || HighlightEditor._defaultOpacity;
     this.#boxes = params.boxes || null;
     this._isDraggable = false;
@@ -8960,21 +8946,30 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     this.#lastPoint = [(lastPoint[0] - this.x) / this.width, (lastPoint[1] - this.y) / this.height];
   }
   #createFreeOutlines({
-    highlight,
+    highlightOutlines,
     highlightId,
     clipPathId
   }) {
-    this.#highlightOutlines = highlight.getOutlines(this._uiManager.direction === "ltr");
-    this.#id = highlightId;
-    this.#clipPathId = clipPathId;
+    this.#highlightOutlines = highlightOutlines;
+    const extraThickness = 1.5;
+    this.#focusOutlines = highlightOutlines.getNewOutline(this.#thickness / 2 + extraThickness, 0.0025);
+    if (highlightId >= 0) {
+      this.#id = highlightId;
+      this.#clipPathId = clipPathId;
+      this.parent.drawLayer.finalizeLine(highlightId, highlightOutlines);
+      this.#outlineId = this.parent.drawLayer.highlightOutline(this.#focusOutlines);
+    } else if (this.parent) {
+      this.parent.drawLayer.updateLine(this.#id, highlightOutlines);
+      this.parent.drawLayer.updateLine(this.#outlineId, this.#focusOutlines);
+    }
     const {
       x,
       y,
       width,
       height,
       lastPoint
-    } = this.#highlightOutlines.box;
-    this.parent.drawLayer.finalizeLine(this.#id, this.#highlightOutlines);
+    } = highlightOutlines.box;
+    this.#lastPoint = lastPoint;
     switch (this.rotation) {
       case 0:
         this.x = x;
@@ -9007,10 +9002,6 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
           break;
         }
     }
-    const innerMargin = 1.5;
-    this.#focusOutlines = highlight.getFocusOutline(HighlightEditor._defaultThickness + innerMargin);
-    this.#outlineId = this.parent.drawLayer.highlightOutline(this.#focusOutlines);
-    this.#lastPoint = lastPoint;
   }
   static initialize(l10n, uiManager) {
     editor_editor.AnnotationEditor.initialize(l10n, uiManager);
@@ -9020,6 +9011,9 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     switch (type) {
       case util.AnnotationEditorParamsType.HIGHLIGHT_DEFAULT_COLOR:
         HighlightEditor._defaultColor = value;
+        break;
+      case util.AnnotationEditorParamsType.HIGHLIGHT_THICKNESS:
+        HighlightEditor._defaultThickness = value;
         break;
     }
   }
@@ -9032,29 +9026,46 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       case util.AnnotationEditorParamsType.HIGHLIGHT_COLOR:
         this.#updateColor(value);
         break;
+      case util.AnnotationEditorParamsType.HIGHLIGHT_THICKNESS:
+        this.#updateThickness(value);
+        break;
     }
   }
   static get defaultPropertiesToUpdate() {
-    return [[util.AnnotationEditorParamsType.HIGHLIGHT_DEFAULT_COLOR, HighlightEditor._defaultColor]];
+    return [[util.AnnotationEditorParamsType.HIGHLIGHT_DEFAULT_COLOR, HighlightEditor._defaultColor], [util.AnnotationEditorParamsType.HIGHLIGHT_THICKNESS, HighlightEditor._defaultThickness]];
   }
   get propertiesToUpdate() {
-    return [[util.AnnotationEditorParamsType.HIGHLIGHT_COLOR, this.color || HighlightEditor._defaultColor]];
+    return [[util.AnnotationEditorParamsType.HIGHLIGHT_COLOR, this.color || HighlightEditor._defaultColor], [util.AnnotationEditorParamsType.HIGHLIGHT_THICKNESS, this.#thickness || HighlightEditor._defaultThickness]];
   }
   #updateColor(color) {
+    const setColor = col => {
+      this.color = col;
+      this.parent?.drawLayer.changeColor(this.#id, col);
+      this.#colorPicker?.updateColor(col);
+    };
     const savedColor = this.color;
     this.addCommands({
-      cmd: () => {
-        this.color = color;
-        this.parent?.drawLayer.changeColor(this.#id, color);
-        this.#colorPicker?.updateColor(color);
-      },
-      undo: () => {
-        this.color = savedColor;
-        this.parent?.drawLayer.changeColor(this.#id, savedColor);
-        this.#colorPicker?.updateColor(savedColor);
-      },
+      cmd: setColor.bind(this, color),
+      undo: setColor.bind(this, savedColor),
+      post: this._uiManager.updateUI.bind(this._uiManager, this),
       mustExec: true,
       type: util.AnnotationEditorParamsType.HIGHLIGHT_COLOR,
+      overwriteIfSameType: true,
+      keepUndo: true
+    });
+  }
+  #updateThickness(thickness) {
+    const savedThickness = this.#thickness;
+    const setThickness = th => {
+      this.#thickness = th;
+      this.#changeThickness(th);
+    };
+    this.addCommands({
+      cmd: setThickness.bind(this, thickness),
+      undo: setThickness.bind(this, savedThickness),
+      post: this._uiManager.updateUI.bind(this._uiManager, this),
+      mustExec: true,
+      type: util.AnnotationEditorParamsType.INK_THICKNESS,
       overwriteIfSameType: true,
       keepUndo: true
     });
@@ -9082,6 +9093,9 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
   }
   fixAndSetPosition() {
     return super.fixAndSetPosition(this.#getRotation());
+  }
+  getBaseTranslation() {
+    return [0, 0];
   }
   getRect(tx, ty) {
     return super.getRect(tx, ty, this.#getRotation());
@@ -9119,6 +9133,17 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     if (mustBeSelected) {
       this.select();
     }
+  }
+  #changeThickness(thickness) {
+    if (!this.#isFreeHighlight) {
+      return;
+    }
+    this.#createFreeOutlines({
+      highlightOutlines: this.#highlightOutlines.getNewOutline(thickness / 2)
+    });
+    this.fixAndSetPosition();
+    const [parentWidth, parentHeight] = this.parentDimensions;
+    this.setDims(this.width * parentWidth, this.height * parentHeight);
   }
   #cleanDrawLayer() {
     if (this.#id === null || !this.parent) {
@@ -9258,7 +9283,7 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
   #serializeOutlines(rect) {
     return this.#highlightOutlines.serialize(rect, this.#getRotation());
   }
-  static startHighlighting(parent, {
+  static startHighlighting(parent, isLTR, {
     target: textLayer,
     x,
     y
@@ -9296,7 +9321,7 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     this._freeHighlight = new editor_outliner.FreeOutliner({
       x,
       y
-    }, [layerX, layerY, parentWidth, parentHeight], parent.scale, this._defaultThickness, 0.001);
+    }, [layerX, layerY, parentWidth, parentHeight], parent.scale, this._defaultThickness / 2, isLTR, 0.001);
     ({
       id: this._freeHighlightId,
       clipPathId: this._freeHighlightClipId
@@ -9311,7 +9336,7 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     if (!this._freeHighlight.isEmpty()) {
       parent.createAndAddNewEditor(event, false, {
         highlightId: this._freeHighlightId,
-        highlight: this._freeHighlight,
+        highlightOutlines: this._freeHighlight.getOutlines(),
         clipPathId: this._freeHighlightClipId
       });
     } else {
@@ -9355,7 +9380,7 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       annotationType: util.AnnotationEditorType.HIGHLIGHT,
       color,
       opacity: this.#opacity,
-      thickness: 2 * HighlightEditor._defaultThickness,
+      thickness: this.#thickness,
       quadPoints: this.#serializeBoxes(rect),
       outlines: this.#serializeOutlines(rect),
       pageIndex: this.pageIndex,
@@ -9450,16 +9475,15 @@ class InkEditor extends editor_editor.AnnotationEditor {
     return [[util.AnnotationEditorParamsType.INK_THICKNESS, this.thickness || InkEditor._defaultThickness], [util.AnnotationEditorParamsType.INK_COLOR, this.color || InkEditor._defaultColor || editor_editor.AnnotationEditor._defaultLineColor], [util.AnnotationEditorParamsType.INK_OPACITY, Math.round(100 * (this.opacity ?? InkEditor._defaultOpacity))]];
   }
   #updateThickness(thickness) {
+    const setThickness = th => {
+      this.thickness = th;
+      this.#fitToContent();
+    };
     const savedThickness = this.thickness;
     this.addCommands({
-      cmd: () => {
-        this.thickness = thickness;
-        this.#fitToContent();
-      },
-      undo: () => {
-        this.thickness = savedThickness;
-        this.#fitToContent();
-      },
+      cmd: setThickness.bind(this, thickness),
+      undo: setThickness.bind(this, savedThickness),
+      post: this._uiManager.updateUI.bind(this._uiManager, this),
       mustExec: true,
       type: util.AnnotationEditorParamsType.INK_THICKNESS,
       overwriteIfSameType: true,
@@ -9467,16 +9491,15 @@ class InkEditor extends editor_editor.AnnotationEditor {
     });
   }
   #updateColor(color) {
+    const setColor = col => {
+      this.color = col;
+      this.#redraw();
+    };
     const savedColor = this.color;
     this.addCommands({
-      cmd: () => {
-        this.color = color;
-        this.#redraw();
-      },
-      undo: () => {
-        this.color = savedColor;
-        this.#redraw();
-      },
+      cmd: setColor.bind(this, color),
+      undo: setColor.bind(this, savedColor),
+      post: this._uiManager.updateUI.bind(this._uiManager, this),
       mustExec: true,
       type: util.AnnotationEditorParamsType.INK_COLOR,
       overwriteIfSameType: true,
@@ -9484,17 +9507,16 @@ class InkEditor extends editor_editor.AnnotationEditor {
     });
   }
   #updateOpacity(opacity) {
+    const setOpacity = op => {
+      this.opacity = op;
+      this.#redraw();
+    };
     opacity /= 100;
     const savedOpacity = this.opacity;
     this.addCommands({
-      cmd: () => {
-        this.opacity = opacity;
-        this.#redraw();
-      },
-      undo: () => {
-        this.opacity = savedOpacity;
-        this.#redraw();
-      },
+      cmd: setOpacity.bind(this, opacity),
+      undo: setOpacity.bind(this, savedOpacity),
+      post: this._uiManager.updateUI.bind(this._uiManager, this),
       mustExec: true,
       type: util.AnnotationEditorParamsType.INK_OPACITY,
       overwriteIfSameType: true,
@@ -10764,14 +10786,14 @@ class AnnotationEditorLayer {
     if (this.#textLayer?.div) {
       document.addEventListener("selectstart", this.#boundSelectionStart);
       this.#textLayer.div.addEventListener("pointerdown", this.#boundTextLayerPointerDown);
-      this.#textLayer.div.classList.add("drawing");
+      this.#textLayer.div.classList.add("highlighting");
     }
   }
   disableTextSelection() {
     if (this.#textLayer?.div) {
       document.removeEventListener("selectstart", this.#boundSelectionStart);
       this.#textLayer.div.removeEventListener("pointerdown", this.#boundTextLayerPointerDown);
-      this.#textLayer.div.classList.remove("drawing");
+      this.#textLayer.div.classList.remove("highlighting");
     }
   }
   #textLayerPointerDown(event) {
@@ -10783,7 +10805,13 @@ class AnnotationEditorLayer {
       if (event.button !== 0 || event.ctrlKey && isMac) {
         return;
       }
-      HighlightEditor.startHighlighting(this, event);
+      this.#textLayer.div.classList.add("free");
+      HighlightEditor.startHighlighting(this, this.#uiManager.direction === "ltr", event);
+      this.#textLayer.div.addEventListener("pointerup", () => {
+        this.#textLayer.div.classList.remove("free");
+      }, {
+        once: true
+      });
       event.preventDefault();
     }
   }
@@ -11182,15 +11210,15 @@ class AnnotationEditorLayer {
 
 /***/ }),
 
-/***/ 97:
+/***/ 705:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   ColorPicker: () => (/* binding */ ColorPicker)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
-/* harmony import */ var _tools_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(812);
-/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(473);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _tools_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(213);
+/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(500);
 
 
 
@@ -11390,7 +11418,7 @@ class ColorPicker {
 
 /***/ }),
 
-/***/ 115:
+/***/ 959:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 
@@ -11400,11 +11428,11 @@ __webpack_require__.d(__webpack_exports__, {
 });
 
 // EXTERNAL MODULE: ./src/display/editor/tools.js
-var tools = __webpack_require__(812);
+var tools = __webpack_require__(213);
 // EXTERNAL MODULE: ./src/shared/util.js
-var util = __webpack_require__(266);
+var util = __webpack_require__(394);
 // EXTERNAL MODULE: ./src/display/display_utils.js
-var display_utils = __webpack_require__(473);
+var display_utils = __webpack_require__(500);
 ;// CONCATENATED MODULE: ./src/display/editor/alt_text.js
 
 class AltText {
@@ -11897,7 +11925,7 @@ class AnnotationEditor {
       x,
       y
     } = this;
-    const [bx, by] = this.#getBaseTranslation();
+    const [bx, by] = this.getBaseTranslation();
     x += bx;
     y += by;
     this.div.style.left = `${(100 * x).toFixed(2)}%`;
@@ -11906,7 +11934,7 @@ class AnnotationEditor {
       block: "nearest"
     });
   }
-  #getBaseTranslation() {
+  getBaseTranslation() {
     const [parentWidth, parentHeight] = this.parentDimensions;
     const {
       _borderLineWidth
@@ -11956,7 +11984,7 @@ class AnnotationEditor {
     }
     this.x = x /= pageWidth;
     this.y = y /= pageHeight;
-    const [bx, by] = this.#getBaseTranslation();
+    const [bx, by] = this.getBaseTranslation();
     x += bx;
     y += by;
     const {
@@ -12659,14 +12687,14 @@ class FakeEditor extends AnnotationEditor {
 
 /***/ }),
 
-/***/ 405:
+/***/ 651:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   FreeOutliner: () => (/* binding */ FreeOutliner),
 /* harmony export */   Outliner: () => (/* binding */ Outliner)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
 
 class Outliner {
   #box;
@@ -12920,6 +12948,7 @@ class FreeOutliner {
   #box;
   #bottom = [];
   #innerMargin;
+  #isLTR;
   #top = [];
   #last = new Float64Array(18);
   #min;
@@ -12933,9 +12962,10 @@ class FreeOutliner {
   constructor({
     x,
     y
-  }, box, scaleFactor, thickness, innerMargin = 0) {
+  }, box, scaleFactor, thickness, isLTR, innerMargin = 0) {
     this.#box = box;
     this.#thickness = thickness * scaleFactor;
+    this.#isLTR = isLTR;
     this.#last.set([NaN, NaN, NaN, NaN, x, y], 6);
     this.#innerMargin = innerMargin;
     this.#min_dist = FreeOutliner.#MIN_DIST * scaleFactor;
@@ -13037,22 +13067,7 @@ class FreeOutliner {
     buffer.push(`L${bottom[4]} ${bottom[5]} Z`);
     return buffer.join(" ");
   }
-  getFocusOutline(thickness) {
-    const [x, y] = this.#points;
-    const outliner = new FreeOutliner({
-      x,
-      y
-    }, this.#box, this.#scaleFactor, thickness, 0.0025);
-    outliner.#points = null;
-    for (let i = 2; i < this.#points.length; i += 2) {
-      outliner.add({
-        x: this.#points[i],
-        y: this.#points[i + 1]
-      });
-    }
-    return outliner.getOutlines();
-  }
-  getOutlines(isLTR) {
+  getOutlines() {
     const top = this.#top;
     const bottom = this.#bottom;
     const last = this.#last;
@@ -13067,7 +13082,7 @@ class FreeOutliner {
     if (isNaN(last[6]) && !this.isEmpty()) {
       const outline = new Float64Array(24);
       outline.set([NaN, NaN, NaN, NaN, (last[2] - layerX) / layerWidth, (last[3] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (last[4] - layerX) / layerWidth, (last[5] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (last[16] - layerX) / layerWidth, (last[17] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (last[14] - layerX) / layerWidth, (last[15] - layerY) / layerHeight], 0);
-      return new FreeHighlightOutline(outline, points, this.#innerMargin, isLTR);
+      return new FreeHighlightOutline(outline, points, this.#box, this.#scaleFactor, this.#innerMargin, this.#isLTR);
     }
     const outline = new Float64Array(this.#top.length + 12 + this.#bottom.length);
     let N = top.length;
@@ -13094,19 +13109,25 @@ class FreeOutliner {
       }
     }
     outline.set([NaN, NaN, NaN, NaN, bottom[4], bottom[5]], N);
-    return new FreeHighlightOutline(outline, points, this.#innerMargin, isLTR);
+    return new FreeHighlightOutline(outline, points, this.#box, this.#scaleFactor, this.#innerMargin, this.#isLTR);
   }
 }
 class FreeHighlightOutline extends Outline {
+  #box;
   #bbox = null;
   #innerMargin;
+  #isLTR;
   #points;
+  #scaleFactor;
   #outline;
-  constructor(outline, points, innerMargin, isLTR) {
+  constructor(outline, points, box, scaleFactor, innerMargin, isLTR) {
     super();
     this.#outline = outline;
     this.#points = points;
+    this.#box = box;
+    this.#scaleFactor = scaleFactor;
     this.#innerMargin = innerMargin;
+    this.#isLTR = isLTR;
     this.#computeMinMax(isLTR);
     const {
       x,
@@ -13235,12 +13256,36 @@ class FreeHighlightOutline extends Outline {
   get box() {
     return this.#bbox;
   }
+  getNewOutline(thickness, innerMargin) {
+    const {
+      x,
+      y,
+      width,
+      height
+    } = this.#bbox;
+    const [layerX, layerY, layerWidth, layerHeight] = this.#box;
+    const sx = width * layerWidth;
+    const sy = height * layerHeight;
+    const tx = x * layerWidth + layerX;
+    const ty = y * layerHeight + layerY;
+    const outliner = new FreeOutliner({
+      x: this.#points[0] * sx + tx,
+      y: this.#points[1] * sy + ty
+    }, this.#box, this.#scaleFactor, thickness, this.#isLTR, innerMargin ?? this.#innerMargin);
+    for (let i = 2; i < this.#points.length; i += 2) {
+      outliner.add({
+        x: this.#points[i] * sx + tx,
+        y: this.#points[i + 1] * sy + ty
+      });
+    }
+    return outliner.getOutlines();
+  }
 }
 
 
 /***/ }),
 
-/***/ 812:
+/***/ 213:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -13251,8 +13296,8 @@ class FreeHighlightOutline extends Outline {
 /* harmony export */   opacityToHex: () => (/* binding */ opacityToHex)
 /* harmony export */ });
 /* unused harmony export CommandManager */
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
-/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(473);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(500);
 
 
 function bindEvents(obj, element, names) {
@@ -13402,6 +13447,7 @@ class CommandManager {
   add({
     cmd,
     undo,
+    post,
     mustExec,
     type = NaN,
     overwriteIfSameType = false,
@@ -13416,6 +13462,7 @@ class CommandManager {
     const save = {
       cmd,
       undo,
+      post,
       type
     };
     if (this.#position === -1) {
@@ -13449,7 +13496,12 @@ class CommandManager {
       return;
     }
     this.#locked = true;
-    this.#commands[this.#position].undo();
+    const {
+      undo,
+      post
+    } = this.#commands[this.#position];
+    undo();
+    post?.();
     this.#locked = false;
     this.#position -= 1;
   }
@@ -13457,7 +13509,12 @@ class CommandManager {
     if (this.#position < this.#commands.length - 1) {
       this.#position += 1;
       this.#locked = true;
-      this.#commands[this.#position].cmd();
+      const {
+        cmd,
+        post
+      } = this.#commands[this.#position];
+      cmd();
+      post?.();
       this.#locked = false;
     }
   }
@@ -13617,9 +13674,7 @@ class AnnotationEditorUIManager {
   static TRANSLATE_BIG = 10;
   static get _keyboardManager() {
     const proto = AnnotationEditorUIManager.prototype;
-    const arrowChecker = self => {
-      return self.#container.contains(document.activeElement) && document.activeElement.tagName !== "BUTTON" && self.hasSomethingToControl();
-    };
+    const arrowChecker = self => self.#container.contains(document.activeElement) && document.activeElement.tagName !== "BUTTON" && self.hasSomethingToControl();
     const textInputChecker = (_self, {
       target: el
     }) => {
@@ -14155,6 +14210,16 @@ class AnnotationEditorUIManager {
       this.#dispatchUpdateUI(editor.propertiesToUpdate);
     }
   }
+  get #lastSelectedEditor() {
+    let ed = null;
+    for (ed of this.#selectedEditors) {}
+    return ed;
+  }
+  updateUI(editor) {
+    if (this.#lastSelectedEditor === editor) {
+      this.#dispatchUpdateUI(editor.propertiesToUpdate);
+    }
+  }
   toggleSelected(editor) {
     if (this.#selectedEditors.has(editor)) {
       this.#selectedEditors.delete(editor);
@@ -14268,6 +14333,9 @@ class AnnotationEditorUIManager {
     return this.#activeEditor || this.hasSelection;
   }
   #selectEditors(editors) {
+    for (const editor of this.#selectedEditors) {
+      editor.unselect();
+    }
     this.#selectedEditors.clear();
     for (const editor of editors) {
       if (editor.isEmpty()) {
@@ -14277,7 +14345,7 @@ class AnnotationEditorUIManager {
       editor.select();
     }
     this.#dispatchUpdateStates({
-      hasSelectedEditor: true
+      hasSelectedEditor: this.hasSelection
     });
   }
   selectAll() {
@@ -14460,14 +14528,14 @@ class AnnotationEditorUIManager {
 
 /***/ }),
 
-/***/ 171:
+/***/ 664:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   PDFFetchStream: () => (/* binding */ PDFFetchStream)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
-/* harmony import */ var _network_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(253);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _network_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(739);
 
 
 ;
@@ -14559,9 +14627,7 @@ class PDFFetchStreamReader {
       }
       this._reader = response.body.getReader();
       this._headersCapability.resolve();
-      const getResponseHeader = name => {
-        return response.headers.get(name);
-      };
+      const getResponseHeader = name => response.headers.get(name);
       const {
         allowRangeRequests,
         suggestedLength
@@ -14677,14 +14743,14 @@ class PDFFetchStreamRangeReader {
 
 /***/ }),
 
-/***/ 742:
+/***/ 355:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   FontFaceObject: () => (/* binding */ FontFaceObject),
 /* harmony export */   FontLoader: () => (/* binding */ FontLoader)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
 
 class FontLoader {
   #systemFonts = new Set();
@@ -14980,13 +15046,13 @@ class FontFaceObject {
 
 /***/ }),
 
-/***/ 472:
+/***/ 590:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   Metadata: () => (/* binding */ Metadata)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
 
 class Metadata {
   #metadataMap;
@@ -15015,14 +15081,14 @@ class Metadata {
 
 /***/ }),
 
-/***/ 474:
+/***/ 278:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   PDFNetworkStream: () => (/* binding */ PDFNetworkStream)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
-/* harmony import */ var _network_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(253);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _network_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(739);
 
 
 ;
@@ -15221,9 +15287,7 @@ class PDFNetworkStreamFullRequestReader {
   _onHeadersReceived() {
     const fullRequestXhrId = this._fullRequestId;
     const fullRequestXhr = this._manager.getRequestXhr(fullRequestXhrId);
-    const getResponseHeader = name => {
-      return fullRequestXhr.getResponseHeader(name);
-    };
+    const getResponseHeader = name => fullRequestXhr.getResponseHeader(name);
     const {
       allowRangeRequests,
       suggestedLength
@@ -15434,7 +15498,7 @@ class PDFNetworkStreamRangeRequestReader {
 
 /***/ }),
 
-/***/ 253:
+/***/ 739:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 
@@ -15447,7 +15511,7 @@ __webpack_require__.d(__webpack_exports__, {
 });
 
 // EXTERNAL MODULE: ./src/shared/util.js
-var util = __webpack_require__(266);
+var util = __webpack_require__(394);
 ;// CONCATENATED MODULE: ./src/display/content_disposition.js
 
 function getFilenameFromContentDispositionHeader(contentDisposition) {
@@ -15580,7 +15644,7 @@ function getFilenameFromContentDispositionHeader(contentDisposition) {
 }
 
 // EXTERNAL MODULE: ./src/display/display_utils.js
-var display_utils = __webpack_require__(473);
+var display_utils = __webpack_require__(500);
 ;// CONCATENATED MODULE: ./src/display/network_utils.js
 
 
@@ -15644,15 +15708,15 @@ function validateResponseStatus(status) {
 
 /***/ }),
 
-/***/ 498:
+/***/ 516:
 /***/ ((__webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   PDFNodeStream: () => (/* binding */ PDFNodeStream)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
-/* harmony import */ var _network_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(253);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _network_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(739);
 
 
 ;
@@ -15898,9 +15962,7 @@ class PDFNodeStreamFullReader extends BaseFullReader {
       }
       this._headersCapability.resolve();
       this._setReadableStream(response);
-      const getResponseHeader = name => {
-        return this._readableStream.headers[name.toLowerCase()];
-      };
+      const getResponseHeader = name => this._readableStream.headers[name.toLowerCase()];
       const {
         allowRangeRequests,
         suggestedLength
@@ -16000,7 +16062,7 @@ __webpack_async_result__();
 
 /***/ }),
 
-/***/ 738:
+/***/ 476:
 /***/ ((__webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
@@ -16010,8 +16072,8 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony export */   NodeFilterFactory: () => (/* binding */ NodeFilterFactory),
 /* harmony export */   NodeStandardFontDataFactory: () => (/* binding */ NodeStandardFontDataFactory)
 /* harmony export */ });
-/* harmony import */ var _base_factory_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(822);
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(266);
+/* harmony import */ var _base_factory_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(470);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(394);
 
 
 ;
@@ -16045,12 +16107,10 @@ class NodeCanvasFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.Ba
 }
 class NodeCMapReaderFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.BaseCMapReaderFactory {
   _fetchData(url, compressionType) {
-    return fetchData(url).then(data => {
-      return {
-        cMapData: data,
-        compressionType
-      };
-    });
+    return fetchData(url).then(data => ({
+      cMapData: data,
+      compressionType
+    }));
   }
 }
 class NodeStandardFontDataFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.BaseStandardFontDataFactory {
@@ -16064,14 +16124,14 @@ __webpack_async_result__();
 
 /***/ }),
 
-/***/ 890:
+/***/ 866:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   OptionalContentConfig: () => (/* binding */ OptionalContentConfig)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
-/* harmony import */ var _shared_murmurhash3_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(825);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _shared_murmurhash3_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(222);
 
 
 const INTERNAL = Symbol("INTERNAL");
@@ -16267,7 +16327,7 @@ class OptionalContentConfig {
 
 /***/ }),
 
-/***/ 739:
+/***/ 350:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -16276,8 +16336,8 @@ class OptionalContentConfig {
 /* harmony export */   updateTextLayer: () => (/* binding */ updateTextLayer)
 /* harmony export */ });
 /* unused harmony export TextLayerRenderTask */
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
-/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(473);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(500);
 
 
 const MAX_TEXT_DIVS_TO_RENDER = 100000;
@@ -16635,14 +16695,14 @@ function updateTextLayer({
 
 /***/ }),
 
-/***/ 92:
+/***/ 224:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   PDFDataTransportStream: () => (/* binding */ PDFDataTransportStream)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
-/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(473);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(500);
 
 
 class PDFDataTransportStream {
@@ -16911,7 +16971,7 @@ class PDFDataTransportStreamRangeReader {
 
 /***/ }),
 
-/***/ 368:
+/***/ 983:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -16943,13 +17003,13 @@ class GlobalWorkerOptions {
 
 /***/ }),
 
-/***/ 160:
+/***/ 283:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   XfaLayer: () => (/* binding */ XfaLayer)
 /* harmony export */ });
-/* harmony import */ var _xfa_text_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(521);
+/* harmony import */ var _xfa_text_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(473);
 
 class XfaLayer {
   static setupStorage(html, id, element, storage, intent) {
@@ -17163,7 +17223,7 @@ class XfaLayer {
 
 /***/ }),
 
-/***/ 521:
+/***/ 473:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -17214,7 +17274,7 @@ class XfaText {
 
 /***/ }),
 
-/***/ 907:
+/***/ 301:
 /***/ ((__webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
@@ -17266,18 +17326,18 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony export */   updateTextLayer: () => (/* reexport safe */ _display_text_layer_js__WEBPACK_IMPORTED_MODULE_3__.updateTextLayer),
 /* harmony export */   version: () => (/* reexport safe */ _display_api_js__WEBPACK_IMPORTED_MODULE_1__.version)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
-/* harmony import */ var _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(406);
-/* harmony import */ var _display_display_utils_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(473);
-/* harmony import */ var _display_text_layer_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(739);
-/* harmony import */ var _display_editor_annotation_editor_layer_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(629);
-/* harmony import */ var _display_editor_tools_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(812);
-/* harmony import */ var _display_annotation_layer_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(640);
-/* harmony import */ var _display_editor_color_picker_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(97);
-/* harmony import */ var _display_draw_layer_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(423);
-/* harmony import */ var _display_worker_options_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(368);
-/* harmony import */ var _display_editor_outliner_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(405);
-/* harmony import */ var _display_xfa_layer_js__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(160);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(787);
+/* harmony import */ var _display_display_utils_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(500);
+/* harmony import */ var _display_text_layer_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(350);
+/* harmony import */ var _display_editor_annotation_editor_layer_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(861);
+/* harmony import */ var _display_editor_tools_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(213);
+/* harmony import */ var _display_annotation_layer_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(653);
+/* harmony import */ var _display_editor_color_picker_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(705);
+/* harmony import */ var _display_draw_layer_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(574);
+/* harmony import */ var _display_worker_options_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(983);
+/* harmony import */ var _display_editor_outliner_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(651);
+/* harmony import */ var _display_xfa_layer_js__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(283);
 var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([_display_api_js__WEBPACK_IMPORTED_MODULE_1__]);
 _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__)[0];
 
@@ -17292,21 +17352,21 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 
-const pdfjsVersion = '4.1.0';
-const pdfjsBuild = '6e46304';
+const pdfjsVersion = "4.1.0";
+const pdfjsBuild = "a6e0b02";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
 
 /***/ }),
 
-/***/ 694:
+/***/ 399:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   MessageHandler: () => (/* binding */ MessageHandler)
 /* harmony export */ });
-/* harmony import */ var _util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(266);
+/* harmony import */ var _util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
 
 const CallbackKind = {
   UNKNOWN: 0,
@@ -17712,7 +17772,7 @@ class MessageHandler {
 
 /***/ }),
 
-/***/ 825:
+/***/ 222:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -17813,7 +17873,7 @@ class MurmurHash3_64 {
 
 /***/ }),
 
-/***/ 266:
+/***/ 394:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -17906,7 +17966,8 @@ const AnnotationEditorParamsType = {
   INK_THICKNESS: 22,
   INK_OPACITY: 23,
   HIGHLIGHT_COLOR: 31,
-  HIGHLIGHT_DEFAULT_COLOR: 32
+  HIGHLIGHT_DEFAULT_COLOR: 32,
+  HIGHLIGHT_THICKNESS: 33
 };
 const PermissionFlag = {
   PRINT: 0x04,
@@ -18349,43 +18410,43 @@ class Util {
     if (transform[0]) {
       if (transform[0] < 0) {
         temp = minMax[0];
-        minMax[0] = minMax[1];
-        minMax[1] = temp;
+        minMax[0] = minMax[2];
+        minMax[2] = temp;
       }
       minMax[0] *= transform[0];
-      minMax[1] *= transform[0];
+      minMax[2] *= transform[0];
       if (transform[3] < 0) {
-        temp = minMax[2];
-        minMax[2] = minMax[3];
+        temp = minMax[1];
+        minMax[1] = minMax[3];
         minMax[3] = temp;
       }
-      minMax[2] *= transform[3];
+      minMax[1] *= transform[3];
       minMax[3] *= transform[3];
     } else {
       temp = minMax[0];
-      minMax[0] = minMax[2];
-      minMax[2] = temp;
-      temp = minMax[1];
-      minMax[1] = minMax[3];
+      minMax[0] = minMax[1];
+      minMax[1] = temp;
+      temp = minMax[2];
+      minMax[2] = minMax[3];
       minMax[3] = temp;
       if (transform[1] < 0) {
-        temp = minMax[2];
-        minMax[2] = minMax[3];
+        temp = minMax[1];
+        minMax[1] = minMax[3];
         minMax[3] = temp;
       }
-      minMax[2] *= transform[1];
+      minMax[1] *= transform[1];
       minMax[3] *= transform[1];
       if (transform[2] < 0) {
         temp = minMax[0];
-        minMax[0] = minMax[1];
-        minMax[1] = temp;
+        minMax[0] = minMax[2];
+        minMax[2] = temp;
       }
       minMax[0] *= transform[2];
-      minMax[1] *= transform[2];
+      minMax[2] *= transform[2];
     }
     minMax[0] += transform[4];
-    minMax[1] += transform[4];
-    minMax[2] += transform[5];
+    minMax[1] += transform[5];
+    minMax[2] += transform[4];
     minMax[3] += transform[5];
   }
   static transform(m1, m2) {
@@ -18450,59 +18511,48 @@ class Util {
     }
     return [xLow, yLow, xHigh, yHigh];
   }
-  static bezierBoundingBox(x0, y0, x1, y1, x2, y2, x3, y3) {
-    const tvalues = [],
-      bounds = [[], []];
-    let a, b, c, t, t1, t2, b2ac, sqrtb2ac;
-    for (let i = 0; i < 2; ++i) {
-      if (i === 0) {
-        b = 6 * x0 - 12 * x1 + 6 * x2;
-        a = -3 * x0 + 9 * x1 - 9 * x2 + 3 * x3;
-        c = 3 * x1 - 3 * x0;
-      } else {
-        b = 6 * y0 - 12 * y1 + 6 * y2;
-        a = -3 * y0 + 9 * y1 - 9 * y2 + 3 * y3;
-        c = 3 * y1 - 3 * y0;
-      }
-      if (Math.abs(a) < 1e-12) {
-        if (Math.abs(b) < 1e-12) {
-          continue;
-        }
-        t = -c / b;
-        if (0 < t && t < 1) {
-          tvalues.push(t);
-        }
-        continue;
-      }
-      b2ac = b * b - 4 * c * a;
-      sqrtb2ac = Math.sqrt(b2ac);
-      if (b2ac < 0) {
-        continue;
-      }
-      t1 = (-b + sqrtb2ac) / (2 * a);
-      if (0 < t1 && t1 < 1) {
-        tvalues.push(t1);
-      }
-      t2 = (-b - sqrtb2ac) / (2 * a);
-      if (0 < t2 && t2 < 1) {
-        tvalues.push(t2);
-      }
+  static #getExtremumOnCurve(x0, x1, x2, x3, y0, y1, y2, y3, t, minMax) {
+    if (t <= 0 || t >= 1) {
+      return;
     }
-    let j = tvalues.length,
-      mt;
-    const jlen = j;
-    while (j--) {
-      t = tvalues[j];
-      mt = 1 - t;
-      bounds[0][j] = mt * mt * mt * x0 + 3 * mt * mt * t * x1 + 3 * mt * t * t * x2 + t * t * t * x3;
-      bounds[1][j] = mt * mt * mt * y0 + 3 * mt * mt * t * y1 + 3 * mt * t * t * y2 + t * t * t * y3;
+    const mt = 1 - t;
+    const tt = t * t;
+    const ttt = tt * t;
+    const x = mt * (mt * (mt * x0 + 3 * t * x1) + 3 * tt * x2) + ttt * x3;
+    const y = mt * (mt * (mt * y0 + 3 * t * y1) + 3 * tt * y2) + ttt * y3;
+    minMax[0] = Math.min(minMax[0], x);
+    minMax[1] = Math.min(minMax[1], y);
+    minMax[2] = Math.max(minMax[2], x);
+    minMax[3] = Math.max(minMax[3], y);
+  }
+  static #getExtremum(x0, x1, x2, x3, y0, y1, y2, y3, a, b, c, minMax) {
+    if (Math.abs(a) < 1e-12) {
+      if (Math.abs(b) >= 1e-12) {
+        this.#getExtremumOnCurve(x0, x1, x2, x3, y0, y1, y2, y3, -c / b, minMax);
+      }
+      return;
     }
-    bounds[0][jlen] = x0;
-    bounds[1][jlen] = y0;
-    bounds[0][jlen + 1] = x3;
-    bounds[1][jlen + 1] = y3;
-    bounds[0].length = bounds[1].length = jlen + 2;
-    return [Math.min(...bounds[0]), Math.min(...bounds[1]), Math.max(...bounds[0]), Math.max(...bounds[1])];
+    const delta = b ** 2 - 4 * c * a;
+    if (delta < 0) {
+      return;
+    }
+    const sqrtDelta = Math.sqrt(delta);
+    const a2 = 2 * a;
+    this.#getExtremumOnCurve(x0, x1, x2, x3, y0, y1, y2, y3, (-b + sqrtDelta) / a2, minMax);
+    this.#getExtremumOnCurve(x0, x1, x2, x3, y0, y1, y2, y3, (-b - sqrtDelta) / a2, minMax);
+  }
+  static bezierBoundingBox(x0, y0, x1, y1, x2, y2, x3, y3, minMax) {
+    if (minMax) {
+      minMax[0] = Math.min(minMax[0], x0, x3);
+      minMax[1] = Math.min(minMax[1], y0, y3);
+      minMax[2] = Math.max(minMax[2], x0, x3);
+      minMax[3] = Math.max(minMax[3], y0, y3);
+    } else {
+      minMax = [Math.min(x0, x3), Math.min(y0, y3), Math.max(x0, x3), Math.max(y0, y3)];
+    }
+    this.#getExtremum(x0, x1, x2, x3, y0, y1, y2, y3, 3 * (-x0 + 3 * (x1 - x2) + x3), 6 * (x0 - 2 * x1 + x2), 3 * (x1 - x0), minMax);
+    this.#getExtremum(x0, x1, x2, x3, y0, y1, y2, y3, 3 * (-y0 + 3 * (y1 - y2) + y3), 6 * (y0 - 2 * y1 + y2), 3 * (y1 - y0), minMax);
+    return minMax;
   }
 }
 const PDFStringTranslateTable = (/* unused pure expression or super */ null && ([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2d8, 0x2c7, 0x2c6, 0x2d9, 0x2dd, 0x2db, 0x2da, 0x2dc, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2022, 0x2020, 0x2021, 0x2026, 0x2014, 0x2013, 0x192, 0x2044, 0x2039, 0x203a, 0x2212, 0x2030, 0x201e, 0x201c, 0x201d, 0x2018, 0x2019, 0x201a, 0x2122, 0xfb01, 0xfb02, 0x141, 0x152, 0x160, 0x178, 0x17d, 0x131, 0x142, 0x153, 0x161, 0x17e, 0, 0x20ac]));
@@ -18596,9 +18646,7 @@ function normalizeUnicode(str) {
     NormalizeRegex = /([\u00a0\u00b5\u037e\u0eb3\u2000-\u200a\u202f\u2126\ufb00-\ufb04\ufb06\ufb20-\ufb36\ufb38-\ufb3c\ufb3e\ufb40-\ufb41\ufb43-\ufb44\ufb46-\ufba1\ufba4-\ufba9\ufbae-\ufbb1\ufbd3-\ufbdc\ufbde-\ufbe7\ufbea-\ufbf8\ufbfc-\ufbfd\ufc00-\ufc5d\ufc64-\ufcf1\ufcf5-\ufd3d\ufd88\ufdf4\ufdfa-\ufdfb\ufe71\ufe77\ufe79\ufe7b\ufe7d]+)|(\ufb05+)/gu;
     NormalizationMap = new Map([["ﬅ", "ſt"]]);
   }
-  return str.replaceAll(NormalizeRegex, (_, p1, p2) => {
-    return p1 ? p1.normalize("NFKC") : NormalizationMap.get(p2);
-  });
+  return str.replaceAll(NormalizeRegex, (_, p1, p2) => p1 ? p1.normalize("NFKC") : NormalizationMap.get(p2));
 }
 function getUuid() {
   if (typeof crypto !== "undefined" && typeof crypto?.randomUUID === "function") {
@@ -18737,7 +18785,7 @@ const AnnotationPrefix = "pdfjs_internal_id_";
 /******/ // startup
 /******/ // Load entry module and return exports
 /******/ // This entry module used 'module' so it can't be inlined
-/******/ var __webpack_exports__ = __webpack_require__(907);
+/******/ var __webpack_exports__ = __webpack_require__(301);
 /******/ __webpack_exports__ = globalThis.pdfjsLib = await (globalThis.pdfjsLibPromise = __webpack_exports__);
 /******/ var __webpack_exports__AbortException = __webpack_exports__.AbortException;
 /******/ var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;
