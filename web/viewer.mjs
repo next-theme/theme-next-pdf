@@ -1648,9 +1648,9 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony export */   AnnotationEditorLayerBuilder: () => (/* binding */ AnnotationEditorLayerBuilder)
 /* harmony export */ });
 /* harmony import */ var pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(4516);
-/* harmony import */ var web_l10n_utils__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(6850);
-var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__, web_l10n_utils__WEBPACK_IMPORTED_MODULE_1__]);
-([pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__, web_l10n_utils__WEBPACK_IMPORTED_MODULE_1__] = __webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__);
+/* harmony import */ var web_null_l10n__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(2322);
+var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__, web_null_l10n__WEBPACK_IMPORTED_MODULE_1__]);
+([pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__, web_null_l10n__WEBPACK_IMPORTED_MODULE_1__] = __webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__);
 
 
 class AnnotationEditorLayerBuilder {
@@ -1662,7 +1662,8 @@ class AnnotationEditorLayerBuilder {
     this.pageDiv = options.pageDiv;
     this.pdfPage = options.pdfPage;
     this.accessibilityManager = options.accessibilityManager;
-    this.l10n = options.l10n || web_l10n_utils__WEBPACK_IMPORTED_MODULE_1__.NullL10n;
+    this.l10n = options.l10n;
+    this.l10n ||= new web_null_l10n__WEBPACK_IMPORTED_MODULE_1__.GenericL10n();
     this.annotationEditorLayer = null;
     this.div = null;
     this._cancelled = false;
@@ -2078,7 +2079,6 @@ const PDFViewerApplication = {
   url: "",
   baseUrl: "",
   _downloadUrl: "",
-  externalServices: new web_external_services__WEBPACK_IMPORTED_MODULE_8__.ExternalServices(),
   _boundEvents: Object.create(null),
   documentInfo: null,
   metadata: null,
@@ -2380,8 +2380,12 @@ const PDFViewerApplication = {
     const params = (0,_ui_utils_js__WEBPACK_IMPORTED_MODULE_0__.parseQueryString)(queryString);
     file = params.get("file") ?? _app_options_js__WEBPACK_IMPORTED_MODULE_2__.AppOptions.get("defaultUrl");
     validateFileURL(file);
-    const fileInput = appConfig.openFileInput;
+    const fileInput = this._openFileInput = document.createElement("input");
+    fileInput.id = "fileInput";
+    fileInput.hidden = true;
+    fileInput.type = "file";
     fileInput.value = null;
+    document.body.append(fileInput);
     fileInput.addEventListener("change", function (evt) {
       const {
         files
@@ -2434,6 +2438,9 @@ const PDFViewerApplication = {
     } else {
       this._hideViewBookmark();
     }
+  },
+  get externalServices() {
+    return (0,pdfjs_lib__WEBPACK_IMPORTED_MODULE_1__.shadow)(this, "externalServices", new web_external_services__WEBPACK_IMPORTED_MODULE_8__.ExternalServices());
   },
   get initialized() {
     return this._initializedCapability.settled;
@@ -3477,11 +3484,8 @@ async function loadFakeWorker() {
 }
 async function loadPDFBug(self) {
   const {
-    debuggerScriptPath
-  } = self.appConfig;
-  const {
     PDFBug
-  } = await import(/* webpackIgnore: true */ debuggerScriptPath);
+  } = await import(/* webpackIgnore: true */ _app_options_js__WEBPACK_IMPORTED_MODULE_2__.AppOptions.get("debuggerSrc"));
   self._PDFBug = PDFBug;
 }
 function reportPageStatsPDFBug({
@@ -3644,8 +3648,7 @@ function webViewerHashchange(evt) {
     });
   };
   var webViewerOpenFile = function (evt) {
-    const fileInput = PDFViewerApplication.appConfig.openFileInput;
-    fileInput.click();
+    PDFViewerApplication._openFileInput?.click();
   };
 }
 function webViewerPresentationMode() {
@@ -4327,6 +4330,10 @@ const defaultOptions = {
     value: 0,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE
   },
+  debuggerSrc: {
+    value: "./debugger.mjs",
+    kind: OptionKind.VIEWER
+  },
   defaultZoomDelay: {
     value: 400,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE
@@ -4966,7 +4973,7 @@ pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__ = (__webpack_async_dependencies__.then ? 
 
 async function docProperties(pdfDocument) {
   const url = "",
-    baseUrl = url.split("#")[0];
+    baseUrl = url.split("#", 1)[0];
   let {
     info,
     metadata,
@@ -5082,12 +5089,22 @@ pdfjs_lib__WEBPACK_IMPORTED_MODULE_2__ = (__webpack_async_dependencies__.then ? 
 
 
 
+function createBundle(lang, text) {
+  const resource = new fluent_bundle__WEBPACK_IMPORTED_MODULE_0__.FluentResource(text);
+  const bundle = new fluent_bundle__WEBPACK_IMPORTED_MODULE_0__.FluentBundle(lang);
+  const errors = bundle.addResource(resource);
+  if (errors.length) {
+    console.error("L10n errors", errors);
+  }
+  return bundle;
+}
 class GenericL10n extends _l10n_js__WEBPACK_IMPORTED_MODULE_3__.L10n {
   constructor(lang) {
     super({
       lang
     });
-    this._setL10n(new fluent_dom__WEBPACK_IMPORTED_MODULE_1__.DOMLocalization([], GenericL10n.#generateBundles.bind(GenericL10n, "en-us", this.getLanguage())));
+    const generateBundles = !lang ? GenericL10n.#generateBundlesFallback.bind(GenericL10n, this.getLanguage()) : GenericL10n.#generateBundles.bind(GenericL10n, "en-us", this.getLanguage());
+    this._setL10n(new fluent_dom__WEBPACK_IMPORTED_MODULE_1__.DOMLocalization([], generateBundles));
   }
   static async *#generateBundles(defaultLang, baseLang) {
     const {
@@ -5107,6 +5124,9 @@ class GenericL10n extends _l10n_js__WEBPACK_IMPORTED_MODULE_3__.L10n {
       if (bundle) {
         yield bundle;
       }
+      if (lang === "en-us") {
+        yield this.#createBundleFallback(lang);
+      }
     }
   }
   static async #createBundle(lang, baseURL, paths) {
@@ -5116,23 +5136,30 @@ class GenericL10n extends _l10n_js__WEBPACK_IMPORTED_MODULE_3__.L10n {
     }
     const url = new URL(path, baseURL);
     const text = await (0,pdfjs_lib__WEBPACK_IMPORTED_MODULE_2__.fetchData)(url, "text");
-    const resource = new fluent_bundle__WEBPACK_IMPORTED_MODULE_0__.FluentResource(text);
-    const bundle = new fluent_bundle__WEBPACK_IMPORTED_MODULE_0__.FluentBundle(lang);
-    const errors = bundle.addResource(resource);
-    if (errors.length) {
-      console.error("L10n errors", errors);
-    }
-    return bundle;
+    return createBundle(lang, text);
   }
   static async #getPaths() {
-    const {
-      href
-    } = document.querySelector(`link[type="application/l10n"]`);
-    const paths = await (0,pdfjs_lib__WEBPACK_IMPORTED_MODULE_2__.fetchData)(href, "json");
+    try {
+      const {
+        href
+      } = document.querySelector(`link[type="application/l10n"]`);
+      const paths = await (0,pdfjs_lib__WEBPACK_IMPORTED_MODULE_2__.fetchData)(href, "json");
+      return {
+        baseURL: href.replace(/[^/]*$/, "") || "./",
+        paths
+      };
+    } catch {}
     return {
-      baseURL: href.replace(/[^/]*$/, "") || "./",
-      paths
+      baseURL: "./",
+      paths: Object.create(null)
     };
+  }
+  static async *#generateBundlesFallback(lang) {
+    yield this.#createBundleFallback(lang);
+  }
+  static async #createBundleFallback(lang) {
+    const text = "pdfjs-previous-button =\n    .title = Previous Page\npdfjs-previous-button-label = Previous\npdfjs-next-button =\n    .title = Next Page\npdfjs-next-button-label = Next\npdfjs-page-input =\n    .title = Page\npdfjs-of-pages = of { $pagesCount }\npdfjs-page-of-pages = ({ $pageNumber } of { $pagesCount })\npdfjs-zoom-out-button =\n    .title = Zoom Out\npdfjs-zoom-out-button-label = Zoom Out\npdfjs-zoom-in-button =\n    .title = Zoom In\npdfjs-zoom-in-button-label = Zoom In\npdfjs-zoom-select =\n    .title = Zoom\npdfjs-presentation-mode-button =\n    .title = Switch to Presentation Mode\npdfjs-presentation-mode-button-label = Presentation Mode\npdfjs-open-file-button =\n    .title = Open File\npdfjs-open-file-button-label = Open\npdfjs-print-button =\n    .title = Print\npdfjs-print-button-label = Print\npdfjs-save-button =\n    .title = Save\npdfjs-save-button-label = Save\npdfjs-download-button =\n    .title = Download\npdfjs-download-button-label = Download\npdfjs-bookmark-button =\n    .title = Current Page (View URL from Current Page)\npdfjs-bookmark-button-label = Current Page\npdfjs-open-in-app-button =\n    .title = Open in app\npdfjs-open-in-app-button-label = Open in app\npdfjs-tools-button =\n    .title = Tools\npdfjs-tools-button-label = Tools\npdfjs-first-page-button =\n    .title = Go to First Page\npdfjs-first-page-button-label = Go to First Page\npdfjs-last-page-button =\n    .title = Go to Last Page\npdfjs-last-page-button-label = Go to Last Page\npdfjs-page-rotate-cw-button =\n    .title = Rotate Clockwise\npdfjs-page-rotate-cw-button-label = Rotate Clockwise\npdfjs-page-rotate-ccw-button =\n    .title = Rotate Counterclockwise\npdfjs-page-rotate-ccw-button-label = Rotate Counterclockwise\npdfjs-cursor-text-select-tool-button =\n    .title = Enable Text Selection Tool\npdfjs-cursor-text-select-tool-button-label = Text Selection Tool\npdfjs-cursor-hand-tool-button =\n    .title = Enable Hand Tool\npdfjs-cursor-hand-tool-button-label = Hand Tool\npdfjs-scroll-page-button =\n    .title = Use Page Scrolling\npdfjs-scroll-page-button-label = Page Scrolling\npdfjs-scroll-vertical-button =\n    .title = Use Vertical Scrolling\npdfjs-scroll-vertical-button-label = Vertical Scrolling\npdfjs-scroll-horizontal-button =\n    .title = Use Horizontal Scrolling\npdfjs-scroll-horizontal-button-label = Horizontal Scrolling\npdfjs-scroll-wrapped-button =\n    .title = Use Wrapped Scrolling\npdfjs-scroll-wrapped-button-label = Wrapped Scrolling\npdfjs-spread-none-button =\n    .title = Do not join page spreads\npdfjs-spread-none-button-label = No Spreads\npdfjs-spread-odd-button =\n    .title = Join page spreads starting with odd-numbered pages\npdfjs-spread-odd-button-label = Odd Spreads\npdfjs-spread-even-button =\n    .title = Join page spreads starting with even-numbered pages\npdfjs-spread-even-button-label = Even Spreads\npdfjs-document-properties-button =\n    .title = Document Properties\u2026\npdfjs-document-properties-button-label = Document Properties\u2026\npdfjs-document-properties-file-name = File name:\npdfjs-document-properties-file-size = File size:\npdfjs-document-properties-kb = { $size_kb } KB ({ $size_b } bytes)\npdfjs-document-properties-mb = { $size_mb } MB ({ $size_b } bytes)\npdfjs-document-properties-title = Title:\npdfjs-document-properties-author = Author:\npdfjs-document-properties-subject = Subject:\npdfjs-document-properties-keywords = Keywords:\npdfjs-document-properties-creation-date = Creation Date:\npdfjs-document-properties-modification-date = Modification Date:\npdfjs-document-properties-date-string = { $date }, { $time }\npdfjs-document-properties-creator = Creator:\npdfjs-document-properties-producer = PDF Producer:\npdfjs-document-properties-version = PDF Version:\npdfjs-document-properties-page-count = Page Count:\npdfjs-document-properties-page-size = Page Size:\npdfjs-document-properties-page-size-unit-inches = in\npdfjs-document-properties-page-size-unit-millimeters = mm\npdfjs-document-properties-page-size-orientation-portrait = portrait\npdfjs-document-properties-page-size-orientation-landscape = landscape\npdfjs-document-properties-page-size-name-a-three = A3\npdfjs-document-properties-page-size-name-a-four = A4\npdfjs-document-properties-page-size-name-letter = Letter\npdfjs-document-properties-page-size-name-legal = Legal\npdfjs-document-properties-page-size-dimension-string = { $width } \xD7 { $height } { $unit } ({ $orientation })\npdfjs-document-properties-page-size-dimension-name-string = { $width } \xD7 { $height } { $unit } ({ $name }, { $orientation })\npdfjs-document-properties-linearized = Fast Web View:\npdfjs-document-properties-linearized-yes = Yes\npdfjs-document-properties-linearized-no = No\npdfjs-document-properties-close-button = Close\npdfjs-print-progress-message = Preparing document for printing\u2026\npdfjs-print-progress-percent = { $progress }%\npdfjs-print-progress-close-button = Cancel\npdfjs-printing-not-supported = Warning: Printing is not fully supported by this browser.\npdfjs-printing-not-ready = Warning: The PDF is not fully loaded for printing.\npdfjs-toggle-sidebar-button =\n    .title = Toggle Sidebar\npdfjs-toggle-sidebar-notification-button =\n    .title = Toggle Sidebar (document contains outline/attachments/layers)\npdfjs-toggle-sidebar-button-label = Toggle Sidebar\npdfjs-document-outline-button =\n    .title = Show Document Outline (double-click to expand/collapse all items)\npdfjs-document-outline-button-label = Document Outline\npdfjs-attachments-button =\n    .title = Show Attachments\npdfjs-attachments-button-label = Attachments\npdfjs-layers-button =\n    .title = Show Layers (double-click to reset all layers to the default state)\npdfjs-layers-button-label = Layers\npdfjs-thumbs-button =\n    .title = Show Thumbnails\npdfjs-thumbs-button-label = Thumbnails\npdfjs-current-outline-item-button =\n    .title = Find Current Outline Item\npdfjs-current-outline-item-button-label = Current Outline Item\npdfjs-findbar-button =\n    .title = Find in Document\npdfjs-findbar-button-label = Find\npdfjs-additional-layers = Additional Layers\npdfjs-thumb-page-title =\n    .title = Page { $page }\npdfjs-thumb-page-canvas =\n    .aria-label = Thumbnail of Page { $page }\npdfjs-find-input =\n    .title = Find\n    .placeholder = Find in document\u2026\npdfjs-find-previous-button =\n    .title = Find the previous occurrence of the phrase\npdfjs-find-previous-button-label = Previous\npdfjs-find-next-button =\n    .title = Find the next occurrence of the phrase\npdfjs-find-next-button-label = Next\npdfjs-find-highlight-checkbox = Highlight All\npdfjs-find-match-case-checkbox-label = Match Case\npdfjs-find-match-diacritics-checkbox-label = Match Diacritics\npdfjs-find-entire-word-checkbox-label = Whole Words\npdfjs-find-reached-top = Reached top of document, continued from bottom\npdfjs-find-reached-bottom = Reached end of document, continued from top\npdfjs-find-match-count =\n    { $total ->\n        [one] { $current } of { $total } match\n       *[other] { $current } of { $total } matches\n    }\npdfjs-find-match-count-limit =\n    { $limit ->\n        [one] More than { $limit } match\n       *[other] More than { $limit } matches\n    }\npdfjs-find-not-found = Phrase not found\npdfjs-page-scale-width = Page Width\npdfjs-page-scale-fit = Page Fit\npdfjs-page-scale-auto = Automatic Zoom\npdfjs-page-scale-actual = Actual Size\npdfjs-page-scale-percent = { $scale }%\npdfjs-page-landmark =\n    .aria-label = Page { $page }\npdfjs-loading-error = An error occurred while loading the PDF.\npdfjs-invalid-file-error = Invalid or corrupted PDF file.\npdfjs-missing-file-error = Missing PDF file.\npdfjs-unexpected-response-error = Unexpected server response.\npdfjs-rendering-error = An error occurred while rendering the page.\npdfjs-annotation-date-string = { $date }, { $time }\npdfjs-text-annotation-type =\n    .alt = [{ $type } Annotation]\npdfjs-password-label = Enter the password to open this PDF file.\npdfjs-password-invalid = Invalid password. Please try again.\npdfjs-password-ok-button = OK\npdfjs-password-cancel-button = Cancel\npdfjs-web-fonts-disabled = Web fonts are disabled: unable to use embedded PDF fonts.\npdfjs-editor-free-text-button =\n    .title = Text\npdfjs-editor-free-text-button-label = Text\npdfjs-editor-ink-button =\n    .title = Draw\npdfjs-editor-ink-button-label = Draw\npdfjs-editor-stamp-button =\n    .title = Add or edit images\npdfjs-editor-stamp-button-label = Add or edit images\npdfjs-editor-highlight-button =\n    .title = Highlight\npdfjs-editor-highlight-button-label = Highlight\npdfjs-editor-remove-ink-button =\n    .title = Remove drawing\npdfjs-editor-remove-freetext-button =\n    .title = Remove text\npdfjs-editor-remove-stamp-button =\n    .title = Remove image\npdfjs-editor-remove-highlight-button =\n    .title = Remove highlight\npdfjs-editor-free-text-color-input = Color\npdfjs-editor-free-text-size-input = Size\npdfjs-editor-ink-color-input = Color\npdfjs-editor-ink-thickness-input = Thickness\npdfjs-editor-ink-opacity-input = Opacity\npdfjs-editor-stamp-add-image-button =\n    .title = Add image\npdfjs-editor-stamp-add-image-button-label = Add image\npdfjs-editor-free-highlight-thickness-input = Thickness\npdfjs-editor-free-highlight-thickness-title =\n    .title = Change thickness when highlighting items other than text\npdfjs-free-text =\n    .aria-label = Text Editor\npdfjs-free-text-default-content = Start typing\u2026\npdfjs-ink =\n    .aria-label = Draw Editor\npdfjs-ink-canvas =\n    .aria-label = User-created image\npdfjs-editor-alt-text-button-label = Alt text\npdfjs-editor-alt-text-edit-button-label = Edit alt text\npdfjs-editor-alt-text-dialog-label = Choose an option\npdfjs-editor-alt-text-dialog-description = Alt text (alternative text) helps when people can\u2019t see the image or when it doesn\u2019t load.\npdfjs-editor-alt-text-add-description-label = Add a description\npdfjs-editor-alt-text-add-description-description = Aim for 1-2 sentences that describe the subject, setting, or actions.\npdfjs-editor-alt-text-mark-decorative-label = Mark as decorative\npdfjs-editor-alt-text-mark-decorative-description = This is used for ornamental images, like borders or watermarks.\npdfjs-editor-alt-text-cancel-button = Cancel\npdfjs-editor-alt-text-save-button = Save\npdfjs-editor-alt-text-decorative-tooltip = Marked as decorative\npdfjs-editor-alt-text-textarea =\n    .placeholder = For example, \u201CA young man sits down at a table to eat a meal\u201D\npdfjs-editor-resizer-label-top-left = Top left corner \u2014 resize\npdfjs-editor-resizer-label-top-middle = Top middle \u2014 resize\npdfjs-editor-resizer-label-top-right = Top right corner \u2014 resize\npdfjs-editor-resizer-label-middle-right = Middle right \u2014 resize\npdfjs-editor-resizer-label-bottom-right = Bottom right corner \u2014 resize\npdfjs-editor-resizer-label-bottom-middle = Bottom middle \u2014 resize\npdfjs-editor-resizer-label-bottom-left = Bottom left corner \u2014 resize\npdfjs-editor-resizer-label-middle-left = Middle left \u2014 resize\npdfjs-editor-highlight-colorpicker-label = Highlight color\npdfjs-editor-colorpicker-button =\n    .title = Change color\npdfjs-editor-colorpicker-dropdown =\n    .aria-label = Color choices\npdfjs-editor-colorpicker-yellow =\n    .title = Yellow\npdfjs-editor-colorpicker-green =\n    .title = Green\npdfjs-editor-colorpicker-blue =\n    .title = Blue\npdfjs-editor-colorpicker-pink =\n    .title = Pink\npdfjs-editor-colorpicker-red =\n    .title = Red";
+    return createBundle(lang, text);
   }
 }
 
@@ -5247,6 +5274,7 @@ class GrabToPan {
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   L10n: () => (/* binding */ L10n)
 /* harmony export */ });
+/* unused harmony export GenericL10n */
 class L10n {
   #dir;
   #lang;
@@ -5319,71 +5347,8 @@ class L10n {
     return ["ar", "he", "fa", "ps", "ur"].includes(shortCode);
   }
 }
+const GenericL10n = null;
 
-
-/***/ }),
-
-/***/ 6850:
-/***/ ((__webpack_module__, __webpack_exports__, __webpack_require__) => {
-
-__webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   NullL10n: () => (/* binding */ NullL10n)
-/* harmony export */ });
-/* harmony import */ var pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(4516);
-/* harmony import */ var fluent_bundle__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(7962);
-/* harmony import */ var fluent_dom__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(8156);
-/* harmony import */ var _l10n_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(6120);
-var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__]);
-pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__ = (__webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__)[0];
-
-
-
-
-class ConstL10n extends _l10n_js__WEBPACK_IMPORTED_MODULE_3__.L10n {
-  constructor(lang) {
-    super({
-      lang
-    });
-    this._setL10n(new fluent_dom__WEBPACK_IMPORTED_MODULE_2__.DOMLocalization([], ConstL10n.#generateBundles.bind(ConstL10n, lang)));
-  }
-  static async *#generateBundles(lang) {
-    const text = "pdfjs-previous-button =\n    .title = Previous Page\npdfjs-previous-button-label = Previous\npdfjs-next-button =\n    .title = Next Page\npdfjs-next-button-label = Next\npdfjs-page-input =\n    .title = Page\npdfjs-of-pages = of { $pagesCount }\npdfjs-page-of-pages = ({ $pageNumber } of { $pagesCount })\npdfjs-zoom-out-button =\n    .title = Zoom Out\npdfjs-zoom-out-button-label = Zoom Out\npdfjs-zoom-in-button =\n    .title = Zoom In\npdfjs-zoom-in-button-label = Zoom In\npdfjs-zoom-select =\n    .title = Zoom\npdfjs-presentation-mode-button =\n    .title = Switch to Presentation Mode\npdfjs-presentation-mode-button-label = Presentation Mode\npdfjs-open-file-button =\n    .title = Open File\npdfjs-open-file-button-label = Open\npdfjs-print-button =\n    .title = Print\npdfjs-print-button-label = Print\npdfjs-save-button =\n    .title = Save\npdfjs-save-button-label = Save\npdfjs-download-button =\n    .title = Download\npdfjs-download-button-label = Download\npdfjs-bookmark-button =\n    .title = Current Page (View URL from Current Page)\npdfjs-bookmark-button-label = Current Page\npdfjs-open-in-app-button =\n    .title = Open in app\npdfjs-open-in-app-button-label = Open in app\npdfjs-tools-button =\n    .title = Tools\npdfjs-tools-button-label = Tools\npdfjs-first-page-button =\n    .title = Go to First Page\npdfjs-first-page-button-label = Go to First Page\npdfjs-last-page-button =\n    .title = Go to Last Page\npdfjs-last-page-button-label = Go to Last Page\npdfjs-page-rotate-cw-button =\n    .title = Rotate Clockwise\npdfjs-page-rotate-cw-button-label = Rotate Clockwise\npdfjs-page-rotate-ccw-button =\n    .title = Rotate Counterclockwise\npdfjs-page-rotate-ccw-button-label = Rotate Counterclockwise\npdfjs-cursor-text-select-tool-button =\n    .title = Enable Text Selection Tool\npdfjs-cursor-text-select-tool-button-label = Text Selection Tool\npdfjs-cursor-hand-tool-button =\n    .title = Enable Hand Tool\npdfjs-cursor-hand-tool-button-label = Hand Tool\npdfjs-scroll-page-button =\n    .title = Use Page Scrolling\npdfjs-scroll-page-button-label = Page Scrolling\npdfjs-scroll-vertical-button =\n    .title = Use Vertical Scrolling\npdfjs-scroll-vertical-button-label = Vertical Scrolling\npdfjs-scroll-horizontal-button =\n    .title = Use Horizontal Scrolling\npdfjs-scroll-horizontal-button-label = Horizontal Scrolling\npdfjs-scroll-wrapped-button =\n    .title = Use Wrapped Scrolling\npdfjs-scroll-wrapped-button-label = Wrapped Scrolling\npdfjs-spread-none-button =\n    .title = Do not join page spreads\npdfjs-spread-none-button-label = No Spreads\npdfjs-spread-odd-button =\n    .title = Join page spreads starting with odd-numbered pages\npdfjs-spread-odd-button-label = Odd Spreads\npdfjs-spread-even-button =\n    .title = Join page spreads starting with even-numbered pages\npdfjs-spread-even-button-label = Even Spreads\npdfjs-document-properties-button =\n    .title = Document Properties\u2026\npdfjs-document-properties-button-label = Document Properties\u2026\npdfjs-document-properties-file-name = File name:\npdfjs-document-properties-file-size = File size:\npdfjs-document-properties-kb = { $size_kb } KB ({ $size_b } bytes)\npdfjs-document-properties-mb = { $size_mb } MB ({ $size_b } bytes)\npdfjs-document-properties-title = Title:\npdfjs-document-properties-author = Author:\npdfjs-document-properties-subject = Subject:\npdfjs-document-properties-keywords = Keywords:\npdfjs-document-properties-creation-date = Creation Date:\npdfjs-document-properties-modification-date = Modification Date:\npdfjs-document-properties-date-string = { $date }, { $time }\npdfjs-document-properties-creator = Creator:\npdfjs-document-properties-producer = PDF Producer:\npdfjs-document-properties-version = PDF Version:\npdfjs-document-properties-page-count = Page Count:\npdfjs-document-properties-page-size = Page Size:\npdfjs-document-properties-page-size-unit-inches = in\npdfjs-document-properties-page-size-unit-millimeters = mm\npdfjs-document-properties-page-size-orientation-portrait = portrait\npdfjs-document-properties-page-size-orientation-landscape = landscape\npdfjs-document-properties-page-size-name-a-three = A3\npdfjs-document-properties-page-size-name-a-four = A4\npdfjs-document-properties-page-size-name-letter = Letter\npdfjs-document-properties-page-size-name-legal = Legal\npdfjs-document-properties-page-size-dimension-string = { $width } \xD7 { $height } { $unit } ({ $orientation })\npdfjs-document-properties-page-size-dimension-name-string = { $width } \xD7 { $height } { $unit } ({ $name }, { $orientation })\npdfjs-document-properties-linearized = Fast Web View:\npdfjs-document-properties-linearized-yes = Yes\npdfjs-document-properties-linearized-no = No\npdfjs-document-properties-close-button = Close\npdfjs-print-progress-message = Preparing document for printing\u2026\npdfjs-print-progress-percent = { $progress }%\npdfjs-print-progress-close-button = Cancel\npdfjs-printing-not-supported = Warning: Printing is not fully supported by this browser.\npdfjs-printing-not-ready = Warning: The PDF is not fully loaded for printing.\npdfjs-toggle-sidebar-button =\n    .title = Toggle Sidebar\npdfjs-toggle-sidebar-notification-button =\n    .title = Toggle Sidebar (document contains outline/attachments/layers)\npdfjs-toggle-sidebar-button-label = Toggle Sidebar\npdfjs-document-outline-button =\n    .title = Show Document Outline (double-click to expand/collapse all items)\npdfjs-document-outline-button-label = Document Outline\npdfjs-attachments-button =\n    .title = Show Attachments\npdfjs-attachments-button-label = Attachments\npdfjs-layers-button =\n    .title = Show Layers (double-click to reset all layers to the default state)\npdfjs-layers-button-label = Layers\npdfjs-thumbs-button =\n    .title = Show Thumbnails\npdfjs-thumbs-button-label = Thumbnails\npdfjs-current-outline-item-button =\n    .title = Find Current Outline Item\npdfjs-current-outline-item-button-label = Current Outline Item\npdfjs-findbar-button =\n    .title = Find in Document\npdfjs-findbar-button-label = Find\npdfjs-additional-layers = Additional Layers\npdfjs-thumb-page-title =\n    .title = Page { $page }\npdfjs-thumb-page-canvas =\n    .aria-label = Thumbnail of Page { $page }\npdfjs-find-input =\n    .title = Find\n    .placeholder = Find in document\u2026\npdfjs-find-previous-button =\n    .title = Find the previous occurrence of the phrase\npdfjs-find-previous-button-label = Previous\npdfjs-find-next-button =\n    .title = Find the next occurrence of the phrase\npdfjs-find-next-button-label = Next\npdfjs-find-highlight-checkbox = Highlight All\npdfjs-find-match-case-checkbox-label = Match Case\npdfjs-find-match-diacritics-checkbox-label = Match Diacritics\npdfjs-find-entire-word-checkbox-label = Whole Words\npdfjs-find-reached-top = Reached top of document, continued from bottom\npdfjs-find-reached-bottom = Reached end of document, continued from top\npdfjs-find-match-count =\n    { $total ->\n        [one] { $current } of { $total } match\n       *[other] { $current } of { $total } matches\n    }\npdfjs-find-match-count-limit =\n    { $limit ->\n        [one] More than { $limit } match\n       *[other] More than { $limit } matches\n    }\npdfjs-find-not-found = Phrase not found\npdfjs-page-scale-width = Page Width\npdfjs-page-scale-fit = Page Fit\npdfjs-page-scale-auto = Automatic Zoom\npdfjs-page-scale-actual = Actual Size\npdfjs-page-scale-percent = { $scale }%\npdfjs-page-landmark =\n    .aria-label = Page { $page }\npdfjs-loading-error = An error occurred while loading the PDF.\npdfjs-invalid-file-error = Invalid or corrupted PDF file.\npdfjs-missing-file-error = Missing PDF file.\npdfjs-unexpected-response-error = Unexpected server response.\npdfjs-rendering-error = An error occurred while rendering the page.\npdfjs-annotation-date-string = { $date }, { $time }\npdfjs-text-annotation-type =\n    .alt = [{ $type } Annotation]\npdfjs-password-label = Enter the password to open this PDF file.\npdfjs-password-invalid = Invalid password. Please try again.\npdfjs-password-ok-button = OK\npdfjs-password-cancel-button = Cancel\npdfjs-web-fonts-disabled = Web fonts are disabled: unable to use embedded PDF fonts.\npdfjs-editor-free-text-button =\n    .title = Text\npdfjs-editor-free-text-button-label = Text\npdfjs-editor-ink-button =\n    .title = Draw\npdfjs-editor-ink-button-label = Draw\npdfjs-editor-stamp-button =\n    .title = Add or edit images\npdfjs-editor-stamp-button-label = Add or edit images\npdfjs-editor-highlight-button =\n    .title = Highlight\npdfjs-editor-highlight-button-label = Highlight\npdfjs-editor-remove-ink-button =\n    .title = Remove drawing\npdfjs-editor-remove-freetext-button =\n    .title = Remove text\npdfjs-editor-remove-stamp-button =\n    .title = Remove image\npdfjs-editor-remove-highlight-button =\n    .title = Remove highlight\npdfjs-editor-free-text-color-input = Color\npdfjs-editor-free-text-size-input = Size\npdfjs-editor-ink-color-input = Color\npdfjs-editor-ink-thickness-input = Thickness\npdfjs-editor-ink-opacity-input = Opacity\npdfjs-editor-stamp-add-image-button =\n    .title = Add image\npdfjs-editor-stamp-add-image-button-label = Add image\npdfjs-editor-free-highlight-thickness-input = Thickness\npdfjs-editor-free-highlight-thickness-title =\n    .title = Change thickness when highlighting items other than text\npdfjs-free-text =\n    .aria-label = Text Editor\npdfjs-free-text-default-content = Start typing\u2026\npdfjs-ink =\n    .aria-label = Draw Editor\npdfjs-ink-canvas =\n    .aria-label = User-created image\npdfjs-editor-alt-text-button-label = Alt text\npdfjs-editor-alt-text-edit-button-label = Edit alt text\npdfjs-editor-alt-text-dialog-label = Choose an option\npdfjs-editor-alt-text-dialog-description = Alt text (alternative text) helps when people can\u2019t see the image or when it doesn\u2019t load.\npdfjs-editor-alt-text-add-description-label = Add a description\npdfjs-editor-alt-text-add-description-description = Aim for 1-2 sentences that describe the subject, setting, or actions.\npdfjs-editor-alt-text-mark-decorative-label = Mark as decorative\npdfjs-editor-alt-text-mark-decorative-description = This is used for ornamental images, like borders or watermarks.\npdfjs-editor-alt-text-cancel-button = Cancel\npdfjs-editor-alt-text-save-button = Save\npdfjs-editor-alt-text-decorative-tooltip = Marked as decorative\npdfjs-editor-alt-text-textarea =\n    .placeholder = For example, \u201CA young man sits down at a table to eat a meal\u201D\npdfjs-editor-resizer-label-top-left = Top left corner \u2014 resize\npdfjs-editor-resizer-label-top-middle = Top middle \u2014 resize\npdfjs-editor-resizer-label-top-right = Top right corner \u2014 resize\npdfjs-editor-resizer-label-middle-right = Middle right \u2014 resize\npdfjs-editor-resizer-label-bottom-right = Bottom right corner \u2014 resize\npdfjs-editor-resizer-label-bottom-middle = Bottom middle \u2014 resize\npdfjs-editor-resizer-label-bottom-left = Bottom left corner \u2014 resize\npdfjs-editor-resizer-label-middle-left = Middle left \u2014 resize\npdfjs-editor-highlight-colorpicker-label = Highlight color\npdfjs-editor-colorpicker-button =\n    .title = Change color\npdfjs-editor-colorpicker-dropdown =\n    .aria-label = Color choices\npdfjs-editor-colorpicker-yellow =\n    .title = Yellow\npdfjs-editor-colorpicker-green =\n    .title = Green\npdfjs-editor-colorpicker-blue =\n    .title = Blue\npdfjs-editor-colorpicker-pink =\n    .title = Pink\npdfjs-editor-colorpicker-red =\n    .title = Red";
-    const resource = new fluent_bundle__WEBPACK_IMPORTED_MODULE_1__.FluentResource(text);
-    const bundle = new fluent_bundle__WEBPACK_IMPORTED_MODULE_1__.FluentBundle(lang);
-    const errors = bundle.addResource(resource);
-    if (errors.length) {
-      console.error("L10n errors", errors);
-    }
-    yield bundle;
-  }
-  static get instance() {
-    return (0,pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__.shadow)(this, "instance", new ConstL10n("en-us"));
-  }
-}
-const NullL10n = {
-  getLanguage() {
-    return ConstL10n.instance.getLanguage();
-  },
-  getDirection() {
-    return ConstL10n.instance.getDirection();
-  },
-  async get(ids, args = null, fallback) {
-    return ConstL10n.instance.get(ids, args, fallback);
-  },
-  async translate(element) {
-    return ConstL10n.instance.translate(element);
-  },
-  pause() {
-    return ConstL10n.instance.pause();
-  },
-  resume() {
-    return ConstL10n.instance.resume();
-  }
-};
-
-__webpack_async_result__();
-} catch(e) { __webpack_async_result__(e); } });
 
 /***/ }),
 
@@ -7218,7 +7183,7 @@ class PDFHistory {
     this._updateInternalState(destination, newState.uid);
     let newUrl;
     if (this._updateUrl && destination?.hash) {
-      const baseUrl = document.location.href.split("#")[0];
+      const baseUrl = document.location.href.split("#", 1)[0];
       if (!baseUrl.startsWith("file://")) {
         newUrl = `${baseUrl}#${destination.hash}`;
       }
@@ -8386,15 +8351,15 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony import */ var _annotation_layer_builder_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(7256);
 /* harmony import */ var _app_options_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(9496);
 /* harmony import */ var _draw_layer_builder_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(2370);
-/* harmony import */ var web_l10n_utils__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(6850);
+/* harmony import */ var web_null_l10n__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(2322);
 /* harmony import */ var _pdf_link_service_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(2500);
 /* harmony import */ var _struct_tree_layer_builder_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(2563);
 /* harmony import */ var _text_accessibility_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(6428);
 /* harmony import */ var _text_highlighter_js__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(1205);
 /* harmony import */ var _text_layer_builder_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(7049);
 /* harmony import */ var _xfa_layer_builder_js__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(8379);
-var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__, _annotation_editor_layer_builder_js__WEBPACK_IMPORTED_MODULE_2__, _annotation_layer_builder_js__WEBPACK_IMPORTED_MODULE_3__, _draw_layer_builder_js__WEBPACK_IMPORTED_MODULE_5__, web_l10n_utils__WEBPACK_IMPORTED_MODULE_6__, _text_layer_builder_js__WEBPACK_IMPORTED_MODULE_10__, _xfa_layer_builder_js__WEBPACK_IMPORTED_MODULE_11__]);
-([pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__, _annotation_editor_layer_builder_js__WEBPACK_IMPORTED_MODULE_2__, _annotation_layer_builder_js__WEBPACK_IMPORTED_MODULE_3__, _draw_layer_builder_js__WEBPACK_IMPORTED_MODULE_5__, web_l10n_utils__WEBPACK_IMPORTED_MODULE_6__, _text_layer_builder_js__WEBPACK_IMPORTED_MODULE_10__, _xfa_layer_builder_js__WEBPACK_IMPORTED_MODULE_11__] = __webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__);
+var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__, _annotation_editor_layer_builder_js__WEBPACK_IMPORTED_MODULE_2__, _annotation_layer_builder_js__WEBPACK_IMPORTED_MODULE_3__, _draw_layer_builder_js__WEBPACK_IMPORTED_MODULE_5__, web_null_l10n__WEBPACK_IMPORTED_MODULE_6__, _text_layer_builder_js__WEBPACK_IMPORTED_MODULE_10__, _xfa_layer_builder_js__WEBPACK_IMPORTED_MODULE_11__]);
+([pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__, _annotation_editor_layer_builder_js__WEBPACK_IMPORTED_MODULE_2__, _annotation_layer_builder_js__WEBPACK_IMPORTED_MODULE_3__, _draw_layer_builder_js__WEBPACK_IMPORTED_MODULE_5__, web_null_l10n__WEBPACK_IMPORTED_MODULE_6__, _text_layer_builder_js__WEBPACK_IMPORTED_MODULE_10__, _xfa_layer_builder_js__WEBPACK_IMPORTED_MODULE_11__] = __webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__);
 
 
 
@@ -8445,7 +8410,8 @@ class PDFPageView {
     this.pageColors = options.pageColors || null;
     this.eventBus = options.eventBus;
     this.renderingQueue = options.renderingQueue;
-    this.l10n = options.l10n || web_l10n_utils__WEBPACK_IMPORTED_MODULE_6__.NullL10n;
+    this.l10n = options.l10n;
+    this.l10n ||= new web_null_l10n__WEBPACK_IMPORTED_MODULE_6__.GenericL10n();
     this.renderTask = null;
     this.resume = null;
     this._isStandalone = !this.renderingQueue?.hasViewer();
@@ -8482,7 +8448,7 @@ class PDFPageView {
           this.#useThumbnailCanvas.initialOptionalContent = optionalContentConfig.hasInitialVisibility;
         });
       }
-      if (this.l10n === web_l10n_utils__WEBPACK_IMPORTED_MODULE_6__.NullL10n) {
+      if (!options.l10n) {
         this.l10n.translate(this.div);
       }
     }
@@ -11086,12 +11052,12 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* unused harmony export PDFPageViewBuffer */
 /* harmony import */ var pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(4516);
 /* harmony import */ var _ui_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(5953);
-/* harmony import */ var web_l10n_utils__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(6850);
+/* harmony import */ var web_null_l10n__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(2322);
 /* harmony import */ var _pdf_page_view_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(1294);
 /* harmony import */ var _pdf_rendering_queue_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(8256);
 /* harmony import */ var _pdf_link_service_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(2500);
-var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__, web_l10n_utils__WEBPACK_IMPORTED_MODULE_2__, _pdf_page_view_js__WEBPACK_IMPORTED_MODULE_3__, _pdf_rendering_queue_js__WEBPACK_IMPORTED_MODULE_4__]);
-([pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__, web_l10n_utils__WEBPACK_IMPORTED_MODULE_2__, _pdf_page_view_js__WEBPACK_IMPORTED_MODULE_3__, _pdf_rendering_queue_js__WEBPACK_IMPORTED_MODULE_4__] = __webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__);
+var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__, web_null_l10n__WEBPACK_IMPORTED_MODULE_2__, _pdf_page_view_js__WEBPACK_IMPORTED_MODULE_3__, _pdf_rendering_queue_js__WEBPACK_IMPORTED_MODULE_4__]);
+([pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__, web_null_l10n__WEBPACK_IMPORTED_MODULE_2__, _pdf_page_view_js__WEBPACK_IMPORTED_MODULE_3__, _pdf_rendering_queue_js__WEBPACK_IMPORTED_MODULE_4__] = __webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__);
 
 
 
@@ -11205,7 +11171,8 @@ class PDFViewer {
     this.enablePrintAutoRotate = options.enablePrintAutoRotate || false;
     this.removePageBorders = options.removePageBorders || false;
     this.maxCanvasPixels = options.maxCanvasPixels;
-    this.l10n = options.l10n || web_l10n_utils__WEBPACK_IMPORTED_MODULE_2__.NullL10n;
+    this.l10n = options.l10n;
+    this.l10n ||= new web_null_l10n__WEBPACK_IMPORTED_MODULE_2__.GenericL10n();
     this.#enablePermissions = options.enablePermissions || false;
     this.pageColors = options.pageColors || null;
     this.defaultRenderingQueue = !options.renderingQueue;
@@ -11232,7 +11199,7 @@ class PDFViewer {
         pdfPage?.cleanup();
       }
     });
-    if (this.l10n === web_l10n_utils__WEBPACK_IMPORTED_MODULE_2__.NullL10n) {
+    if (!options.l10n) {
       this.l10n.translate(this.container);
     }
   }
@@ -14729,7 +14696,7 @@ var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([web_
 
 
 const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "a6e0b02";
+const pdfjsBuild = "247af2e";
 const AppConstants = {
   LinkTarget: _pdf_link_service_js__WEBPACK_IMPORTED_MODULE_4__.LinkTarget,
   RenderingStates: _ui_utils_js__WEBPACK_IMPORTED_MODULE_2__.RenderingStates,
@@ -14862,9 +14829,7 @@ function getViewerConfiguration() {
       editorStampAddImage: document.getElementById("editorStampAddImage"),
       editorFreeHighlightThickness: document.getElementById("editorFreeHighlightThickness")
     },
-    printContainer: document.getElementById("printContainer"),
-    openFileInput: document.getElementById("fileInput"),
-    debuggerScriptPath: "./debugger.mjs"
+    printContainer: document.getElementById("printContainer")
   };
 }
 function webViewerLoad() {

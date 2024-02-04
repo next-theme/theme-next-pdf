@@ -828,22 +828,39 @@
       fill:none;
     }
 
-.canvasWrapper svg.highlightOutline.hovered{
-        stroke:var(--hover-outline-color);
-        stroke-width:var(--outline-width);
-      }
-
-.canvasWrapper svg.highlightOutline.selected .mainOutline{
-          stroke:var(--outline-around-color);
-          stroke-width:calc(
-            var(--outline-width) + 2 * var(--outline-around-width)
-          );
-        }
-
-.canvasWrapper svg.highlightOutline.selected .secondaryOutline{
-          stroke:var(--outline-color);
+.canvasWrapper svg.highlightOutline.hovered:not(.free):not(.selected){
+          stroke:var(--hover-outline-color);
           stroke-width:var(--outline-width);
         }
+
+.canvasWrapper svg.highlightOutline.selected:not(.free) .mainOutline{
+            stroke:var(--outline-around-color);
+            stroke-width:calc(
+              var(--outline-width) + 2 * var(--outline-around-width)
+            );
+          }
+
+.canvasWrapper svg.highlightOutline.selected:not(.free) .secondaryOutline{
+            stroke:var(--outline-color);
+            stroke-width:var(--outline-width);
+          }
+
+.canvasWrapper svg.highlightOutline.free.hovered:not(.selected){
+          stroke:var(--hover-outline-color);
+          stroke-width:calc(2 * var(--outline-width));
+        }
+
+.canvasWrapper svg.highlightOutline.free.selected .mainOutline{
+            stroke:var(--outline-around-color);
+            stroke-width:calc(
+              2 * (var(--outline-width) + var(--outline-around-width))
+            );
+          }
+
+.canvasWrapper svg.highlightOutline.free.selected .secondaryOutline{
+            stroke:var(--outline-color);
+            stroke-width:calc(2 * var(--outline-width));
+          }
 
 :root{
   --outline-width:2px;
@@ -867,8 +884,8 @@
   );
   --editorFreeText-editing-cursor:text;
   --editorInk-editing-cursor:url(images/cursor-editorInk.svg) 0 16, pointer;
-  --editorHighlight-editing-cursor:url(images/cursor-editorTextHighlight.svg) 23 23, text;
-  --editorFreeHighlight-editing-cursor:url(images/toolbarButton-editorHighlight.svg) 0 16, pointer;
+  --editorHighlight-editing-cursor:url(images/cursor-editorTextHighlight.svg) 24 24, text;
+  --editorFreeHighlight-editing-cursor:url(images/cursor-editorFreeHighlight.svg) 1 18, pointer;
 }
 
 .textLayer.highlighting{

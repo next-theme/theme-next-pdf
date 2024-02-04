@@ -4544,7 +4544,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.1.0";
-const build = "a6e0b02";
+const build = "247af2e";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -8277,9 +8277,32 @@ class DrawLayer {
     path.setAttribute("id", pathId);
     path.setAttribute("d", outlines.toSVGPath());
     path.setAttribute("vector-effect", "non-scaling-stroke");
+    let maskId;
+    if (outlines.free) {
+      root.classList.add("free");
+      const mask = DrawLayer._svgFactory.createElement("mask");
+      defs.append(mask);
+      maskId = `mask_p${this.pageIndex}_${id}`;
+      mask.setAttribute("id", maskId);
+      mask.setAttribute("maskUnits", "objectBoundingBox");
+      const rect = DrawLayer._svgFactory.createElement("rect");
+      mask.append(rect);
+      rect.setAttribute("width", "1");
+      rect.setAttribute("height", "1");
+      rect.setAttribute("fill", "white");
+      const use = DrawLayer._svgFactory.createElement("use");
+      mask.append(use);
+      use.setAttribute("href", `#${pathId}`);
+      use.setAttribute("stroke", "none");
+      use.setAttribute("fill", "black");
+      use.setAttribute("fill-rule", "nonzero");
+    }
     const use1 = DrawLayer._svgFactory.createElement("use");
     root.append(use1);
     use1.setAttribute("href", `#${pathId}`);
+    if (maskId) {
+      use1.setAttribute("mask", `url(#${maskId})`);
+    }
     const use2 = use1.cloneNode();
     root.append(use2);
     use1.classList.add("mainOutline");
@@ -8966,10 +8989,8 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       x,
       y,
       width,
-      height,
-      lastPoint
+      height
     } = highlightOutlines.box;
-    this.#lastPoint = lastPoint;
     switch (this.rotation) {
       case 0:
         this.x = x;
@@ -9002,6 +9023,10 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
           break;
         }
     }
+    const {
+      lastPoint
+    } = this.#focusOutlines.box;
+    this.#lastPoint = [(lastPoint[0] - this.x) / this.width, (lastPoint[1] - this.y) / this.height];
   }
   static initialize(l10n, uiManager) {
     editor_editor.AnnotationEditor.initialize(l10n, uiManager);
@@ -13243,8 +13268,6 @@ class FreeHighlightOutline extends Outline {
       y = minY - this.#innerMargin,
       width = maxX - minX + 2 * this.#innerMargin,
       height = maxY - minY + 2 * this.#innerMargin;
-    lastPointX = (lastPointX - x) / width;
-    lastPointY = (lastPointY - y) / height;
     this.#bbox = {
       x,
       y,
@@ -17353,7 +17376,7 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "a6e0b02";
+const pdfjsBuild = "247af2e";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });

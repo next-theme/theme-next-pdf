@@ -24479,7 +24479,7 @@ class Font {
     this._glyphCache = Object.create(null);
     let isSerifFont = !!(properties.flags & FontFlags.Serif);
     if (!isSerifFont && !properties.isSimulatedFlags) {
-      const baseName = name.replaceAll(/[,_]/g, "-").split("-")[0],
+      const baseName = name.replaceAll(/[,_]/g, "-").split("-", 1)[0],
         serifFonts = getSerifFonts();
       for (const namePart of baseName.split("+")) {
         if (serifFonts[namePart]) {
@@ -24701,7 +24701,7 @@ class Font {
       this.toFontChar = map;
     }
     amendFallbackToUnicode(properties);
-    this.loadedName = fontName.split("-")[0];
+    this.loadedName = fontName.split("-", 1)[0];
   }
   checkAndRepair(name, font, properties) {
     const VALID_TABLES = ["OS/2", "cmap", "head", "hhea", "hmtx", "maxp", "name", "post", "loca", "glyf", "fpgm", "prep", "cvt ", "CFF "];
@@ -33707,7 +33707,7 @@ class PartialEvaluator {
     properties.vmetrics = glyphsVMetrics;
   }
   isSerifFont(baseFontName) {
-    const fontNameWoStyle = baseFontName.split("-")[0];
+    const fontNameWoStyle = baseFontName.split("-", 1)[0];
     return fontNameWoStyle in getSerifFonts() || /serif/gi.test(fontNameWoStyle);
   }
   getBaseFontMetrics(name) {
@@ -33888,7 +33888,7 @@ class PartialEvaluator {
         }
         baseFontName = baseFontName.name.replaceAll(/[,_]/g, "-");
         const metrics = this.getBaseFontMetrics(baseFontName);
-        const fontNameWoStyle = baseFontName.split("-")[0];
+        const fontNameWoStyle = baseFontName.split("-", 1)[0];
         const flags = (this.isSerifFont(fontNameWoStyle) ? FontFlags.Serif : 0) | (metrics.monospace ? FontFlags.FixedPitch : 0) | (getSymbolsFonts()[fontNameWoStyle] ? FontFlags.Symbolic : FontFlags.Nonsymbolic);
         const properties = {
           type,
@@ -57202,7 +57202,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "a6e0b02";
+const pdfjsBuild = "247af2e";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };
