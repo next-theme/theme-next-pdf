@@ -2841,14 +2841,10 @@ function getDocument(src) {
     const networkStreamPromise = new Promise(function (resolve) {
       let networkStream;
       if (rangeTransport) {
-        networkStream = new _transport_stream_js__WEBPACK_IMPORTED_MODULE_10__.PDFDataTransportStream({
-          length,
-          initialData: rangeTransport.initialData,
-          progressiveDone: rangeTransport.progressiveDone,
-          contentDispositionFilename: rangeTransport.contentDispositionFilename,
+        networkStream = new _transport_stream_js__WEBPACK_IMPORTED_MODULE_10__.PDFDataTransportStream(rangeTransport, {
           disableRange,
           disableStream
-        }, rangeTransport);
+        });
       } else if (!data) {
         const createPDFNetworkStream = params => {
           if (_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.isNodeJS) {
@@ -4544,7 +4540,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.1.0";
-const build = "247af2e";
+const build = "485e9ce";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -8296,6 +8292,7 @@ class DrawLayer {
       use.setAttribute("stroke", "none");
       use.setAttribute("fill", "black");
       use.setAttribute("fill-rule", "nonzero");
+      use.classList.add("mask");
     }
     const use1 = DrawLayer._svgFactory.createElement("use");
     root.append(use1);
@@ -9026,7 +9023,7 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     const {
       lastPoint
     } = this.#focusOutlines.box;
-    this.#lastPoint = [(lastPoint[0] - this.x) / this.width, (lastPoint[1] - this.y) / this.height];
+    this.#lastPoint = [(lastPoint[0] - x) / width, (lastPoint[1] - y) / height];
   }
   static initialize(l10n, uiManager) {
     editor_editor.AnnotationEditor.initialize(l10n, uiManager);
@@ -16729,15 +16726,17 @@ function updateTextLayer({
 
 
 class PDFDataTransportStream {
-  constructor({
-    length,
-    initialData,
-    progressiveDone = false,
-    contentDispositionFilename = null,
+  constructor(pdfDataRangeTransport, {
     disableRange = false,
     disableStream = false
-  }, pdfDataRangeTransport) {
+  }) {
     (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.assert)(pdfDataRangeTransport, 'PDFDataTransportStream - missing required "pdfDataRangeTransport" argument.');
+    const {
+      length,
+      initialData,
+      progressiveDone,
+      contentDispositionFilename
+    } = pdfDataRangeTransport;
     this._queuedChunks = [];
     this._progressiveDone = progressiveDone;
     this._contentDispositionFilename = contentDispositionFilename;
@@ -16751,27 +16750,27 @@ class PDFDataTransportStream {
     this._contentLength = length;
     this._fullRequestReader = null;
     this._rangeReaders = [];
-    this._pdfDataRangeTransport.addRangeListener((begin, chunk) => {
+    pdfDataRangeTransport.addRangeListener((begin, chunk) => {
       this._onReceiveData({
         begin,
         chunk
       });
     });
-    this._pdfDataRangeTransport.addProgressListener((loaded, total) => {
+    pdfDataRangeTransport.addProgressListener((loaded, total) => {
       this._onProgress({
         loaded,
         total
       });
     });
-    this._pdfDataRangeTransport.addProgressiveReadListener(chunk => {
+    pdfDataRangeTransport.addProgressiveReadListener(chunk => {
       this._onReceiveData({
         chunk
       });
     });
-    this._pdfDataRangeTransport.addProgressiveDoneListener(() => {
+    pdfDataRangeTransport.addProgressiveDoneListener(() => {
       this._onProgressiveDone();
     });
-    this._pdfDataRangeTransport.transportReady();
+    pdfDataRangeTransport.transportReady();
   }
   _onReceiveData({
     begin,
@@ -17376,7 +17375,7 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "247af2e";
+const pdfjsBuild = "485e9ce";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });

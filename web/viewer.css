@@ -791,15 +791,18 @@
     transform:none;
   }
 
-.canvasWrapper svg[data-main-rotation="90"] use:not(.clip){
+.canvasWrapper svg[data-main-rotation="90"] mask,
+      .canvasWrapper svg[data-main-rotation="90"] use:not(.clip, .mask){
         transform:matrix(0, 1, -1, 0, 1, 0);
       }
 
-.canvasWrapper svg[data-main-rotation="180"] use:not(.clip){
+.canvasWrapper svg[data-main-rotation="180"] mask,
+      .canvasWrapper svg[data-main-rotation="180"] use:not(.clip, .mask){
         transform:matrix(-1, 0, 0, -1, 1, 1);
       }
 
-.canvasWrapper svg[data-main-rotation="270"] use:not(.clip){
+.canvasWrapper svg[data-main-rotation="270"] mask,
+      .canvasWrapper svg[data-main-rotation="270"] use:not(.clip, .mask){
         transform:matrix(0, -1, 1, 0, 0, 1);
       }
 
@@ -2218,7 +2221,7 @@
 @media screen and (forced-colors: active){
 
 #highlightParamsToolbarContainer #editorHighlightThickness .thicknessPicker{
-        --example-color:HighlightText;
+        --example-color:CanvasText;
     }
       }
 
