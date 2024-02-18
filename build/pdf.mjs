@@ -22,7 +22,7 @@
 
 /******/ var __webpack_modules__ = ({
 
-/***/ 653:
+/***/ 976:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 
@@ -35,11 +35,11 @@ __webpack_require__.d(__webpack_exports__, {
 });
 
 // EXTERNAL MODULE: ./src/shared/util.js
-var util = __webpack_require__(394);
+var util = __webpack_require__(292);
 // EXTERNAL MODULE: ./src/display/display_utils.js
-var display_utils = __webpack_require__(500);
+var display_utils = __webpack_require__(419);
 // EXTERNAL MODULE: ./src/display/annotation_storage.js
-var annotation_storage = __webpack_require__(296);
+var annotation_storage = __webpack_require__(792);
 ;// CONCATENATED MODULE: ./src/shared/scripting_utils.js
 function makeColorComp(n) {
   return Math.floor(Math.max(0, Math.min(1, n)) * 255).toString(16).padStart(2, "0");
@@ -100,7 +100,7 @@ class ColorConverters {
 }
 
 // EXTERNAL MODULE: ./src/display/xfa_layer.js
-var xfa_layer = __webpack_require__(283);
+var xfa_layer = __webpack_require__(284);
 ;// CONCATENATED MODULE: ./src/display/annotation_layer.js
 
 
@@ -2500,7 +2500,7 @@ class AnnotationLayer {
 
 /***/ }),
 
-/***/ 296:
+/***/ 792:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -2508,9 +2508,9 @@ class AnnotationLayer {
 /* harmony export */   PrintAnnotationStorage: () => (/* binding */ PrintAnnotationStorage),
 /* harmony export */   SerializableEmpty: () => (/* binding */ SerializableEmpty)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
-/* harmony import */ var _editor_editor_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(959);
-/* harmony import */ var _shared_murmurhash3_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(222);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
+/* harmony import */ var _editor_editor_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(173);
+/* harmony import */ var _shared_murmurhash3_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(651);
 
 
 
@@ -2665,7 +2665,7 @@ class PrintAnnotationStorage extends AnnotationStorage {
 
 /***/ }),
 
-/***/ 787:
+/***/ 831:
 /***/ ((__webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
@@ -2677,22 +2677,22 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony export */   version: () => (/* binding */ version)
 /* harmony export */ });
 /* unused harmony exports DefaultCanvasFactory, DefaultCMapReaderFactory, DefaultFilterFactory, DefaultStandardFontDataFactory, LoopbackPort, PDFDocumentLoadingTask, PDFDocumentProxy, PDFPageProxy, PDFWorkerUtil, RenderTask */
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
-/* harmony import */ var _annotation_storage_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(296);
-/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(500);
-/* harmony import */ var _font_loader_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(355);
-/* harmony import */ var display_node_utils__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(476);
-/* harmony import */ var _canvas_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(287);
-/* harmony import */ var _text_layer_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(350);
-/* harmony import */ var _worker_options_js__WEBPACK_IMPORTED_MODULE_14__ = __webpack_require__(983);
-/* harmony import */ var _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(399);
-/* harmony import */ var _metadata_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(590);
-/* harmony import */ var _optional_content_config_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(866);
-/* harmony import */ var _transport_stream_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(224);
-/* harmony import */ var display_fetch_stream__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(664);
-/* harmony import */ var display_network__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(278);
-/* harmony import */ var display_node_stream__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(516);
-/* harmony import */ var _xfa_text_js__WEBPACK_IMPORTED_MODULE_15__ = __webpack_require__(473);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
+/* harmony import */ var _annotation_storage_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(792);
+/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(419);
+/* harmony import */ var _font_loader_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(10);
+/* harmony import */ var display_node_utils__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(573);
+/* harmony import */ var _canvas_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(923);
+/* harmony import */ var _text_layer_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(814);
+/* harmony import */ var _worker_options_js__WEBPACK_IMPORTED_MODULE_14__ = __webpack_require__(164);
+/* harmony import */ var _shared_message_handler_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(178);
+/* harmony import */ var _metadata_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(62);
+/* harmony import */ var _optional_content_config_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(626);
+/* harmony import */ var _transport_stream_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(585);
+/* harmony import */ var display_fetch_stream__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(94);
+/* harmony import */ var display_network__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(457);
+/* harmony import */ var display_node_stream__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(786);
+/* harmony import */ var _xfa_text_js__WEBPACK_IMPORTED_MODULE_15__ = __webpack_require__(50);
 var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([display_node_utils__WEBPACK_IMPORTED_MODULE_4__, display_node_stream__WEBPACK_IMPORTED_MODULE_13__]);
 ([display_node_utils__WEBPACK_IMPORTED_MODULE_4__, display_node_stream__WEBPACK_IMPORTED_MODULE_13__] = __webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__);
 
@@ -3771,7 +3771,7 @@ class PDFWorker {
       if (this.#mainThreadWorkerMessageHandler) {
         return this.#mainThreadWorkerMessageHandler;
       }
-      const worker = await import(/* webpackIgnore: true */ this.workerSrc);
+      const worker = await import( /*webpackIgnore: true*/this.workerSrc);
       return worker.WorkerMessageHandler;
     };
     return (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.shadow)(this, "_setupFakeWorkerGlobal", loader());
@@ -4540,14 +4540,14 @@ class InternalRenderTask {
   }
 }
 const version = "4.1.0";
-const build = "485e9ce";
+const build = "4ac8ee8";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
 
 /***/ }),
 
-/***/ 470:
+/***/ 583:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -4557,7 +4557,7 @@ __webpack_async_result__();
 /* harmony export */   BaseSVGFactory: () => (/* binding */ BaseSVGFactory),
 /* harmony export */   BaseStandardFontDataFactory: () => (/* binding */ BaseStandardFontDataFactory)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
 
 class BaseFilterFactory {
   constructor() {
@@ -4706,7 +4706,7 @@ class BaseSVGFactory {
 
 /***/ }),
 
-/***/ 287:
+/***/ 923:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 
@@ -4716,9 +4716,9 @@ __webpack_require__.d(__webpack_exports__, {
 });
 
 // EXTERNAL MODULE: ./src/shared/util.js
-var util = __webpack_require__(394);
+var util = __webpack_require__(292);
 // EXTERNAL MODULE: ./src/display/display_utils.js
-var display_utils = __webpack_require__(500);
+var display_utils = __webpack_require__(419);
 ;// CONCATENATED MODULE: ./src/display/pattern_helper.js
 
 
@@ -7466,7 +7466,7 @@ for (const op in util.OPS) {
 
 /***/ }),
 
-/***/ 500:
+/***/ 419:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -7495,8 +7495,8 @@ for (const op in util.OPS) {
 /* harmony export */   setLayerDimensions: () => (/* binding */ setLayerDimensions)
 /* harmony export */ });
 /* unused harmony export deprecated */
-/* harmony import */ var _base_factory_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(470);
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(394);
+/* harmony import */ var _base_factory_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(583);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(292);
 
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -8162,14 +8162,14 @@ function setLayerDimensions(div, viewport, mustFlip = false, mustRotate = true) 
 
 /***/ }),
 
-/***/ 574:
+/***/ 47:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   DrawLayer: () => (/* binding */ DrawLayer)
 /* harmony export */ });
-/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(500);
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(394);
+/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(419);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(292);
 
 
 class DrawLayer {
@@ -8317,7 +8317,6 @@ class DrawLayer {
     const root = this.#mapping.get(id);
     const defs = root.firstChild;
     const path = defs.firstChild;
-    this.updateBox(id, line.box);
     path.setAttribute("d", line.toSVGPath());
   }
   removeFreeHighlight(id) {
@@ -8364,7 +8363,7 @@ class DrawLayer {
 
 /***/ }),
 
-/***/ 861:
+/***/ 731:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 
@@ -8374,13 +8373,13 @@ __webpack_require__.d(__webpack_exports__, {
 });
 
 // EXTERNAL MODULE: ./src/shared/util.js
-var util = __webpack_require__(394);
+var util = __webpack_require__(292);
 // EXTERNAL MODULE: ./src/display/editor/editor.js + 2 modules
-var editor_editor = __webpack_require__(959);
+var editor_editor = __webpack_require__(173);
 // EXTERNAL MODULE: ./src/display/editor/tools.js
-var tools = __webpack_require__(213);
+var tools = __webpack_require__(830);
 // EXTERNAL MODULE: ./src/display/annotation_layer.js + 1 modules
-var annotation_layer = __webpack_require__(653);
+var annotation_layer = __webpack_require__(976);
 ;// CONCATENATED MODULE: ./src/display/editor/freetext.js
 
 
@@ -8895,11 +8894,11 @@ class FreeTextEditor extends editor_editor.AnnotationEditor {
 }
 
 // EXTERNAL MODULE: ./src/display/editor/outliner.js
-var editor_outliner = __webpack_require__(651);
+var editor_outliner = __webpack_require__(61);
 // EXTERNAL MODULE: ./src/display/editor/color_picker.js
-var color_picker = __webpack_require__(705);
+var color_picker = __webpack_require__(259);
 // EXTERNAL MODULE: ./src/display/display_utils.js
-var display_utils = __webpack_require__(500);
+var display_utils = __webpack_require__(419);
 ;// CONCATENATED MODULE: ./src/display/editor/highlight.js
 
 
@@ -8979,8 +8978,11 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       this.parent.drawLayer.finalizeLine(highlightId, highlightOutlines);
       this.#outlineId = this.parent.drawLayer.highlightOutline(this.#focusOutlines);
     } else if (this.parent) {
+      const angle = this.parent.viewport.rotation;
       this.parent.drawLayer.updateLine(this.#id, highlightOutlines);
+      this.parent.drawLayer.updateBox(this.#id, HighlightEditor.#rotateBbox(this.#highlightOutlines.box, (angle - this.rotation + 360) % 360));
       this.parent.drawLayer.updateLine(this.#outlineId, this.#focusOutlines);
+      this.parent.drawLayer.updateBox(this.#outlineId, HighlightEditor.#rotateBbox(this.#focusOutlines.box, angle));
     }
     const {
       x,
@@ -9057,7 +9059,7 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     return [[util.AnnotationEditorParamsType.HIGHLIGHT_DEFAULT_COLOR, HighlightEditor._defaultColor], [util.AnnotationEditorParamsType.HIGHLIGHT_THICKNESS, HighlightEditor._defaultThickness]];
   }
   get propertiesToUpdate() {
-    return [[util.AnnotationEditorParamsType.HIGHLIGHT_COLOR, this.color || HighlightEditor._defaultColor], [util.AnnotationEditorParamsType.HIGHLIGHT_THICKNESS, this.#thickness || HighlightEditor._defaultThickness]];
+    return [[util.AnnotationEditorParamsType.HIGHLIGHT_COLOR, this.color || HighlightEditor._defaultColor], [util.AnnotationEditorParamsType.HIGHLIGHT_THICKNESS, this.#thickness || HighlightEditor._defaultThickness], [util.AnnotationEditorParamsType.HIGHLIGHT_FREE, this.#isFreeHighlight]];
   }
   #updateColor(color) {
     const setColor = col => {
@@ -11031,10 +11033,26 @@ class AnnotationEditorLayer {
   unselect(editor) {
     this.#uiManager.unselect(editor);
   }
-  selectionStart(_event) {
-    this.#textLayer?.div.addEventListener("pointerup", this.#boundPointerUpAfterSelection, {
-      once: true
-    });
+  selectionStart(event) {
+    if (!this.#textLayer || event.target.parentElement.closest(".textLayer") !== this.#textLayer.div) {
+      return;
+    }
+    if (this.#uiManager.isShiftKeyDown) {
+      const keyup = () => {
+        if (this.#uiManager.isShiftKeyDown) {
+          return;
+        }
+        window.removeEventListener("keyup", keyup);
+        window.removeEventListener("blur", keyup);
+        this.pointerUpAfterSelection({});
+      };
+      window.addEventListener("keyup", keyup);
+      window.addEventListener("blur", keyup);
+    } else {
+      this.#textLayer.div.addEventListener("pointerup", this.#boundPointerUpAfterSelection, {
+        once: true
+      });
+    }
   }
   pointerUpAfterSelection(event) {
     const selection = document.getSelection();
@@ -11232,15 +11250,15 @@ class AnnotationEditorLayer {
 
 /***/ }),
 
-/***/ 705:
+/***/ 259:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   ColorPicker: () => (/* binding */ ColorPicker)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
-/* harmony import */ var _tools_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(213);
-/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(500);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
+/* harmony import */ var _tools_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(830);
+/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(419);
 
 
 
@@ -11440,7 +11458,7 @@ class ColorPicker {
 
 /***/ }),
 
-/***/ 959:
+/***/ 173:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 
@@ -11450,11 +11468,11 @@ __webpack_require__.d(__webpack_exports__, {
 });
 
 // EXTERNAL MODULE: ./src/display/editor/tools.js
-var tools = __webpack_require__(213);
+var tools = __webpack_require__(830);
 // EXTERNAL MODULE: ./src/shared/util.js
-var util = __webpack_require__(394);
+var util = __webpack_require__(292);
 // EXTERNAL MODULE: ./src/display/display_utils.js
-var display_utils = __webpack_require__(500);
+var display_utils = __webpack_require__(419);
 ;// CONCATENATED MODULE: ./src/display/editor/alt_text.js
 
 class AltText {
@@ -12709,14 +12727,14 @@ class FakeEditor extends AnnotationEditor {
 
 /***/ }),
 
-/***/ 651:
+/***/ 61:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   FreeOutliner: () => (/* binding */ FreeOutliner),
 /* harmony export */   Outliner: () => (/* binding */ Outliner)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
 
 class Outliner {
   #box;
@@ -12973,6 +12991,8 @@ class FreeOutliner {
   #isLTR;
   #top = [];
   #last = new Float64Array(18);
+  #lastX;
+  #lastY;
   #min;
   #min_dist;
   #scaleFactor;
@@ -13001,10 +13021,18 @@ class FreeOutliner {
   isEmpty() {
     return isNaN(this.#last[8]);
   }
+  #getLastCoords() {
+    const lastTop = this.#last.subarray(4, 6);
+    const lastBottom = this.#last.subarray(16, 18);
+    const [x, y, width, height] = this.#box;
+    return [(this.#lastX + (lastTop[0] - lastBottom[0]) / 2 - x) / width, (this.#lastY + (lastTop[1] - lastBottom[1]) / 2 - y) / height, (this.#lastX + (lastBottom[0] - lastTop[0]) / 2 - x) / width, (this.#lastY + (lastBottom[1] - lastTop[1]) / 2 - y) / height];
+  }
   add({
     x,
     y
   }) {
+    this.#lastX = x;
+    this.#lastY = y;
     const [layerX, layerY, layerWidth, layerHeight] = this.#box;
     let [x1, y1, x2, y2] = this.#last.subarray(8, 12);
     const diffX = x - x2;
@@ -13066,8 +13094,9 @@ class FreeOutliner {
     const lastTop = this.#last.subarray(4, 6);
     const lastBottom = this.#last.subarray(16, 18);
     const [x, y, width, height] = this.#box;
+    const [lastTopX, lastTopY, lastBottomX, lastBottomY] = this.#getLastCoords();
     if (isNaN(this.#last[6]) && !this.isEmpty()) {
-      return `M${(this.#last[2] - x) / width} ${(this.#last[3] - y) / height} L${(this.#last[4] - x) / width} ${(this.#last[5] - y) / height} L${(this.#last[16] - x) / width} ${(this.#last[17] - y) / height} L${(this.#last[14] - x) / width} ${(this.#last[15] - y) / height} Z`;
+      return `M${(this.#last[2] - x) / width} ${(this.#last[3] - y) / height} L${(this.#last[4] - x) / width} ${(this.#last[5] - y) / height} L${lastTopX} ${lastTopY} L${lastBottomX} ${lastBottomY} L${(this.#last[16] - x) / width} ${(this.#last[17] - y) / height} L${(this.#last[14] - x) / width} ${(this.#last[15] - y) / height} Z`;
     }
     const buffer = [];
     buffer.push(`M${top[4]} ${top[5]}`);
@@ -13078,7 +13107,7 @@ class FreeOutliner {
         buffer.push(`C${top[i]} ${top[i + 1]} ${top[i + 2]} ${top[i + 3]} ${top[i + 4]} ${top[i + 5]}`);
       }
     }
-    buffer.push(`L${(lastTop[0] - x) / width} ${(lastTop[1] - y) / height} L${(lastBottom[0] - x) / width} ${(lastBottom[1] - y) / height}`);
+    buffer.push(`L${(lastTop[0] - x) / width} ${(lastTop[1] - y) / height} L${lastTopX} ${lastTopY} L${lastBottomX} ${lastBottomY} L${(lastBottom[0] - x) / width} ${(lastBottom[1] - y) / height}`);
     for (let i = bottom.length - 6; i >= 6; i -= 6) {
       if (isNaN(bottom[i])) {
         buffer.push(`L${bottom[i + 4]} ${bottom[i + 5]}`);
@@ -13096,17 +13125,20 @@ class FreeOutliner {
     const lastTop = last.subarray(4, 6);
     const lastBottom = last.subarray(16, 18);
     const [layerX, layerY, layerWidth, layerHeight] = this.#box;
-    const points = new Float64Array(this.#points?.length ?? 0);
-    for (let i = 0, ii = points.length; i < ii; i += 2) {
+    const points = new Float64Array((this.#points?.length ?? 0) + 2);
+    for (let i = 0, ii = points.length - 2; i < ii; i += 2) {
       points[i] = (this.#points[i] - layerX) / layerWidth;
       points[i + 1] = (this.#points[i + 1] - layerY) / layerHeight;
     }
+    points[points.length - 2] = (this.#lastX - layerX) / layerWidth;
+    points[points.length - 1] = (this.#lastY - layerY) / layerHeight;
+    const [lastTopX, lastTopY, lastBottomX, lastBottomY] = this.#getLastCoords();
     if (isNaN(last[6]) && !this.isEmpty()) {
-      const outline = new Float64Array(24);
-      outline.set([NaN, NaN, NaN, NaN, (last[2] - layerX) / layerWidth, (last[3] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (last[4] - layerX) / layerWidth, (last[5] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (last[16] - layerX) / layerWidth, (last[17] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (last[14] - layerX) / layerWidth, (last[15] - layerY) / layerHeight], 0);
+      const outline = new Float64Array(36);
+      outline.set([NaN, NaN, NaN, NaN, (last[2] - layerX) / layerWidth, (last[3] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (last[4] - layerX) / layerWidth, (last[5] - layerY) / layerHeight, NaN, NaN, NaN, NaN, lastTopX, lastTopY, NaN, NaN, NaN, NaN, lastBottomX, lastBottomY, NaN, NaN, NaN, NaN, (last[16] - layerX) / layerWidth, (last[17] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (last[14] - layerX) / layerWidth, (last[15] - layerY) / layerHeight], 0);
       return new FreeHighlightOutline(outline, points, this.#box, this.#scaleFactor, this.#innerMargin, this.#isLTR);
     }
-    const outline = new Float64Array(this.#top.length + 12 + this.#bottom.length);
+    const outline = new Float64Array(this.#top.length + 24 + this.#bottom.length);
     let N = top.length;
     for (let i = 0; i < N; i += 2) {
       if (isNaN(top[i])) {
@@ -13116,8 +13148,8 @@ class FreeOutliner {
       outline[i] = top[i];
       outline[i + 1] = top[i + 1];
     }
-    outline.set([NaN, NaN, NaN, NaN, (lastTop[0] - layerX) / layerWidth, (lastTop[1] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (lastBottom[0] - layerX) / layerWidth, (lastBottom[1] - layerY) / layerHeight], N);
-    N += 12;
+    outline.set([NaN, NaN, NaN, NaN, (lastTop[0] - layerX) / layerWidth, (lastTop[1] - layerY) / layerHeight, NaN, NaN, NaN, NaN, lastTopX, lastTopY, NaN, NaN, NaN, NaN, lastBottomX, lastBottomY, NaN, NaN, NaN, NaN, (lastBottom[0] - layerX) / layerWidth, (lastBottom[1] - layerY) / layerHeight], N);
+    N += 24;
     for (let i = bottom.length - 6; i >= 6; i -= 6) {
       for (let j = 0; j < 6; j += 2) {
         if (isNaN(bottom[i + j])) {
@@ -13305,7 +13337,7 @@ class FreeHighlightOutline extends Outline {
 
 /***/ }),
 
-/***/ 213:
+/***/ 830:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -13316,8 +13348,8 @@ class FreeHighlightOutline extends Outline {
 /* harmony export */   opacityToHex: () => (/* binding */ opacityToHex)
 /* harmony export */ });
 /* unused harmony export CommandManager */
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
-/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(500);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
+/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(419);
 
 
 function bindEvents(obj, element, names) {
@@ -13675,6 +13707,7 @@ class AnnotationEditorUIManager {
   #boundCut = this.cut.bind(this);
   #boundPaste = this.paste.bind(this);
   #boundKeydown = this.keydown.bind(this);
+  #boundKeyup = this.keyup.bind(this);
   #boundOnEditingAction = this.onEditingAction.bind(this);
   #boundOnPageChanging = this.onPageChanging.bind(this);
   #boundOnScaleChanging = this.onScaleChanging.bind(this);
@@ -13765,6 +13798,7 @@ class AnnotationEditorUIManager {
       realScale: _display_utils_js__WEBPACK_IMPORTED_MODULE_1__.PixelsPerInch.PDF_TO_CSS_UNITS,
       rotation: 0
     };
+    this.isShiftKeyDown = false;
   }
   destroy() {
     this.#removeKeyboardManager();
@@ -13867,6 +13901,7 @@ class AnnotationEditorUIManager {
     window.removeEventListener("blur", this.#boundBlur);
   }
   blur() {
+    this.isShiftKeyDown = false;
     if (!this.hasSelection) {
       return;
     }
@@ -13896,9 +13931,11 @@ class AnnotationEditorUIManager {
   }
   #addKeyboardManager() {
     window.addEventListener("keydown", this.#boundKeydown);
+    window.addEventListener("keyup", this.#boundKeyup);
   }
   #removeKeyboardManager() {
     window.removeEventListener("keydown", this.#boundKeydown);
+    window.removeEventListener("keyup", this.#boundKeyup);
   }
   #addCopyPasteListeners() {
     document.addEventListener("copy", this.#boundCopy);
@@ -13998,8 +14035,16 @@ class AnnotationEditorUIManager {
     }
   }
   keydown(event) {
+    if (!this.isShiftKeyDown && event.key === "Shift") {
+      this.isShiftKeyDown = true;
+    }
     if (!this.isEditorHandlingKeyboard) {
       AnnotationEditorUIManager._keyboardManager.exec(this, event);
+    }
+  }
+  keyup(event) {
+    if (this.isShiftKeyDown && event.key === "Shift") {
+      this.isShiftKeyDown = false;
     }
   }
   onEditingAction(details) {
@@ -14548,17 +14593,16 @@ class AnnotationEditorUIManager {
 
 /***/ }),
 
-/***/ 664:
+/***/ 94:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   PDFFetchStream: () => (/* binding */ PDFFetchStream)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
-/* harmony import */ var _network_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(739);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
+/* harmony import */ var _network_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(490);
 
 
-;
 function createFetchOptions(headers, withCredentials, abortController) {
   return {
     method: "GET",
@@ -14763,14 +14807,14 @@ class PDFFetchStreamRangeReader {
 
 /***/ }),
 
-/***/ 355:
+/***/ 10:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   FontFaceObject: () => (/* binding */ FontFaceObject),
 /* harmony export */   FontLoader: () => (/* binding */ FontLoader)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
 
 class FontLoader {
   #systemFonts = new Set();
@@ -15066,13 +15110,13 @@ class FontFaceObject {
 
 /***/ }),
 
-/***/ 590:
+/***/ 62:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   Metadata: () => (/* binding */ Metadata)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
 
 class Metadata {
   #metadataMap;
@@ -15101,17 +15145,16 @@ class Metadata {
 
 /***/ }),
 
-/***/ 278:
+/***/ 457:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   PDFNetworkStream: () => (/* binding */ PDFNetworkStream)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
-/* harmony import */ var _network_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(739);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
+/* harmony import */ var _network_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(490);
 
 
-;
 const OK_RESPONSE = 200;
 const PARTIAL_CONTENT_RESPONSE = 206;
 function getArrayBuffer(xhr) {
@@ -15518,7 +15561,7 @@ class PDFNetworkStreamRangeRequestReader {
 
 /***/ }),
 
-/***/ 739:
+/***/ 490:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 
@@ -15531,7 +15574,7 @@ __webpack_require__.d(__webpack_exports__, {
 });
 
 // EXTERNAL MODULE: ./src/shared/util.js
-var util = __webpack_require__(394);
+var util = __webpack_require__(292);
 ;// CONCATENATED MODULE: ./src/display/content_disposition.js
 
 function getFilenameFromContentDispositionHeader(contentDisposition) {
@@ -15664,7 +15707,7 @@ function getFilenameFromContentDispositionHeader(contentDisposition) {
 }
 
 // EXTERNAL MODULE: ./src/display/display_utils.js
-var display_utils = __webpack_require__(500);
+var display_utils = __webpack_require__(419);
 ;// CONCATENATED MODULE: ./src/display/network_utils.js
 
 
@@ -15728,24 +15771,23 @@ function validateResponseStatus(status) {
 
 /***/ }),
 
-/***/ 516:
+/***/ 786:
 /***/ ((__webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   PDFNodeStream: () => (/* binding */ PDFNodeStream)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
-/* harmony import */ var _network_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(739);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
+/* harmony import */ var _network_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(490);
 
 
-;
 let fs, http, https, url;
 if (_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.isNodeJS) {
-  fs = await import(/* webpackIgnore: true */ "fs");
-  http = await import(/* webpackIgnore: true */ "http");
-  https = await import(/* webpackIgnore: true */ "https");
-  url = await import(/* webpackIgnore: true */ "url");
+  fs = await import( /*webpackIgnore: true*/"fs");
+  http = await import( /*webpackIgnore: true*/"http");
+  https = await import( /*webpackIgnore: true*/"https");
+  url = await import( /*webpackIgnore: true*/"url");
 }
 const fileUriRegex = /^file:\/\/\/[a-zA-Z]:\//;
 function parseUrl(sourceUrl) {
@@ -16082,7 +16124,7 @@ __webpack_async_result__();
 
 /***/ }),
 
-/***/ 476:
+/***/ 573:
 /***/ ((__webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
@@ -16092,22 +16134,20 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony export */   NodeFilterFactory: () => (/* binding */ NodeFilterFactory),
 /* harmony export */   NodeStandardFontDataFactory: () => (/* binding */ NodeStandardFontDataFactory)
 /* harmony export */ });
-/* harmony import */ var _base_factory_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(470);
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(394);
+/* harmony import */ var _base_factory_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(583);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(292);
 
 
-;
 let fs, canvas, path2d_polyfill;
 if (_shared_util_js__WEBPACK_IMPORTED_MODULE_1__.isNodeJS) {
-  fs = await import(/* webpackIgnore: true */ "fs");
+  fs = await import( /*webpackIgnore: true*/"fs");
   try {
-    canvas = await import(/* webpackIgnore: true */ "canvas");
+    canvas = await import( /*webpackIgnore: true*/"canvas");
   } catch {}
   try {
-    path2d_polyfill = await import(/* webpackIgnore: true */ "path2d-polyfill");
+    path2d_polyfill = await import( /*webpackIgnore: true*/"path2d-polyfill");
   } catch {}
 }
-;
 const fetchData = function (url) {
   return new Promise((resolve, reject) => {
     fs.readFile(url, (error, data) => {
@@ -16144,14 +16184,14 @@ __webpack_async_result__();
 
 /***/ }),
 
-/***/ 866:
+/***/ 626:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   OptionalContentConfig: () => (/* binding */ OptionalContentConfig)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
-/* harmony import */ var _shared_murmurhash3_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(222);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
+/* harmony import */ var _shared_murmurhash3_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(651);
 
 
 const INTERNAL = Symbol("INTERNAL");
@@ -16242,7 +16282,7 @@ class OptionalContentConfig {
       return true;
     }
     if (!group) {
-      (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.warn)("Optional content group not defined.");
+      (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.info)("Optional content group not defined.");
       return true;
     }
     if (group.type === "OCG") {
@@ -16347,7 +16387,7 @@ class OptionalContentConfig {
 
 /***/ }),
 
-/***/ 350:
+/***/ 814:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -16356,8 +16396,8 @@ class OptionalContentConfig {
 /* harmony export */   updateTextLayer: () => (/* binding */ updateTextLayer)
 /* harmony export */ });
 /* unused harmony export TextLayerRenderTask */
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
-/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(500);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
+/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(419);
 
 
 const MAX_TEXT_DIVS_TO_RENDER = 100000;
@@ -16715,14 +16755,14 @@ function updateTextLayer({
 
 /***/ }),
 
-/***/ 224:
+/***/ 585:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   PDFDataTransportStream: () => (/* binding */ PDFDataTransportStream)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
-/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(500);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
+/* harmony import */ var _display_utils_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(419);
 
 
 class PDFDataTransportStream {
@@ -16993,7 +17033,7 @@ class PDFDataTransportStreamRangeReader {
 
 /***/ }),
 
-/***/ 983:
+/***/ 164:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -17025,13 +17065,13 @@ class GlobalWorkerOptions {
 
 /***/ }),
 
-/***/ 283:
+/***/ 284:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   XfaLayer: () => (/* binding */ XfaLayer)
 /* harmony export */ });
-/* harmony import */ var _xfa_text_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(473);
+/* harmony import */ var _xfa_text_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(50);
 
 class XfaLayer {
   static setupStorage(html, id, element, storage, intent) {
@@ -17245,7 +17285,7 @@ class XfaLayer {
 
 /***/ }),
 
-/***/ 473:
+/***/ 50:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -17296,7 +17336,7 @@ class XfaText {
 
 /***/ }),
 
-/***/ 301:
+/***/ 228:
 /***/ ((__webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
@@ -17348,18 +17388,18 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony export */   updateTextLayer: () => (/* reexport safe */ _display_text_layer_js__WEBPACK_IMPORTED_MODULE_3__.updateTextLayer),
 /* harmony export */   version: () => (/* reexport safe */ _display_api_js__WEBPACK_IMPORTED_MODULE_1__.version)
 /* harmony export */ });
-/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
-/* harmony import */ var _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(787);
-/* harmony import */ var _display_display_utils_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(500);
-/* harmony import */ var _display_text_layer_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(350);
-/* harmony import */ var _display_editor_annotation_editor_layer_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(861);
-/* harmony import */ var _display_editor_tools_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(213);
-/* harmony import */ var _display_annotation_layer_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(653);
-/* harmony import */ var _display_editor_color_picker_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(705);
-/* harmony import */ var _display_draw_layer_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(574);
-/* harmony import */ var _display_worker_options_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(983);
-/* harmony import */ var _display_editor_outliner_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(651);
-/* harmony import */ var _display_xfa_layer_js__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(283);
+/* harmony import */ var _shared_util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
+/* harmony import */ var _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(831);
+/* harmony import */ var _display_display_utils_js__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(419);
+/* harmony import */ var _display_text_layer_js__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(814);
+/* harmony import */ var _display_editor_annotation_editor_layer_js__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(731);
+/* harmony import */ var _display_editor_tools_js__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(830);
+/* harmony import */ var _display_annotation_layer_js__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(976);
+/* harmony import */ var _display_editor_color_picker_js__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(259);
+/* harmony import */ var _display_draw_layer_js__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(47);
+/* harmony import */ var _display_worker_options_js__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(164);
+/* harmony import */ var _display_editor_outliner_js__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(61);
+/* harmony import */ var _display_xfa_layer_js__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(284);
 var __webpack_async_dependencies__ = __webpack_handle_async_dependencies__([_display_api_js__WEBPACK_IMPORTED_MODULE_1__]);
 _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.then ? (await __webpack_async_dependencies__)() : __webpack_async_dependencies__)[0];
 
@@ -17375,20 +17415,20 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "485e9ce";
+const pdfjsBuild = "4ac8ee8";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
 
 /***/ }),
 
-/***/ 399:
+/***/ 178:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   MessageHandler: () => (/* binding */ MessageHandler)
 /* harmony export */ });
-/* harmony import */ var _util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(394);
+/* harmony import */ var _util_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(292);
 
 const CallbackKind = {
   UNKNOWN: 0,
@@ -17794,7 +17834,7 @@ class MessageHandler {
 
 /***/ }),
 
-/***/ 222:
+/***/ 651:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -17895,7 +17935,7 @@ class MurmurHash3_64 {
 
 /***/ }),
 
-/***/ 394:
+/***/ 292:
 /***/ ((__unused_webpack___webpack_module__, __webpack_exports__, __webpack_require__) => {
 
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
@@ -17989,7 +18029,8 @@ const AnnotationEditorParamsType = {
   INK_OPACITY: 23,
   HIGHLIGHT_COLOR: 31,
   HIGHLIGHT_DEFAULT_COLOR: 32,
-  HIGHLIGHT_THICKNESS: 33
+  HIGHLIGHT_THICKNESS: 33,
+  HIGHLIGHT_FREE: 34
 };
 const PermissionFlag = {
   PRINT: 0x04,
@@ -18807,7 +18848,7 @@ const AnnotationPrefix = "pdfjs_internal_id_";
 /******/ // startup
 /******/ // Load entry module and return exports
 /******/ // This entry module used 'module' so it can't be inlined
-/******/ var __webpack_exports__ = __webpack_require__(301);
+/******/ var __webpack_exports__ = __webpack_require__(228);
 /******/ __webpack_exports__ = globalThis.pdfjsLib = await (globalThis.pdfjsLibPromise = __webpack_exports__);
 /******/ var __webpack_exports__AbortException = __webpack_exports__.AbortException;
 /******/ var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;

@@ -93,7 +93,8 @@ const AnnotationEditorParamsType = {
   INK_OPACITY: 23,
   HIGHLIGHT_COLOR: 31,
   HIGHLIGHT_DEFAULT_COLOR: 32,
-  HIGHLIGHT_THICKNESS: 33
+  HIGHLIGHT_THICKNESS: 33,
+  HIGHLIGHT_FREE: 34
 };
 const PermissionFlag = {
   PRINT: 0x04,
@@ -1530,6 +1531,9 @@ function getRotationMatrix(rotation, width, height) {
     default:
       throw new Error("Invalid rotation");
   }
+}
+function getSizeInBytes(x) {
+  return Math.ceil(Math.ceil(Math.log2(1 + x)) / 8);
 }
 
 ;// CONCATENATED MODULE: ./src/core/stream.js
@@ -25307,6 +25311,10 @@ class Font {
         locaEntries[i].endOffset = nextOffset;
         break;
       }
+      const last = locaEntries.at(-2);
+      if (last.offset !== 0 && last.endOffset === 0) {
+        last.endOffset = oldGlyfDataLength;
+      }
       const missingGlyphs = Object.create(null);
       let writeOffset = 0;
       itemEncode(locaData, 0, writeOffset);
@@ -32458,6 +32466,7 @@ class PartialEvaluator {
           case OPS.beginMarkedContentProps:
             if (!(args[0] instanceof Name)) {
               warn(`Expected name for beginMarkedContentProps arg0=${args[0]}`);
+              operatorList.addOp(OPS.beginMarkedContentProps, ["OC", null]);
               continue;
             }
             if (args[0].name === "OC") {
@@ -32469,6 +32478,7 @@ class PartialEvaluator {
                 }
                 if (self.options.ignoreErrors) {
                   warn(`getOperatorList - ignoring beginMarkedContentProps: "${reason}".`);
+                  operatorList.addOp(OPS.beginMarkedContentProps, ["OC", null]);
                   return;
                 }
                 throw reason;
@@ -37207,6 +37217,7 @@ class CipherTransformFactory {
 
 
 
+
 async function writeObject(ref, obj, buffer, {
   encrypt = null
 }) {
@@ -37427,6 +37438,103 @@ function updateXFA({
     data
   });
 }
+async function getXRefTable(xrefInfo, baseOffset, newRefs, newXref, buffer) {
+  buffer.push("xref\n");
+  const indexes = getIndexes(newRefs);
+  let indexesPosition = 0;
+  for (const {
+    ref,
+    data
+  } of newRefs) {
+    if (ref.num === indexes[indexesPosition]) {
+      buffer.push(`${indexes[indexesPosition]} ${indexes[indexesPosition + 1]}\n`);
+      indexesPosition += 2;
+    }
+    buffer.push(`${baseOffset.toString().padStart(10, "0")} ${Math.min(ref.gen, 0xffff).toString().padStart(5, "0")} n\r\n`);
+    baseOffset += data.length;
+  }
+  computeIDs(baseOffset, xrefInfo, newXref);
+  buffer.push("trailer\n");
+  await writeDict(newXref, buffer);
+  buffer.push("\nstartxref\n", baseOffset.toString(), "\n%%EOF\n");
+}
+function getIndexes(newRefs) {
+  const indexes = [];
+  for (const {
+    ref
+  } of newRefs) {
+    if (ref.num === indexes.at(-2) + indexes.at(-1)) {
+      indexes[indexes.length - 1] += 1;
+    } else {
+      indexes.push(ref.num, 1);
+    }
+  }
+  return indexes;
+}
+async function getXRefStreamTable(xrefInfo, baseOffset, newRefs, newXref, buffer) {
+  const xrefTableData = [];
+  let maxOffset = 0;
+  let maxGen = 0;
+  for (const {
+    ref,
+    data
+  } of newRefs) {
+    maxOffset = Math.max(maxOffset, baseOffset);
+    const gen = Math.min(ref.gen, 0xffff);
+    maxGen = Math.max(maxGen, gen);
+    xrefTableData.push([1, baseOffset, gen]);
+    baseOffset += data.length;
+  }
+  newXref.set("Index", getIndexes(newRefs));
+  const offsetSize = getSizeInBytes(maxOffset);
+  const maxGenSize = getSizeInBytes(maxGen);
+  const sizes = [1, offsetSize, maxGenSize];
+  newXref.set("W", sizes);
+  computeIDs(baseOffset, xrefInfo, newXref);
+  const structSize = sizes.reduce((a, x) => a + x, 0);
+  const data = new Uint8Array(structSize * xrefTableData.length);
+  const stream = new Stream(data);
+  stream.dict = newXref;
+  let offset = 0;
+  for (const [type, objOffset, gen] of xrefTableData) {
+    offset = writeInt(type, sizes[0], offset, data);
+    offset = writeInt(objOffset, sizes[1], offset, data);
+    offset = writeInt(gen, sizes[2], offset, data);
+  }
+  await writeObject(xrefInfo.newRef, stream, buffer, {});
+  buffer.push("startxref\n", baseOffset.toString(), "\n%%EOF\n");
+}
+function computeIDs(baseOffset, xrefInfo, newXref) {
+  if (Array.isArray(xrefInfo.fileIds) && xrefInfo.fileIds.length > 0) {
+    const md5 = computeMD5(baseOffset, xrefInfo);
+    newXref.set("ID", [xrefInfo.fileIds[0], md5]);
+  }
+}
+function getTrailerDict(xrefInfo, newRefs, useXrefStream) {
+  const newXref = new Dict(null);
+  newXref.set("Prev", xrefInfo.startXRef);
+  const refForXrefTable = xrefInfo.newRef;
+  if (useXrefStream) {
+    newRefs.push({
+      ref: refForXrefTable,
+      data: ""
+    });
+    newXref.set("Size", refForXrefTable.num + 1);
+    newXref.set("Type", Name.get("XRef"));
+  } else {
+    newXref.set("Size", refForXrefTable.num);
+  }
+  if (xrefInfo.rootRef !== null) {
+    newXref.set("Root", xrefInfo.rootRef);
+  }
+  if (xrefInfo.infoRef !== null) {
+    newXref.set("Info", xrefInfo.infoRef);
+  }
+  if (xrefInfo.encryptRef !== null) {
+    newXref.set("Encrypt", xrefInfo.encryptRef);
+  }
+  return newXref;
+}
 async function incrementalUpdate({
   originalData,
   xrefInfo,
@@ -37438,7 +37546,8 @@ async function incrementalUpdate({
   needAppearances,
   acroFormRef = null,
   acroForm = null,
-  xfaData = null
+  xfaData = null,
+  useXrefStream = false
 }) {
   await updateAcroform({
     xref,
@@ -37458,8 +37567,6 @@ async function incrementalUpdate({
       xref
     });
   }
-  const newXref = new Dict(null);
-  const refForXrefTable = xrefInfo.newRef;
   let buffer, baseOffset;
   const lastByte = originalData.at(-1);
   if (lastByte === 0x0a || lastByte === 0x0d) {
@@ -37469,65 +37576,22 @@ async function incrementalUpdate({
     buffer = ["\n"];
     baseOffset = originalData.length + 1;
   }
-  newXref.set("Size", refForXrefTable.num + 1);
-  newXref.set("Prev", xrefInfo.startXRef);
-  newXref.set("Type", Name.get("XRef"));
-  if (xrefInfo.rootRef !== null) {
-    newXref.set("Root", xrefInfo.rootRef);
-  }
-  if (xrefInfo.infoRef !== null) {
-    newXref.set("Info", xrefInfo.infoRef);
-  }
-  if (xrefInfo.encryptRef !== null) {
-    newXref.set("Encrypt", xrefInfo.encryptRef);
-  }
-  newRefs.push({
-    ref: refForXrefTable,
-    data: ""
-  });
+  const newXref = getTrailerDict(xrefInfo, newRefs, useXrefStream);
   newRefs = newRefs.sort((a, b) => a.ref.num - b.ref.num);
-  const xrefTableData = [[0, 1, 0xffff]];
-  const indexes = [0, 1];
-  let maxOffset = 0;
   for (const {
-    ref,
     data
   } of newRefs) {
-    maxOffset = Math.max(maxOffset, baseOffset);
-    xrefTableData.push([1, baseOffset, Math.min(ref.gen, 0xffff)]);
-    baseOffset += data.length;
-    indexes.push(ref.num, 1);
     buffer.push(data);
   }
-  newXref.set("Index", indexes);
-  if (Array.isArray(xrefInfo.fileIds) && xrefInfo.fileIds.length > 0) {
-    const md5 = computeMD5(baseOffset, xrefInfo);
-    newXref.set("ID", [xrefInfo.fileIds[0], md5]);
-  }
-  const offsetSize = Math.ceil(Math.log2(maxOffset) / 8);
-  const sizes = [1, offsetSize, 2];
-  const structSize = sizes[0] + sizes[1] + sizes[2];
-  const tableLength = structSize * xrefTableData.length;
-  newXref.set("W", sizes);
-  newXref.set("Length", tableLength);
-  buffer.push(`${refForXrefTable.num} ${refForXrefTable.gen} obj\n`);
-  await writeDict(newXref, buffer, null);
-  buffer.push(" stream\n");
-  const bufferLen = buffer.reduce((a, str) => a + str.length, 0);
-  const footer = `\nendstream\nendobj\nstartxref\n${baseOffset}\n%%EOF\n`;
-  const array = new Uint8Array(originalData.length + bufferLen + tableLength + footer.length);
+  await (useXrefStream ? getXRefStreamTable(xrefInfo, baseOffset, newRefs, newXref, buffer) : getXRefTable(xrefInfo, baseOffset, newRefs, newXref, buffer));
+  const totalLength = buffer.reduce((a, str) => a + str.length, originalData.length);
+  const array = new Uint8Array(totalLength);
   array.set(originalData);
   let offset = originalData.length;
   for (const str of buffer) {
     writeString(str, offset, array);
     offset += str.length;
   }
-  for (const [type, objOffset, gen] of xrefTableData) {
-    offset = writeInt(type, sizes[0], offset, array);
-    offset = writeInt(objOffset, sizes[1], offset, array);
-    offset = writeInt(gen, sizes[2], offset, array);
-  }
-  writeString(footer, offset, array);
   return array;
 }
 
@@ -55179,7 +55243,13 @@ class PDFDocument {
     if (this.linearization) {
       stream.reset();
       if (find(stream, ENDOBJ_SIGNATURE)) {
-        startXRef = stream.pos + 6 - stream.start;
+        stream.skip(6);
+        let ch = stream.peekByte();
+        while (isWhiteSpace(ch)) {
+          stream.pos++;
+          ch = stream.peekByte();
+        }
+        startXRef = stream.pos - stream.start;
       }
     } else {
       const step = 1024;
@@ -57082,7 +57152,8 @@ class WorkerMessageHandler {
         needAppearances,
         acroFormRef,
         acroForm,
-        xfaData
+        xfaData,
+        useXrefStream: isDict(xref.topDict, "XRef")
       }).finally(() => {
         xref.resetNewTemporaryRef();
       });
@@ -57202,7 +57273,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "485e9ce";
+const pdfjsBuild = "4ac8ee8";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };
