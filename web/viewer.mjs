@@ -2266,7 +2266,8 @@ const PDFViewerApplication = {
       enablePrintAutoRotate: _app_options_js__WEBPACK_IMPORTED_MODULE_2__.AppOptions.get("enablePrintAutoRotate"),
       maxCanvasPixels: _app_options_js__WEBPACK_IMPORTED_MODULE_2__.AppOptions.get("maxCanvasPixels"),
       enablePermissions: _app_options_js__WEBPACK_IMPORTED_MODULE_2__.AppOptions.get("enablePermissions"),
-      pageColors
+      pageColors,
+      mlManager: this.mlManager
     });
     this.pdfViewer = pdfViewer;
     pdfRenderingQueue.setViewer(pdfViewer);
@@ -2448,6 +2449,9 @@ const PDFViewerApplication = {
   },
   get externalServices() {
     return (0,pdfjs_lib__WEBPACK_IMPORTED_MODULE_1__.shadow)(this, "externalServices", new web_external_services__WEBPACK_IMPORTED_MODULE_4__.ExternalServices());
+  },
+  get mlManager() {
+    return (0,pdfjs_lib__WEBPACK_IMPORTED_MODULE_1__.shadow)(this, "mlManager", _app_options_js__WEBPACK_IMPORTED_MODULE_2__.AppOptions.get("enableML") === true ? new web_external_services__WEBPACK_IMPORTED_MODULE_4__.MLManager() : null);
   },
   get initialized() {
     return this._initializedCapability.settled;
@@ -4394,6 +4398,10 @@ const defaultOptions = {
     value: false,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE
   },
+  enableML: {
+    value: false,
+    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+  },
   enablePermissions: {
     value: false,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE
@@ -4811,8 +4819,28 @@ class CaretBrowsingMode {
       return;
     }
     const midY = rect.y + rect.height / 2;
-    const caretPosition = CaretBrowsingMode.#caretPositionFromPoint(caretX, midY);
-    if (caretPosition.offsetNode?.parentElement !== element) {
+    let caretPosition = CaretBrowsingMode.#caretPositionFromPoint(caretX, midY);
+    let parentElement = caretPosition.offsetNode?.parentElement;
+    if (parentElement && parentElement !== element) {
+      const elementsAtPoint = document.elementsFromPoint(caretX, midY);
+      const savedVisibilities = [];
+      for (const el of elementsAtPoint) {
+        if (el === element) {
+          break;
+        }
+        const {
+          style
+        } = el;
+        savedVisibilities.push([el, style.visibility]);
+        style.visibility = "hidden";
+      }
+      caretPosition = CaretBrowsingMode.#caretPositionFromPoint(caretX, midY);
+      parentElement = caretPosition.offsetNode?.parentElement;
+      for (const [el, visibility] of savedVisibilities) {
+        el.style.visibility = visibility;
+      }
+    }
+    if (parentElement !== element) {
       if (select) {
         selection.extend(element.firstChild, 0);
       } else {
@@ -5263,6 +5291,7 @@ __webpack_async_result__();
 __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependencies__, __webpack_async_result__) => { try {
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   ExternalServices: () => (/* binding */ ExternalServices),
+/* harmony export */   MLManager: () => (/* binding */ MLManager),
 /* harmony export */   Preferences: () => (/* binding */ Preferences),
 /* harmony export */   initCom: () => (/* binding */ initCom)
 /* harmony export */ });
@@ -5295,6 +5324,11 @@ class ExternalServices extends _external_services_js__WEBPACK_IMPORTED_MODULE_4_
   }
   createScripting() {
     return new _generic_scripting_js__WEBPACK_IMPORTED_MODULE_3__.GenericScripting(_app_options_js__WEBPACK_IMPORTED_MODULE_0__.AppOptions.get("sandboxBundleSrc"));
+  }
+}
+class MLManager {
+  async guess() {
+    return null;
   }
 }
 
@@ -9494,7 +9528,7 @@ class PDFPresentationMode {
     this.#addWindowListeners();
     this.#showControls();
     this.contextMenuOpen = false;
-    window.getSelection().removeAllRanges();
+    document.getSelection().empty();
   }
   #exit() {
     const pageNumber = this.pdfViewer.currentPageNumber;
@@ -11376,6 +11410,7 @@ class PDFViewer {
   #containerTopLeft = null;
   #copyCallbackBound = null;
   #enablePermissions = false;
+  #mlManager = null;
   #getAllTextInProgress = false;
   #hiddenCopyElement = null;
   #interruptCopyCondition = false;
@@ -11420,6 +11455,7 @@ class PDFViewer {
     this.l10n ||= new web_null_l10n__WEBPACK_IMPORTED_MODULE_2__.GenericL10n();
     this.#enablePermissions = options.enablePermissions || false;
     this.pageColors = options.pageColors || null;
+    this.#mlManager = options.mlManager || null;
     this.defaultRenderingQueue = !options.renderingQueue;
     if (this.defaultRenderingQueue) {
       this.renderingQueue = new _pdf_rendering_queue_js__WEBPACK_IMPORTED_MODULE_4__.PDFRenderingQueue();
@@ -11790,7 +11826,7 @@ class PDFViewer {
         if (pdfDocument.isPureXfa) {
           console.warn("Warning: XFA-editing is not implemented.");
         } else if (isValidAnnotationEditorMode(mode)) {
-          this.#annotationEditorUIManager = new pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorUIManager(this.container, this.viewer, this.#altTextManager, this.eventBus, pdfDocument, this.pageColors, this.#annotationEditorHighlightColors);
+          this.#annotationEditorUIManager = new pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorUIManager(this.container, this.viewer, this.#altTextManager, this.eventBus, pdfDocument, this.pageColors, this.#annotationEditorHighlightColors, this.#mlManager);
           this.eventBus.dispatch("annotationeditoruimanager", {
             source: this,
             uiManager: this.#annotationEditorUIManager
@@ -12940,6 +12976,7 @@ class BasePreferences {
     defaultZoomValue: "",
     disablePageLabels: false,
     enableHighlightEditor: false,
+    enableML: false,
     enablePermissions: false,
     enablePrintAutoRotate: true,
     enableScripting: true,
@@ -14143,6 +14180,15 @@ class Toolbar {
         once: true
       });
     }
+    eventBus._on("showannotationeditorui", ({
+      mode
+    }) => {
+      switch (mode) {
+        case pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorType.HIGHLIGHT:
+          options.editorHighlightButton.click();
+          break;
+      }
+    });
     this.reset();
   }
   #setAnnotationEditorUIManager(uiManager, parentContainer) {
@@ -14939,7 +14985,7 @@ _app_js__WEBPACK_IMPORTED_MODULE_3__ = (__webpack_async_dependencies__.then ? (a
 
 
 const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "4ac8ee8";
+const pdfjsBuild = "1bd6af6";
 const AppConstants = {
   LinkTarget: _pdf_link_service_js__WEBPACK_IMPORTED_MODULE_2__.LinkTarget,
   RenderingStates: _ui_utils_js__WEBPACK_IMPORTED_MODULE_0__.RenderingStates,

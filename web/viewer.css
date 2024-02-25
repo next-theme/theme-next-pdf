@@ -208,6 +208,11 @@
     transform:rotate(90deg) translateY(-100%);
   }
 
+.annotationLayer.disabled section,
+    .annotationLayer.disabled .popup{
+      pointer-events:none;
+    }
+
 .annotationLayer canvas{
     position:absolute;
     width:100%;
