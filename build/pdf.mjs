@@ -2635,6 +2635,42 @@ class AnnotationStorage {
       transfer
     } : SerializableEmpty;
   }
+  get editorStats() {
+    const stats = Object.create(null);
+    const typeToEditor = new Map();
+    for (const value of this.#storage.values()) {
+      if (!(value instanceof _editor_editor_js__WEBPACK_IMPORTED_MODULE_1__.AnnotationEditor)) {
+        continue;
+      }
+      const editorStats = value.telemetryFinalData;
+      if (!editorStats) {
+        continue;
+      }
+      const {
+        type
+      } = editorStats;
+      if (!typeToEditor.has(type)) {
+        typeToEditor.set(type, Object.getPrototypeOf(value).constructor);
+      }
+      const map = stats[type] ||= new Map();
+      for (const [key, val] of Object.entries(editorStats)) {
+        if (key === "type") {
+          continue;
+        }
+        let counters = map.get(key);
+        if (!counters) {
+          counters = new Map();
+          map.set(key, counters);
+        }
+        const count = counters.get(val) ?? 0;
+        counters.set(val, count + 1);
+      }
+    }
+    for (const [type, editor] of typeToEditor) {
+      stats[type] = editor.computeTelemetryFinalData(stats[type]);
+    }
+    return stats;
+  }
 }
 class PrintAnnotationStorage extends AnnotationStorage {
   #serializable;
@@ -4540,7 +4576,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.1.0";
-const build = "1bd6af6";
+const build = "dd3adc8";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -7786,21 +7822,15 @@ async function fetchData(url, type = "text") {
         return;
       }
       if (request.status === 200 || request.status === 0) {
-        let data;
         switch (type) {
           case "arraybuffer":
           case "blob":
           case "json":
-            data = request.response;
-            break;
-          default:
-            data = request.responseText;
-            break;
+            resolve(request.response);
+            return;
         }
-        if (data) {
-          resolve(data);
-          return;
-        }
+        resolve(request.responseText);
+        return;
       }
       reject(new Error(request.statusText));
     };
@@ -8907,18 +8937,24 @@ var display_utils = __webpack_require__(419);
 
 
 class HighlightEditor extends editor_editor.AnnotationEditor {
+  #anchorNode = null;
+  #anchorOffset = 0;
   #boxes;
   #clipPathId = null;
   #colorPicker = null;
   #focusOutlines = null;
+  #focusNode = null;
+  #focusOffset = 0;
   #highlightDiv = null;
   #highlightOutlines = null;
   #id = null;
   #isFreeHighlight = false;
+  #boundKeydown = this.#keydown.bind(this);
   #lastPoint = null;
   #opacity;
   #outlineId = null;
   #thickness;
+  #methodOfCreation = "";
   static _defaultColor = null;
   static _defaultOpacity = 1;
   static _defaultThickness = 12;
@@ -8928,6 +8964,18 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
   static _freeHighlightId = -1;
   static _freeHighlight = null;
   static _freeHighlightClipId = "";
+  static get _keyboardManager() {
+    const proto = HighlightEditor.prototype;
+    return (0,util.shadow)(this, "_keyboardManager", new tools.KeyboardManager([[["ArrowLeft", "mac+ArrowLeft"], proto._moveCaret, {
+      args: [0]
+    }], [["ArrowRight", "mac+ArrowRight"], proto._moveCaret, {
+      args: [1]
+    }], [["ArrowUp", "mac+ArrowUp"], proto._moveCaret, {
+      args: [2]
+    }], [["ArrowDown", "mac+ArrowDown"], proto._moveCaret, {
+      args: [3]
+    }]]));
+  }
   constructor(params) {
     super({
       ...params,
@@ -8937,16 +8985,41 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     this.#thickness = params.thickness || HighlightEditor._defaultThickness;
     this.#opacity = params.opacity || HighlightEditor._defaultOpacity;
     this.#boxes = params.boxes || null;
+    this.#methodOfCreation = params.methodOfCreation || "";
     this._isDraggable = false;
     if (params.highlightId > -1) {
       this.#isFreeHighlight = true;
       this.#createFreeOutlines(params);
       this.#addToDrawLayer();
     } else {
+      this.#anchorNode = params.anchorNode;
+      this.#anchorOffset = params.anchorOffset;
+      this.#focusNode = params.focusNode;
+      this.#focusOffset = params.focusOffset;
       this.#createOutlines();
       this.#addToDrawLayer();
       this.rotate(this.rotation);
     }
+  }
+  get telemetryInitialData() {
+    return {
+      action: "added",
+      type: this.#isFreeHighlight ? "free_highlight" : "highlight",
+      color: this._uiManager.highlightColorNames.get(this.color),
+      thickness: this.#thickness,
+      methodOfCreation: this.#methodOfCreation
+    };
+  }
+  get telemetryFinalData() {
+    return {
+      type: "highlight",
+      color: this._uiManager.highlightColorNames.get(this.color)
+    };
+  }
+  static computeTelemetryFinalData(data) {
+    return {
+      numberOfColors: data.get("color").size
+    };
   }
   #createOutlines() {
     const outliner = new editor_outliner.Outliner(this.#boxes, 0.001);
@@ -9077,6 +9150,10 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       overwriteIfSameType: true,
       keepUndo: true
     });
+    this._reportTelemetry({
+      action: "color_changed",
+      color: this._uiManager.highlightColorNames.get(color)
+    }, true);
   }
   #updateThickness(thickness) {
     const savedThickness = this.#thickness;
@@ -9093,6 +9170,10 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       overwriteIfSameType: true,
       keepUndo: true
     });
+    this._reportTelemetry({
+      action: "thickness_changed",
+      thickness
+    }, true);
   }
   async addEditToolbar() {
     const toolbar = await super.addEditToolbar();
@@ -9131,6 +9212,9 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
   remove() {
     super.remove();
     this.#cleanDrawLayer();
+    this._reportTelemetry({
+      action: "deleted"
+    });
   }
   rebuild() {
     if (!this.parent) {
@@ -9250,6 +9334,8 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     const div = super.render();
     if (this.#isFreeHighlight) {
       div.classList.add("free");
+    } else {
+      this.div.addEventListener("keydown", this.#boundKeydown);
     }
     const highlightDiv = this.#highlightDiv = document.createElement("div");
     div.append(highlightDiv);
@@ -9267,6 +9353,33 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
   pointerleave() {
     this.parent.drawLayer.removeClass(this.#outlineId, "hovered");
   }
+  #keydown(event) {
+    HighlightEditor._keyboardManager.exec(this, event);
+  }
+  _moveCaret(direction) {
+    this.parent.unselect(this);
+    switch (direction) {
+      case 0:
+      case 2:
+        this.#setCaret(true);
+        break;
+      case 1:
+      case 3:
+        this.#setCaret(false);
+        break;
+    }
+  }
+  #setCaret(start) {
+    if (!this.#anchorNode) {
+      return;
+    }
+    const selection = window.getSelection();
+    if (start) {
+      selection.setPosition(this.#anchorNode, this.#anchorOffset);
+    } else {
+      selection.setPosition(this.#focusNode, this.#focusOffset);
+    }
+  }
   select() {
     super.select();
     this.parent?.drawLayer.removeClass(this.#outlineId, "hovered");
@@ -9275,18 +9388,20 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
   unselect() {
     super.unselect();
     this.parent?.drawLayer.removeClass(this.#outlineId, "selected");
+    if (!this.#isFreeHighlight) {
+      this.#setCaret(false);
+    }
   }
   #getRotation() {
     return this.#isFreeHighlight ? this.rotation : 0;
   }
-  #serializeBoxes(rect) {
+  #serializeBoxes() {
     if (this.#isFreeHighlight) {
       return null;
     }
     const [pageWidth, pageHeight] = this.pageDimensions;
     const boxes = this.#boxes;
     const quadPoints = new Array(boxes.length * 8);
-    const [tx, ty] = rect;
     let i = 0;
     for (const {
       x,
@@ -9294,8 +9409,8 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       width,
       height
     } of boxes) {
-      const sx = tx + x * pageWidth;
-      const sy = ty + (1 - y - height) * pageHeight;
+      const sx = x * pageWidth;
+      const sy = (1 - y - height) * pageHeight;
       quadPoints[i] = quadPoints[i + 4] = sx;
       quadPoints[i + 1] = quadPoints[i + 3] = sy;
       quadPoints[i + 2] = quadPoints[i + 6] = sx + width * pageWidth;
@@ -9405,7 +9520,7 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       color,
       opacity: this.#opacity,
       thickness: this.#thickness,
-      quadPoints: this.#serializeBoxes(rect),
+      quadPoints: this.#serializeBoxes(),
       outlines: this.#serializeOutlines(rect),
       pageIndex: this.pageIndex,
       rect,
@@ -10417,15 +10532,8 @@ class StampEditor extends editor_editor.AnnotationEditor {
       this.parent.addUndoableEditor(this);
       this.#hasBeenAddedInUndoStack = true;
     }
-    this._uiManager._eventBus.dispatch("reporttelemetry", {
-      source: this,
-      details: {
-        type: "editing",
-        subtype: this.editorType,
-        data: {
-          action: "inserted_image"
-        }
-      }
+    this._reportTelemetry({
+      action: "inserted_image"
     });
     this.addAltTextButton();
     if (this.#bitmapFileName) {
@@ -10646,11 +10754,9 @@ class AnnotationEditorLayer {
   #allowClick = false;
   #annotationLayer = null;
   #boundPointerup = this.pointerup.bind(this);
-  #boundPointerUpAfterSelection = this.pointerUpAfterSelection.bind(this);
   #boundPointerdown = this.pointerdown.bind(this);
   #boundTextLayerPointerDown = this.#textLayerPointerDown.bind(this);
   #editorFocusTimeoutId = null;
-  #boundSelectionStart = this.selectionStart.bind(this);
   #editors = new Map();
   #hadPointerDown = false;
   #isCleaningUp = false;
@@ -10841,14 +10947,12 @@ class AnnotationEditorLayer {
   }
   enableTextSelection() {
     if (this.#textLayer?.div) {
-      document.addEventListener("selectstart", this.#boundSelectionStart);
       this.#textLayer.div.addEventListener("pointerdown", this.#boundTextLayerPointerDown);
       this.#textLayer.div.classList.add("highlighting");
     }
   }
   disableTextSelection() {
     if (this.#textLayer?.div) {
-      document.removeEventListener("selectstart", this.#boundSelectionStart);
       this.#textLayer.div.removeEventListener("pointerdown", this.#boundTextLayerPointerDown);
       this.#textLayer.div.classList.remove("highlighting");
     }
@@ -10934,6 +11038,7 @@ class AnnotationEditorLayer {
     editor.fixAndSetPosition();
     editor.onceAdded();
     this.#uiManager.addToAnnotationStorage(editor);
+    editor._reportTelemetry(editor.telemetryInitialData);
   }
   moveEditorInDOM(editor) {
     if (!editor.isAttachedToDOM) {
@@ -11065,36 +11170,6 @@ class AnnotationEditorLayer {
   }
   unselect(editor) {
     this.#uiManager.unselect(editor);
-  }
-  selectionStart(event) {
-    if (!this.#textLayer || event.target.parentElement.closest(".textLayer") !== this.#textLayer.div) {
-      return;
-    }
-    if (this.#uiManager.isShiftKeyDown) {
-      const keyup = () => {
-        if (this.#uiManager.isShiftKeyDown) {
-          return;
-        }
-        window.removeEventListener("keyup", keyup);
-        window.removeEventListener("blur", keyup);
-        this.pointerUpAfterSelection({});
-      };
-      window.addEventListener("keyup", keyup);
-      window.addEventListener("blur", keyup);
-    } else {
-      this.#textLayer.div.addEventListener("pointerup", this.#boundPointerUpAfterSelection, {
-        once: true
-      });
-    }
-  }
-  pointerUpAfterSelection(event) {
-    const boxes = this.#uiManager.getSelectionBoxes(this.#textLayer?.div);
-    if (boxes) {
-      this.createAndAddNewEditor(event, false, {
-        boxes
-      });
-      document.getSelection().empty();
-    }
   }
   pointerup(event) {
     const {
@@ -11554,15 +11629,8 @@ class AltText {
         this.#altTextTooltipTimeout = setTimeout(() => {
           this.#altTextTooltipTimeout = null;
           this.#altTextTooltip.classList.add("show");
-          this.#editor._uiManager._eventBus.dispatch("reporttelemetry", {
-            source: this,
-            details: {
-              type: "editing",
-              subtype: this.#editor.editorType,
-              data: {
-                action: "alt_text_tooltip"
-              }
-            }
+          this.#editor._reportTelemetry({
+            action: "alt_text_tooltip"
           });
         }, DELAY_TO_SHOW_TOOLTIP);
       });
@@ -11698,6 +11766,7 @@ class AnnotationEditor {
   #moveInDOMTimeout = null;
   #prevDragX = 0;
   #prevDragY = 0;
+  #telemetryTimeouts = null;
   _initialOptions = Object.create(null);
   _uiManager = null;
   _focusEventsAllowed = true;
@@ -11707,6 +11776,7 @@ class AnnotationEditor {
   static _borderLineWidth = -1;
   static _colorManager = new tools.ColorManager();
   static _zIndex = 1;
+  static _telemetryTimeout = 1000;
   static get _resizerKeyboardManager() {
     const resize = AnnotationEditor.prototype._resizeWithKeyboard;
     const small = tools.AnnotationEditorUIManager.TRANSLATE_SMALL;
@@ -12503,6 +12573,12 @@ class AnnotationEditor {
     }
     this.#stopResizing();
     this.removeEditToolbar();
+    if (this.#telemetryTimeouts) {
+      for (const timeout of this.#telemetryTimeouts.values()) {
+        clearTimeout(timeout);
+      }
+      this.#telemetryTimeouts = null;
+    }
   }
   get isResizable() {
     return false;
@@ -12684,6 +12760,43 @@ class AnnotationEditor {
   }
   static canCreateNewEmptyEditor() {
     return true;
+  }
+  get telemetryInitialData() {
+    return {
+      action: "added"
+    };
+  }
+  get telemetryFinalData() {
+    return null;
+  }
+  _reportTelemetry(data, mustWait = false) {
+    if (mustWait) {
+      this.#telemetryTimeouts ||= new Map();
+      const {
+        action
+      } = data;
+      let timeout = this.#telemetryTimeouts.get(action);
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      timeout = setTimeout(() => {
+        this._reportTelemetry(data);
+        this.#telemetryTimeouts.delete(action);
+        if (this.#telemetryTimeouts.size === 0) {
+          this.#telemetryTimeouts = null;
+        }
+      }, AnnotationEditor._telemetryTimeout);
+      this.#telemetryTimeouts.set(action, timeout);
+      return;
+    }
+    data.type ||= this.editorType;
+    this._uiManager._eventBus.dispatch("reporttelemetry", {
+      source: this,
+      details: {
+        type: "editing",
+        data
+      }
+    });
   }
 }
 class FakeEditor extends AnnotationEditor {
@@ -13339,7 +13452,8 @@ function opacityToHex(opacity) {
 }
 class IdManager {
   #id = 0;
-  getId() {
+  constructor() {}
+  get id() {
     return `${_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorPrefix}${this.#id++}`;
   }
 }
@@ -13669,8 +13783,8 @@ class AnnotationEditorUIManager {
   #editorsToRescale = new Set();
   #filterFactory = null;
   #focusMainContainerTimeoutId = null;
-  #hasSelection = false;
   #highlightColors = null;
+  #highlightWhenShiftUp = false;
   #idManager = new IdManager();
   #isEnabled = false;
   #isWaiting = false;
@@ -13736,7 +13850,9 @@ class AnnotationEditorUIManager {
         target: el
       }) => !(el instanceof HTMLButtonElement) && self.#container.contains(el) && !self.isEnterHandled
     }], [[" ", "mac+ "], proto.addNewEditorFromKeyboard, {
-      checker: self => self.#container.contains(document.activeElement)
+      checker: (self, {
+        target: el
+      }) => !(el instanceof HTMLButtonElement) && self.#container.contains(document.activeElement)
     }], [["Escape", "mac+Escape"], proto.unselectAll], [["ArrowLeft", "mac+ArrowLeft"], proto.translateSelectedEditors, {
       args: [-small, 0],
       checker: arrowChecker
@@ -13826,6 +13942,9 @@ class AnnotationEditorUIManager {
   get highlightColors() {
     return (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.shadow)(this, "highlightColors", this.#highlightColors ? new Map(this.#highlightColors.split(",").map(pair => pair.split("=").map(x => x.trim()))) : null);
   }
+  get highlightColorNames() {
+    return (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.shadow)(this, "highlightColorNames", this.highlightColors ? new Map(Array.from(this.highlightColors, e => e.reverse())) : null);
+  }
   setMainHighlightColorPicker(colorPicker) {
     this.#mainHighlightColorPicker = colorPicker;
   }
@@ -13878,13 +13997,16 @@ class AnnotationEditorUIManager {
     this.commitOrRemove();
     this.viewParameters.rotation = pagesRotation;
   }
-  highlightSelection() {
+  highlightSelection(methodOfCreation = "") {
     const selection = document.getSelection();
     if (!selection || selection.isCollapsed) {
       return;
     }
     const {
-      anchorNode
+      anchorNode,
+      anchorOffset,
+      focusNode,
+      focusOffset
     } = selection;
     const anchorElement = anchorNode.nodeType === Node.TEXT_NODE ? anchorNode.parentElement : anchorNode;
     const textLayer = anchorElement.closest(".textLayer");
@@ -13902,7 +14024,12 @@ class AnnotationEditorUIManager {
           x: 0,
           y: 0
         }, false, {
-          boxes
+          methodOfCreation,
+          boxes,
+          anchorNode,
+          anchorOffset,
+          focusNode,
+          focusOffset
         });
         break;
       }
@@ -13916,8 +14043,7 @@ class AnnotationEditorUIManager {
   #selectionChange() {
     const selection = document.getSelection();
     if (!selection || selection.isCollapsed) {
-      if (this.#hasSelection) {
-        this.#hasSelection = false;
+      if (this.#selectedTextNode) {
         this.#selectedTextNode = null;
         this.#dispatchUpdateStates({
           hasSelectedText: false
@@ -13933,8 +14059,7 @@ class AnnotationEditorUIManager {
     }
     const anchorElement = anchorNode.nodeType === Node.TEXT_NODE ? anchorNode.parentElement : anchorNode;
     if (!anchorElement.closest(".textLayer")) {
-      if (this.#hasSelection) {
-        this.#hasSelection = false;
+      if (this.#selectedTextNode) {
         this.#selectedTextNode = null;
         this.#dispatchUpdateStates({
           hasSelectedText: false
@@ -13942,11 +14067,28 @@ class AnnotationEditorUIManager {
       }
       return;
     }
-    this.#hasSelection = true;
     this.#selectedTextNode = anchorNode;
     this.#dispatchUpdateStates({
       hasSelectedText: true
     });
+    if (this.#mode !== _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorType.HIGHLIGHT) {
+      return;
+    }
+    this.#highlightWhenShiftUp = this.isShiftKeyDown;
+    if (!this.isShiftKeyDown) {
+      const pointerup = e => {
+        if (e.type === "pointerup" && e.button !== 0) {
+          return;
+        }
+        window.removeEventListener("pointerup", pointerup);
+        window.removeEventListener("blur", pointerup);
+        if (e.type === "pointerup") {
+          this.highlightSelection("main_toolbar");
+        }
+      };
+      window.addEventListener("pointerup", pointerup);
+      window.addEventListener("blur", pointerup);
+    }
   }
   #addSelectionListener() {
     document.addEventListener("selectionchange", this.#boundSelectionChange);
@@ -13964,6 +14106,10 @@ class AnnotationEditorUIManager {
   }
   blur() {
     this.isShiftKeyDown = false;
+    if (this.#highlightWhenShiftUp) {
+      this.#highlightWhenShiftUp = false;
+      this.highlightSelection("main_toolbar");
+    }
     if (!this.hasSelection) {
       return;
     }
@@ -14107,11 +14253,25 @@ class AnnotationEditorUIManager {
   keyup(event) {
     if (this.isShiftKeyDown && event.key === "Shift") {
       this.isShiftKeyDown = false;
+      if (this.#highlightWhenShiftUp) {
+        this.#highlightWhenShiftUp = false;
+        this.highlightSelection("main_toolbar");
+      }
     }
   }
-  onEditingAction(details) {
-    if (["undo", "redo", "delete", "selectAll", "highlightSelection"].includes(details.name)) {
-      this[details.name]();
+  onEditingAction({
+    name
+  }) {
+    switch (name) {
+      case "undo":
+      case "redo":
+      case "delete":
+      case "selectAll":
+        this[name]();
+        break;
+      case "highlightSelection":
+        this.highlightSelection("context_menu");
+        break;
     }
   }
   #dispatchUpdateStates(details) {
@@ -14121,6 +14281,9 @@ class AnnotationEditorUIManager {
         source: this,
         details: Object.assign(this.#previousStates, details)
       });
+      if (this.#mode === _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorType.HIGHLIGHT && details.hasSelectedEditor === false) {
+        this.#dispatchUpdateUI([[_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorParamsType.HIGHLIGHT_FREE, true]]);
+      }
     }
   }
   #dispatchUpdateUI(details) {
@@ -14161,7 +14324,7 @@ class AnnotationEditorUIManager {
     }
   }
   getId() {
-    return this.#idManager.getId();
+    return this.#idManager.id;
   }
   get currentLayer() {
     return this.#allLayers.get(this.#currentPageIndex);
@@ -17548,7 +17711,7 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "1bd6af6";
+const pdfjsBuild = "dd3adc8";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });

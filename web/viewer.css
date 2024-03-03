@@ -2230,7 +2230,12 @@
     }
       }
 
-#highlightParamsToolbarContainer #editorHighlightThickness .thicknessPicker::before{
+:is(#highlightParamsToolbarContainer #editorHighlightThickness .thicknessPicker > .editorParamsSlider[disabled]){
+        opacity:0.4;
+      }
+
+#highlightParamsToolbarContainer #editorHighlightThickness .thicknessPicker::before,
+      #highlightParamsToolbarContainer #editorHighlightThickness .thicknessPicker::after{
         content:"";
         width:8px;
         aspect-ratio:1;
@@ -2239,18 +2244,13 @@
         background-color:var(--example-color);
       }
 
+#highlightParamsToolbarContainer #editorHighlightThickness .thicknessPicker::after{
+        width:24px;
+      }
+
 #highlightParamsToolbarContainer #editorHighlightThickness .thicknessPicker .editorParamsSlider{
         width:unset;
         height:14px;
-      }
-
-#highlightParamsToolbarContainer #editorHighlightThickness .thicknessPicker::after{
-        content:"";
-        width:24px;
-        aspect-ratio:1;
-        display:block;
-        border-radius:100%;
-        background-color:var(--example-color);
       }
 
 :root{

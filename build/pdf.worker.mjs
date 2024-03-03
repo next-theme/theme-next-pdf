@@ -52829,6 +52829,7 @@ class LinkAnnotation extends Annotation {
       annotationGlobals
     } = params;
     this.data.annotationType = AnnotationType.LINK;
+    this.data.noHTML = false;
     const quadPoints = getQuadPoints(dict, this.rectangle);
     if (quadPoints) {
       this.data.quadPoints = quadPoints;
@@ -57273,7 +57274,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "1bd6af6";
+const pdfjsBuild = "dd3adc8";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };

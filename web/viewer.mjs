@@ -1577,16 +1577,9 @@ class AltTextManager {
     }
   }
   #close() {
-    this.#eventBus.dispatch("reporttelemetry", {
-      source: this,
-      details: {
-        type: "editing",
-        subtype: this.#currentEditor.editorType,
-        data: this.#telemetryData || {
-          action: "alt_text_cancel",
-          alt_text_keyboard: !this.#hasUsedPointer
-        }
-      }
+    this.#currentEditor._reportTelemetry(this.#telemetryData || {
+      action: "alt_text_cancel",
+      alt_text_keyboard: !this.#hasUsedPointer
     });
     this.#telemetryData = null;
     this.#removeOnClickListeners();
@@ -2103,6 +2096,9 @@ const PDFViewerApplication = {
   _isCtrlKeyDown: false,
   _nimbusDataPromise: null,
   _caretBrowsing: null,
+  _isScrolling: false,
+  _lastScrollTop: 0,
+  _lastScrollLeft: 0,
   async initialize(appConfig) {
     let l10nPromise;
     this.appConfig = appConfig;
@@ -2446,6 +2442,42 @@ const PDFViewerApplication = {
     } else {
       this._hideViewBookmark();
     }
+    if (!("onscrollend" in document.documentElement)) {
+      return;
+    }
+    const {
+      mainContainer
+    } = appConfig;
+    ({
+      scrollTop: this._lastScrollTop,
+      scrollLeft: this._lastScrollLeft
+    } = mainContainer);
+    const scroll = () => {
+      if (this._lastScrollTop === mainContainer.scrollTop && this._lastScrollLeft === mainContainer.scrollLeft) {
+        return;
+      }
+      mainContainer.removeEventListener("scroll", scroll, {
+        passive: true
+      });
+      this._isScrolling = true;
+      const scrollend = () => {
+        ({
+          scrollTop: this._lastScrollTop,
+          scrollLeft: this._lastScrollLeft
+        } = mainContainer);
+        this._isScrolling = false;
+        mainContainer.addEventListener("scroll", scroll, {
+          passive: true
+        });
+        mainContainer.removeEventListener("scrollend", scrollend);
+        mainContainer.removeEventListener("blur", scrollend);
+      };
+      mainContainer.addEventListener("scrollend", scrollend);
+      mainContainer.addEventListener("blur", scrollend);
+    };
+    mainContainer.addEventListener("scroll", scroll, {
+      passive: true
+    });
   },
   get externalServices() {
     return (0,pdfjs_lib__WEBPACK_IMPORTED_MODULE_1__.shadow)(this, "externalServices", new web_external_services__WEBPACK_IMPORTED_MODULE_4__.ExternalServices());
@@ -2710,7 +2742,8 @@ const PDFViewerApplication = {
       this.externalServices.reportTelemetry({
         type: "editing",
         data: {
-          type: "save"
+          type: "save",
+          stats: this.pdfDocument?.annotationStorage.editorStats
         }
       });
     }
@@ -3102,14 +3135,6 @@ const PDFViewerApplication = {
     annotationStorage.onAnnotationEditor = typeStr => {
       this._hasAnnotationEditors = !!typeStr;
       this.setTitle();
-      if (typeStr) {
-        this.externalServices.reportTelemetry({
-          type: "editing",
-          data: {
-            type: typeStr
-          }
-        });
-      }
     };
   },
   setInitialView(storedHash, {
@@ -3194,7 +3219,8 @@ const PDFViewerApplication = {
       this.externalServices.reportTelemetry({
         type: "editing",
         data: {
-          type: "print"
+          type: "print",
+          stats: this.pdfDocument?.annotationStorage.editorStats
         }
       });
     }
@@ -3838,7 +3864,7 @@ function webViewerWheel(evt) {
   const isPinchToZoom = evt.ctrlKey && !PDFViewerApplication._isCtrlKeyDown && deltaMode === WheelEvent.DOM_DELTA_PIXEL && evt.deltaX === 0 && (Math.abs(scaleFactor - 1) < 0.05 || isBuiltInMac) && evt.deltaZ === 0;
   if (isPinchToZoom || evt.ctrlKey && supportsMouseWheelZoomCtrlKey || evt.metaKey && supportsMouseWheelZoomMetaKey) {
     evt.preventDefault();
-    if (zoomDisabledTimeout || document.visibilityState === "hidden" || PDFViewerApplication.overlayManager.active) {
+    if (PDFViewerApplication._isScrolling || zoomDisabledTimeout || document.visibilityState === "hidden" || PDFViewerApplication.overlayManager.active) {
       return;
     }
     const previousScale = pdfViewer.currentScale;
@@ -3873,8 +3899,6 @@ function webViewerWheel(evt) {
       }
     }
     PDFViewerApplication._centerAtPos(previousScale, evt.clientX, evt.clientY);
-  } else {
-    setZoomDisabledTimeout();
   }
 }
 function webViewerTouchStart(evt) {
@@ -14985,7 +15009,7 @@ _app_js__WEBPACK_IMPORTED_MODULE_3__ = (__webpack_async_dependencies__.then ? (a
 
 
 const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "1bd6af6";
+const pdfjsBuild = "dd3adc8";
 const AppConstants = {
   LinkTarget: _pdf_link_service_js__WEBPACK_IMPORTED_MODULE_2__.LinkTarget,
   RenderingStates: _ui_utils_js__WEBPACK_IMPORTED_MODULE_0__.RenderingStates,
