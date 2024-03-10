@@ -2636,7 +2636,7 @@ class AnnotationStorage {
     } : SerializableEmpty;
   }
   get editorStats() {
-    const stats = Object.create(null);
+    let stats = null;
     const typeToEditor = new Map();
     for (const value of this.#storage.values()) {
       if (!(value instanceof _editor_editor_js__WEBPACK_IMPORTED_MODULE_1__.AnnotationEditor)) {
@@ -2652,6 +2652,7 @@ class AnnotationStorage {
       if (!typeToEditor.has(type)) {
         typeToEditor.set(type, Object.getPrototypeOf(value).constructor);
       }
+      stats ||= Object.create(null);
       const map = stats[type] ||= new Map();
       for (const [key, val] of Object.entries(editorStats)) {
         if (key === "type") {
@@ -4576,7 +4577,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.1.0";
-const build = "dd3adc8";
+const build = "b14f696";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -8359,6 +8360,9 @@ class DrawLayer {
   updateBox(id, box) {
     DrawLayer.#setBox(this.#mapping.get(id), box);
   }
+  show(id, visible) {
+    this.#mapping.get(id).classList.toggle("hidden", !visible);
+  }
   rotate(id, angle) {
     this.#mapping.get(id).setAttribute("data-main-rotation", angle);
   }
@@ -9238,6 +9242,7 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       mustBeSelected = !this.parent && this.div?.classList.contains("selectedEditor");
     }
     super.setParent(parent);
+    this.show(this._isVisible);
     if (mustBeSelected) {
       this.select();
     }
@@ -9392,6 +9397,16 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       this.#setCaret(false);
     }
   }
+  get _mustFixPosition() {
+    return !this.#isFreeHighlight;
+  }
+  show(visible) {
+    super.show(visible);
+    if (this.parent) {
+      this.parent.drawLayer.show(this.#id, visible);
+      this.parent.drawLayer.show(this.#outlineId, visible);
+    }
+  }
   #getRotation() {
     return this.#isFreeHighlight ? this.rotation : 0;
   }
@@ -9476,7 +9491,8 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
       parent.createAndAddNewEditor(event, false, {
         highlightId: this._freeHighlightId,
         highlightOutlines: this._freeHighlight.getOutlines(),
-        clipPathId: this._freeHighlightClipId
+        clipPathId: this._freeHighlightClipId,
+        methodOfCreation: "main_toolbar"
       });
     } else {
       parent.drawLayer.removeFreeHighlight(this._freeHighlightId);
@@ -10491,6 +10507,7 @@ class StampEditor extends editor_editor.AnnotationEditor {
     }
     super.render();
     this.div.hidden = true;
+    this.addAltTextButton();
     if (this.#bitmap) {
       this.#createCanvas();
     } else {
@@ -10535,7 +10552,6 @@ class StampEditor extends editor_editor.AnnotationEditor {
     this._reportTelemetry({
       action: "inserted_image"
     });
-    this.addAltTextButton();
     if (this.#bitmapFileName) {
       canvas.setAttribute("aria-label", this.#bitmapFileName);
     }
@@ -10966,6 +10982,7 @@ class AnnotationEditorLayer {
       if (event.button !== 0 || event.ctrlKey && isMac) {
         return;
       }
+      this.#uiManager.showAllEditors("highlight", true, true);
       this.#textLayer.div.classList.add("free");
       HighlightEditor.startHighlighting(this, this.#uiManager.direction === "ltr", event);
       this.#textLayer.div.addEventListener("pointerup", () => {
@@ -11315,6 +11332,7 @@ class ColorPicker {
   #dropdown = null;
   #dropdownWasFromKeyboard = false;
   #isMainColorPicker = false;
+  #editor = null;
   #eventBus;
   #uiManager = null;
   #type;
@@ -11328,6 +11346,7 @@ class ColorPicker {
     if (editor) {
       this.#isMainColorPicker = false;
       this.#type = _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorParamsType.HIGHLIGHT_COLOR;
+      this.#editor = editor;
     } else {
       this.#isMainColorPicker = true;
       this.#type = _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorParamsType.HIGHLIGHT_DEFAULT_COLOR;
@@ -11469,7 +11488,11 @@ class ColorPicker {
     return this.#dropdown && !this.#dropdown.classList.contains("hidden");
   }
   _hideDropdownFromKeyboard() {
-    if (this.#isMainColorPicker || !this.#isDropdownVisible) {
+    if (this.#isMainColorPicker) {
+      return;
+    }
+    if (!this.#isDropdownVisible) {
+      this.#editor?.unselect();
       return;
     }
     this.hideDropdown();
@@ -11768,6 +11791,7 @@ class AnnotationEditor {
   #prevDragY = 0;
   #telemetryTimeouts = null;
   _initialOptions = Object.create(null);
+  _isVisible = true;
   _uiManager = null;
   _focusEventsAllowed = true;
   _l10nPromise = null;
@@ -12034,6 +12058,9 @@ class AnnotationEditor {
         return [-x, -y];
     }
   }
+  get _mustFixPosition() {
+    return true;
+  }
   fixAndSetPosition(rotation = this.rotation) {
     const [pageWidth, pageHeight] = this.pageDimensions;
     let {
@@ -12046,23 +12073,25 @@ class AnnotationEditor {
     height *= pageHeight;
     x *= pageWidth;
     y *= pageHeight;
-    switch (rotation) {
-      case 0:
-        x = Math.max(0, Math.min(pageWidth - width, x));
-        y = Math.max(0, Math.min(pageHeight - height, y));
-        break;
-      case 90:
-        x = Math.max(0, Math.min(pageWidth - height, x));
-        y = Math.min(pageHeight, Math.max(width, y));
-        break;
-      case 180:
-        x = Math.min(pageWidth, Math.max(width, x));
-        y = Math.min(pageHeight, Math.max(height, y));
-        break;
-      case 270:
-        x = Math.min(pageWidth, Math.max(height, x));
-        y = Math.max(0, Math.min(pageHeight - width, y));
-        break;
+    if (this._mustFixPosition) {
+      switch (rotation) {
+        case 0:
+          x = Math.max(0, Math.min(pageWidth - width, x));
+          y = Math.max(0, Math.min(pageHeight - height, y));
+          break;
+        case 90:
+          x = Math.max(0, Math.min(pageWidth - height, x));
+          y = Math.min(pageHeight, Math.max(width, y));
+          break;
+        case 180:
+          x = Math.min(pageWidth, Math.max(width, x));
+          y = Math.min(pageHeight, Math.max(height, y));
+          break;
+        case 270:
+          x = Math.min(pageWidth, Math.max(height, x));
+          y = Math.max(0, Math.min(pageHeight - width, y));
+          break;
+      }
     }
     this.x = x /= pageWidth;
     this.y = y /= pageHeight;
@@ -12382,6 +12411,9 @@ class AnnotationEditor {
     this.div.className = this.name;
     this.div.setAttribute("id", this.id);
     this.div.setAttribute("tabIndex", 0);
+    if (!this._isVisible) {
+      this.div.classList.add("hidden");
+    }
     this.setInForeground();
     this.div.addEventListener("focusin", this.#boundFocusin);
     this.div.addEventListener("focusout", this.#boundFocusout);
@@ -12536,6 +12568,7 @@ class AnnotationEditor {
   rebuild() {
     this.div?.addEventListener("focusin", this.#boundFocusin);
     this.div?.addEventListener("focusout", this.#boundFocusout);
+    this.show(this._isVisible);
   }
   rotate(_angle) {}
   serialize(isForCopying = false, context = null) {
@@ -12797,6 +12830,10 @@ class AnnotationEditor {
         data
       }
     });
+  }
+  show(visible) {
+    this.div.classList.toggle("hidden", !visible);
+    this._isVisible = visible;
   }
 }
 class FakeEditor extends AnnotationEditor {
@@ -13795,6 +13832,7 @@ class AnnotationEditorUIManager {
   #selectedEditors = new Set();
   #selectedTextNode = null;
   #pageColors = null;
+  #showAllStates = null;
   #boundBlur = this.blur.bind(this);
   #boundFocus = this.focus.bind(this);
   #boundCopy = this.copy.bind(this);
@@ -14074,6 +14112,7 @@ class AnnotationEditorUIManager {
     if (this.#mode !== _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorType.HIGHLIGHT) {
       return;
     }
+    this.showAllEditors("highlight", true, true);
     this.#highlightWhenShiftUp = this.isShiftKeyDown;
     if (!this.isShiftKeyDown) {
       const pointerup = e => {
@@ -14402,12 +14441,37 @@ class AnnotationEditorUIManager {
       case _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorParamsType.HIGHLIGHT_DEFAULT_COLOR:
         this.#mainHighlightColorPicker?.updateColor(value);
         break;
+      case _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorParamsType.HIGHLIGHT_SHOW_ALL:
+        this._eventBus.dispatch("reporttelemetry", {
+          source: this,
+          details: {
+            type: "editing",
+            data: {
+              type: "highlight",
+              action: "toggle_visibility"
+            }
+          }
+        });
+        (this.#showAllStates ||= new Map()).set(type, value);
+        this.showAllEditors("highlight", value);
+        break;
     }
     for (const editor of this.#selectedEditors) {
       editor.updateParams(type, value);
     }
     for (const editorType of this.#editorTypes) {
       editorType.updateDefaultParams(type, value);
+    }
+  }
+  showAllEditors(type, visible, updateButton = false) {
+    for (const editor of this.#allEditors.values()) {
+      if (editor.editorType === type) {
+        editor.show(visible);
+      }
+    }
+    const state = this.#showAllStates?.get(_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorParamsType.HIGHLIGHT_SHOW_ALL) ?? true;
+    if (state !== visible) {
+      this.#dispatchUpdateUI([[_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorParamsType.HIGHLIGHT_SHOW_ALL, visible]]);
     }
   }
   enableWaiting(mustWait = false) {
@@ -17711,7 +17775,7 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "dd3adc8";
+const pdfjsBuild = "b14f696";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -18326,7 +18390,8 @@ const AnnotationEditorParamsType = {
   HIGHLIGHT_COLOR: 31,
   HIGHLIGHT_DEFAULT_COLOR: 32,
   HIGHLIGHT_THICKNESS: 33,
-  HIGHLIGHT_FREE: 34
+  HIGHLIGHT_FREE: 34,
+  HIGHLIGHT_SHOW_ALL: 35
 };
 const PermissionFlag = {
   PRINT: 0x04,

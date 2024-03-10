@@ -94,7 +94,8 @@ const AnnotationEditorParamsType = {
   HIGHLIGHT_COLOR: 31,
   HIGHLIGHT_DEFAULT_COLOR: 32,
   HIGHLIGHT_THICKNESS: 33,
-  HIGHLIGHT_FREE: 34
+  HIGHLIGHT_FREE: 34,
+  HIGHLIGHT_SHOW_ALL: 35
 };
 const PermissionFlag = {
   PRINT: 0x04,
@@ -55129,9 +55130,13 @@ class Page {
         }));
       }
       const sortedAnnotations = [];
-      let popupAnnotations;
+      let popupAnnotations, widgetAnnotations;
       for (const annotation of await Promise.all(annotationPromises)) {
         if (!annotation) {
+          continue;
+        }
+        if (annotation instanceof WidgetAnnotation) {
+          (widgetAnnotations ||= []).push(annotation);
           continue;
         }
         if (annotation instanceof PopupAnnotation) {
@@ -55139,6 +55144,9 @@ class Page {
           continue;
         }
         sortedAnnotations.push(annotation);
+      }
+      if (widgetAnnotations) {
+        sortedAnnotations.push(...widgetAnnotations);
       }
       if (popupAnnotations) {
         sortedAnnotations.push(...popupAnnotations);
@@ -57274,7 +57282,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "dd3adc8";
+const pdfjsBuild = "b14f696";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };
