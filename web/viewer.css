@@ -1129,6 +1129,16 @@
   --editorHighlight-editing-cursor:url(images/cursor-editorTextHighlight.svg) 24 24, text;
   --editorFreeHighlight-editing-cursor:url(images/cursor-editorFreeHighlight.svg) 1 18, pointer;
 }
+.visuallyHidden{
+  position:absolute;
+  border:0;
+  margin:0;
+  padding:0;
+  width:0;
+  height:0;
+  overflow:hidden;
+  white-space:nowrap;
+}
 
 .textLayer.highlighting{
   cursor:var(--editorFreeHighlight-editing-cursor);
@@ -1245,10 +1255,11 @@
       border:var(--focus-outline-around);
     }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar{
     --editor-toolbar-delete-image:url(images/editor-toolbar-delete.svg);
     --editor-toolbar-bg-color:#f0f0f4;
+    --editor-toolbar-highlight-image:url(images/toolbarButton-editorHighlight.svg);
     --editor-toolbar-fg-color:#2e2e56;
     --editor-toolbar-border-color:#8f8f9d;
     --editor-toolbar-hover-border-color:var(--editor-toolbar-border-color);
@@ -1285,8 +1296,8 @@
 
 @media (prefers-color-scheme: dark){
 
-:where(html:not(.is-light)) .annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar{
+:where(html:not(.is-light)) :is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar{
       --editor-toolbar-bg-color:#2b2a33;
       --editor-toolbar-fg-color:#fbfbfe;
       --editor-toolbar-hover-bg-color:#52525e;
@@ -1294,8 +1305,8 @@
   }
     }
 
-:where(html.is-dark) .annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar{
+:where(html.is-dark) :is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar{
       --editor-toolbar-bg-color:#2b2a33;
       --editor-toolbar-fg-color:#fbfbfe;
       --editor-toolbar-hover-bg-color:#52525e;
@@ -1304,8 +1315,8 @@
 
 @media screen and (forced-colors: active){
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar{
       --editor-toolbar-bg-color:ButtonFace;
       --editor-toolbar-fg-color:ButtonText;
       --editor-toolbar-border-color:ButtonText;
@@ -1318,28 +1329,28 @@
   }
     }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar.hidden{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar.hidden{
       display:none;
     }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar:has(:focus-visible){
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar:has(:focus-visible){
       border-color:transparent;
     }
 
-[dir="ltr"] .annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar{
+[dir="ltr"] :is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar{
       transform-origin:100% 0;
     }
 
-[dir="rtl"] .annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar{
+[dir="rtl"] :is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar{
       transform-origin:0 0;
     }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons{
       display:flex;
       justify-content:center;
       align-items:center;
@@ -1347,8 +1358,8 @@
       height:100%;
     }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons .divider{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .divider{
         width:1px;
         height:calc(
           2 * var(--editor-toolbar-padding) + var(--editor-toolbar-height)
@@ -1358,13 +1369,38 @@
         margin-inline:2px;
       }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons .delete{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .highlightButton{
         width:var(--editor-toolbar-height);
       }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons .delete::before{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .highlightButton::before{
+          content:"";
+          -webkit-mask-image:var(--editor-toolbar-highlight-image);
+                  mask-image:var(--editor-toolbar-highlight-image);
+          -webkit-mask-repeat:no-repeat;
+                  mask-repeat:no-repeat;
+          -webkit-mask-position:center;
+                  mask-position:center;
+          display:inline-block;
+          background-color:var(--editor-toolbar-fg-color);
+          width:100%;
+          height:100%;
+        }
+
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .highlightButton:hover::before{
+          background-color:var(--editor-toolbar-hover-fg-color);
+        }
+
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .delete{
+        width:var(--editor-toolbar-height);
+      }
+
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .delete::before{
           content:"";
           -webkit-mask-image:var(--editor-toolbar-delete-image);
                   mask-image:var(--editor-toolbar-delete-image);
@@ -1378,25 +1414,25 @@
           height:100%;
         }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons .delete:hover::before{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .delete:hover::before{
           background-color:var(--editor-toolbar-hover-fg-color);
         }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons > *{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons > *{
         height:var(--editor-toolbar-height);
       }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons > :not(.divider){
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons > :not(.divider){
         border:none;
         background-color:transparent;
         cursor:pointer;
       }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons > :not(.divider):hover{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons > :not(.divider):hover{
           border-radius:2px;
           background-color:var(--editor-toolbar-hover-bg-color);
           color:var(--editor-toolbar-hover-fg-color);
@@ -1404,19 +1440,19 @@
           outline-offset:1px;
         }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons > :not(.divider):hover:active{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons > :not(.divider):hover:active{
             outline:none;
           }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons > :not(.divider):focus-visible{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons > :not(.divider):focus-visible{
           border-radius:2px;
           outline:2px solid var(--editor-toolbar-focus-outline-color);
         }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons .altText{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .altText{
         --alt-text-add-image:url(images/altText_add.svg);
         --alt-text-done-image:url(images/altText_done.svg);
 
@@ -1433,13 +1469,13 @@
         color:var(--editor-toolbar-fg-color);
       }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons .altText:disabled{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .altText:disabled{
           pointer-events:none;
         }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons .altText::before{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .altText::before{
           content:"";
           -webkit-mask-image:var(--alt-text-add-image);
                   mask-image:var(--alt-text-add-image);
@@ -1454,24 +1490,24 @@
           margin-inline-end:4px;
         }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons .altText:hover::before{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .altText:hover::before{
           background-color:var(--editor-toolbar-hover-fg-color);
         }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons .altText.done::before{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .altText.done::before{
           -webkit-mask-image:var(--alt-text-done-image);
                   mask-image:var(--alt-text-done-image);
         }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons .altText .tooltip{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .altText .tooltip{
           display:none;
         }
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons .altText .tooltip.show{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .altText .tooltip.show{
             --alt-text-tooltip-bg:#f0f0f4;
             --alt-text-tooltip-fg:#15141a;
             --alt-text-tooltip-border:#8f8f9d;
@@ -1502,16 +1538,16 @@
 
 @media (prefers-color-scheme: dark){
 
-:where(html:not(.is-light)) .annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons .altText .tooltip.show{
+:where(html:not(.is-light)) :is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .altText .tooltip.show{
               --alt-text-tooltip-bg:#1c1b22;
               --alt-text-tooltip-fg:#fbfbfe;
               --alt-text-tooltip-shadow:0px 2px 6px 0px #15141a;
           }
             }
 
-:where(html.is-dark) .annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons .altText .tooltip.show{
+:where(html.is-dark) :is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .altText .tooltip.show{
               --alt-text-tooltip-bg:#1c1b22;
               --alt-text-tooltip-fg:#fbfbfe;
               --alt-text-tooltip-shadow:0px 2px 6px 0px #15141a;
@@ -1519,8 +1555,8 @@
 
 @media screen and (forced-colors: active){
 
-.annotationEditorLayer
-  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor) .editToolbar .buttons .altText .tooltip.show{
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .altText .tooltip.show{
               --alt-text-tooltip-bg:Canvas;
               --alt-text-tooltip-fg:CanvasText;
               --alt-text-tooltip-border:CanvasText;
