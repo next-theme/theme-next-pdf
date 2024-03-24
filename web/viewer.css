@@ -25,7 +25,6 @@
           text-size-adjust:none;
   forced-color-adjust:none;
   transform-origin:0 0;
-  z-index:2;
   caret-color:CanvasText;
 }
 
@@ -141,7 +140,6 @@
   left:0;
   pointer-events:none;
   transform-origin:0 0;
-  z-index:3;
 }
 
 @media screen and (forced-colors: active){
@@ -1131,6 +1129,8 @@
 }
 .visuallyHidden{
   position:absolute;
+  top:0;
+  left:0;
   border:0;
   margin:0;
   padding:0;
@@ -1138,6 +1138,7 @@
   height:0;
   overflow:hidden;
   white-space:nowrap;
+  font-size:0;
 }
 
 .textLayer.highlighting{
@@ -1187,7 +1188,6 @@
   font-size:calc(100px * var(--scale-factor));
   transform-origin:0 0;
   cursor:auto;
-  z-index:4;
 }
 
 .annotationEditorLayer.waiting{
@@ -2588,7 +2588,6 @@
   overflow:hidden;
   width:100%;
   height:100%;
-  z-index:1;
 }
 
 .pdfViewer .page{
