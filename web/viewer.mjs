@@ -4466,7 +4466,7 @@ const defaultOptions = {
     kind: OptionKind.VIEWER
   },
   maxCanvasPixels: {
-    value: 16777216,
+    value: 2 ** 25,
     kind: OptionKind.VIEWER
   },
   forcePageColors: {
@@ -8666,7 +8666,7 @@ class PDFPageView {
     this.#textLayerMode = options.textLayerMode ?? _ui_utils_js__WEBPACK_IMPORTED_MODULE_1__.TextLayerMode.ENABLE;
     this.#annotationMode = options.annotationMode ?? pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__.AnnotationMode.ENABLE_FORMS;
     this.imageResourcesPath = options.imageResourcesPath || "";
-    this.maxCanvasPixels = options.maxCanvasPixels ?? (_app_options_js__WEBPACK_IMPORTED_MODULE_4__.AppOptions.getCompat("maxCanvasPixels") || 16777216);
+    this.maxCanvasPixels = options.maxCanvasPixels ?? (_app_options_js__WEBPACK_IMPORTED_MODULE_4__.AppOptions.getCompat("maxCanvasPixels") || 2 ** 25);
     this.pageColors = options.pageColors || null;
     this.eventBus = options.eventBus;
     this.renderingQueue = options.renderingQueue;
@@ -13059,13 +13059,13 @@ class BasePreferences {
       prefs
     }) => {
       const options = Object.create(null);
-      for (const [name, defaultVal] of Object.entries(this.#browserDefaults)) {
+      for (const [name, val] of Object.entries(this.#browserDefaults)) {
         const prefVal = browserPrefs?.[name];
-        options[name] = typeof prefVal === typeof defaultVal ? prefVal : defaultVal;
+        options[name] = typeof prefVal === typeof val ? prefVal : val;
       }
-      for (const [name, defaultVal] of Object.entries(this.#defaults)) {
+      for (const [name, val] of Object.entries(this.#defaults)) {
         const prefVal = prefs?.[name];
-        options[name] = this.#prefs[name] = typeof prefVal === typeof defaultVal ? prefVal : defaultVal;
+        options[name] = this.#prefs[name] = typeof prefVal === typeof val ? prefVal : val;
       }
       _app_options_js__WEBPACK_IMPORTED_MODULE_0__.AppOptions.setAll(options, true);
     });
@@ -13084,17 +13084,19 @@ class BasePreferences {
   }
   async reset() {
     await this.#initializedPromise;
-    const prefs = this.#prefs;
+    const oldPrefs = structuredClone(this.#prefs);
     this.#prefs = Object.create(null);
-    return this._writeToStorage(this.#defaults).catch(reason => {
-      this.#prefs = prefs;
+    try {
+      await this._writeToStorage(this.#defaults);
+    } catch (reason) {
+      this.#prefs = oldPrefs;
       throw reason;
-    });
+    }
   }
   async set(name, value) {
     await this.#initializedPromise;
     const defaultValue = this.#defaults[name],
-      prefs = this.#prefs;
+      oldPrefs = structuredClone(this.#prefs);
     if (defaultValue === undefined) {
       throw new Error(`Set preference: "${name}" is undefined.`);
     } else if (value === undefined) {
@@ -13112,10 +13114,12 @@ class BasePreferences {
       throw new Error(`Set preference: "${value}" must be an integer.`);
     }
     this.#prefs[name] = value;
-    return this._writeToStorage(this.#prefs).catch(reason => {
-      this.#prefs = prefs;
+    try {
+      await this._writeToStorage(this.#prefs);
+    } catch (reason) {
+      this.#prefs = oldPrefs;
       throw reason;
-    });
+    }
   }
   async get(name) {
     await this.#initializedPromise;
@@ -15031,7 +15035,7 @@ _app_js__WEBPACK_IMPORTED_MODULE_3__ = (__webpack_async_dependencies__.then ? (a
 
 
 const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "14307c0";
+const pdfjsBuild = "3d2eb36";
 const AppConstants = {
   LinkTarget: _pdf_link_service_js__WEBPACK_IMPORTED_MODULE_2__.LinkTarget,
   RenderingStates: _ui_utils_js__WEBPACK_IMPORTED_MODULE_0__.RenderingStates,

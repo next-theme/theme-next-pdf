@@ -2525,10 +2525,45 @@
 
 #highlightParamsToolbarContainer #editorHighlightVisibility{
     display:flex;
-    justify-content:space-between;
-    align-items:center;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:8px;
     align-self:stretch;
   }
+
+#highlightParamsToolbarContainer #editorHighlightVisibility .divider{
+      --divider-color:#d7d7db;
+
+      margin-block:4px;
+      width:100%;
+      height:1px;
+      background-color:var(--divider-color);
+    }
+
+@media (prefers-color-scheme: dark){
+
+:where(html:not(.is-light)) #highlightParamsToolbarContainer #editorHighlightVisibility .divider{
+        --divider-color:#8f8f9d;
+    }
+      }
+
+:where(html.is-dark) #highlightParamsToolbarContainer #editorHighlightVisibility .divider{
+        --divider-color:#8f8f9d;
+    }
+
+@media screen and (forced-colors: active){
+
+#highlightParamsToolbarContainer #editorHighlightVisibility .divider{
+        --divider-color:CanvasText;
+    }
+      }
+
+#highlightParamsToolbarContainer #editorHighlightVisibility .toggler{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      align-self:stretch;
+    }
 
 :root{
   --viewer-container-height:0;
