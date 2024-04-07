@@ -2954,7 +2954,7 @@ function getDataProp(val) {
 class PDFDocumentLoadingTask {
   static #docId = 0;
   constructor() {
-    this._capability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    this._capability = Promise.withResolvers();
     this._transport = null;
     this._worker = null;
     this.docId = `d${PDFDocumentLoadingTask.#docId++}`;
@@ -2995,7 +2995,7 @@ class PDFDataRangeTransport {
     this._progressListeners = [];
     this._progressiveReadListeners = [];
     this._progressiveDoneListeners = [];
-    this._readyCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    this._readyCapability = Promise.withResolvers();
   }
   addRangeListener(listener) {
     this._rangeListeners.push(listener);
@@ -3248,7 +3248,7 @@ class PDFPageProxy {
     }
     const intentPrint = !!(renderingIntent & _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.RenderingIntentFlag.PRINT);
     if (!intentState.displayReadyCapability) {
-      intentState.displayReadyCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+      intentState.displayReadyCapability = Promise.withResolvers();
       intentState.operatorList = {
         fnArray: [],
         argsArray: [],
@@ -3335,7 +3335,7 @@ class PDFPageProxy {
     if (!intentState.opListReadCapability) {
       opListTask = Object.create(null);
       opListTask.operatorListChanged = operatorListChanged;
-      intentState.opListReadCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+      intentState.opListReadCapability = Promise.withResolvers();
       (intentState.renderTasks ||= new Set()).add(opListTask);
       intentState.operatorList = {
         fnArray: [],
@@ -3646,7 +3646,7 @@ class PDFWorker {
     this.name = name;
     this.destroyed = false;
     this.verbosity = verbosity;
-    this._readyCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    this._readyCapability = Promise.withResolvers();
     this._port = null;
     this._webWorker = null;
     this._messageHandler = null;
@@ -3849,7 +3849,7 @@ class WorkerTransport {
     this._networkStream = networkStream;
     this._fullReader = null;
     this._lastProgress = null;
-    this.downloadInfoCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    this.downloadInfoCapability = Promise.withResolvers();
     this.setupMessageHandler();
   }
   #cacheSimpleMethod(name, data = null) {
@@ -3910,7 +3910,7 @@ class WorkerTransport {
       return this.destroyCapability.promise;
     }
     this.destroyed = true;
-    this.destroyCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    this.destroyCapability = Promise.withResolvers();
     this.#passwordCapability?.reject(new Error("Worker was destroyed during onPassword callback"));
     const waitOn = [];
     for (const page of this.#pageCache.values()) {
@@ -3978,7 +3978,7 @@ class WorkerTransport {
       };
     });
     messageHandler.on("ReaderHeadersReady", data => {
-      const headersCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+      const headersCapability = Promise.withResolvers();
       const fullReader = this._fullReader;
       fullReader.headersReady.then(() => {
         if (!fullReader.isStreamingSupported || !fullReader.isRangeSupported) {
@@ -4064,7 +4064,7 @@ class WorkerTransport {
       loadingTask._capability.reject(reason);
     });
     messageHandler.on("PasswordRequest", exception => {
-      this.#passwordCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+      this.#passwordCapability = Promise.withResolvers();
       if (loadingTask.onPassword) {
         const updatePassword = password => {
           if (password instanceof Error) {
@@ -4378,34 +4378,35 @@ class WorkerTransport {
     });
   }
 }
+const INITIAL_DATA = Symbol("INITIAL_DATA");
 class PDFObjects {
   #objs = Object.create(null);
   #ensureObj(objId) {
     return this.#objs[objId] ||= {
-      capability: new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability(),
-      data: null
+      ...Promise.withResolvers(),
+      data: INITIAL_DATA
     };
   }
   get(objId, callback = null) {
     if (callback) {
       const obj = this.#ensureObj(objId);
-      obj.capability.promise.then(() => callback(obj.data));
+      obj.promise.then(() => callback(obj.data));
       return null;
     }
     const obj = this.#objs[objId];
-    if (!obj?.capability.settled) {
+    if (!obj || obj.data === INITIAL_DATA) {
       throw new Error(`Requesting object that isn't resolved yet ${objId}.`);
     }
     return obj.data;
   }
   has(objId) {
     const obj = this.#objs[objId];
-    return obj?.capability.settled ?? false;
+    return !!obj && obj.data !== INITIAL_DATA;
   }
   resolve(objId, data = null) {
     const obj = this.#ensureObj(objId);
     obj.data = data;
-    obj.capability.resolve();
+    obj.resolve();
   }
   clear() {
     for (const objId in this.#objs) {
@@ -4419,10 +4420,9 @@ class PDFObjects {
   *[Symbol.iterator]() {
     for (const objId in this.#objs) {
       const {
-        capability,
         data
       } = this.#objs[objId];
-      if (!capability.settled) {
+      if (data === INITIAL_DATA) {
         continue;
       }
       yield [objId, data];
@@ -4487,7 +4487,7 @@ class InternalRenderTask {
     this.graphicsReady = false;
     this._useRequestAnimationFrame = useRequestAnimationFrame === true && typeof window !== "undefined";
     this.cancelled = false;
-    this.capability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    this.capability = Promise.withResolvers();
     this.task = new RenderTask(this);
     this._cancelBound = this.cancel.bind(this);
     this._continueBound = this._continue.bind(this);
@@ -4589,7 +4589,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.1.0";
-const build = "3d2eb36";
+const build = "5adad89";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -9434,10 +9434,8 @@ class HighlightEditor extends editor_editor.AnnotationEditor {
     }
     const div = super.render();
     if (this.#text) {
-      const mark = document.createElement("mark");
-      div.append(mark);
-      mark.append(document.createTextNode(this.#text));
-      mark.className = "visuallyHidden";
+      div.setAttribute("aria-label", this.#text);
+      div.setAttribute("role", "mark");
     }
     if (this.#isFreeHighlight) {
       div.classList.add("free");
@@ -15313,7 +15311,7 @@ class PDFFetchStreamReader {
     const source = stream.source;
     this._withCredentials = source.withCredentials || false;
     this._contentLength = source.length;
-    this._headersCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    this._headersCapability = Promise.withResolvers();
     this._disableRange = source.disableRange || false;
     this._rangeChunkSize = source.rangeChunkSize;
     if (!this._rangeChunkSize && !this._disableRange) {
@@ -15398,7 +15396,7 @@ class PDFFetchStreamRangeReader {
     this._loaded = 0;
     const source = stream.source;
     this._withCredentials = source.withCredentials || false;
-    this._readCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    this._readCapability = Promise.withResolvers();
     this._isStreamingSupported = !source.disableStream;
     this._abortController = new AbortController();
     this._headers = createHeaders(this._stream.httpHeaders);
@@ -15970,7 +15968,7 @@ class PDFNetworkStreamFullRequestReader {
     };
     this._url = source.url;
     this._fullRequestId = manager.requestFull(args);
-    this._headersReceivedCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    this._headersReceivedCapability = Promise.withResolvers();
     this._disableRange = source.disableRange || false;
     this._contentLength = source.length;
     this._rangeChunkSize = source.rangeChunkSize;
@@ -16080,7 +16078,7 @@ class PDFNetworkStreamFullRequestReader {
         done: true
       };
     }
-    const requestCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    const requestCapability = Promise.withResolvers();
     this._requests.push(requestCapability);
     return requestCapability.promise;
   }
@@ -16177,7 +16175,7 @@ class PDFNetworkStreamRangeRequestReader {
         done: true
       };
     }
-    const requestCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    const requestCapability = Promise.withResolvers();
     this._requests.push(requestCapability);
     return requestCapability.promise;
   }
@@ -16493,8 +16491,8 @@ class BaseFullReader {
     this._isStreamingSupported = !source.disableStream;
     this._isRangeSupported = !source.disableRange;
     this._readableStream = null;
-    this._readCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
-    this._headersCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    this._readCapability = Promise.withResolvers();
+    this._headersCapability = Promise.withResolvers();
   }
   get headersReady() {
     return this._headersCapability.promise;
@@ -16524,7 +16522,7 @@ class BaseFullReader {
     }
     const chunk = this._readableStream.read();
     if (chunk === null) {
-      this._readCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+      this._readCapability = Promise.withResolvers();
       return this.read();
     }
     this._loaded += chunk.length;
@@ -16578,7 +16576,7 @@ class BaseRangeReader {
     this.onProgress = null;
     this._loaded = 0;
     this._readableStream = null;
-    this._readCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    this._readCapability = Promise.withResolvers();
     const source = stream.source;
     this._isStreamingSupported = !source.disableStream;
   }
@@ -16598,7 +16596,7 @@ class BaseRangeReader {
     }
     const chunk = this._readableStream.read();
     if (chunk === null) {
-      this._readCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+      this._readCapability = Promise.withResolvers();
       return this.read();
     }
     this._loaded += chunk.length;
@@ -17300,7 +17298,7 @@ class TextLayerRenderTask {
     this._reader = null;
     this._textDivProperties = textDivProperties || new WeakMap();
     this._canceled = false;
-    this._capability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    this._capability = Promise.withResolvers();
     this._layoutTextParams = {
       prevFontSize: null,
       prevFontFamily: null,
@@ -17368,7 +17366,11 @@ class TextLayerRenderTask {
     }
   }
   _render() {
-    const capability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    const {
+      promise,
+      resolve,
+      reject
+    } = Promise.withResolvers();
     let styleCache = Object.create(null);
     if (this._isReadableStream) {
       const pump = () => {
@@ -17377,13 +17379,13 @@ class TextLayerRenderTask {
           done
         }) => {
           if (done) {
-            capability.resolve();
+            resolve();
             return;
           }
           Object.assign(styleCache, value.styles);
           this._processItems(value.items, styleCache);
           pump();
-        }, capability.reject);
+        }, reject);
       };
       this._reader = this._textContentSource.getReader();
       pump();
@@ -17393,11 +17395,11 @@ class TextLayerRenderTask {
         styles
       } = this._textContentSource;
       this._processItems(items, styles);
-      capability.resolve();
+      resolve();
     } else {
       throw new Error('No "textContentSource" parameter specified.');
     }
-    capability.promise.then(() => {
+    promise.then(() => {
       styleCache = null;
       render(this);
     }, this._capability.reject);
@@ -17629,7 +17631,7 @@ class PDFDataTransportStreamReader {
         done: true
       };
     }
-    const requestCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    const requestCapability = Promise.withResolvers();
     this._requests.push(requestCapability);
     return requestCapability.promise;
   }
@@ -17701,7 +17703,7 @@ class PDFDataTransportStreamRangeReader {
         done: true
       };
     }
-    const requestCapability = new _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    const requestCapability = Promise.withResolvers();
     this._requests.push(requestCapability);
     return requestCapability.promise;
   }
@@ -18053,7 +18055,6 @@ __webpack_require__.a(__webpack_module__, async (__webpack_handle_async_dependen
 /* harmony export */   PasswordResponses: () => (/* reexport safe */ _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PasswordResponses),
 /* harmony export */   PermissionFlag: () => (/* reexport safe */ _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PermissionFlag),
 /* harmony export */   PixelsPerInch: () => (/* reexport safe */ _display_display_utils_js__WEBPACK_IMPORTED_MODULE_2__.PixelsPerInch),
-/* harmony export */   PromiseCapability: () => (/* reexport safe */ _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability),
 /* harmony export */   RenderingCancelledException: () => (/* reexport safe */ _display_display_utils_js__WEBPACK_IMPORTED_MODULE_2__.RenderingCancelledException),
 /* harmony export */   UnexpectedResponseException: () => (/* reexport safe */ _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.UnexpectedResponseException),
 /* harmony export */   Util: () => (/* reexport safe */ _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.Util),
@@ -18103,7 +18104,7 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "3d2eb36";
+const pdfjsBuild = "5adad89";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -18242,7 +18243,7 @@ class MessageHandler {
   }
   sendWithPromise(actionName, data, transfers) {
     const callbackId = this.callbackId++;
-    const capability = new _util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+    const capability = Promise.withResolvers();
     this.callbackCapabilities[callbackId] = capability;
     try {
       this.comObj.postMessage({
@@ -18264,7 +18265,7 @@ class MessageHandler {
       comObj = this.comObj;
     return new ReadableStream({
       start: controller => {
-        const startCapability = new _util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+        const startCapability = Promise.withResolvers();
         this.streamControllers[streamId] = {
           controller,
           startCall: startCapability,
@@ -18283,7 +18284,7 @@ class MessageHandler {
         return startCapability.promise;
       },
       pull: controller => {
-        const pullCapability = new _util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+        const pullCapability = Promise.withResolvers();
         this.streamControllers[streamId].pullCall = pullCapability;
         comObj.postMessage({
           sourceName,
@@ -18296,7 +18297,7 @@ class MessageHandler {
       },
       cancel: reason => {
         (0,_util_js__WEBPACK_IMPORTED_MODULE_0__.assert)(reason instanceof Error, "cancel must have a valid reason");
-        const cancelCapability = new _util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+        const cancelCapability = Promise.withResolvers();
         this.streamControllers[streamId].cancelCall = cancelCapability;
         this.streamControllers[streamId].isClosed = true;
         comObj.postMessage({
@@ -18325,7 +18326,7 @@ class MessageHandler {
         const lastDesiredSize = this.desiredSize;
         this.desiredSize -= size;
         if (lastDesiredSize > 0 && this.desiredSize <= 0) {
-          this.sinkCapability = new _util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability();
+          this.sinkCapability = Promise.withResolvers();
           this.ready = this.sinkCapability.promise;
         }
         comObj.postMessage({
@@ -18363,7 +18364,7 @@ class MessageHandler {
           reason: wrapReason(reason)
         });
       },
-      sinkCapability: new _util_js__WEBPACK_IMPORTED_MODULE_0__.PromiseCapability(),
+      sinkCapability: Promise.withResolvers(),
       onPull: null,
       onCancel: null,
       isCancelled: false,
@@ -18650,7 +18651,6 @@ class MurmurHash3_64 {
 /* harmony export */   PasswordException: () => (/* binding */ PasswordException),
 /* harmony export */   PasswordResponses: () => (/* binding */ PasswordResponses),
 /* harmony export */   PermissionFlag: () => (/* binding */ PermissionFlag),
-/* harmony export */   PromiseCapability: () => (/* binding */ PromiseCapability),
 /* harmony export */   RenderingIntentFlag: () => (/* binding */ RenderingIntentFlag),
 /* harmony export */   TextRenderingMode: () => (/* binding */ TextRenderingMode),
 /* harmony export */   UnexpectedResponseException: () => (/* binding */ UnexpectedResponseException),
@@ -19373,24 +19373,6 @@ function getModificationDate(date = new Date()) {
   const buffer = [date.getUTCFullYear().toString(), (date.getUTCMonth() + 1).toString().padStart(2, "0"), date.getUTCDate().toString().padStart(2, "0"), date.getUTCHours().toString().padStart(2, "0"), date.getUTCMinutes().toString().padStart(2, "0"), date.getUTCSeconds().toString().padStart(2, "0")];
   return buffer.join("");
 }
-class PromiseCapability {
-  #settled = false;
-  constructor() {
-    this.promise = new Promise((resolve, reject) => {
-      this.resolve = data => {
-        this.#settled = true;
-        resolve(data);
-      };
-      this.reject = reason => {
-        this.#settled = true;
-        reject(reason);
-      };
-    });
-  }
-  get settled() {
-    return this.#settled;
-  }
-}
 let NormalizeRegex = null;
 let NormalizationMap = null;
 function normalizeUnicode(str) {
@@ -19563,7 +19545,6 @@ const AnnotationPrefix = "pdfjs_internal_id_";
 /******/ var __webpack_exports__PasswordResponses = __webpack_exports__.PasswordResponses;
 /******/ var __webpack_exports__PermissionFlag = __webpack_exports__.PermissionFlag;
 /******/ var __webpack_exports__PixelsPerInch = __webpack_exports__.PixelsPerInch;
-/******/ var __webpack_exports__PromiseCapability = __webpack_exports__.PromiseCapability;
 /******/ var __webpack_exports__RenderingCancelledException = __webpack_exports__.RenderingCancelledException;
 /******/ var __webpack_exports__UnexpectedResponseException = __webpack_exports__.UnexpectedResponseException;
 /******/ var __webpack_exports__Util = __webpack_exports__.Util;
@@ -19585,7 +19566,7 @@ const AnnotationPrefix = "pdfjs_internal_id_";
 /******/ var __webpack_exports__shadow = __webpack_exports__.shadow;
 /******/ var __webpack_exports__updateTextLayer = __webpack_exports__.updateTextLayer;
 /******/ var __webpack_exports__version = __webpack_exports__.version;
-/******/ export { __webpack_exports__AbortException as AbortException, __webpack_exports__AnnotationEditorLayer as AnnotationEditorLayer, __webpack_exports__AnnotationEditorParamsType as AnnotationEditorParamsType, __webpack_exports__AnnotationEditorType as AnnotationEditorType, __webpack_exports__AnnotationEditorUIManager as AnnotationEditorUIManager, __webpack_exports__AnnotationLayer as AnnotationLayer, __webpack_exports__AnnotationMode as AnnotationMode, __webpack_exports__CMapCompressionType as CMapCompressionType, __webpack_exports__ColorPicker as ColorPicker, __webpack_exports__DOMSVGFactory as DOMSVGFactory, __webpack_exports__DrawLayer as DrawLayer, __webpack_exports__FeatureTest as FeatureTest, __webpack_exports__GlobalWorkerOptions as GlobalWorkerOptions, __webpack_exports__ImageKind as ImageKind, __webpack_exports__InvalidPDFException as InvalidPDFException, __webpack_exports__MissingPDFException as MissingPDFException, __webpack_exports__OPS as OPS, __webpack_exports__Outliner as Outliner, __webpack_exports__PDFDataRangeTransport as PDFDataRangeTransport, __webpack_exports__PDFDateString as PDFDateString, __webpack_exports__PDFWorker as PDFWorker, __webpack_exports__PasswordResponses as PasswordResponses, __webpack_exports__PermissionFlag as PermissionFlag, __webpack_exports__PixelsPerInch as PixelsPerInch, __webpack_exports__PromiseCapability as PromiseCapability, __webpack_exports__RenderingCancelledException as RenderingCancelledException, __webpack_exports__UnexpectedResponseException as UnexpectedResponseException, __webpack_exports__Util as Util, __webpack_exports__VerbosityLevel as VerbosityLevel, __webpack_exports__XfaLayer as XfaLayer, __webpack_exports__build as build, __webpack_exports__createValidAbsoluteUrl as createValidAbsoluteUrl, __webpack_exports__fetchData as fetchData, __webpack_exports__getDocument as getDocument, __webpack_exports__getFilenameFromUrl as getFilenameFromUrl, __webpack_exports__getPdfFilenameFromUrl as getPdfFilenameFromUrl, __webpack_exports__getXfaPageViewport as getXfaPageViewport, __webpack_exports__isDataScheme as isDataScheme, __webpack_exports__isPdfFile as isPdfFile, __webpack_exports__noContextMenu as noContextMenu, __webpack_exports__normalizeUnicode as normalizeUnicode, __webpack_exports__renderTextLayer as renderTextLayer, __webpack_exports__setLayerDimensions as setLayerDimensions, __webpack_exports__shadow as shadow, __webpack_exports__updateTextLayer as updateTextLayer, __webpack_exports__version as version };
+/******/ export { __webpack_exports__AbortException as AbortException, __webpack_exports__AnnotationEditorLayer as AnnotationEditorLayer, __webpack_exports__AnnotationEditorParamsType as AnnotationEditorParamsType, __webpack_exports__AnnotationEditorType as AnnotationEditorType, __webpack_exports__AnnotationEditorUIManager as AnnotationEditorUIManager, __webpack_exports__AnnotationLayer as AnnotationLayer, __webpack_exports__AnnotationMode as AnnotationMode, __webpack_exports__CMapCompressionType as CMapCompressionType, __webpack_exports__ColorPicker as ColorPicker, __webpack_exports__DOMSVGFactory as DOMSVGFactory, __webpack_exports__DrawLayer as DrawLayer, __webpack_exports__FeatureTest as FeatureTest, __webpack_exports__GlobalWorkerOptions as GlobalWorkerOptions, __webpack_exports__ImageKind as ImageKind, __webpack_exports__InvalidPDFException as InvalidPDFException, __webpack_exports__MissingPDFException as MissingPDFException, __webpack_exports__OPS as OPS, __webpack_exports__Outliner as Outliner, __webpack_exports__PDFDataRangeTransport as PDFDataRangeTransport, __webpack_exports__PDFDateString as PDFDateString, __webpack_exports__PDFWorker as PDFWorker, __webpack_exports__PasswordResponses as PasswordResponses, __webpack_exports__PermissionFlag as PermissionFlag, __webpack_exports__PixelsPerInch as PixelsPerInch, __webpack_exports__RenderingCancelledException as RenderingCancelledException, __webpack_exports__UnexpectedResponseException as UnexpectedResponseException, __webpack_exports__Util as Util, __webpack_exports__VerbosityLevel as VerbosityLevel, __webpack_exports__XfaLayer as XfaLayer, __webpack_exports__build as build, __webpack_exports__createValidAbsoluteUrl as createValidAbsoluteUrl, __webpack_exports__fetchData as fetchData, __webpack_exports__getDocument as getDocument, __webpack_exports__getFilenameFromUrl as getFilenameFromUrl, __webpack_exports__getPdfFilenameFromUrl as getPdfFilenameFromUrl, __webpack_exports__getXfaPageViewport as getXfaPageViewport, __webpack_exports__isDataScheme as isDataScheme, __webpack_exports__isPdfFile as isPdfFile, __webpack_exports__noContextMenu as noContextMenu, __webpack_exports__normalizeUnicode as normalizeUnicode, __webpack_exports__renderTextLayer as renderTextLayer, __webpack_exports__setLayerDimensions as setLayerDimensions, __webpack_exports__shadow as shadow, __webpack_exports__updateTextLayer as updateTextLayer, __webpack_exports__version as version };
 /******/ 
 
 //# sourceMappingURL=pdf.mjs.map

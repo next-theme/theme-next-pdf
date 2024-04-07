@@ -3280,6 +3280,7 @@ body{
   }
 
 .loadingInput:has(> #findInput[data-status="pending"])::after{
+    display:block;
     visibility:visible;
   }
 
@@ -3929,6 +3930,7 @@ a:is(.toolbarButton, .secondaryToolbarButton)[href="#"]{
   }
 
 .loadingInput:has(> #pageNumber.loading)::after{
+    display:block;
     visibility:visible;
 
     transition-property:visibility;
@@ -3938,6 +3940,7 @@ a:is(.toolbarButton, .secondaryToolbarButton)[href="#"]{
 .loadingInput::after{
     position:absolute;
     visibility:hidden;
+    display:none;
     top:calc(50% - 8px);
     width:16px;
     height:16px;
