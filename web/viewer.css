@@ -1032,8 +1032,7 @@
     background-color:var(--toggle-dot-background-color-on-pressed);
   }
 
-.toggle-button[aria-pressed="true"]:-moz-locale-dir(rtl)::before,[dir="rtl"] 
-  .toggle-button[aria-pressed="true"]::before{
+[dir="rtl"] .toggle-button[aria-pressed="true"]::before{
     translate:calc(-1 * var(--toggle-dot-transform-x));
   }
 

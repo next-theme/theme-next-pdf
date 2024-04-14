@@ -5983,7 +5983,13 @@ class PDFCursorTools {
   }
   #addEventListeners() {
     this.eventBus._on("switchcursortool", evt => {
-      this.switchTool(evt.tool);
+      if (!evt.reset) {
+        this.switchTool(evt.tool);
+      } else if (this.#prevActive !== null) {
+        annotationEditorMode = pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorType.NONE;
+        presentationModeState = _ui_utils_js__WEBPACK_IMPORTED_MODULE_1__.PresentationModeState.NORMAL;
+        enableActive();
+      }
     });
     let annotationEditorMode = pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorType.NONE,
       presentationModeState = _ui_utils_js__WEBPACK_IMPORTED_MODULE_1__.PresentationModeState.NORMAL;
@@ -5999,13 +6005,6 @@ class PDFCursorTools {
         this.switchTool(prevActive);
       }
     };
-    this.eventBus._on("secondarytoolbarreset", evt => {
-      if (this.#prevActive !== null) {
-        annotationEditorMode = pdfjs_lib__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorType.NONE;
-        presentationModeState = _ui_utils_js__WEBPACK_IMPORTED_MODULE_1__.PresentationModeState.NORMAL;
-        enableActive();
-      }
-    });
     this.eventBus._on("annotationeditormodechanged", ({
       mode
     }) => {
@@ -7293,7 +7292,7 @@ class PDFHistory {
     this._fingerprint = fingerprint;
     this._updateUrl = updateUrl === true;
     this._initialized = true;
-    this._bindEvents();
+    this.#bindEvents();
     const state = window.history.state;
     this._popStateInProgress = false;
     this._blockHashChange = 0;
@@ -7302,17 +7301,17 @@ class PDFHistory {
     this._uid = this._maxUid = 0;
     this._destination = null;
     this._position = null;
-    if (!this._isValidState(state, true) || resetHistory) {
+    if (!this.#isValidState(state, true) || resetHistory) {
       const {
         hash,
         page,
         rotation
-      } = this._parseCurrentHash(true);
+      } = this.#parseCurrentHash(true);
       if (!hash || reInitialized || resetHistory) {
-        this._pushOrReplaceState(null, true);
+        this.#pushOrReplaceState(null, true);
         return;
       }
-      this._pushOrReplaceState({
+      this.#pushOrReplaceState({
         hash,
         page,
         rotation
@@ -7320,7 +7319,7 @@ class PDFHistory {
       return;
     }
     const destination = state.destination;
-    this._updateInternalState(destination, state.uid, true);
+    this.#updateInternalState(destination, state.uid, true);
     if (destination.rotation !== undefined) {
       this._initialRotation = destination.rotation;
     }
@@ -7335,9 +7334,9 @@ class PDFHistory {
   }
   reset() {
     if (this._initialized) {
-      this._pageHide();
+      this.#pageHide();
       this._initialized = false;
-      this._unbindEvents();
+      this.#unbindEvents();
     }
     if (this._updateViewareaTimeout) {
       clearTimeout(this._updateViewareaTimeout);
@@ -7360,7 +7359,7 @@ class PDFHistory {
     } else if (!Array.isArray(explicitDest)) {
       console.error("PDFHistory.push: " + `"${explicitDest}" is not a valid explicitDest parameter.`);
       return;
-    } else if (!this._isValidPage(pageNumber)) {
+    } else if (!this.#isValidPage(pageNumber)) {
       if (pageNumber !== null || this._destination) {
         console.error("PDFHistory.push: " + `"${pageNumber}" is not a valid pageNumber parameter.`);
         return;
@@ -7380,7 +7379,7 @@ class PDFHistory {
     if (this._popStateInProgress && !forceReplace) {
       return;
     }
-    this._pushOrReplaceState({
+    this.#pushOrReplaceState({
       dest: explicitDest,
       hash,
       page: pageNumber,
@@ -7397,7 +7396,7 @@ class PDFHistory {
     if (!this._initialized) {
       return;
     }
-    if (!this._isValidPage(pageNumber)) {
+    if (!this.#isValidPage(pageNumber)) {
       console.error(`PDFHistory.pushPage: "${pageNumber}" is not a valid page number.`);
       return;
     }
@@ -7407,7 +7406,7 @@ class PDFHistory {
     if (this._popStateInProgress) {
       return;
     }
-    this._pushOrReplaceState({
+    this.#pushOrReplaceState({
       dest: null,
       hash: `page=${pageNumber}`,
       page: pageNumber,
@@ -7424,14 +7423,14 @@ class PDFHistory {
     if (!this._initialized || this._popStateInProgress) {
       return;
     }
-    this._tryPushCurrentPosition();
+    this.#tryPushCurrentPosition();
   }
   back() {
     if (!this._initialized || this._popStateInProgress) {
       return;
     }
     const state = window.history.state;
-    if (this._isValidState(state) && state.uid > 0) {
+    if (this.#isValidState(state) && state.uid > 0) {
       window.history.back();
     }
   }
@@ -7440,7 +7439,7 @@ class PDFHistory {
       return;
     }
     const state = window.history.state;
-    if (this._isValidState(state) && state.uid < this._maxUid) {
+    if (this.#isValidState(state) && state.uid < this._maxUid) {
       window.history.forward();
     }
   }
@@ -7453,14 +7452,14 @@ class PDFHistory {
   get initialRotation() {
     return this._initialized ? this._initialRotation : null;
   }
-  _pushOrReplaceState(destination, forceReplace = false) {
+  #pushOrReplaceState(destination, forceReplace = false) {
     const shouldReplace = forceReplace || !this._destination;
     const newState = {
       fingerprint: this._fingerprint,
       uid: shouldReplace ? this._uid : this._uid + 1,
       destination
     };
-    this._updateInternalState(destination, newState.uid);
+    this.#updateInternalState(destination, newState.uid);
     let newUrl;
     if (this._updateUrl && destination?.hash) {
       const baseUrl = document.location.href.split("#", 1)[0];
@@ -7474,7 +7473,7 @@ class PDFHistory {
       window.history.pushState(newState, "", newUrl);
     }
   }
-  _tryPushCurrentPosition(temporary = false) {
+  #tryPushCurrentPosition(temporary = false) {
     if (!this._position) {
       return;
     }
@@ -7484,11 +7483,11 @@ class PDFHistory {
       position.temporary = true;
     }
     if (!this._destination) {
-      this._pushOrReplaceState(position);
+      this.#pushOrReplaceState(position);
       return;
     }
     if (this._destination.temporary) {
-      this._pushOrReplaceState(position, true);
+      this.#pushOrReplaceState(position, true);
       return;
     }
     if (this._destination.hash === position.hash) {
@@ -7504,12 +7503,12 @@ class PDFHistory {
       }
       forceReplace = true;
     }
-    this._pushOrReplaceState(position, forceReplace);
+    this.#pushOrReplaceState(position, forceReplace);
   }
-  _isValidPage(val) {
+  #isValidPage(val) {
     return Number.isInteger(val) && val > 0 && val <= this.linkService.pagesCount;
   }
-  _isValidState(state, checkReload = false) {
+  #isValidState(state, checkReload = false) {
     if (!state) {
       return false;
     }
@@ -7534,7 +7533,7 @@ class PDFHistory {
     }
     return true;
   }
-  _updateInternalState(destination, uid, removeTemporary = false) {
+  #updateInternalState(destination, uid, removeTemporary = false) {
     if (this._updateViewareaTimeout) {
       clearTimeout(this._updateViewareaTimeout);
       this._updateViewareaTimeout = null;
@@ -7547,12 +7546,12 @@ class PDFHistory {
     this._maxUid = Math.max(this._maxUid, uid);
     this._numPositionUpdates = 0;
   }
-  _parseCurrentHash(checkNameddest = false) {
+  #parseCurrentHash(checkNameddest = false) {
     const hash = unescape(getCurrentHash()).substring(1);
     const params = (0,_ui_utils_js__WEBPACK_IMPORTED_MODULE_0__.parseQueryString)(hash);
     const nameddest = params.get("nameddest") || "";
     let page = params.get("page") | 0;
-    if (!this._isValidPage(page) || checkNameddest && nameddest.length > 0) {
+    if (!this.#isValidPage(page) || checkNameddest && nameddest.length > 0) {
       page = null;
     }
     return {
@@ -7561,7 +7560,7 @@ class PDFHistory {
       rotation: this.linkService.rotation
     };
   }
-  _updateViewarea({
+  #updateViewarea({
     location
   }) {
     if (this._updateViewareaTimeout) {
@@ -7583,13 +7582,13 @@ class PDFHistory {
     if (UPDATE_VIEWAREA_TIMEOUT > 0) {
       this._updateViewareaTimeout = setTimeout(() => {
         if (!this._popStateInProgress) {
-          this._tryPushCurrentPosition(true);
+          this.#tryPushCurrentPosition(true);
         }
         this._updateViewareaTimeout = null;
       }, UPDATE_VIEWAREA_TIMEOUT);
     }
   }
-  _popState({
+  #popState({
     state
   }) {
     const newHash = getCurrentHash(),
@@ -7601,15 +7600,15 @@ class PDFHistory {
         hash,
         page,
         rotation
-      } = this._parseCurrentHash();
-      this._pushOrReplaceState({
+      } = this.#parseCurrentHash();
+      this.#pushOrReplaceState({
         hash,
         page,
         rotation
       }, true);
       return;
     }
-    if (!this._isValidState(state)) {
+    if (!this.#isValidState(state)) {
       return;
     }
     this._popStateInProgress = true;
@@ -7624,7 +7623,7 @@ class PDFHistory {
       });
     }
     const destination = state.destination;
-    this._updateInternalState(destination, state.uid, true);
+    this.#updateInternalState(destination, state.uid, true);
     if ((0,_ui_utils_js__WEBPACK_IMPORTED_MODULE_0__.isValidRotation)(destination.rotation)) {
       this.linkService.rotation = destination.rotation;
     }
@@ -7639,25 +7638,25 @@ class PDFHistory {
       this._popStateInProgress = false;
     });
   }
-  _pageHide() {
+  #pageHide() {
     if (!this._destination || this._destination.temporary) {
-      this._tryPushCurrentPosition();
+      this.#tryPushCurrentPosition();
     }
   }
-  _bindEvents() {
+  #bindEvents() {
     if (this._boundEvents) {
       return;
     }
     this._boundEvents = {
-      updateViewarea: this._updateViewarea.bind(this),
-      popState: this._popState.bind(this),
-      pageHide: this._pageHide.bind(this)
+      updateViewarea: this.#updateViewarea.bind(this),
+      popState: this.#popState.bind(this),
+      pageHide: this.#pageHide.bind(this)
     };
     this.eventBus._on("updateviewarea", this._boundEvents.updateViewarea);
     window.addEventListener("popstate", this._boundEvents.popState);
     window.addEventListener("pagehide", this._boundEvents.pageHide);
   }
-  _unbindEvents() {
+  #unbindEvents() {
     if (!this._boundEvents) {
       return;
     }
@@ -10953,7 +10952,7 @@ class PDFThumbnailView {
     }
     this.resume = null;
   }
-  _getPageDrawContext(upscaleFactor = 1) {
+  #getPageDrawContext(upscaleFactor = 1) {
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d", {
       alpha: false
@@ -10968,11 +10967,11 @@ class PDFThumbnailView {
       transform
     };
   }
-  _convertCanvasToImage(canvas) {
+  #convertCanvasToImage(canvas) {
     if (this.renderingState !== _ui_utils_js__WEBPACK_IMPORTED_MODULE_0__.RenderingStates.FINISHED) {
-      throw new Error("_convertCanvasToImage: Rendering has not finished.");
+      throw new Error("#convertCanvasToImage: Rendering has not finished.");
     }
-    const reducedCanvas = this._reduceImage(canvas);
+    const reducedCanvas = this.#reduceImage(canvas);
     const image = document.createElement("img");
     image.className = "thumbnailImage";
     image.setAttribute("data-l10n-id", "pdfjs-thumb-page-canvas");
@@ -10992,7 +10991,7 @@ class PDFThumbnailView {
       return;
     }
     this.renderingState = _ui_utils_js__WEBPACK_IMPORTED_MODULE_0__.RenderingStates.FINISHED;
-    this._convertCanvasToImage(canvas);
+    this.#convertCanvasToImage(canvas);
     if (error) {
       throw error;
     }
@@ -11014,7 +11013,7 @@ class PDFThumbnailView {
       ctx,
       canvas,
       transform
-    } = this._getPageDrawContext(DRAW_UPSCALE_FACTOR);
+    } = this.#getPageDrawContext(DRAW_UPSCALE_FACTOR);
     const drawViewport = this.viewport.clone({
       scale: DRAW_UPSCALE_FACTOR * this.scale
     });
@@ -11069,13 +11068,13 @@ class PDFThumbnailView {
       return;
     }
     this.renderingState = _ui_utils_js__WEBPACK_IMPORTED_MODULE_0__.RenderingStates.FINISHED;
-    this._convertCanvasToImage(canvas);
+    this.#convertCanvasToImage(canvas);
   }
-  _reduceImage(img) {
+  #reduceImage(img) {
     const {
       ctx,
       canvas
-    } = this._getPageDrawContext();
+    } = this.#getPageDrawContext();
     if (img.width <= 2 * canvas.width) {
       ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvas.width, canvas.height);
       return canvas;
@@ -11144,16 +11143,16 @@ class PDFThumbnailViewer {
     this.linkService = linkService;
     this.renderingQueue = renderingQueue;
     this.pageColors = pageColors || null;
-    this.scroll = (0,_ui_utils_js__WEBPACK_IMPORTED_MODULE_0__.watchScroll)(this.container, this._scrollUpdated.bind(this));
-    this._resetView();
+    this.scroll = (0,_ui_utils_js__WEBPACK_IMPORTED_MODULE_0__.watchScroll)(this.container, this.#scrollUpdated.bind(this));
+    this.#resetView();
   }
-  _scrollUpdated() {
+  #scrollUpdated() {
     this.renderingQueue.renderHighestPriority();
   }
   getThumbnail(index) {
     return this._thumbnails[index];
   }
-  _getVisibleThumbs() {
+  #getVisibleThumbs() {
     return (0,_ui_utils_js__WEBPACK_IMPORTED_MODULE_0__.getVisibleElements)({
       scrollEl: this.container,
       views: this._thumbnails
@@ -11177,7 +11176,7 @@ class PDFThumbnailViewer {
       first,
       last,
       views
-    } = this._getVisibleThumbs();
+    } = this.#getVisibleThumbs();
     if (views.length > 0) {
       let shouldScroll = false;
       if (pageNumber <= first.id || pageNumber >= last.id) {
@@ -11231,7 +11230,7 @@ class PDFThumbnailViewer {
     }
     _pdf_thumbnail_view_js__WEBPACK_IMPORTED_MODULE_1__.TempImageFactory.destroyCanvas();
   }
-  _resetView() {
+  #resetView() {
     this._thumbnails = [];
     this._currentPageNumber = 1;
     this._pageLabels = null;
@@ -11240,8 +11239,8 @@ class PDFThumbnailViewer {
   }
   setDocument(pdfDocument) {
     if (this.pdfDocument) {
-      this._cancelRendering();
-      this._resetView();
+      this.#cancelRendering();
+      this.#resetView();
     }
     this.pdfDocument = pdfDocument;
     if (!pdfDocument) {
@@ -11276,7 +11275,7 @@ class PDFThumbnailViewer {
       console.error("Unable to initialize thumbnail viewer", reason);
     });
   }
-  _cancelRendering() {
+  #cancelRendering() {
     for (const thumbnail of this._thumbnails) {
       thumbnail.cancelRendering();
     }
@@ -11321,7 +11320,7 @@ class PDFThumbnailViewer {
     return this.scroll.down;
   }
   forceRendering() {
-    const visibleThumbs = this._getVisibleThumbs();
+    const visibleThumbs = this.#getVisibleThumbs();
     const scrollAhead = this.#getScrollAhead(visibleThumbs);
     const thumbView = this.renderingQueue.getHighestPriority(visibleThumbs, this._thumbnails, scrollAhead);
     if (thumbView) {
@@ -13308,6 +13307,10 @@ class SecondaryToolbar {
     this.pageNumber = 0;
     this.pagesCount = 0;
     this.#updateUIState();
+    this.eventBus.dispatch("switchcursortool", {
+      source: this,
+      reset: true
+    });
     this.#scrollModeChanged({
       mode: _ui_utils_js__WEBPACK_IMPORTED_MODULE_0__.ScrollMode.VERTICAL
     });
@@ -15022,7 +15025,7 @@ _app_js__WEBPACK_IMPORTED_MODULE_3__ = (__webpack_async_dependencies__.then ? (a
 
 
 const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "5adad89";
+const pdfjsBuild = "2e94511";
 const AppConstants = {
   LinkTarget: _pdf_link_service_js__WEBPACK_IMPORTED_MODULE_2__.LinkTarget,
   RenderingStates: _ui_utils_js__WEBPACK_IMPORTED_MODULE_0__.RenderingStates,
