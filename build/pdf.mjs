@@ -178,6 +178,7 @@ class AnnotationElementFactory {
   }
 }
 class AnnotationElement {
+  #updates = null;
   #hasBorder = false;
   constructor(parameters, {
     isRenderable = false,
@@ -214,6 +215,61 @@ class AnnotationElement {
   get hasPopupData() {
     return AnnotationElement._hasPopupData(this.data);
   }
+  updateEdited(params) {
+    if (!this.container) {
+      return;
+    }
+    this.#updates ||= {
+      rect: this.data.rect.slice(0)
+    };
+    const {
+      rect
+    } = params;
+    if (rect) {
+      this.#setRectEdited(rect);
+    }
+  }
+  resetEdited() {
+    if (!this.#updates) {
+      return;
+    }
+    this.#setRectEdited(this.#updates.rect);
+    this.#updates = null;
+  }
+  #setRectEdited(rect) {
+    const {
+      container: {
+        style
+      },
+      data: {
+        rect: currentRect,
+        rotation
+      },
+      parent: {
+        viewport: {
+          rawDims: {
+            pageWidth,
+            pageHeight,
+            pageX,
+            pageY
+          }
+        }
+      }
+    } = this;
+    currentRect?.splice(0, 4, ...rect);
+    const {
+      width,
+      height
+    } = getRectDims(rect);
+    style.left = `${100 * (rect[0] - pageX) / pageWidth}%`;
+    style.top = `${100 * (pageHeight - rect[3] + pageY) / pageHeight}%`;
+    if (rotation === 0) {
+      style.width = `${100 * width / pageWidth}%`;
+      style.height = `${100 * height / pageHeight}%`;
+    } else {
+      this.setRotation(rotation);
+    }
+  }
   _createContainer(ignoreBorder) {
     const {
       data,
@@ -227,7 +283,10 @@ class AnnotationElement {
     if (!(this instanceof WidgetAnnotationElement)) {
       container.tabIndex = DEFAULT_TAB_INDEX;
     }
-    container.style.zIndex = this.parent.zIndex++;
+    const {
+      style
+    } = container;
+    style.zIndex = this.parent.zIndex++;
     if (data.popupRef) {
       container.setAttribute("aria-haspopup", "dialog");
     }
@@ -237,12 +296,6 @@ class AnnotationElement {
     if (data.noRotate) {
       container.classList.add("norotate");
     }
-    const {
-      pageWidth,
-      pageHeight,
-      pageX,
-      pageY
-    } = viewport.rawDims;
     if (!data.rect || this instanceof PopupAnnotationElement) {
       const {
         rotation
@@ -256,24 +309,23 @@ class AnnotationElement {
       width,
       height
     } = getRectDims(data.rect);
-    const rect = util.Util.normalizeRect([data.rect[0], page.view[3] - data.rect[1] + page.view[1], data.rect[2], page.view[3] - data.rect[3] + page.view[1]]);
     if (!ignoreBorder && data.borderStyle.width > 0) {
-      container.style.borderWidth = `${data.borderStyle.width}px`;
+      style.borderWidth = `${data.borderStyle.width}px`;
       const horizontalRadius = data.borderStyle.horizontalCornerRadius;
       const verticalRadius = data.borderStyle.verticalCornerRadius;
       if (horizontalRadius > 0 || verticalRadius > 0) {
         const radius = `calc(${horizontalRadius}px * var(--scale-factor)) / calc(${verticalRadius}px * var(--scale-factor))`;
-        container.style.borderRadius = radius;
+        style.borderRadius = radius;
       } else if (this instanceof RadioButtonWidgetAnnotationElement) {
         const radius = `calc(${width}px * var(--scale-factor)) / calc(${height}px * var(--scale-factor))`;
-        container.style.borderRadius = radius;
+        style.borderRadius = radius;
       }
       switch (data.borderStyle.style) {
         case util.AnnotationBorderStyleType.SOLID:
-          container.style.borderStyle = "solid";
+          style.borderStyle = "solid";
           break;
         case util.AnnotationBorderStyleType.DASHED:
-          container.style.borderStyle = "dashed";
+          style.borderStyle = "dashed";
           break;
         case util.AnnotationBorderStyleType.BEVELED:
           (0,util.warn)("Unimplemented border style: beveled");
@@ -282,7 +334,7 @@ class AnnotationElement {
           (0,util.warn)("Unimplemented border style: inset");
           break;
         case util.AnnotationBorderStyleType.UNDERLINE:
-          container.style.borderBottomStyle = "solid";
+          style.borderBottomStyle = "solid";
           break;
         default:
           break;
@@ -290,19 +342,26 @@ class AnnotationElement {
       const borderColor = data.borderColor || null;
       if (borderColor) {
         this.#hasBorder = true;
-        container.style.borderColor = util.Util.makeHexColor(borderColor[0] | 0, borderColor[1] | 0, borderColor[2] | 0);
+        style.borderColor = util.Util.makeHexColor(borderColor[0] | 0, borderColor[1] | 0, borderColor[2] | 0);
       } else {
-        container.style.borderWidth = 0;
+        style.borderWidth = 0;
       }
     }
-    container.style.left = `${100 * (rect[0] - pageX) / pageWidth}%`;
-    container.style.top = `${100 * (rect[1] - pageY) / pageHeight}%`;
+    const rect = util.Util.normalizeRect([data.rect[0], page.view[3] - data.rect[1] + page.view[1], data.rect[2], page.view[3] - data.rect[3] + page.view[1]]);
+    const {
+      pageWidth,
+      pageHeight,
+      pageX,
+      pageY
+    } = viewport.rawDims;
+    style.left = `${100 * (rect[0] - pageX) / pageWidth}%`;
+    style.top = `${100 * (rect[1] - pageY) / pageHeight}%`;
     const {
       rotation
     } = data;
     if (data.hasOwnCanvas || rotation === 0) {
-      container.style.width = `${100 * width / pageWidth}%`;
-      container.style.height = `${100 * height / pageHeight}%`;
+      style.width = `${100 * width / pageWidth}%`;
+      style.height = `${100 * height / pageHeight}%`;
     } else {
       this.setRotation(rotation, container);
     }
@@ -2370,6 +2429,7 @@ class AnnotationLayer {
     div,
     accessibilityManager,
     annotationCanvasMap,
+    annotationEditorUIManager,
     page,
     viewport
   }) {
@@ -2379,6 +2439,7 @@ class AnnotationLayer {
     this.page = page;
     this.viewport = viewport;
     this.zIndex = 0;
+    this._annotationEditorUIManager = annotationEditorUIManager;
   }
   #appendElement(element, id) {
     const contentElement = element.firstChild || element;
@@ -2441,14 +2502,15 @@ class AnnotationLayer {
           elements.push(element);
         }
       }
-      if (element.annotationEditorType > 0) {
-        this.#editableAnnotations.set(element.data.id, element);
-      }
       const rendered = element.render();
       if (data.hidden) {
         rendered.style.visibility = "hidden";
       }
       this.#appendElement(rendered, data.id);
+      if (element.annotationEditorType > 0) {
+        this.#editableAnnotations.set(element.data.id, element);
+        this._annotationEditorUIManager?.renderAnnotationElement(element);
+      }
     }
     this.#setAnnotationCanvasMap();
   }
@@ -2473,6 +2535,7 @@ class AnnotationLayer {
       if (!element) {
         continue;
       }
+      canvas.className = "annotationContent";
       const {
         firstChild
       } = element;
@@ -2480,8 +2543,10 @@ class AnnotationLayer {
         element.append(canvas);
       } else if (firstChild.nodeName === "CANVAS") {
         firstChild.replaceWith(canvas);
-      } else {
+      } else if (!firstChild.classList.contains("annotationContent")) {
         firstChild.before(canvas);
+      } else {
+        firstChild.after(canvas);
       }
     }
     this.#annotationCanvasMap.clear();
@@ -2835,7 +2900,7 @@ function getDocument(src) {
   }
   const fetchDocParams = {
     docId,
-    apiVersion: "4.1.0",
+    apiVersion: "4.2.0",
     data,
     password,
     disableAutoFetch,
@@ -4588,8 +4653,8 @@ class InternalRenderTask {
     }
   }
 }
-const version = "4.1.0";
-const build = "2e94511";
+const version = "4.2.0";
+const build = "5ad42c1";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -8664,11 +8729,14 @@ class FreeTextEditor extends editor_editor.AnnotationEditor {
         div
       } = this;
       const savedDisplay = div.style.display;
+      const savedVisibility = div.classList.contains("hidden");
+      div.classList.remove("hidden");
       div.style.display = "hidden";
       currentLayer.div.append(this.div);
       rect = div.getBoundingClientRect();
       div.remove();
       div.style.display = savedDisplay;
+      div.classList.toggle("hidden", savedVisibility);
     }
     if (this.rotation % 180 === this.parentRotation % 180) {
       this.width = rect.width / parentWidth;
@@ -8949,7 +9017,7 @@ class FreeTextEditor extends editor_editor.AnnotationEditor {
         value: textContent.join("\n"),
         position: textPosition,
         pageIndex: pageNumber - 1,
-        rect,
+        rect: rect.slice(0),
         rotation,
         id,
         deleted: false
@@ -9004,6 +9072,32 @@ class FreeTextEditor extends editor_editor.AnnotationEditor {
       pageIndex
     } = this.#initialData;
     return this._hasBeenMoved || serialized.value !== value || serialized.fontSize !== fontSize || serialized.color.some((c, i) => c !== color[i]) || serialized.pageIndex !== pageIndex;
+  }
+  renderAnnotationElement(annotation) {
+    const content = super.renderAnnotationElement(annotation);
+    if (this.deleted) {
+      return content;
+    }
+    const {
+      style
+    } = content;
+    style.fontSize = `calc(${this.#fontSize}px * var(--scale-factor))`;
+    style.color = this.#color;
+    content.replaceChildren();
+    for (const line of this.#content.split("\n")) {
+      const div = document.createElement("div");
+      div.append(line ? document.createTextNode(line) : document.createElement("br"));
+      content.append(div);
+    }
+    const padding = FreeTextEditor._internalPadding * this.parentScale;
+    annotation.updateEdited({
+      rect: this.getRect(padding, padding)
+    });
+    return content;
+  }
+  resetAnnotationElement(annotation) {
+    super.resetAnnotationElement(annotation);
+    annotation.resetEdited();
   }
 }
 
@@ -10985,7 +11079,9 @@ class AnnotationEditorLayer {
     const annotationElementIds = new Set();
     for (const editor of this.#editors.values()) {
       editor.enableEditing();
+      editor.show(true);
       if (editor.annotationElementId) {
+        this.#uiManager.removeChangedExistingAnnotation(editor);
         annotationElementIds.add(editor.annotationElementId);
       }
     }
@@ -11013,12 +11109,18 @@ class AnnotationEditorLayer {
     this.#isDisabling = true;
     this.div.tabIndex = -1;
     this.togglePointerEvents(false);
-    const hiddenAnnotationIds = new Set();
+    const changedAnnotations = new Map();
+    const resetAnnotations = new Map();
     for (const editor of this.#editors.values()) {
       editor.disableEditing();
-      if (!editor.annotationElementId || editor.serialize() !== null) {
-        hiddenAnnotationIds.add(editor.annotationElementId);
+      if (!editor.annotationElementId) {
         continue;
+      }
+      if (editor.serialize() !== null) {
+        changedAnnotations.set(editor.annotationElementId, editor);
+        continue;
+      } else {
+        resetAnnotations.set(editor.annotationElementId, editor);
       }
       this.getEditableAnnotation(editor.annotationElementId)?.show();
       editor.remove();
@@ -11029,8 +11131,21 @@ class AnnotationEditorLayer {
         const {
           id
         } = editable.data;
-        if (hiddenAnnotationIds.has(id) || this.#uiManager.isDeletedAnnotationElement(id)) {
+        if (this.#uiManager.isDeletedAnnotationElement(id)) {
           continue;
+        }
+        let editor = resetAnnotations.get(id);
+        if (editor) {
+          editor.resetAnnotationElement(editable);
+          editor.show(false);
+          editable.show();
+          continue;
+        }
+        editor = changedAnnotations.get(id);
+        if (editor) {
+          this.#uiManager.addChangedExistingAnnotation(editor);
+          editor.renderAnnotationElement(editable);
+          editor.show(false);
         }
         editable.show();
       }
@@ -11142,7 +11257,7 @@ class AnnotationEditorLayer {
     if (editor.parent === this) {
       return;
     }
-    if (editor.annotationElementId) {
+    if (editor.parent && editor.annotationElementId) {
       this.#uiManager.addDeletedAnnotationElement(editor.annotationElementId);
       editor_editor.AnnotationEditor.deleteAnnotationElement(editor);
       editor.annotationElementId = null;
@@ -12624,6 +12739,9 @@ class AnnotationEditor {
     editor.height = height / pageHeight;
     return editor;
   }
+  get hasBeenModified() {
+    return !!this.annotationElementId && (this.deleted || this.serialize() !== null);
+  }
   remove() {
     this.div.removeEventListener("focusin", this.#boundFocusin);
     this.div.removeEventListener("focusout", this.#boundFocusout);
@@ -12882,6 +13000,28 @@ class AnnotationEditor {
       this.div.tabIndex = -1;
     }
     this.#disabled = true;
+  }
+  renderAnnotationElement(annotation) {
+    let content = annotation.container.querySelector(".annotationContent");
+    if (!content) {
+      content = document.createElement("div");
+      content.classList.add("annotationContent", this.editorType);
+      annotation.container.prepend(content);
+    } else if (content.nodeName === "CANVAS") {
+      const canvas = content;
+      content = document.createElement("div");
+      content.classList.add("annotationContent", this.editorType);
+      canvas.before(content);
+    }
+    return content;
+  }
+  resetAnnotationElement(annotation) {
+    const {
+      firstChild
+    } = annotation.container;
+    if (firstChild.nodeName === "DIV" && firstChild.classList.contains("annotationContent")) {
+      firstChild.remove();
+    }
   }
 }
 class FakeEditor extends AnnotationEditor {
@@ -14035,6 +14175,7 @@ class AnnotationEditorUIManager {
   #allLayers = new Map();
   #altTextManager = null;
   #annotationStorage = null;
+  #changedExistingAnnotations = null;
   #commandManager = new CommandManager();
   #currentPageIndex = 0;
   #deletedAnnotationsElementIds = new Set();
@@ -14809,6 +14950,7 @@ class AnnotationEditorUIManager {
   }
   addDeletedAnnotationElement(editor) {
     this.#deletedAnnotationsElementIds.add(editor.annotationElementId);
+    this.addChangedExistingAnnotation(editor);
     editor.deleted = true;
   }
   isDeletedAnnotationElement(annotationElementId) {
@@ -14816,6 +14958,7 @@ class AnnotationEditorUIManager {
   }
   removeDeletedAnnotationElement(editor) {
     this.#deletedAnnotationsElementIds.delete(editor.annotationElementId);
+    this.removeChangedExistingAnnotation(editor);
     editor.deleted = false;
   }
   #addEditorToLayer(editor) {
@@ -15219,6 +15362,31 @@ class AnnotationEditorUIManager {
       }
     }
     return boxes.length === 0 ? null : boxes;
+  }
+  addChangedExistingAnnotation({
+    annotationElementId,
+    id
+  }) {
+    (this.#changedExistingAnnotations ||= new Map()).set(annotationElementId, id);
+  }
+  removeChangedExistingAnnotation({
+    annotationElementId
+  }) {
+    this.#changedExistingAnnotations?.delete(annotationElementId);
+  }
+  renderAnnotationElement(annotation) {
+    const editorId = this.#changedExistingAnnotations?.get(annotation.data.id);
+    if (!editorId) {
+      return;
+    }
+    const editor = this.#annotationStorage.getRawValue(editorId);
+    if (!editor) {
+      return;
+    }
+    if (this.#mode === _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.AnnotationEditorType.NONE && !editor.hasBeenModified) {
+      return;
+    }
+    editor.renderAnnotationElement(annotation);
   }
 }
 
@@ -18098,8 +18266,8 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 
-const pdfjsVersion = "4.1.0";
-const pdfjsBuild = "2e94511";
+const pdfjsVersion = "4.2.0";
+const pdfjsBuild = "5ad42c1";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
