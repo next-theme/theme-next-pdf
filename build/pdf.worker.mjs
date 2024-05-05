@@ -773,6 +773,17 @@ function getUuid() {
   return bytesToString(buf);
 }
 const AnnotationPrefix = "pdfjs_internal_id_";
+const FontRenderOps = {
+  BEZIER_CURVE_TO: 0,
+  MOVE_TO: 1,
+  LINE_TO: 2,
+  QUADRATIC_CURVE_TO: 3,
+  RESTORE: 4,
+  SAVE: 5,
+  SCALE: 6,
+  TRANSFORM: 7,
+  TRANSLATE: 8
+};
 
 ;// CONCATENATED MODULE: ./src/core/primitives.js
 
@@ -1225,6 +1236,9 @@ function readUint32(data, offset) {
 }
 function isWhiteSpace(ch) {
   return ch === 0x20 || ch === 0x09 || ch === 0x0d || ch === 0x0a;
+}
+function isNumberArray(arr, len) {
+  return Array.isArray(arr) && (len === null || arr.length === len) && arr.every(x => typeof x === "number");
 }
 function parseXFAPath(path) {
   const positionPattern = /(.+)\[(\d+)\]$/;
@@ -17149,6 +17163,7 @@ class CFFFont {
 
 
 
+
 function getUint32(data, offset) {
   return (data[offset] << 24 | data[offset + 1] << 16 | data[offset + 2] << 8 | data[offset + 3]) >>> 0;
 }
@@ -17278,22 +17293,13 @@ function lookupCmap(ranges, unicode) {
 }
 function compileGlyf(code, cmds, font) {
   function moveTo(x, y) {
-    cmds.push({
-      cmd: "moveTo",
-      args: [x, y]
-    });
+    cmds.add(FontRenderOps.MOVE_TO, [x, y]);
   }
   function lineTo(x, y) {
-    cmds.push({
-      cmd: "lineTo",
-      args: [x, y]
-    });
+    cmds.add(FontRenderOps.LINE_TO, [x, y]);
   }
   function quadraticCurveTo(xa, ya, x, y) {
-    cmds.push({
-      cmd: "quadraticCurveTo",
-      args: [xa, ya, x, y]
-    });
+    cmds.add(FontRenderOps.QUADRATIC_CURVE_TO, [xa, ya, x, y]);
   }
   let i = 0;
   const numberOfContours = getInt16(code, i);
@@ -17350,17 +17356,11 @@ function compileGlyf(code, cmds, font) {
       }
       const subglyph = font.glyphs[glyphIndex];
       if (subglyph) {
-        cmds.push({
-          cmd: "save"
-        }, {
-          cmd: "transform",
-          args: [scaleX, scale01, scale10, scaleY, x, y]
-        });
+        cmds.add(FontRenderOps.SAVE);
+        cmds.add(FontRenderOps.TRANSFORM, [scaleX, scale01, scale10, scaleY, x, y]);
         if (!(flags & 0x02)) {}
         compileGlyf(subglyph, cmds, font);
-        cmds.push({
-          cmd: "restore"
-        });
+        cmds.add(FontRenderOps.RESTORE);
       }
     } while (flags & 0x20);
   } else {
@@ -17450,22 +17450,13 @@ function compileGlyf(code, cmds, font) {
 }
 function compileCharString(charStringCode, cmds, font, glyphId) {
   function moveTo(x, y) {
-    cmds.push({
-      cmd: "moveTo",
-      args: [x, y]
-    });
+    cmds.add(FontRenderOps.MOVE_TO, [x, y]);
   }
   function lineTo(x, y) {
-    cmds.push({
-      cmd: "lineTo",
-      args: [x, y]
-    });
+    cmds.add(FontRenderOps.LINE_TO, [x, y]);
   }
   function bezierCurveTo(x1, y1, x2, y2, x, y) {
-    cmds.push({
-      cmd: "bezierCurveTo",
-      args: [x1, y1, x2, y2, x, y]
-    });
+    cmds.add(FontRenderOps.BEZIER_CURVE_TO, [x1, y1, x2, y2, x, y]);
   }
   const stack = [];
   let x = 0,
@@ -17635,17 +17626,11 @@ function compileCharString(charStringCode, cmds, font, glyphId) {
             const bchar = stack.pop();
             y = stack.pop();
             x = stack.pop();
-            cmds.push({
-              cmd: "save"
-            }, {
-              cmd: "translate",
-              args: [x, y]
-            });
+            cmds.add(FontRenderOps.SAVE);
+            cmds.add(FontRenderOps.TRANSLATE, [x, y]);
             let cmap = lookupCmap(font.cmap, String.fromCharCode(font.glyphNameMap[StandardEncoding[achar]]));
             compileCharString(font.glyphs[cmap.glyphId], cmds, font, cmap.glyphId);
-            cmds.push({
-              cmd: "restore"
-            });
+            cmds.add(FontRenderOps.RESTORE);
             cmap = lookupCmap(font.cmap, String.fromCharCode(font.glyphNameMap[StandardEncoding[bchar]]));
             compileCharString(font.glyphs[cmap.glyphId], cmds, font, cmap.glyphId);
           }
@@ -17812,6 +17797,22 @@ function compileCharString(charStringCode, cmds, font, glyphId) {
   parse(charStringCode);
 }
 const NOOP = [];
+class Commands {
+  cmds = [];
+  add(cmd, args) {
+    if (args) {
+      if (!isNumberArray(args, null)) {
+        warn(`Commands.add - "${cmd}" has at least one non-number arg: "${args}".`);
+        const newArgs = args.map(arg => typeof arg === "number" ? arg : 0);
+        this.cmds.push(cmd, ...newArgs);
+      } else {
+        this.cmds.push(cmd, ...args);
+      }
+    } else {
+      this.cmds.push(cmd);
+    }
+  }
+}
 class CompiledFont {
   constructor(fontMatrix) {
     if (this.constructor === CompiledFont) {
@@ -17826,21 +17827,20 @@ class CompiledFont {
       charCode,
       glyphId
     } = lookupCmap(this.cmap, unicode);
-    let fn = this.compiledGlyphs[glyphId];
+    let fn = this.compiledGlyphs[glyphId],
+      compileEx;
     if (!fn) {
       try {
         fn = this.compileGlyph(this.glyphs[glyphId], glyphId);
-        this.compiledGlyphs[glyphId] = fn;
       } catch (ex) {
-        this.compiledGlyphs[glyphId] = NOOP;
-        if (this.compiledCharCodeToGlyphId[charCode] === undefined) {
-          this.compiledCharCodeToGlyphId[charCode] = glyphId;
-        }
-        throw ex;
+        fn = NOOP;
+        compileEx = ex;
       }
+      this.compiledGlyphs[glyphId] = fn;
     }
-    if (this.compiledCharCodeToGlyphId[charCode] === undefined) {
-      this.compiledCharCodeToGlyphId[charCode] = glyphId;
+    this.compiledCharCodeToGlyphId[charCode] ??= glyphId;
+    if (compileEx) {
+      throw compileEx;
     }
     return fn;
   }
@@ -17858,20 +17858,13 @@ class CompiledFont {
         warn("Invalid fd index for glyph index.");
       }
     }
-    const cmds = [{
-      cmd: "save"
-    }, {
-      cmd: "transform",
-      args: fontMatrix.slice()
-    }, {
-      cmd: "scale",
-      args: ["size", "-size"]
-    }];
+    const cmds = new Commands();
+    cmds.add(FontRenderOps.SAVE);
+    cmds.add(FontRenderOps.TRANSFORM, fontMatrix.slice());
+    cmds.add(FontRenderOps.SCALE);
     this.compileGlyphImpl(code, cmds, glyphId);
-    cmds.push({
-      cmd: "restore"
-    });
-    return cmds;
+    cmds.add(FontRenderOps.RESTORE);
+    return cmds.cmds;
   }
   compileGlyphImpl() {
     unreachable("Children classes should implement this.");
@@ -26402,6 +26395,7 @@ class GlobalImageCache {
 
 
 
+
 class PDFFunctionFactory {
   constructor({
     xref,
@@ -26477,15 +26471,8 @@ function toNumberArray(arr) {
   if (!Array.isArray(arr)) {
     return null;
   }
-  const length = arr.length;
-  for (let i = 0; i < length; i++) {
-    if (typeof arr[i] !== "number") {
-      const result = new Array(length);
-      for (let j = 0; j < length; j++) {
-        result[j] = +arr[j];
-      }
-      return result;
-    }
+  if (!isNumberArray(arr, null)) {
+    return arr.map(x => +x);
   }
   return arr;
 }
@@ -29562,6 +29549,7 @@ class PDFImage {
 
 
 
+
 const DefaultPartialEvaluatorOptions = Object.freeze({
   maxImageSize: -1,
   disableFontFace: false,
@@ -32240,56 +32228,85 @@ class PartialEvaluator {
     let defaultWidth = 0;
     const glyphsVMetrics = [];
     let defaultVMetrics;
-    let i, ii, j, jj, start, code, widths;
     if (properties.composite) {
-      defaultWidth = dict.has("DW") ? dict.get("DW") : 1000;
-      widths = dict.get("W");
-      if (widths) {
-        for (i = 0, ii = widths.length; i < ii; i++) {
-          start = xref.fetchIfRef(widths[i++]);
-          code = xref.fetchIfRef(widths[i]);
+      const dw = dict.get("DW");
+      defaultWidth = Number.isInteger(dw) ? dw : 1000;
+      const widths = dict.get("W");
+      if (Array.isArray(widths)) {
+        for (let i = 0, ii = widths.length; i < ii; i++) {
+          let start = xref.fetchIfRef(widths[i++]);
+          if (!Number.isInteger(start)) {
+            break;
+          }
+          const code = xref.fetchIfRef(widths[i]);
           if (Array.isArray(code)) {
-            for (j = 0, jj = code.length; j < jj; j++) {
-              glyphsWidths[start++] = xref.fetchIfRef(code[j]);
+            for (const c of code) {
+              const width = xref.fetchIfRef(c);
+              if (typeof width === "number") {
+                glyphsWidths[start] = width;
+              }
+              start++;
             }
-          } else {
+          } else if (Number.isInteger(code)) {
             const width = xref.fetchIfRef(widths[++i]);
-            for (j = start; j <= code; j++) {
+            if (typeof width !== "number") {
+              continue;
+            }
+            for (let j = start; j <= code; j++) {
               glyphsWidths[j] = width;
             }
+          } else {
+            break;
           }
         }
       }
       if (properties.vertical) {
-        let vmetrics = dict.getArray("DW2") || [880, -1000];
+        const dw2 = dict.getArray("DW2");
+        let vmetrics = isNumberArray(dw2, 2) ? dw2 : [880, -1000];
         defaultVMetrics = [vmetrics[1], defaultWidth * 0.5, vmetrics[0]];
         vmetrics = dict.get("W2");
-        if (vmetrics) {
-          for (i = 0, ii = vmetrics.length; i < ii; i++) {
-            start = xref.fetchIfRef(vmetrics[i++]);
-            code = xref.fetchIfRef(vmetrics[i]);
+        if (Array.isArray(vmetrics)) {
+          for (let i = 0, ii = vmetrics.length; i < ii; i++) {
+            let start = xref.fetchIfRef(vmetrics[i++]);
+            if (!Number.isInteger(start)) {
+              break;
+            }
+            const code = xref.fetchIfRef(vmetrics[i]);
             if (Array.isArray(code)) {
-              for (j = 0, jj = code.length; j < jj; j++) {
-                glyphsVMetrics[start++] = [xref.fetchIfRef(code[j++]), xref.fetchIfRef(code[j++]), xref.fetchIfRef(code[j])];
+              for (let j = 0, jj = code.length; j < jj; j++) {
+                const vmetric = [xref.fetchIfRef(code[j++]), xref.fetchIfRef(code[j++]), xref.fetchIfRef(code[j])];
+                if (isNumberArray(vmetric, null)) {
+                  glyphsVMetrics[start] = vmetric;
+                }
+                start++;
               }
-            } else {
+            } else if (Number.isInteger(code)) {
               const vmetric = [xref.fetchIfRef(vmetrics[++i]), xref.fetchIfRef(vmetrics[++i]), xref.fetchIfRef(vmetrics[++i])];
-              for (j = start; j <= code; j++) {
+              if (!isNumberArray(vmetric, null)) {
+                continue;
+              }
+              for (let j = start; j <= code; j++) {
                 glyphsVMetrics[j] = vmetric;
               }
+            } else {
+              break;
             }
           }
         }
       }
     } else {
-      const firstChar = properties.firstChar;
-      widths = dict.get("Widths");
-      if (widths) {
-        j = firstChar;
-        for (i = 0, ii = widths.length; i < ii; i++) {
-          glyphsWidths[j++] = xref.fetchIfRef(widths[i]);
+      const widths = dict.get("Widths");
+      if (Array.isArray(widths)) {
+        let j = properties.firstChar;
+        for (const w of widths) {
+          const width = xref.fetchIfRef(w);
+          if (typeof width === "number") {
+            glyphsWidths[j] = width;
+          }
+          j++;
         }
-        defaultWidth = parseFloat(descriptor.get("MissingWidth")) || 0;
+        const missingWidth = descriptor.get("MissingWidth");
+        defaultWidth = typeof missingWidth === "number" ? missingWidth : 0;
       } else {
         const baseFontName = dict.get("BaseFont");
         if (baseFontName instanceof Name) {
@@ -32391,8 +32408,14 @@ class PartialEvaluator {
       }
       composite = true;
     }
-    const firstChar = dict.get("FirstChar") || 0,
-      lastChar = dict.get("LastChar") || (composite ? 0xffff : 0xff);
+    let firstChar = dict.get("FirstChar");
+    if (!Number.isInteger(firstChar)) {
+      firstChar = 0;
+    }
+    let lastChar = dict.get("LastChar");
+    if (!Number.isInteger(lastChar)) {
+      lastChar = composite ? 0xffff : 0xff;
+    }
     const descriptor = dict.get("FontDescriptor");
     const toUnicode = dict.get("ToUnicode") || baseDict.get("ToUnicode");
     if (descriptor) {
@@ -32497,9 +32520,13 @@ class PartialEvaluator {
     const isType3Font = type === "Type3";
     if (!descriptor) {
       if (isType3Font) {
+        let bbox = dict.getArray("FontBBox");
+        if (!isNumberArray(bbox, 4)) {
+          bbox = [0, 0, 0, 0];
+        }
         descriptor = new Dict(null);
         descriptor.set("FontName", Name.get(type));
-        descriptor.set("FontBBox", dict.getArray("FontBBox") || [0, 0, 0, 0]);
+        descriptor.set("FontBBox", bbox);
       } else {
         let baseFontName = dict.get("BaseFont");
         if (!(baseFontName instanceof Name)) {
@@ -32537,11 +32564,15 @@ class PartialEvaluator {
           properties.systemFontInfo = getFontSubstitution(this.systemFontCache, this.idFactory, this.options.standardFontDataUrl, baseFontName, standardFontName, type);
         }
         const newProperties = await this.extractDataStructures(dict, properties);
-        if (widths) {
+        if (Array.isArray(widths)) {
           const glyphWidths = [];
           let j = firstChar;
-          for (const width of widths) {
-            glyphWidths[j++] = this.xref.fetchIfRef(width);
+          for (const w of widths) {
+            const width = this.xref.fetchIfRef(w);
+            if (typeof width === "number") {
+              glyphWidths[j] = width;
+            }
+            j++;
           }
           newProperties.widths = glyphWidths;
         } else {
@@ -32614,6 +32645,38 @@ class PartialEvaluator {
         systemFontInfo = getFontSubstitution(this.systemFontCache, this.idFactory, this.options.standardFontDataUrl, fontName.name, standardFontName, type);
       }
     }
+    let fontMatrix = dict.getArray("FontMatrix");
+    if (!isNumberArray(fontMatrix, 6)) {
+      fontMatrix = FONT_IDENTITY_MATRIX;
+    }
+    let bbox = descriptor.getArray("FontBBox") || dict.getArray("FontBBox");
+    if (!isNumberArray(bbox, 4)) {
+      bbox = undefined;
+    }
+    let ascent = descriptor.get("Ascent");
+    if (typeof ascent !== "number") {
+      ascent = undefined;
+    }
+    let descent = descriptor.get("Descent");
+    if (typeof descent !== "number") {
+      descent = undefined;
+    }
+    let xHeight = descriptor.get("XHeight");
+    if (typeof xHeight !== "number") {
+      xHeight = 0;
+    }
+    let capHeight = descriptor.get("CapHeight");
+    if (typeof capHeight !== "number") {
+      capHeight = 0;
+    }
+    let flags = descriptor.get("Flags");
+    if (!Number.isInteger(flags)) {
+      flags = 0;
+    }
+    let italicAngle = descriptor.get("ItalicAngle");
+    if (typeof italicAngle !== "number") {
+      italicAngle = 0;
+    }
     const properties = {
       type,
       name: fontName.name,
@@ -32626,17 +32689,17 @@ class PartialEvaluator {
       loadedName: baseDict.loadedName,
       composite,
       fixedPitch: false,
-      fontMatrix: dict.getArray("FontMatrix") || FONT_IDENTITY_MATRIX,
+      fontMatrix,
       firstChar,
       lastChar,
       toUnicode,
-      bbox: descriptor.getArray("FontBBox") || dict.getArray("FontBBox"),
-      ascent: descriptor.get("Ascent"),
-      descent: descriptor.get("Descent"),
-      xHeight: descriptor.get("XHeight") || 0,
-      capHeight: descriptor.get("CapHeight") || 0,
-      flags: descriptor.get("Flags"),
-      italicAngle: descriptor.get("ItalicAngle") || 0,
+      bbox,
+      ascent,
+      descent,
+      xHeight,
+      capHeight,
+      flags,
+      italicAngle,
       isType3Font,
       cssFontInfo,
       scaleFactors: glyphScaleFactors,
@@ -33931,6 +33994,9 @@ function clearGlobalCaches() {
 
 
 function pickPlatformItem(dict) {
+  if (!(dict instanceof Dict)) {
+    return null;
+  }
   if (dict.has("UF")) {
     return dict.get("UF");
   } else if (dict.has("F")) {
@@ -33944,6 +34010,9 @@ function pickPlatformItem(dict) {
   }
   return null;
 }
+function stripPath(str) {
+  return str.substring(str.lastIndexOf("/") + 1);
+}
 class FileSpec {
   #contentAvailable = false;
   constructor(root, xref, skipContent = false) {
@@ -33955,7 +34024,6 @@ class FileSpec {
     if (root.has("FS")) {
       this.fs = root.get("FS");
     }
-    this.description = root.has("Desc") ? stringToPDFString(root.get("Desc")) : "";
     if (root.has("RF")) {
       warn("Related file specifications are not supported");
     }
@@ -33968,36 +34036,45 @@ class FileSpec {
     }
   }
   get filename() {
-    if (!this._filename && this.root) {
-      const filename = pickPlatformItem(this.root) || "unnamed";
-      this._filename = stringToPDFString(filename).replaceAll("\\\\", "\\").replaceAll("\\/", "/").replaceAll("\\", "/");
+    let filename = "";
+    const item = pickPlatformItem(this.root);
+    if (item && typeof item === "string") {
+      filename = stringToPDFString(item).replaceAll("\\\\", "\\").replaceAll("\\/", "/").replaceAll("\\", "/");
     }
-    return this._filename;
+    return shadow(this, "filename", filename || "unnamed");
   }
   get content() {
     if (!this.#contentAvailable) {
       return null;
     }
-    if (!this.contentRef && this.root) {
-      this.contentRef = pickPlatformItem(this.root.get("EF"));
-    }
+    this._contentRef ||= pickPlatformItem(this.root?.get("EF"));
     let content = null;
-    if (this.contentRef) {
-      const fileObj = this.xref.fetchIfRef(this.contentRef);
+    if (this._contentRef) {
+      const fileObj = this.xref.fetchIfRef(this._contentRef);
       if (fileObj instanceof BaseStream) {
         content = fileObj.getBytes();
       } else {
         warn("Embedded file specification points to non-existing/invalid content");
       }
     } else {
-      warn("Embedded file specification does not have a content");
+      warn("Embedded file specification does not have any content");
     }
     return content;
   }
+  get description() {
+    let description = "";
+    const desc = this.root?.get("Desc");
+    if (desc && typeof desc === "string") {
+      description = stringToPDFString(desc);
+    }
+    return shadow(this, "description", description);
+  }
   get serializable() {
     return {
-      filename: this.filename,
-      content: this.content
+      rawFilename: this.filename,
+      filename: stripPath(this.filename),
+      content: this.content,
+      description: this.description
     };
   }
 }
@@ -38237,9 +38314,9 @@ class Catalog {
           if (urlDict instanceof Dict) {
             const fs = new FileSpec(urlDict, null, true);
             const {
-              filename
+              rawFilename
             } = fs.serializable;
-            url = filename;
+            url = rawFilename;
           } else if (typeof urlDict === "string") {
             url = urlDict;
           }
@@ -55413,7 +55490,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = "4.2.0";
+    const workerVersion = "4.3.0";
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }
@@ -55637,6 +55714,7 @@ class WorkerMessageHandler {
           return {
             rotate,
             ref,
+            refStr: ref?.toString() ?? null,
             userUnit,
             view
           };
@@ -55982,8 +56060,8 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
-const pdfjsVersion = "4.2.0";
-const pdfjsBuild = "90d4b9c";
+const pdfjsVersion = "4.3.0";
+const pdfjsBuild = "1b811ac";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };

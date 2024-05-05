@@ -776,6 +776,9 @@ class LinkAnnotationElement extends AnnotationElement {
   }
   #bindAttachment(link, attachment, dest = null) {
     link.href = this.linkService.getAnchorUrl("");
+    if (attachment.description) {
+      link.title = attachment.description;
+    }
     link.onclick = () => {
       this.downloadManager?.openOrDownloadData(attachment.content, attachment.filename, dest);
       return false;
@@ -2368,15 +2371,13 @@ class FileAttachmentAnnotationElement extends AnnotationElement {
       isRenderable: true
     });
     const {
-      filename,
-      content
-    } = this.data.file;
-    this.filename = (0,display_utils.getFilenameFromUrl)(filename, true);
-    this.content = content;
+      file
+    } = this.data;
+    this.filename = file.filename;
+    this.content = file.content;
     this.linkService.eventBus?.dispatch("fileattachmentannotation", {
       source: this,
-      filename,
-      content
+      ...file
     });
   }
   render() {
@@ -2902,7 +2903,7 @@ function getDocument(src) {
   }
   const fetchDocParams = {
     docId,
-    apiVersion: "4.2.0",
+    apiVersion: "4.3.0",
     data,
     password,
     disableAutoFetch,
@@ -2925,7 +2926,6 @@ function getDocument(src) {
   };
   const transportParams = {
     ignoreErrors,
-    isEvalSupported,
     disableFontFace,
     fontExtraProperties,
     enableXfa,
@@ -3017,6 +3017,9 @@ function getDataProp(val) {
     return new Uint8Array(val);
   }
   throw new Error("Invalid PDF binary data: either TypedArray, " + "string, or array-like object is expected in the data property.");
+}
+function isRefProxy(ref) {
+  return typeof ref === "object" && Number.isInteger(ref?.num) && ref.num >= 0 && Number.isInteger(ref?.gen) && ref.gen >= 0;
 }
 class PDFDocumentLoadingTask {
   static #docId = 0;
@@ -3200,6 +3203,9 @@ class PDFDocumentProxy {
   }
   destroy() {
     return this.loadingTask.destroy();
+  }
+  cachedPageNumber(ref) {
+    return this._transport.cachedPageNumber(ref);
   }
   get loadingParams() {
     return this._transport.loadingParams;
@@ -3897,6 +3903,7 @@ class WorkerTransport {
   #methodPromises = new Map();
   #pageCache = new Map();
   #pagePromises = new Map();
+  #pageRefCache = new Map();
   #passwordCapability = null;
   constructor(messageHandler, loadingTask, networkStream, params, factory) {
     this.messageHandler = messageHandler;
@@ -3985,6 +3992,7 @@ class WorkerTransport {
     }
     this.#pageCache.clear();
     this.#pagePromises.clear();
+    this.#pageRefCache.clear();
     if (this.hasOwnProperty("annotationStorage")) {
       this.annotationStorage.resetModified();
     }
@@ -4184,7 +4192,6 @@ class WorkerTransport {
           }
           const inspectFont = params.pdfBug && globalThis.FontInspector?.enabled ? (font, url) => globalThis.FontInspector.fontAdded(font, url) : null;
           const font = new _font_loader_js__WEBPACK_IMPORTED_MODULE_3__.FontFaceObject(exportedData, {
-            isEvalSupported: params.isEvalSupported,
             disableFontFace: params.disableFontFace,
             ignoreErrors: params.ignoreErrors,
             inspectFont
@@ -4315,6 +4322,9 @@ class WorkerTransport {
       if (this.destroyed) {
         throw new Error("Transport destroyed");
       }
+      if (pageInfo.refStr) {
+        this.#pageRefCache.set(pageInfo.refStr, pageNumber);
+      }
       const page = new PDFPageProxy(pageIndex, pageInfo, this, this._params.pdfBug);
       this.#pageCache.set(pageIndex, page);
       return page;
@@ -4323,7 +4333,7 @@ class WorkerTransport {
     return promise;
   }
   getPageIndex(ref) {
-    if (typeof ref !== "object" || !Number.isInteger(ref?.num) || ref.num < 0 || !Number.isInteger(ref?.gen) || ref.gen < 0) {
+    if (!isRefProxy(ref)) {
       return Promise.reject(new Error("Invalid pageIndex request."));
     }
     return this.messageHandler.sendWithPromise("GetPageIndex", {
@@ -4433,6 +4443,13 @@ class WorkerTransport {
     this.#methodPromises.clear();
     this.filterFactory.destroy(true);
     (0,_text_layer_js__WEBPACK_IMPORTED_MODULE_6__.cleanupTextLayer)();
+  }
+  cachedPageNumber(ref) {
+    if (!isRefProxy(ref)) {
+      return null;
+    }
+    const refStr = ref.gen === 0 ? `${ref.num}R` : `${ref.num}R${ref.gen}`;
+    return this.#pageRefCache.get(refStr) ?? null;
   }
   get loadingParams() {
     const {
@@ -4655,8 +4672,8 @@ class InternalRenderTask {
     }
   }
 }
-const version = "4.2.0";
-const build = "90d4b9c";
+const version = "4.3.0";
+const build = "1b811ac";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -4685,6 +4702,12 @@ class BaseFilterFactory {
     return "none";
   }
   addHCMFilter(fgColor, bgColor) {
+    return "none";
+  }
+  addAlphaFilter(map) {
+    return "none";
+  }
+  addLuminosityFilter(map) {
     return "none";
   }
   addHighlightHCMFilter(filterName, fgColor, bgColor, newFgColor, newBgColor) {
@@ -5389,7 +5412,6 @@ function grayToRGBA(src, dest) {
 
 const MIN_FONT_SIZE = 16;
 const MAX_FONT_SIZE = 100;
-const MAX_GROUP_SIZE = 4096;
 const EXECUTION_TIME = 15;
 const EXECUTION_STEPS = 10;
 const MAX_SIZE_TO_COMPILE = 1000;
@@ -5943,72 +5965,6 @@ function resetCtxToDefault(ctx) {
     }
   }
 }
-function composeSMaskBackdrop(bytes, r0, g0, b0) {
-  const length = bytes.length;
-  for (let i = 3; i < length; i += 4) {
-    const alpha = bytes[i];
-    if (alpha === 0) {
-      bytes[i - 3] = r0;
-      bytes[i - 2] = g0;
-      bytes[i - 1] = b0;
-    } else if (alpha < 255) {
-      const alpha_ = 255 - alpha;
-      bytes[i - 3] = bytes[i - 3] * alpha + r0 * alpha_ >> 8;
-      bytes[i - 2] = bytes[i - 2] * alpha + g0 * alpha_ >> 8;
-      bytes[i - 1] = bytes[i - 1] * alpha + b0 * alpha_ >> 8;
-    }
-  }
-}
-function composeSMaskAlpha(maskData, layerData, transferMap) {
-  const length = maskData.length;
-  const scale = 1 / 255;
-  for (let i = 3; i < length; i += 4) {
-    const alpha = transferMap ? transferMap[maskData[i]] : maskData[i];
-    layerData[i] = layerData[i] * alpha * scale | 0;
-  }
-}
-function composeSMaskLuminosity(maskData, layerData, transferMap) {
-  const length = maskData.length;
-  for (let i = 3; i < length; i += 4) {
-    const y = maskData[i - 3] * 77 + maskData[i - 2] * 152 + maskData[i - 1] * 28;
-    layerData[i] = transferMap ? layerData[i] * transferMap[y >> 8] >> 8 : layerData[i] * y >> 16;
-  }
-}
-function genericComposeSMask(maskCtx, layerCtx, width, height, subtype, backdrop, transferMap, layerOffsetX, layerOffsetY, maskOffsetX, maskOffsetY) {
-  const hasBackdrop = !!backdrop;
-  const r0 = hasBackdrop ? backdrop[0] : 0;
-  const g0 = hasBackdrop ? backdrop[1] : 0;
-  const b0 = hasBackdrop ? backdrop[2] : 0;
-  const composeFn = subtype === "Luminosity" ? composeSMaskLuminosity : composeSMaskAlpha;
-  const PIXELS_TO_PROCESS = 1048576;
-  const chunkSize = Math.min(height, Math.ceil(PIXELS_TO_PROCESS / width));
-  for (let row = 0; row < height; row += chunkSize) {
-    const chunkHeight = Math.min(chunkSize, height - row);
-    const maskData = maskCtx.getImageData(layerOffsetX - maskOffsetX, row + (layerOffsetY - maskOffsetY), width, chunkHeight);
-    const layerData = layerCtx.getImageData(layerOffsetX, row + layerOffsetY, width, chunkHeight);
-    if (hasBackdrop) {
-      composeSMaskBackdrop(maskData.data, r0, g0, b0);
-    }
-    composeFn(maskData.data, layerData.data, transferMap);
-    layerCtx.putImageData(layerData, layerOffsetX, row + layerOffsetY);
-  }
-}
-function composeSMask(ctx, smask, layerCtx, layerBox) {
-  const layerOffsetX = layerBox[0];
-  const layerOffsetY = layerBox[1];
-  const layerWidth = layerBox[2] - layerOffsetX;
-  const layerHeight = layerBox[3] - layerOffsetY;
-  if (layerWidth === 0 || layerHeight === 0) {
-    return;
-  }
-  genericComposeSMask(smask.context, layerCtx, layerWidth, layerHeight, smask.subtype, smask.backdrop, smask.transferMap, layerOffsetX, layerOffsetY, smask.offsetX, smask.offsetY);
-  ctx.save();
-  ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = "source-over";
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.drawImage(layerCtx.canvas, 0, 0);
-  ctx.restore();
-}
 function getImageSmoothingEnabled(transform, interpolate) {
   if (interpolate) {
     return true;
@@ -6409,11 +6365,72 @@ class CanvasGraphics {
     }
     const smask = this.current.activeSMask;
     const suspendedCtx = this.suspendedCtx;
-    composeSMask(suspendedCtx, smask, this.ctx, dirtyBox);
+    this.composeSMask(suspendedCtx, smask, this.ctx, dirtyBox);
     this.ctx.save();
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
     this.ctx.restore();
+  }
+  composeSMask(ctx, smask, layerCtx, layerBox) {
+    const layerOffsetX = layerBox[0];
+    const layerOffsetY = layerBox[1];
+    const layerWidth = layerBox[2] - layerOffsetX;
+    const layerHeight = layerBox[3] - layerOffsetY;
+    if (layerWidth === 0 || layerHeight === 0) {
+      return;
+    }
+    this.genericComposeSMask(smask.context, layerCtx, layerWidth, layerHeight, smask.subtype, smask.backdrop, smask.transferMap, layerOffsetX, layerOffsetY, smask.offsetX, smask.offsetY);
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(layerCtx.canvas, 0, 0);
+    ctx.restore();
+  }
+  genericComposeSMask(maskCtx, layerCtx, width, height, subtype, backdrop, transferMap, layerOffsetX, layerOffsetY, maskOffsetX, maskOffsetY) {
+    let maskCanvas = maskCtx.canvas;
+    let maskX = layerOffsetX - maskOffsetX;
+    let maskY = layerOffsetY - maskOffsetY;
+    if (backdrop) {
+      if (maskX < 0 || maskY < 0 || maskX + width > maskCanvas.width || maskY + height > maskCanvas.height) {
+        const canvas = this.cachedCanvases.getCanvas("maskExtension", width, height);
+        const ctx = canvas.context;
+        ctx.drawImage(maskCanvas, -maskX, -maskY);
+        if (backdrop.some(c => c !== 0)) {
+          ctx.globalCompositeOperation = "destination-atop";
+          ctx.fillStyle = util.Util.makeHexColor(...backdrop);
+          ctx.fillRect(0, 0, width, height);
+          ctx.globalCompositeOperation = "source-over";
+        }
+        maskCanvas = canvas.canvas;
+        maskX = maskY = 0;
+      } else if (backdrop.some(c => c !== 0)) {
+        maskCtx.save();
+        maskCtx.globalAlpha = 1;
+        maskCtx.setTransform(1, 0, 0, 1, 0, 0);
+        const clip = new Path2D();
+        clip.rect(maskX, maskY, width, height);
+        maskCtx.clip(clip);
+        maskCtx.globalCompositeOperation = "destination-atop";
+        maskCtx.fillStyle = util.Util.makeHexColor(...backdrop);
+        maskCtx.fillRect(maskX, maskY, width, height);
+        maskCtx.restore();
+      }
+    }
+    layerCtx.save();
+    layerCtx.globalAlpha = 1;
+    layerCtx.setTransform(1, 0, 0, 1, 0, 0);
+    if (subtype === "Alpha" && transferMap) {
+      layerCtx.filter = this.filterFactory.addAlphaFilter(transferMap);
+    } else if (subtype === "Luminosity") {
+      layerCtx.filter = this.filterFactory.addLuminosityFilter(transferMap);
+    }
+    const clip = new Path2D();
+    clip.rect(layerOffsetX, layerOffsetY, width, height);
+    layerCtx.clip(clip);
+    layerCtx.globalCompositeOperation = "destination-in";
+    layerCtx.drawImage(maskCanvas, maskX, maskY, width, height, layerOffsetX, layerOffsetY, width, height);
+    layerCtx.restore();
   }
   save() {
     if (this.inSMaskMode) {
@@ -7097,18 +7114,8 @@ class CanvasGraphics {
     bounds = util.Util.intersect(bounds, canvasBounds) || [0, 0, 0, 0];
     const offsetX = Math.floor(bounds[0]);
     const offsetY = Math.floor(bounds[1]);
-    let drawnWidth = Math.max(Math.ceil(bounds[2]) - offsetX, 1);
-    let drawnHeight = Math.max(Math.ceil(bounds[3]) - offsetY, 1);
-    let scaleX = 1,
-      scaleY = 1;
-    if (drawnWidth > MAX_GROUP_SIZE) {
-      scaleX = drawnWidth / MAX_GROUP_SIZE;
-      drawnWidth = MAX_GROUP_SIZE;
-    }
-    if (drawnHeight > MAX_GROUP_SIZE) {
-      scaleY = drawnHeight / MAX_GROUP_SIZE;
-      drawnHeight = MAX_GROUP_SIZE;
-    }
+    const drawnWidth = Math.max(Math.ceil(bounds[2]) - offsetX, 1);
+    const drawnHeight = Math.max(Math.ceil(bounds[3]) - offsetY, 1);
     this.current.startNewPathAndClipBox([0, 0, drawnWidth, drawnHeight]);
     let cacheId = "groupAt" + this.groupLevel;
     if (group.smask) {
@@ -7116,7 +7123,6 @@ class CanvasGraphics {
     }
     const scratchCanvas = this.cachedCanvases.getCanvas(cacheId, drawnWidth, drawnHeight);
     const groupCtx = scratchCanvas.context;
-    groupCtx.scale(1 / scaleX, 1 / scaleY);
     groupCtx.translate(-offsetX, -offsetY);
     groupCtx.transform(...currentTransform);
     if (group.smask) {
@@ -7125,8 +7131,6 @@ class CanvasGraphics {
         context: groupCtx,
         offsetX,
         offsetY,
-        scaleX,
-        scaleY,
         subtype: group.smask.subtype,
         backdrop: group.smask.backdrop,
         transferMap: group.smask.transferMap || null,
@@ -7135,7 +7139,6 @@ class CanvasGraphics {
     } else {
       currentCtx.setTransform(1, 0, 0, 1, 0, 0);
       currentCtx.translate(offsetX, offsetY);
-      currentCtx.scale(scaleX, scaleY);
       currentCtx.save();
     }
     copyCtxState(currentCtx, groupCtx);
@@ -7662,6 +7665,27 @@ class DOMFilterFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.Bas
     }
     return this.#_defs;
   }
+  #createTables(maps) {
+    if (maps.length === 1) {
+      const mapR = maps[0];
+      const buffer = new Array(256);
+      for (let i = 0; i < 256; i++) {
+        buffer[i] = mapR[i] / 255;
+      }
+      const table = buffer.join(",");
+      return [table, table, table];
+    }
+    const [mapR, mapG, mapB] = maps;
+    const bufferR = new Array(256);
+    const bufferG = new Array(256);
+    const bufferB = new Array(256);
+    for (let i = 0; i < 256; i++) {
+      bufferR[i] = mapR[i] / 255;
+      bufferG[i] = mapG[i] / 255;
+      bufferB[i] = mapB[i] / 255;
+    }
+    return [bufferR.join(","), bufferG.join(","), bufferB.join(",")];
+  }
   addFilter(maps) {
     if (!maps) {
       return "none";
@@ -7670,29 +7694,8 @@ class DOMFilterFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.Bas
     if (value) {
       return value;
     }
-    let tableR, tableG, tableB, key;
-    if (maps.length === 1) {
-      const mapR = maps[0];
-      const buffer = new Array(256);
-      for (let i = 0; i < 256; i++) {
-        buffer[i] = mapR[i] / 255;
-      }
-      key = tableR = tableG = tableB = buffer.join(",");
-    } else {
-      const [mapR, mapG, mapB] = maps;
-      const bufferR = new Array(256);
-      const bufferG = new Array(256);
-      const bufferB = new Array(256);
-      for (let i = 0; i < 256; i++) {
-        bufferR[i] = mapR[i] / 255;
-        bufferG[i] = mapG[i] / 255;
-        bufferB[i] = mapB[i] / 255;
-      }
-      tableR = bufferR.join(",");
-      tableG = bufferG.join(",");
-      tableB = bufferB.join(",");
-      key = `${tableR}${tableG}${tableB}`;
-    }
+    const [tableR, tableG, tableB] = this.#createTables(maps);
+    const key = maps.length === 1 ? tableR : `${tableR}${tableG}${tableB}`;
     value = this.#cache.get(key);
     if (value) {
       this.#cache.set(maps, value);
@@ -7759,6 +7762,54 @@ class DOMFilterFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.Bas
     this.#addTransferMapConversion(getSteps(0, 5), getSteps(1, 5), getSteps(2, 5), filter);
     info.url = `url(#${id})`;
     return info.url;
+  }
+  addAlphaFilter(map) {
+    let value = this.#cache.get(map);
+    if (value) {
+      return value;
+    }
+    const [tableA] = this.#createTables([map]);
+    const key = `alpha_${tableA}`;
+    value = this.#cache.get(key);
+    if (value) {
+      this.#cache.set(map, value);
+      return value;
+    }
+    const id = `g_${this.#docId}_alpha_map_${this.#id++}`;
+    const url = `url(#${id})`;
+    this.#cache.set(map, url);
+    this.#cache.set(key, url);
+    const filter = this.#createFilter(id);
+    this.#addTransferMapAlphaConversion(tableA, filter);
+    return url;
+  }
+  addLuminosityFilter(map) {
+    let value = this.#cache.get(map || "luminosity");
+    if (value) {
+      return value;
+    }
+    let tableA, key;
+    if (map) {
+      [tableA] = this.#createTables([map]);
+      key = `luminosity_${tableA}`;
+    } else {
+      key = "luminosity";
+    }
+    value = this.#cache.get(key);
+    if (value) {
+      this.#cache.set(map, value);
+      return value;
+    }
+    const id = `g_${this.#docId}_luminosity_map_${this.#id++}`;
+    const url = `url(#${id})`;
+    this.#cache.set(map, url);
+    this.#cache.set(key, url);
+    const filter = this.#createFilter(id);
+    this.#addLuminosityConversion(filter);
+    if (map) {
+      this.#addTransferMapAlphaConversion(tableA, filter);
+    }
+    return url;
   }
   addHighlightHCMFilter(filterName, fgColor, bgColor, newFgColor, newBgColor) {
     const key = `${fgColor}-${bgColor}-${newFgColor}-${newBgColor}`;
@@ -7830,6 +7881,12 @@ class DOMFilterFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.Bas
     }
     this.#id = 0;
   }
+  #addLuminosityConversion(filter) {
+    const feColorMatrix = this.#document.createElementNS(SVG_NS, "feColorMatrix");
+    feColorMatrix.setAttribute("type", "matrix");
+    feColorMatrix.setAttribute("values", "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.3 0.59 0.11 0 0");
+    filter.append(feColorMatrix);
+  }
   #addGrayConversion(filter) {
     const feColorMatrix = this.#document.createElementNS(SVG_NS, "feColorMatrix");
     feColorMatrix.setAttribute("type", "matrix");
@@ -7855,6 +7912,11 @@ class DOMFilterFactory extends _base_factory_js__WEBPACK_IMPORTED_MODULE_0__.Bas
     this.#appendFeFunc(feComponentTransfer, "feFuncR", rTable);
     this.#appendFeFunc(feComponentTransfer, "feFuncG", gTable);
     this.#appendFeFunc(feComponentTransfer, "feFuncB", bTable);
+  }
+  #addTransferMapAlphaConversion(aTable, filter) {
+    const feComponentTransfer = this.#document.createElementNS(SVG_NS, "feComponentTransfer");
+    filter.append(feComponentTransfer);
+    this.#appendFeFunc(feComponentTransfer, "feFuncA", aTable);
   }
   #getRGB(color) {
     this.#defs.style.color = color;
@@ -8059,10 +8121,8 @@ function isDataScheme(url) {
 function isPdfFile(filename) {
   return typeof filename === "string" && /\.pdf$/i.test(filename);
 }
-function getFilenameFromUrl(url, onlyStripPath = false) {
-  if (!onlyStripPath) {
-    [url] = url.split(/[#?]/, 1);
-  }
+function getFilenameFromUrl(url) {
+  [url] = url.split(/[#?]/, 1);
   return url.substring(url.lastIndexOf("/") + 1);
 }
 function getPdfFilenameFromUrl(url, defaultFilename = "document.pdf") {
@@ -15824,7 +15884,6 @@ class FontLoader {
 }
 class FontFaceObject {
   constructor(translatedData, {
-    isEvalSupported = true,
     disableFontFace = false,
     ignoreErrors = false,
     inspectFont = null
@@ -15833,7 +15892,6 @@ class FontFaceObject {
     for (const i in translatedData) {
       this[i] = translatedData[i];
     }
-    this.isEvalSupported = isEvalSupported !== false;
     this.disableFontFace = disableFontFace === true;
     this.ignoreErrors = ignoreErrors === true;
     this._inspectFont = inspectFont;
@@ -15888,22 +15946,72 @@ class FontFaceObject {
         throw ex;
       }
       (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.warn)(`getPathGenerator - ignoring character: "${ex}".`);
+    }
+    if (!Array.isArray(cmds) || cmds.length === 0) {
       return this.compiledGlyphs[character] = function (c, size) {};
     }
-    if (this.isEvalSupported && _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.FeatureTest.isEvalSupported) {
-      const jsBuf = [];
-      for (const current of cmds) {
-        const args = current.args !== undefined ? current.args.join(",") : "";
-        jsBuf.push("c.", current.cmd, "(", args, ");\n");
+    const commands = [];
+    for (let i = 0, ii = cmds.length; i < ii;) {
+      switch (cmds[i++]) {
+        case _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.FontRenderOps.BEZIER_CURVE_TO:
+          {
+            const [a, b, c, d, e, f] = cmds.slice(i, i + 6);
+            commands.push(ctx => ctx.bezierCurveTo(a, b, c, d, e, f));
+            i += 6;
+          }
+          break;
+        case _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.FontRenderOps.MOVE_TO:
+          {
+            const [a, b] = cmds.slice(i, i + 2);
+            commands.push(ctx => ctx.moveTo(a, b));
+            i += 2;
+          }
+          break;
+        case _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.FontRenderOps.LINE_TO:
+          {
+            const [a, b] = cmds.slice(i, i + 2);
+            commands.push(ctx => ctx.lineTo(a, b));
+            i += 2;
+          }
+          break;
+        case _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.FontRenderOps.QUADRATIC_CURVE_TO:
+          {
+            const [a, b, c, d] = cmds.slice(i, i + 4);
+            commands.push(ctx => ctx.quadraticCurveTo(a, b, c, d));
+            i += 4;
+          }
+          break;
+        case _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.FontRenderOps.RESTORE:
+          commands.push(ctx => ctx.restore());
+          break;
+        case _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.FontRenderOps.SAVE:
+          commands.push(ctx => ctx.save());
+          break;
+        case _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.FontRenderOps.SCALE:
+          (0,_shared_util_js__WEBPACK_IMPORTED_MODULE_0__.assert)(commands.length === 2, "Scale command is only valid at the third position.");
+          break;
+        case _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.FontRenderOps.TRANSFORM:
+          {
+            const [a, b, c, d, e, f] = cmds.slice(i, i + 6);
+            commands.push(ctx => ctx.transform(a, b, c, d, e, f));
+            i += 6;
+          }
+          break;
+        case _shared_util_js__WEBPACK_IMPORTED_MODULE_0__.FontRenderOps.TRANSLATE:
+          {
+            const [a, b] = cmds.slice(i, i + 2);
+            commands.push(ctx => ctx.translate(a, b));
+            i += 2;
+          }
+          break;
       }
-      return this.compiledGlyphs[character] = new Function("c", "size", jsBuf.join(""));
     }
-    return this.compiledGlyphs[character] = function (c, size) {
-      for (const current of cmds) {
-        if (current.cmd === "scale") {
-          current.args = [size, -size];
-        }
-        c[current.cmd].apply(c, current.args);
+    return this.compiledGlyphs[character] = function glyphDrawer(ctx, size) {
+      commands[0](ctx);
+      commands[1](ctx);
+      ctx.scale(size, -size);
+      for (let i = 2, ii = commands.length; i < ii; i++) {
+        commands[i](ctx);
       }
     };
   }
@@ -18268,8 +18376,8 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 
-const pdfjsVersion = "4.2.0";
-const pdfjsBuild = "90d4b9c";
+const pdfjsVersion = "4.3.0";
+const pdfjsBuild = "1b811ac";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -18805,6 +18913,7 @@ class MurmurHash3_64 {
 /* harmony export */   CMapCompressionType: () => (/* binding */ CMapCompressionType),
 /* harmony export */   FONT_IDENTITY_MATRIX: () => (/* binding */ FONT_IDENTITY_MATRIX),
 /* harmony export */   FeatureTest: () => (/* binding */ FeatureTest),
+/* harmony export */   FontRenderOps: () => (/* binding */ FontRenderOps),
 /* harmony export */   FormatError: () => (/* binding */ FormatError),
 /* harmony export */   IDENTITY_MATRIX: () => (/* binding */ IDENTITY_MATRIX),
 /* harmony export */   ImageKind: () => (/* binding */ ImageKind),
@@ -19562,6 +19671,17 @@ function getUuid() {
   return bytesToString(buf);
 }
 const AnnotationPrefix = "pdfjs_internal_id_";
+const FontRenderOps = {
+  BEZIER_CURVE_TO: 0,
+  MOVE_TO: 1,
+  LINE_TO: 2,
+  QUADRATIC_CURVE_TO: 3,
+  RESTORE: 4,
+  SAVE: 5,
+  SCALE: 6,
+  TRANSFORM: 7,
+  TRANSLATE: 8
+};
 
 
 /***/ })
