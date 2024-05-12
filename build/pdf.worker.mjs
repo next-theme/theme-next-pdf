@@ -1237,8 +1237,20 @@ function readUint32(data, offset) {
 function isWhiteSpace(ch) {
   return ch === 0x20 || ch === 0x09 || ch === 0x0d || ch === 0x0a;
 }
+function isBooleanArray(arr, len) {
+  return Array.isArray(arr) && (len === null || arr.length === len) && arr.every(x => typeof x === "boolean");
+}
 function isNumberArray(arr, len) {
   return Array.isArray(arr) && (len === null || arr.length === len) && arr.every(x => typeof x === "number");
+}
+function lookupMatrix(arr, fallback) {
+  return isNumberArray(arr, 6) ? arr : fallback;
+}
+function lookupRect(arr, fallback) {
+  return isNumberArray(arr, 4) ? arr : fallback;
+}
+function lookupNormalRect(arr, fallback) {
+  return isNumberArray(arr, 4) ? Util.normalizeRect(arr) : fallback;
 }
 function parseXFAPath(path) {
   const positionPattern = /(.+)\[(\d+)\]$/;
@@ -24938,8 +24950,17 @@ class BaseShading {
 class RadialAxialShading extends BaseShading {
   constructor(dict, xref, resources, pdfFunctionFactory, localColorSpaceCache) {
     super();
-    this.coordsArr = dict.getArray("Coords");
     this.shadingType = dict.get("ShadingType");
+    let coordsLen = 0;
+    if (this.shadingType === ShadingType.AXIAL) {
+      coordsLen = 4;
+    } else if (this.shadingType === ShadingType.RADIAL) {
+      coordsLen = 6;
+    }
+    this.coordsArr = dict.getArray("Coords");
+    if (!isNumberArray(this.coordsArr, coordsLen)) {
+      throw new FormatError("RadialAxialShading: Invalid /Coords array.");
+    }
     const cs = ColorSpace.parse({
       cs: dict.getRaw("CS") || dict.getRaw("ColorSpace"),
       xref,
@@ -24947,21 +24968,18 @@ class RadialAxialShading extends BaseShading {
       pdfFunctionFactory,
       localColorSpaceCache
     });
-    const bbox = dict.getArray("BBox");
-    this.bbox = Array.isArray(bbox) && bbox.length === 4 ? Util.normalizeRect(bbox) : null;
+    this.bbox = lookupNormalRect(dict.getArray("BBox"), null);
     let t0 = 0.0,
       t1 = 1.0;
-    if (dict.has("Domain")) {
-      const domainArr = dict.getArray("Domain");
-      t0 = domainArr[0];
-      t1 = domainArr[1];
+    const domainArr = dict.getArray("Domain");
+    if (isNumberArray(domainArr, 2)) {
+      [t0, t1] = domainArr;
     }
     let extendStart = false,
       extendEnd = false;
-    if (dict.has("Extend")) {
-      const extendArr = dict.getArray("Extend");
-      extendStart = extendArr[0];
-      extendEnd = extendArr[1];
+    const extendArr = dict.getArray("Extend");
+    if (isBooleanArray(extendArr, 2)) {
+      [extendStart, extendEnd] = extendArr;
     }
     if (this.shadingType === ShadingType.RADIAL && (!extendStart || !extendEnd)) {
       const [x1, y1, r1, x2, y2, r2] = this.coordsArr;
@@ -25045,8 +25063,10 @@ class RadialAxialShading extends BaseShading {
     this.colorStops = colorStops;
   }
   getIR() {
-    const coordsArr = this.coordsArr;
-    const shadingType = this.shadingType;
+    const {
+      coordsArr,
+      shadingType
+    } = this;
     let type, p0, p1, r0, r1;
     if (shadingType === ShadingType.AXIAL) {
       p0 = [coordsArr[0], coordsArr[1]];
@@ -25175,8 +25195,7 @@ class MeshShading extends BaseShading {
     }
     const dict = stream.dict;
     this.shadingType = dict.get("ShadingType");
-    const bbox = dict.getArray("BBox");
-    this.bbox = Array.isArray(bbox) && bbox.length === 4 ? Util.normalizeRect(bbox) : null;
+    this.bbox = lookupNormalRect(dict.getArray("BBox"), null);
     const cs = ColorSpace.parse({
       cs: dict.getRaw("CS") || dict.getRaw("ColorSpace"),
       xref,
@@ -25668,14 +25687,26 @@ class DummyShading extends BaseShading {
   }
 }
 function getTilingPatternIR(operatorList, dict, color) {
-  const matrix = dict.getArray("Matrix");
-  const bbox = Util.normalizeRect(dict.getArray("BBox"));
+  const matrix = lookupMatrix(dict.getArray("Matrix"), IDENTITY_MATRIX);
+  const bbox = lookupNormalRect(dict.getArray("BBox"), null);
+  if (!bbox || bbox[2] - bbox[0] === 0 || bbox[3] - bbox[1] === 0) {
+    throw new FormatError(`Invalid getTilingPatternIR /BBox array.`);
+  }
   const xstep = dict.get("XStep");
+  if (typeof xstep !== "number") {
+    throw new FormatError(`Invalid getTilingPatternIR /XStep value.`);
+  }
   const ystep = dict.get("YStep");
+  if (typeof ystep !== "number") {
+    throw new FormatError(`Invalid getTilingPatternIR /YStep value.`);
+  }
   const paintType = dict.get("PaintType");
+  if (!Number.isInteger(paintType)) {
+    throw new FormatError(`Invalid getTilingPatternIR /PaintType value.`);
+  }
   const tilingType = dict.get("TilingType");
-  if (bbox[2] - bbox[0] === 0 || bbox[3] - bbox[1] === 0) {
-    throw new FormatError(`Invalid getTilingPatternIR /BBox array: [${bbox}].`);
+  if (!Number.isInteger(tilingType)) {
+    throw new FormatError(`Invalid getTilingPatternIR /TilingType value.`);
   }
   return ["TilingPattern", color, operatorList, matrix, bbox, xstep, ystep, paintType, tilingType];
 }
@@ -29844,9 +29875,8 @@ class PartialEvaluator {
   }
   async buildFormXObject(resources, xobj, smask, operatorList, task, initialState, localColorSpaceCache) {
     const dict = xobj.dict;
-    const matrix = dict.getArray("Matrix");
-    let bbox = dict.getArray("BBox");
-    bbox = Array.isArray(bbox) && bbox.length === 4 ? Util.normalizeRect(bbox) : null;
+    const matrix = lookupMatrix(dict.getArray("Matrix"), null);
+    const bbox = lookupNormalRect(dict.getArray("BBox"), null);
     let optionalContent, groupOptions;
     if (dict.has("OC")) {
       optionalContent = await this.parseMarkedContentProps(dict.get("OC"), resources);
@@ -30581,7 +30611,7 @@ class PartialEvaluator {
             localShadingPatternCache
           });
           if (objId) {
-            const matrix = dict.getArray("Matrix");
+            const matrix = lookupMatrix(dict.getArray("Matrix"), null);
             operatorList.addOp(fn, ["Shading", objId, matrix]);
           }
           return undefined;
@@ -31778,8 +31808,8 @@ class PartialEvaluator {
               }
               const currentState = stateManager.state.clone();
               const xObjStateManager = new StateManager(currentState);
-              const matrix = xobj.dict.getArray("Matrix");
-              if (Array.isArray(matrix) && matrix.length === 6) {
+              const matrix = lookupMatrix(xobj.dict.getArray("Matrix"), null);
+              if (matrix) {
                 xObjStateManager.transform(matrix);
               }
               enqueueChunk();
@@ -32520,10 +32550,7 @@ class PartialEvaluator {
     const isType3Font = type === "Type3";
     if (!descriptor) {
       if (isType3Font) {
-        let bbox = dict.getArray("FontBBox");
-        if (!isNumberArray(bbox, 4)) {
-          bbox = [0, 0, 0, 0];
-        }
+        const bbox = lookupNormalRect(dict.getArray("FontBBox"), [0, 0, 0, 0]);
         descriptor = new Dict(null);
         descriptor.set("FontName", Name.get(type));
         descriptor.set("FontBBox", bbox);
@@ -32645,14 +32672,8 @@ class PartialEvaluator {
         systemFontInfo = getFontSubstitution(this.systemFontCache, this.idFactory, this.options.standardFontDataUrl, fontName.name, standardFontName, type);
       }
     }
-    let fontMatrix = dict.getArray("FontMatrix");
-    if (!isNumberArray(fontMatrix, 6)) {
-      fontMatrix = FONT_IDENTITY_MATRIX;
-    }
-    let bbox = descriptor.getArray("FontBBox") || dict.getArray("FontBBox");
-    if (!isNumberArray(bbox, 4)) {
-      bbox = undefined;
-    }
+    const fontMatrix = lookupMatrix(dict.getArray("FontMatrix"), FONT_IDENTITY_MATRIX);
+    const bbox = lookupNormalRect(descriptor.getArray("FontBBox") || dict.getArray("FontBBox"), undefined);
     let ascent = descriptor.get("Ascent");
     if (typeof ascent !== "number") {
       ascent = undefined;
@@ -37295,7 +37316,7 @@ class Catalog {
       const color = outlineDict.getArray("C");
       const count = outlineDict.get("Count");
       let rgbColor = blackColor;
-      if (Array.isArray(color) && color.length === 3 && (color[0] !== 0 || color[1] !== 0 || color[2] !== 0)) {
+      if (isNumberArray(color, 3) && (color[0] !== 0 || color[1] !== 0 || color[2] !== 0)) {
         rgbColor = ColorSpace.singletons.rgb.getRgb(color, 0);
       }
       const outlineItem = {
@@ -49571,7 +49592,7 @@ function getPdfColorArray(color) {
 }
 function getQuadPoints(dict, rect) {
   const quadPoints = dict.getArray("QuadPoints");
-  if (!Array.isArray(quadPoints) || quadPoints.length === 0 || quadPoints.length % 8 > 0) {
+  if (!isNumberArray(quadPoints, null) || quadPoints.length === 0 || quadPoints.length % 8 > 0) {
     return null;
   }
   const quadPointsLists = [];
@@ -49765,7 +49786,7 @@ class Annotation {
     return this._hasFlag(this.flags, flag);
   }
   setRectangle(rectangle) {
-    this.rectangle = Array.isArray(rectangle) && rectangle.length === 4 ? Util.normalizeRect(rectangle) : [0, 0, 0, 0];
+    this.rectangle = lookupNormalRect(rectangle, [0, 0, 0, 0]);
   }
   setColor(color) {
     this.color = getRgbColor(color);
@@ -49918,8 +49939,8 @@ class Annotation {
     }
     const appearanceDict = appearance.dict;
     const resources = await this.loadResources(["ExtGState", "ColorSpace", "Pattern", "Shading", "XObject", "Font"], appearance);
-    const bbox = appearanceDict.getArray("BBox") || [0, 0, 1, 1];
-    const matrix = appearanceDict.getArray("Matrix") || [1, 0, 0, 1, 0, 0];
+    const bbox = lookupRect(appearanceDict.getArray("BBox"), [0, 0, 1, 1]);
+    const matrix = lookupMatrix(appearanceDict.getArray("Matrix"), IDENTITY_MATRIX);
     const transform = getTransformMatrix(rect, bbox, matrix);
     const opList = new OperatorList();
     let optionalContent;
@@ -49994,7 +50015,9 @@ class Annotation {
     }
     if (text.length > 1 || text[0]) {
       const appearanceDict = this.appearance.dict;
-      this.data.textPosition = this._transformPoint(firstPosition, appearanceDict.getArray("BBox"), appearanceDict.getArray("Matrix"));
+      const bbox = lookupRect(appearanceDict.getArray("BBox"), null);
+      const matrix = lookupMatrix(appearanceDict.getArray("Matrix"), null);
+      this.data.textPosition = this._transformPoint(firstPosition, bbox, matrix);
       this.data.textContent = text;
     }
   }
@@ -51046,7 +51069,7 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
     const appearance = value ? this.checkedAppearance : this.uncheckedAppearance;
     if (appearance) {
       const savedAppearance = this.appearance;
-      const savedMatrix = appearance.dict.getArray("Matrix") || IDENTITY_MATRIX;
+      const savedMatrix = lookupMatrix(appearance.dict.getArray("Matrix"), IDENTITY_MATRIX);
       if (rotation) {
         appearance.dict.set("Matrix", this.getRotationMatrix(annotationStorage));
       }
@@ -51632,8 +51655,7 @@ class PopupAnnotation extends Annotation {
       warn("Popup annotation has a missing or invalid parent annotation.");
       return;
     }
-    const parentRect = parentItem.getArray("Rect");
-    this.data.parentRect = Array.isArray(parentRect) && parentRect.length === 4 ? Util.normalizeRect(parentRect) : null;
+    this.data.parentRect = lookupNormalRect(parentItem.getArray("Rect"), null);
     const rt = parentItem.get("RT");
     if (isName(rt, AnnotationReplyType.GROUP)) {
       parentItem = parentItem.get("IRT");
@@ -51871,7 +51893,7 @@ class LineAnnotation extends MarkupAnnotation {
     this.data.annotationType = AnnotationType.LINE;
     this.data.hasOwnCanvas = this.data.noRotate;
     this.data.noHTML = false;
-    const lineCoordinates = dict.getArray("L");
+    const lineCoordinates = lookupRect(dict.getArray("L"), [0, 0, 0, 0]);
     this.data.lineCoordinates = Util.normalizeRect(lineCoordinates);
     this.setLineEndings(dict.getArray("LE"));
     this.data.lineEndings = this.lineEndings;
@@ -52007,7 +52029,7 @@ class PolylineAnnotation extends MarkupAnnotation {
       this.data.lineEndings = this.lineEndings;
     }
     const rawVertices = dict.getArray("Vertices");
-    if (!Array.isArray(rawVertices)) {
+    if (!isNumberArray(rawVertices, null)) {
       return;
     }
     for (let i = 0, ii = rawVertices.length; i < ii; i += 2) {
@@ -52077,11 +52099,18 @@ class InkAnnotation extends MarkupAnnotation {
     }
     for (let i = 0, ii = rawInkLists.length; i < ii; ++i) {
       this.data.inkLists.push([]);
+      if (!Array.isArray(rawInkLists[i])) {
+        continue;
+      }
       for (let j = 0, jj = rawInkLists[i].length; j < jj; j += 2) {
-        this.data.inkLists[i].push({
-          x: xref.fetchIfRef(rawInkLists[i][j]),
-          y: xref.fetchIfRef(rawInkLists[i][j + 1])
-        });
+        const x = xref.fetchIfRef(rawInkLists[i][j]),
+          y = xref.fetchIfRef(rawInkLists[i][j + 1]);
+        if (typeof x === "number" && typeof y === "number") {
+          this.data.inkLists[i].push({
+            x,
+            y
+          });
+        }
       }
     }
     if (!this.appearance) {
@@ -53482,9 +53511,8 @@ class Page {
     if (this.xfaData) {
       return this.xfaData.bbox;
     }
-    let box = this._getInheritableProperty(name, true);
-    if (Array.isArray(box) && box.length === 4) {
-      box = Util.normalizeRect(box);
+    const box = lookupNormalRect(this._getInheritableProperty(name, true), null);
+    if (box) {
       if (box[2] - box[0] > 0 && box[3] - box[1] > 0) {
         return box;
       }
@@ -56061,7 +56089,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = "4.3.0";
-const pdfjsBuild = "1b811ac";
+const pdfjsBuild = "b676540";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };

@@ -4673,7 +4673,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.3.0";
-const build = "1b811ac";
+const build = "b676540";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
@@ -5174,7 +5174,7 @@ class TilingPattern {
   static MAX_PATTERN_SIZE = 3000;
   constructor(IR, color, ctx, canvasGraphicsFactory, baseTransform) {
     this.operatorList = IR[2];
-    this.matrix = IR[3] || [1, 0, 0, 1, 0, 0];
+    this.matrix = IR[3];
     this.bbox = IR[4];
     this.xstep = IR[5];
     this.ystep = IR[6];
@@ -7066,7 +7066,7 @@ class CanvasGraphics {
     }
     this.save();
     this.baseTransformStack.push(this.baseTransform);
-    if (Array.isArray(matrix) && matrix.length === 6) {
+    if (matrix) {
       this.transform(...matrix);
     }
     this.baseTransform = (0,display_utils.getCurrentTransform)(this.ctx);
@@ -7179,7 +7179,7 @@ class CanvasGraphics {
     if (this.baseTransform) {
       this.ctx.setTransform(...this.baseTransform);
     }
-    if (Array.isArray(rect) && rect.length === 4) {
+    if (rect) {
       const width = rect[2] - rect[0];
       const height = rect[3] - rect[1];
       if (hasOwnCanvas && this.annotationCanvasMap) {
@@ -18377,7 +18377,7 @@ _display_api_js__WEBPACK_IMPORTED_MODULE_1__ = (__webpack_async_dependencies__.t
 
 
 const pdfjsVersion = "4.3.0";
-const pdfjsBuild = "1b811ac";
+const pdfjsBuild = "b676540";
 
 __webpack_async_result__();
 } catch(e) { __webpack_async_result__(e); } });
