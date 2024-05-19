@@ -17,7 +17,7 @@
   position:absolute;
   text-align:initial;
   inset:0;
-  overflow:hidden;
+  overflow:clip;
   opacity:1;
   line-height:1;
   -webkit-text-size-adjust:none;
@@ -26,6 +26,7 @@
   forced-color-adjust:none;
   transform-origin:0 0;
   caret-color:CanvasText;
+  z-index:0;
 }
 
 .textLayer.highlighting{
@@ -38,6 +39,11 @@
     white-space:pre;
     cursor:text;
     transform-origin:0% 0%;
+  }
+
+.textLayer > :not(.markedContent),
+  .textLayer .markedContent span:not(.markedContent){
+    z-index:1;
   }
 
 .textLayer span.markedContent{
@@ -115,7 +121,7 @@
     display:block;
     position:absolute;
     inset:100% 0 0;
-    z-index:-1;
+    z-index:0;
     cursor:default;
     -webkit-user-select:none;
        -moz-user-select:none;
@@ -1648,9 +1654,11 @@
 }
 
 .annotationEditorLayer .stampEditor canvas{
-  width:100%;
-  height:100%;
-}
+    position:absolute;
+    width:100%;
+    height:100%;
+    margin:0;
+  }
 
 .annotationEditorLayer :is(.freeTextEditor, .inkEditor, .stampEditor) > .resizers{
       position:absolute;
@@ -2636,10 +2644,28 @@
   }
 
 .pdfViewer .canvasWrapper{
-  overflow:hidden;
-  width:100%;
-  height:100%;
-}
+    overflow:hidden;
+    width:100%;
+    height:100%;
+  }
+
+.pdfViewer .canvasWrapper canvas{
+      margin:0;
+      display:block;
+    }
+
+.pdfViewer .canvasWrapper canvas[hidden]{
+        display:none;
+      }
+
+.pdfViewer .canvasWrapper canvas[zooming]{
+        width:100%;
+        height:100%;
+      }
+
+.pdfViewer .canvasWrapper canvas .structTree{
+        contain:strict;
+      }
 
 .pdfViewer .page{
   direction:ltr;
@@ -2700,23 +2726,6 @@
 .pdfViewer.removePageBorders .spread .page,
 .pdfViewer.removePageBorders:is(.scrollHorizontal, .scrollWrapped) .page{
   margin-inline:5px;
-}
-
-.pdfViewer .page canvas{
-  margin:0;
-}
-
-.pdfViewer .page canvas .structTree{
-  contain:strict;
-}
-
-.pdfViewer .page canvas[hidden]{
-  display:none;
-}
-
-.pdfViewer .page canvas[zooming]{
-  width:100%;
-  height:100%;
 }
 
 .pdfViewer .page.loadingIcon::after{
