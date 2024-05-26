@@ -1242,6 +1242,7 @@ const {
   renderTextLayer,
   setLayerDimensions,
   shadow,
+  TextLayer,
   UnexpectedResponseException,
   updateTextLayer,
   Util,
@@ -8911,9 +8912,8 @@ class TextHighlighter {
 class TextLayerBuilder {
   #enablePermissions = false;
   #onAppend = null;
-  #rotation = 0;
-  #scale = 0;
   #textContentSource = null;
+  #textLayer = null;
   static #textLayers = new Map();
   static #selectionChangeAbortController = null;
   constructor({
@@ -8922,11 +8922,7 @@ class TextLayerBuilder {
     enablePermissions = false,
     onAppend = null
   }) {
-    this.textContentItemsStr = [];
     this.renderingDone = false;
-    this.textDivs = [];
-    this.textDivProperties = new WeakMap();
-    this.textLayerRenderTask = null;
     this.highlighter = highlighter;
     this.accessibilityManager = accessibilityManager;
     this.#enablePermissions = enablePermissions === true;
@@ -8942,51 +8938,32 @@ class TextLayerBuilder {
     this.div.append(endOfContent);
     this.#bindMouse(endOfContent);
   }
-  get numTextDivs() {
-    return this.textDivs.length;
-  }
   async render(viewport) {
     if (!this.#textContentSource) {
       throw new Error('No "textContentSource" parameter specified.');
     }
-    const scale = viewport.scale * (globalThis.devicePixelRatio || 1);
-    const {
-      rotation
-    } = viewport;
-    if (this.renderingDone) {
-      const mustRotate = rotation !== this.#rotation;
-      const mustRescale = scale !== this.#scale;
-      if (mustRotate || mustRescale) {
-        this.hide();
-        updateTextLayer({
-          container: this.div,
-          viewport,
-          textDivs: this.textDivs,
-          textDivProperties: this.textDivProperties,
-          mustRescale,
-          mustRotate
-        });
-        this.#scale = scale;
-        this.#rotation = rotation;
-      }
+    if (this.renderingDone && this.#textLayer) {
+      this.#textLayer.update({
+        viewport,
+        onBefore: this.hide.bind(this)
+      });
       this.show();
       return;
     }
     this.cancel();
-    this.highlighter?.setTextMapping(this.textDivs, this.textContentItemsStr);
-    this.accessibilityManager?.setTextMapping(this.textDivs);
-    this.textLayerRenderTask = renderTextLayer({
+    this.#textLayer = new TextLayer({
       textContentSource: this.#textContentSource,
       container: this.div,
-      viewport,
-      textDivs: this.textDivs,
-      textDivProperties: this.textDivProperties,
-      textContentItemsStr: this.textContentItemsStr
+      viewport
     });
-    await this.textLayerRenderTask.promise;
+    const {
+      textDivs,
+      textContentItemsStr
+    } = this.#textLayer;
+    this.highlighter?.setTextMapping(textDivs, textContentItemsStr);
+    this.accessibilityManager?.setTextMapping(textDivs);
+    await this.#textLayer.render();
     this.#finishRendering();
-    this.#scale = scale;
-    this.#rotation = rotation;
     this.#onAppend?.(this.div);
     this.highlighter?.enable();
     this.accessibilityManager?.enable();
@@ -9004,15 +8981,10 @@ class TextLayerBuilder {
     }
   }
   cancel() {
-    if (this.textLayerRenderTask) {
-      this.textLayerRenderTask.cancel();
-      this.textLayerRenderTask = null;
-    }
+    this.#textLayer?.cancel();
+    this.#textLayer = null;
     this.highlighter?.disable();
     this.accessibilityManager?.disable();
-    this.textContentItemsStr.length = 0;
-    this.textDivs.length = 0;
-    this.textDivProperties = new WeakMap();
     TextLayerBuilder.#removeGlobalSelectionListener(this.div);
   }
   setTextContentSource(source) {
@@ -9045,10 +9017,13 @@ class TextLayerBuilder {
     }
   }
   static #enableGlobalSelectionListener() {
-    if (TextLayerBuilder.#selectionChangeAbortController) {
+    if (this.#selectionChangeAbortController) {
       return;
     }
-    TextLayerBuilder.#selectionChangeAbortController = new AbortController();
+    this.#selectionChangeAbortController = new AbortController();
+    const {
+      signal
+    } = this.#selectionChangeAbortController;
     const reset = (end, textLayer) => {
       textLayer.append(end);
       end.style.width = "";
@@ -9056,52 +9031,53 @@ class TextLayerBuilder {
       end.classList.remove("active");
     };
     document.addEventListener("pointerup", () => {
-      TextLayerBuilder.#textLayers.forEach(reset);
+      this.#textLayers.forEach(reset);
     }, {
-      signal: TextLayerBuilder.#selectionChangeAbortController.signal
+      signal
     });
     var isFirefox, prevRange;
     document.addEventListener("selectionchange", () => {
       const selection = document.getSelection();
       if (selection.rangeCount === 0) {
-        TextLayerBuilder.#textLayers.forEach(reset);
+        this.#textLayers.forEach(reset);
         return;
       }
       const activeTextLayers = new Set();
       for (let i = 0; i < selection.rangeCount; i++) {
         const range = selection.getRangeAt(i);
-        for (const textLayerDiv of TextLayerBuilder.#textLayers.keys()) {
+        for (const textLayerDiv of this.#textLayers.keys()) {
           if (!activeTextLayers.has(textLayerDiv) && range.intersectsNode(textLayerDiv)) {
             activeTextLayers.add(textLayerDiv);
           }
         }
       }
-      for (const [textLayerDiv, endDiv] of TextLayerBuilder.#textLayers) {
+      for (const [textLayerDiv, endDiv] of this.#textLayers) {
         if (activeTextLayers.has(textLayerDiv)) {
           endDiv.classList.add("active");
         } else {
           reset(endDiv, textLayerDiv);
         }
       }
-      isFirefox ??= getComputedStyle(TextLayerBuilder.#textLayers.values().next().value).getPropertyValue("-moz-user-select") === "none";
-      if (!isFirefox) {
-        const range = selection.getRangeAt(0);
-        const modifyStart = prevRange && (range.compareBoundaryPoints(Range.END_TO_END, prevRange) === 0 || range.compareBoundaryPoints(Range.START_TO_END, prevRange) === 0);
-        let anchor = modifyStart ? range.startContainer : range.endContainer;
-        if (anchor.nodeType === Node.TEXT_NODE) {
-          anchor = anchor.parentNode;
-        }
-        const parentTextLayer = anchor.parentElement.closest(".textLayer");
-        const endDiv = TextLayerBuilder.#textLayers.get(parentTextLayer);
-        if (endDiv) {
-          endDiv.style.width = parentTextLayer.style.width;
-          endDiv.style.height = parentTextLayer.style.height;
-          anchor.parentElement.insertBefore(endDiv, modifyStart ? anchor : anchor.nextSibling);
-        }
-        prevRange = range.cloneRange();
+      isFirefox ??= getComputedStyle(this.#textLayers.values().next().value).getPropertyValue("-moz-user-select") === "none";
+      if (isFirefox) {
+        return;
       }
+      const range = selection.getRangeAt(0);
+      const modifyStart = prevRange && (range.compareBoundaryPoints(Range.END_TO_END, prevRange) === 0 || range.compareBoundaryPoints(Range.START_TO_END, prevRange) === 0);
+      let anchor = modifyStart ? range.startContainer : range.endContainer;
+      if (anchor.nodeType === Node.TEXT_NODE) {
+        anchor = anchor.parentNode;
+      }
+      const parentTextLayer = anchor.parentElement.closest(".textLayer");
+      const endDiv = this.#textLayers.get(parentTextLayer);
+      if (endDiv) {
+        endDiv.style.width = parentTextLayer.style.width;
+        endDiv.style.height = parentTextLayer.style.height;
+        anchor.parentElement.insertBefore(endDiv, modifyStart ? anchor : anchor.nextSibling);
+      }
+      prevRange = range.cloneRange();
     }, {
-      signal: TextLayerBuilder.#selectionChangeAbortController.signal
+      signal
     });
   }
 }
@@ -9374,7 +9350,6 @@ class PDFPageView {
     this.eventBus.dispatch("textlayerrendered", {
       source: this,
       pageNumber: this.id,
-      numTextDivs: textLayer.numTextDivs,
       error
     });
     this.#renderStructTreeLayer();
@@ -14352,7 +14327,7 @@ function webViewerReportTelemetry({
 
 
 const pdfjsVersion = "4.3.0";
-const pdfjsBuild = "63b66b4";
+const pdfjsBuild = "17e09e5";
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,
