@@ -8930,11 +8930,10 @@ class Parser {
     if (this.tryShift() && isCmd(this.buf2, "endstream")) {
       this.shift();
     } else {
-      const actualLength = this.#findStreamLength(startPos);
-      if (actualLength < 0) {
+      length = this.#findStreamLength(startPos);
+      if (length < 0) {
         throw new FormatError("Missing endstream command.");
       }
-      length = actualLength;
       lexer.nextChar();
       this.shift();
       this.shift();
@@ -29696,7 +29695,7 @@ class PartialEvaluator {
     this.globalImageCache = globalImageCache;
     this.systemFontCache = systemFontCache;
     this.options = options || DefaultPartialEvaluatorOptions;
-    this.parsingType3Font = false;
+    this.type3FontRefs = null;
     this._regionalImageCache = new RegionalImageCache();
     this._fetchBuiltInCMapBound = this.fetchBuiltInCMap.bind(this);
     ImageResizer.setMaxArea(this.options.canvasMaxAreaInBytes);
@@ -29707,6 +29706,9 @@ class PartialEvaluator {
       isEvalSupported: this.options.isEvalSupported
     });
     return shadow(this, "_pdfFunctionFactory", pdfFunctionFactory);
+  }
+  get parsingType3Font() {
+    return !!this.type3FontRefs;
   }
   clone(newOptions = null) {
     const newEvaluator = Object.create(this);
@@ -30396,7 +30398,7 @@ class PartialEvaluator {
       }
     }
     if (fontRef) {
-      if (this.parsingType3Font && this.type3FontRefs.has(fontRef)) {
+      if (this.type3FontRefs?.has(fontRef)) {
         return errorFont();
       }
       if (this.fontCache.has(fontRef)) {
@@ -32831,7 +32833,6 @@ class TranslatedFont {
     const type3Evaluator = evaluator.clone({
       ignoreErrors: false
     });
-    type3Evaluator.parsingType3Font = true;
     const type3FontRefs = new RefSet(evaluator.type3FontRefs);
     if (this.dict.objId && !type3FontRefs.has(this.dict.objId)) {
       type3FontRefs.put(this.dict.objId);
@@ -49611,38 +49612,19 @@ function getQuadPoints(dict, rect) {
   if (!isNumberArray(quadPoints, null) || quadPoints.length === 0 || quadPoints.length % 8 > 0) {
     return null;
   }
-  const quadPointsLists = [];
-  for (let i = 0, ii = quadPoints.length / 8; i < ii; i++) {
-    let minX = Infinity,
-      maxX = -Infinity,
-      minY = Infinity,
-      maxY = -Infinity;
-    for (let j = i * 8, jj = i * 8 + 8; j < jj; j += 2) {
-      const x = quadPoints[j];
-      const y = quadPoints[j + 1];
-      minX = Math.min(x, minX);
-      maxX = Math.max(x, maxX);
-      minY = Math.min(y, minY);
-      maxY = Math.max(y, maxY);
-    }
+  const newQuadPoints = new Float32Array(quadPoints.length);
+  for (let i = 0, ii = quadPoints.length; i < ii; i += 8) {
+    const [x1, y1, x2, y2, x3, y3, x4, y4] = quadPoints.slice(i, i + 8);
+    const minX = Math.min(x1, x2, x3, x4);
+    const maxX = Math.max(x1, x2, x3, x4);
+    const minY = Math.min(y1, y2, y3, y4);
+    const maxY = Math.max(y1, y2, y3, y4);
     if (rect !== null && (minX < rect[0] || maxX > rect[2] || minY < rect[1] || maxY > rect[3])) {
       return null;
     }
-    quadPointsLists.push([{
-      x: minX,
-      y: maxY
-    }, {
-      x: maxX,
-      y: maxY
-    }, {
-      x: minX,
-      y: minY
-    }, {
-      x: maxX,
-      y: minY
-    }]);
+    newQuadPoints.set([minX, maxY, maxX, maxY, minX, minY, maxX, minY], i);
   }
-  return quadPointsLists;
+  return newQuadPoints;
 }
 function getTransformMatrix(rect, bbox, matrix) {
   const [minX, minY, maxX, maxY] = Util.getAxialAlignedBoundingBox(bbox, matrix);
@@ -50268,22 +50250,10 @@ class MarkupAnnotation extends Annotation {
     }
     let pointsArray = this.data.quadPoints;
     if (!pointsArray) {
-      pointsArray = [[{
-        x: this.rectangle[0],
-        y: this.rectangle[3]
-      }, {
-        x: this.rectangle[2],
-        y: this.rectangle[3]
-      }, {
-        x: this.rectangle[0],
-        y: this.rectangle[1]
-      }, {
-        x: this.rectangle[2],
-        y: this.rectangle[1]
-      }]];
+      pointsArray = Float32Array.from([this.rectangle[0], this.rectangle[3], this.rectangle[2], this.rectangle[3], this.rectangle[0], this.rectangle[1], this.rectangle[2], this.rectangle[1]]);
     }
-    for (const points of pointsArray) {
-      const [mX, MX, mY, MY] = pointsCallback(buffer, points);
+    for (let i = 0, ii = pointsArray.length; i < ii; i += 8) {
+      const [mX, MX, mY, MY] = pointsCallback(buffer, pointsArray.subarray(i, i + 8));
       minX = Math.min(minX, mX);
       maxX = Math.max(maxX, MX);
       minY = Math.min(minY, mY);
@@ -51934,7 +51904,7 @@ class LineAnnotation extends MarkupAnnotation {
         fillAlpha,
         pointsCallback: (buffer, points) => {
           buffer.push(`${lineCoordinates[0]} ${lineCoordinates[1]} m`, `${lineCoordinates[2]} ${lineCoordinates[3]} l`, "S");
-          return [points[0].x - borderWidth, points[1].x + borderWidth, points[3].y - borderWidth, points[1].y + borderWidth];
+          return [points[0] - borderWidth, points[2] + borderWidth, points[7] - borderWidth, points[3] + borderWidth];
         }
       });
     }
@@ -51967,17 +51937,17 @@ class SquareAnnotation extends MarkupAnnotation {
         strokeAlpha,
         fillAlpha,
         pointsCallback: (buffer, points) => {
-          const x = points[2].x + this.borderStyle.width / 2;
-          const y = points[2].y + this.borderStyle.width / 2;
-          const width = points[3].x - points[2].x - this.borderStyle.width;
-          const height = points[1].y - points[3].y - this.borderStyle.width;
+          const x = points[4] + this.borderStyle.width / 2;
+          const y = points[5] + this.borderStyle.width / 2;
+          const width = points[6] - points[4] - this.borderStyle.width;
+          const height = points[3] - points[7] - this.borderStyle.width;
           buffer.push(`${x} ${y} ${width} ${height} re`);
           if (fillColor) {
             buffer.push("B");
           } else {
             buffer.push("S");
           }
-          return [points[0].x, points[1].x, points[3].y, points[1].y];
+          return [points[0], points[2], points[7], points[3]];
         }
       });
     }
@@ -52009,10 +51979,10 @@ class CircleAnnotation extends MarkupAnnotation {
         strokeAlpha,
         fillAlpha,
         pointsCallback: (buffer, points) => {
-          const x0 = points[0].x + this.borderStyle.width / 2;
-          const y0 = points[0].y - this.borderStyle.width / 2;
-          const x1 = points[3].x - this.borderStyle.width / 2;
-          const y1 = points[3].y + this.borderStyle.width / 2;
+          const x0 = points[0] + this.borderStyle.width / 2;
+          const y0 = points[1] - this.borderStyle.width / 2;
+          const x1 = points[6] - this.borderStyle.width / 2;
+          const y1 = points[7] + this.borderStyle.width / 2;
           const xMid = x0 + (x1 - x0) / 2;
           const yMid = y0 + (y1 - y0) / 2;
           const xOffset = (x1 - x0) / 2 * controlPointsDistance;
@@ -52023,7 +51993,7 @@ class CircleAnnotation extends MarkupAnnotation {
           } else {
             buffer.push("S");
           }
-          return [points[0].x, points[1].x, points[3].y, points[1].y];
+          return [points[0], points[2], points[7], points[3]];
         }
       });
     }
@@ -52039,7 +52009,7 @@ class PolylineAnnotation extends MarkupAnnotation {
     this.data.annotationType = AnnotationType.POLYLINE;
     this.data.hasOwnCanvas = this.data.noRotate;
     this.data.noHTML = false;
-    this.data.vertices = [];
+    this.data.vertices = null;
     if (!(this instanceof PolygonAnnotation)) {
       this.setLineEndings(dict.getArray("LE"));
       this.data.lineEndings = this.lineEndings;
@@ -52048,23 +52018,18 @@ class PolylineAnnotation extends MarkupAnnotation {
     if (!isNumberArray(rawVertices, null)) {
       return;
     }
-    for (let i = 0, ii = rawVertices.length; i < ii; i += 2) {
-      this.data.vertices.push({
-        x: rawVertices[i],
-        y: rawVertices[i + 1]
-      });
-    }
+    const vertices = this.data.vertices = Float32Array.from(rawVertices);
     if (!this.appearance) {
       const strokeColor = this.color ? getPdfColorArray(this.color) : [0, 0, 0];
       const strokeAlpha = dict.get("CA");
       const borderWidth = this.borderStyle.width || 1,
         borderAdjust = 2 * borderWidth;
       const bbox = [Infinity, Infinity, -Infinity, -Infinity];
-      for (const vertex of this.data.vertices) {
-        bbox[0] = Math.min(bbox[0], vertex.x - borderAdjust);
-        bbox[1] = Math.min(bbox[1], vertex.y - borderAdjust);
-        bbox[2] = Math.max(bbox[2], vertex.x + borderAdjust);
-        bbox[3] = Math.max(bbox[3], vertex.y + borderAdjust);
+      for (let i = 0, ii = vertices.length; i < ii; i += 2) {
+        bbox[0] = Math.min(bbox[0], vertices[i] - borderAdjust);
+        bbox[1] = Math.min(bbox[1], vertices[i + 1] - borderAdjust);
+        bbox[2] = Math.max(bbox[2], vertices[i] + borderAdjust);
+        bbox[3] = Math.max(bbox[3], vertices[i + 1] + borderAdjust);
       }
       if (!Util.intersect(this.rectangle, bbox)) {
         this.rectangle = bbox;
@@ -52075,12 +52040,11 @@ class PolylineAnnotation extends MarkupAnnotation {
         strokeColor,
         strokeAlpha,
         pointsCallback: (buffer, points) => {
-          const vertices = this.data.vertices;
-          for (let i = 0, ii = vertices.length; i < ii; i++) {
-            buffer.push(`${vertices[i].x} ${vertices[i].y} ${i === 0 ? "m" : "l"}`);
+          for (let i = 0, ii = vertices.length; i < ii; i += 2) {
+            buffer.push(`${vertices[i]} ${vertices[i + 1]} ${i === 0 ? "m" : "l"}`);
           }
           buffer.push("S");
-          return [points[0].x, points[1].x, points[3].y, points[1].y];
+          return [points[0], points[2], points[7], points[3]];
         }
       });
     }
@@ -52114,18 +52078,17 @@ class InkAnnotation extends MarkupAnnotation {
       return;
     }
     for (let i = 0, ii = rawInkLists.length; i < ii; ++i) {
-      this.data.inkLists.push([]);
       if (!Array.isArray(rawInkLists[i])) {
         continue;
       }
+      const inkList = new Float32Array(rawInkLists[i].length);
+      this.data.inkLists.push(inkList);
       for (let j = 0, jj = rawInkLists[i].length; j < jj; j += 2) {
         const x = xref.fetchIfRef(rawInkLists[i][j]),
           y = xref.fetchIfRef(rawInkLists[i][j + 1]);
         if (typeof x === "number" && typeof y === "number") {
-          this.data.inkLists[i].push({
-            x,
-            y
-          });
+          inkList[j] = x;
+          inkList[j + 1] = y;
         }
       }
     }
@@ -52135,12 +52098,12 @@ class InkAnnotation extends MarkupAnnotation {
       const borderWidth = this.borderStyle.width || 1,
         borderAdjust = 2 * borderWidth;
       const bbox = [Infinity, Infinity, -Infinity, -Infinity];
-      for (const inkLists of this.data.inkLists) {
-        for (const vertex of inkLists) {
-          bbox[0] = Math.min(bbox[0], vertex.x - borderAdjust);
-          bbox[1] = Math.min(bbox[1], vertex.y - borderAdjust);
-          bbox[2] = Math.max(bbox[2], vertex.x + borderAdjust);
-          bbox[3] = Math.max(bbox[3], vertex.y + borderAdjust);
+      for (const inkList of this.data.inkLists) {
+        for (let i = 0, ii = inkList.length; i < ii; i += 2) {
+          bbox[0] = Math.min(bbox[0], inkList[i] - borderAdjust);
+          bbox[1] = Math.min(bbox[1], inkList[i + 1] - borderAdjust);
+          bbox[2] = Math.max(bbox[2], inkList[i] + borderAdjust);
+          bbox[3] = Math.max(bbox[3], inkList[i + 1] + borderAdjust);
         }
       }
       if (!Util.intersect(this.rectangle, bbox)) {
@@ -52153,12 +52116,12 @@ class InkAnnotation extends MarkupAnnotation {
         strokeAlpha,
         pointsCallback: (buffer, points) => {
           for (const inkList of this.data.inkLists) {
-            for (let i = 0, ii = inkList.length; i < ii; i++) {
-              buffer.push(`${inkList[i].x} ${inkList[i].y} ${i === 0 ? "m" : "l"}`);
+            for (let i = 0, ii = inkList.length; i < ii; i += 2) {
+              buffer.push(`${inkList[i]} ${inkList[i + 1]} ${i === 0 ? "m" : "l"}`);
             }
             buffer.push("S");
           }
-          return [points[0].x, points[1].x, points[3].y, points[1].y];
+          return [points[0], points[2], points[7], points[3]];
         }
       });
     }
@@ -52320,8 +52283,8 @@ class HighlightAnnotation extends MarkupAnnotation {
           blendMode: "Multiply",
           fillAlpha,
           pointsCallback: (buffer, points) => {
-            buffer.push(`${points[0].x} ${points[0].y} m`, `${points[1].x} ${points[1].y} l`, `${points[3].x} ${points[3].y} l`, `${points[2].x} ${points[2].y} l`, "f");
-            return [points[0].x, points[1].x, points[3].y, points[1].y];
+            buffer.push(`${points[0]} ${points[1]} m`, `${points[2]} ${points[3]} l`, `${points[6]} ${points[7]} l`, `${points[4]} ${points[5]} l`, "f");
+            return [points[0], points[2], points[7], points[3]];
           }
         });
       }
@@ -52423,8 +52386,8 @@ class UnderlineAnnotation extends MarkupAnnotation {
           strokeColor,
           strokeAlpha,
           pointsCallback: (buffer, points) => {
-            buffer.push(`${points[2].x} ${points[2].y + 1.3} m`, `${points[3].x} ${points[3].y + 1.3} l`, "S");
-            return [points[0].x, points[1].x, points[3].y, points[1].y];
+            buffer.push(`${points[4]} ${points[5] + 1.3} m`, `${points[6]} ${points[7] + 1.3} l`, "S");
+            return [points[0], points[2], points[7], points[3]];
           }
         });
       }
@@ -52452,11 +52415,11 @@ class SquigglyAnnotation extends MarkupAnnotation {
           strokeColor,
           strokeAlpha,
           pointsCallback: (buffer, points) => {
-            const dy = (points[0].y - points[2].y) / 6;
+            const dy = (points[1] - points[5]) / 6;
             let shift = dy;
-            let x = points[2].x;
-            const y = points[2].y;
-            const xEnd = points[3].x;
+            let x = points[4];
+            const y = points[5];
+            const xEnd = points[6];
             buffer.push(`${x} ${y + shift} m`);
             do {
               x += 2;
@@ -52464,7 +52427,7 @@ class SquigglyAnnotation extends MarkupAnnotation {
               buffer.push(`${x} ${y + shift} l`);
             } while (x < xEnd);
             buffer.push("S");
-            return [points[2].x, xEnd, y - 2 * dy, y + 2 * dy];
+            return [points[4], xEnd, y - 2 * dy, y + 2 * dy];
           }
         });
       }
@@ -52492,8 +52455,8 @@ class StrikeOutAnnotation extends MarkupAnnotation {
           strokeColor,
           strokeAlpha,
           pointsCallback: (buffer, points) => {
-            buffer.push(`${(points[0].x + points[2].x) / 2} ` + `${(points[0].y + points[2].y) / 2} m`, `${(points[1].x + points[3].x) / 2} ` + `${(points[1].y + points[3].y) / 2} l`, "S");
-            return [points[0].x, points[1].x, points[3].y, points[1].y];
+            buffer.push(`${(points[0] + points[4]) / 2} ` + `${(points[1] + points[5]) / 2} m`, `${(points[2] + points[6]) / 2} ` + `${(points[3] + points[7]) / 2} l`, "S");
+            return [points[0], points[2], points[7], points[3]];
           }
         });
       }
@@ -53722,52 +53685,49 @@ class Page {
       systemFontCache: this.systemFontCache,
       options: this.evaluatorOptions
     });
-    const newAnnotationsByPage = !this.xfaFactory ? getNewAnnotationsMap(annotationStorage) : null;
-    let deletedAnnotations = null;
+    const newAnnotsByPage = !this.xfaFactory ? getNewAnnotationsMap(annotationStorage) : null;
+    const newAnnots = newAnnotsByPage?.get(this.pageIndex);
     let newAnnotationsPromise = Promise.resolve(null);
-    if (newAnnotationsByPage) {
-      const newAnnotations = newAnnotationsByPage.get(this.pageIndex);
-      if (newAnnotations) {
-        const annotationGlobalsPromise = this.pdfManager.ensureDoc("annotationGlobals");
-        let imagePromises;
-        const missingBitmaps = new Set();
-        for (const {
-          bitmapId,
-          bitmap
-        } of newAnnotations) {
-          if (bitmapId && !bitmap && !missingBitmaps.has(bitmapId)) {
-            missingBitmaps.add(bitmapId);
-          }
+    let deletedAnnotations = null;
+    if (newAnnots) {
+      const annotationGlobalsPromise = this.pdfManager.ensureDoc("annotationGlobals");
+      let imagePromises;
+      const missingBitmaps = new Set();
+      for (const {
+        bitmapId,
+        bitmap
+      } of newAnnots) {
+        if (bitmapId && !bitmap && !missingBitmaps.has(bitmapId)) {
+          missingBitmaps.add(bitmapId);
         }
-        const {
-          isOffscreenCanvasSupported
-        } = this.evaluatorOptions;
-        if (missingBitmaps.size > 0) {
-          const annotationWithBitmaps = newAnnotations.slice();
-          for (const [key, annotation] of annotationStorage) {
-            if (!key.startsWith(AnnotationEditorPrefix)) {
-              continue;
-            }
-            if (annotation.bitmap && missingBitmaps.has(annotation.bitmapId)) {
-              annotationWithBitmaps.push(annotation);
-            }
-          }
-          imagePromises = AnnotationFactory.generateImages(annotationWithBitmaps, this.xref, isOffscreenCanvasSupported);
-        } else {
-          imagePromises = AnnotationFactory.generateImages(newAnnotations, this.xref, isOffscreenCanvasSupported);
-        }
-        deletedAnnotations = new RefSet();
-        this.#replaceIdByRef(newAnnotations, deletedAnnotations, null);
-        newAnnotationsPromise = annotationGlobalsPromise.then(annotationGlobals => {
-          if (!annotationGlobals) {
-            return null;
-          }
-          return AnnotationFactory.printNewAnnotations(annotationGlobals, partialEvaluator, task, newAnnotations, imagePromises);
-        });
       }
+      const {
+        isOffscreenCanvasSupported
+      } = this.evaluatorOptions;
+      if (missingBitmaps.size > 0) {
+        const annotationWithBitmaps = newAnnots.slice();
+        for (const [key, annotation] of annotationStorage) {
+          if (!key.startsWith(AnnotationEditorPrefix)) {
+            continue;
+          }
+          if (annotation.bitmap && missingBitmaps.has(annotation.bitmapId)) {
+            annotationWithBitmaps.push(annotation);
+          }
+        }
+        imagePromises = AnnotationFactory.generateImages(annotationWithBitmaps, this.xref, isOffscreenCanvasSupported);
+      } else {
+        imagePromises = AnnotationFactory.generateImages(newAnnots, this.xref, isOffscreenCanvasSupported);
+      }
+      deletedAnnotations = new RefSet();
+      this.#replaceIdByRef(newAnnots, deletedAnnotations, null);
+      newAnnotationsPromise = annotationGlobalsPromise.then(annotationGlobals => {
+        if (!annotationGlobals) {
+          return null;
+        }
+        return AnnotationFactory.printNewAnnotations(annotationGlobals, partialEvaluator, task, newAnnots, imagePromises);
+      });
     }
-    const dataPromises = Promise.all([contentStreamPromise, resourcesPromise]);
-    const pageListPromise = dataPromises.then(([contentStream]) => {
+    const pageListPromise = Promise.all([contentStreamPromise, resourcesPromise]).then(([contentStream]) => {
       const opList = new OperatorList(intent, sink);
       handler.send("StartRenderPage", {
         transparency: partialEvaluator.hasBlendModes(this.resources, this.nonBlendModesSet),
@@ -55532,7 +55492,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = "4.3.0";
+    const workerVersion = "4.4.0";
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }
@@ -56102,8 +56062,8 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
-const pdfjsVersion = "4.3.0";
-const pdfjsBuild = "17e09e5";
+const pdfjsVersion = "4.4.0";
+const pdfjsBuild = "53dfb5a";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };
