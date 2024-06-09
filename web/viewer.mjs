@@ -3669,8 +3669,10 @@ class DownloadManager {
     this.downloadData(data, filename, contentType);
     return false;
   }
-  download(blob, url, filename, _options) {
-    const blobUrl = URL.createObjectURL(blob);
+  download(data, url, filename, _options) {
+    const blobUrl = URL.createObjectURL(new Blob([data], {
+      type: "application/pdf"
+    }));
     download(blobUrl, filename);
   }
 }
@@ -8936,13 +8938,6 @@ class TextLayerBuilder {
     this.div.tabIndex = 0;
     this.div.className = "textLayer";
   }
-  #finishRendering() {
-    this.#renderingDone = true;
-    const endOfContent = document.createElement("div");
-    endOfContent.className = "endOfContent";
-    this.div.append(endOfContent);
-    this.#bindMouse(endOfContent);
-  }
   async render(viewport, textContentParams = null) {
     if (this.#renderingDone && this.#textLayer) {
       this.#textLayer.update({
@@ -8968,7 +8963,11 @@ class TextLayerBuilder {
     this.highlighter?.setTextMapping(textDivs, textContentItemsStr);
     this.accessibilityManager?.setTextMapping(textDivs);
     await this.#textLayer.render();
-    this.#finishRendering();
+    this.#renderingDone = true;
+    const endOfContent = document.createElement("div");
+    endOfContent.className = "endOfContent";
+    this.div.append(endOfContent);
+    this.#bindMouse(endOfContent);
     this.#onAppend?.(this.div);
     this.highlighter?.enable();
     this.accessibilityManager?.enable();
@@ -12409,17 +12408,21 @@ const PDFViewerApplication = {
       });
     });
     appConfig.mainContainer.addEventListener("dragover", function (evt) {
-      evt.preventDefault();
-      evt.dataTransfer.dropEffect = evt.dataTransfer.effectAllowed === "copy" ? "copy" : "move";
+      for (const item of evt.dataTransfer.items) {
+        if (item.type === "application/pdf") {
+          evt.dataTransfer.dropEffect = evt.dataTransfer.effectAllowed === "copy" ? "copy" : "move";
+          evt.preventDefault();
+          evt.stopPropagation();
+          return;
+        }
+      }
     });
     appConfig.mainContainer.addEventListener("drop", function (evt) {
-      evt.preventDefault();
-      const {
-        files
-      } = evt.dataTransfer;
-      if (!files || files.length === 0) {
+      if (evt.dataTransfer.files?.[0].type !== "application/pdf") {
         return;
       }
+      evt.preventDefault();
+      evt.stopPropagation();
       eventBus.dispatch("fileinputchange", {
         source: this,
         fileInput: evt.dataTransfer
@@ -12671,12 +12674,9 @@ const PDFViewerApplication = {
     try {
       this._ensureDownloadComplete();
       const data = await this.pdfDocument.getData();
-      const blob = new Blob([data], {
-        type: "application/pdf"
-      });
-      await this.downloadManager.download(blob, url, filename, options);
+      this.downloadManager.download(data, url, filename, options);
     } catch {
-      await this.downloadManager.downloadUrl(url, filename, options);
+      this.downloadManager.downloadUrl(url, filename, options);
     }
   },
   async save(options = {}) {
@@ -12690,10 +12690,7 @@ const PDFViewerApplication = {
     try {
       this._ensureDownloadComplete();
       const data = await this.pdfDocument.saveDocument();
-      const blob = new Blob([data], {
-        type: "application/pdf"
-      });
-      await this.downloadManager.download(blob, url, filename, options);
+      this.downloadManager.download(data, url, filename, options);
     } catch (reason) {
       console.error(`Error when saving the document: ${reason.message}`);
       await this.download(options);
@@ -14290,7 +14287,7 @@ function webViewerReportTelemetry({
 
 
 const pdfjsVersion = "4.4.0";
-const pdfjsBuild = "53dfb5a";
+const pdfjsBuild = "bb73d2a";
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,
