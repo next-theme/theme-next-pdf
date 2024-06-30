@@ -176,6 +176,9 @@ function watchScroll(viewAreaElement, callback, abortSignal = undefined) {
     useCapture: true,
     signal: abortSignal
   });
+  abortSignal?.addEventListener("abort", () => window.cancelAnimationFrame(rAF), {
+    once: true
+  });
   return state;
 }
 function parseQueryString(query) {
@@ -1363,9 +1366,18 @@ class EventBus {
     }
   }
 }
-class AutomationEventBus extends EventBus {
+class FirefoxEventBus extends EventBus {
+  #externalServices;
+  #globalEventNames;
+  #isInAutomation;
+  constructor(globalEventNames, externalServices, isInAutomation) {
+    super();
+    this.#globalEventNames = globalEventNames;
+    this.#externalServices = externalServices;
+    this.#isInAutomation = isInAutomation;
+  }
   dispatch(eventName, data) {
-    throw new Error("Not implemented: AutomationEventBus.dispatch");
+    throw new Error("Not implemented: FirefoxEventBus.dispatch");
   }
 }
 
@@ -1390,6 +1402,10 @@ class BaseExternalServices {
     throw new Error("Not implemented: updateEditorStates");
   }
   async getNimbusExperimentData() {}
+  async getGlobalEventNames() {
+    return null;
+  }
+  dispatchGlobalEvent(_event) {}
 }
 
 ;// CONCATENATED MODULE: ./web/preferences.js
@@ -2750,6 +2766,9 @@ class DOMLocalization extends Localization {
     this.pauseObserving();
     if (this.roots.size === 0) {
       this.mutationObserver = null;
+      if (this.windowElement && this.pendingrAF) {
+        this.windowElement.cancelAnimationFrame(this.pendingrAF);
+      }
       this.windowElement = null;
       this.pendingrAF = null;
       this.pendingElements.clear();
@@ -2897,9 +2916,6 @@ class L10n {
     }
     this.#elements.clear();
     this.#l10n.pauseObserving();
-    await new Promise(resolve => {
-      window.requestAnimationFrame(resolve);
-    });
   }
   pause() {
     this.#l10n.pauseObserving();
@@ -12101,6 +12117,7 @@ const PDFViewerApplication = {
   isViewerEmbedded: window.parent !== window,
   url: "",
   baseUrl: "",
+  _allowedGlobalEventsPromise: null,
   _downloadUrl: "",
   _eventBusAbortController: null,
   _windowAbortController: null,
@@ -12245,7 +12262,8 @@ const PDFViewerApplication = {
       externalServices,
       l10n
     } = this;
-    const eventBus = AppOptions.get("isInAutomation") ? new AutomationEventBus() : new EventBus();
+    let eventBus;
+    eventBus = new EventBus();
     this.eventBus = eventBus;
     this.overlayManager = new OverlayManager();
     const pdfRenderingQueue = new PDFRenderingQueue();
@@ -14320,7 +14338,7 @@ function webViewerReportTelemetry({
 
 
 const pdfjsVersion = "4.4.0";
-const pdfjsBuild = "c18a987";
+const pdfjsBuild = "fb3a4e4";
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,
