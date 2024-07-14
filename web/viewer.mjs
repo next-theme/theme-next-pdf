@@ -552,6 +552,7 @@ const OptionKind = {
   VIEWER: 0x02,
   API: 0x04,
   WORKER: 0x08,
+  EVENT_DISPATCH: 0x10,
   PREFERENCE: 0x80
 };
 const defaultOptions = {
@@ -589,7 +590,7 @@ const defaultOptions = {
   },
   toolbarDensity: {
     value: 0,
-    kind: OptionKind.BROWSER
+    kind: OptionKind.BROWSER + OptionKind.EVENT_DISPATCH
   },
   annotationEditorMode: {
     value: 0,
@@ -819,6 +820,7 @@ const userOptions = Object.create(null);
   }
 }
 class AppOptions {
+  static eventBus;
   constructor() {
     throw new Error("Cannot initialize AppOptions.");
   }
@@ -839,21 +841,38 @@ class AppOptions {
   static set(name, value) {
     userOptions[name] = value;
   }
-  static setAll(options, init = false) {
-    if (init) {
-      if (this.get("disablePreferences")) {
-        return;
-      }
-      for (const name in userOptions) {
-        if (compatibilityParams[name] !== undefined) {
+  static setAll(options, prefs = false) {
+    let events;
+    for (const name in options) {
+      const userOption = options[name];
+      if (prefs) {
+        const defaultOption = defaultOptions[name];
+        if (!defaultOption) {
           continue;
         }
-        console.warn("setAll: The Preferences may override manually set AppOptions; " + 'please use the "disablePreferences"-option in order to prevent that.');
-        break;
+        const {
+          kind,
+          value
+        } = defaultOption;
+        if (!(kind & OptionKind.BROWSER || kind & OptionKind.PREFERENCE)) {
+          continue;
+        }
+        if (typeof userOption !== typeof value) {
+          continue;
+        }
+        if (this.eventBus && kind & OptionKind.EVENT_DISPATCH) {
+          (events ||= new Map()).set(name, userOption);
+        }
       }
+      userOptions[name] = userOption;
     }
-    for (const name in options) {
-      userOptions[name] = options[name];
+    if (events) {
+      for (const [name, value] of events) {
+        this.eventBus.dispatch(name.toLowerCase(), {
+          source: this,
+          value
+        });
+      }
     }
   }
   static remove(name) {
@@ -863,6 +882,21 @@ class AppOptions {
       userOptions[name] = val;
     }
   }
+}
+{
+  AppOptions._checkDisablePreferences = () => {
+    if (AppOptions.get("disablePreferences")) {
+      return true;
+    }
+    for (const name in userOptions) {
+      if (compatibilityParams[name] !== undefined) {
+        continue;
+      }
+      console.warn("The Preferences may override manually set AppOptions; " + 'please use the "disablePreferences"-option to prevent that.');
+      break;
+    }
+    return false;
+  };
 }
 
 ;// CONCATENATED MODULE: ./web/pdf_link_service.js
@@ -1185,7 +1219,7 @@ class PDFLinkService {
       case "FitBH":
       case "FitV":
       case "FitBV":
-        if (args.length !== 1) {
+        if (args.length > 1) {
           return false;
         }
         break;
@@ -1409,17 +1443,6 @@ class BaseExternalServices {
 ;// CONCATENATED MODULE: ./web/preferences.js
 
 class BasePreferences {
-  #browserDefaults = Object.freeze({
-    canvasMaxAreaInBytes: -1,
-    isInAutomation: false,
-    supportsCaretBrowsingMode: false,
-    supportsDocumentFonts: true,
-    supportsIntegratedFind: false,
-    supportsMouseWheelZoomCtrlKey: true,
-    supportsMouseWheelZoomMetaKey: true,
-    supportsPinchToZoom: true,
-    toolbarDensity: 0
-  });
   #defaults = Object.freeze({
     annotationEditorMode: 0,
     annotationMode: 2,
@@ -1454,9 +1477,7 @@ class BasePreferences {
     enableXfa: true,
     viewerCssTheme: 0
   });
-  #prefs = Object.create(null);
   #initializedPromise = null;
-  static #eventToDispatch = new Set(["toolbarDensity"]);
   constructor() {
     if (this.constructor === BasePreferences) {
       throw new Error("Cannot initialize BasePreferences.");
@@ -1465,16 +1486,13 @@ class BasePreferences {
       browserPrefs,
       prefs
     }) => {
-      const options = Object.create(null);
-      for (const [name, val] of Object.entries(this.#browserDefaults)) {
-        const prefVal = browserPrefs?.[name];
-        options[name] = typeof prefVal === typeof val ? prefVal : val;
+      if (AppOptions._checkDisablePreferences()) {
+        return;
       }
-      for (const [name, val] of Object.entries(this.#defaults)) {
-        const prefVal = prefs?.[name];
-        options[name] = this.#prefs[name] = typeof prefVal === typeof val ? prefVal : val;
-      }
-      AppOptions.setAll(options, true);
+      AppOptions.setAll({
+        ...browserPrefs,
+        ...prefs
+      }, true);
     });
   }
   async _writeToStorage(prefObj) {
@@ -1483,58 +1501,22 @@ class BasePreferences {
   async _readFromStorage(prefObj) {
     throw new Error("Not implemented: _readFromStorage");
   }
-  async #updatePref({
-    name,
-    value
-  }) {
-    throw new Error("Not implemented: #updatePref");
-  }
   async reset() {
     await this.#initializedPromise;
-    const oldPrefs = structuredClone(this.#prefs);
-    this.#prefs = Object.create(null);
-    try {
-      await this._writeToStorage(this.#defaults);
-    } catch (reason) {
-      this.#prefs = oldPrefs;
-      throw reason;
-    }
+    AppOptions.setAll(this.#defaults, true);
+    await this._writeToStorage(this.#defaults);
   }
   async set(name, value) {
     await this.#initializedPromise;
-    const defaultValue = this.#defaults[name],
-      oldPrefs = structuredClone(this.#prefs);
-    if (defaultValue === undefined) {
-      throw new Error(`Set preference: "${name}" is undefined.`);
-    } else if (value === undefined) {
-      throw new Error("Set preference: no value is specified.");
-    }
-    const valueType = typeof value,
-      defaultType = typeof defaultValue;
-    if (valueType !== defaultType) {
-      if (valueType === "number" && defaultType === "string") {
-        value = value.toString();
-      } else {
-        throw new Error(`Set preference: "${value}" is a ${valueType}, expected a ${defaultType}.`);
-      }
-    } else if (valueType === "number" && !Number.isInteger(value)) {
-      throw new Error(`Set preference: "${value}" must be an integer.`);
-    }
-    this.#prefs[name] = value;
-    try {
-      await this._writeToStorage(this.#prefs);
-    } catch (reason) {
-      this.#prefs = oldPrefs;
-      throw reason;
-    }
+    AppOptions.setAll({
+      [name]: value
+    }, true);
+    const prefs = AppOptions.getAll(OptionKind.PREFERENCE);
+    await this._writeToStorage(prefs);
   }
   async get(name) {
     await this.#initializedPromise;
-    const defaultValue = this.#defaults[name];
-    if (defaultValue === undefined) {
-      throw new Error(`Get preference: "${name}" is undefined.`);
-    }
-    return this.#prefs[name] ?? defaultValue;
+    return AppOptions.get(name);
   }
   get initializedPromise() {
     return this.#initializedPromise;
@@ -11493,7 +11475,7 @@ class PDFViewer {
         pageView.toggleEditingMode(isEditing);
       }
       const idsToRefresh = this.#switchToEditAnnotationMode();
-      if (isEditing && editId && idsToRefresh) {
+      if (isEditing && idsToRefresh) {
         this.#cleanupSwitchAnnotationEditorMode();
         this.#onPageRenderedCallback = ({
           pageNumber
@@ -12178,7 +12160,6 @@ class ViewHistory {
 
 
 const FORCE_PAGES_LOADED_TIMEOUT = 10000;
-const WHEEL_ZOOM_DISABLED_TIMEOUT = 1000;
 const ViewOnLoad = {
   UNKNOWN: -1,
   PREVIOUS: 0,
@@ -13513,9 +13494,6 @@ const PDFViewerApplication = {
       });
     }
     addWindowResolutionChange();
-    window.addEventListener("visibilitychange", webViewerVisibilityChange, {
-      signal
-    });
     window.addEventListener("wheel", webViewerWheel, {
       passive: false,
       signal
@@ -13976,20 +13954,6 @@ function webViewerPageChanging({
 function webViewerResolutionChange(evt) {
   PDFViewerApplication.pdfViewer.refresh();
 }
-function webViewerVisibilityChange(evt) {
-  if (document.visibilityState === "visible") {
-    setZoomDisabledTimeout();
-  }
-}
-let zoomDisabledTimeout = null;
-function setZoomDisabledTimeout() {
-  if (zoomDisabledTimeout) {
-    clearTimeout(zoomDisabledTimeout);
-  }
-  zoomDisabledTimeout = setTimeout(function () {
-    zoomDisabledTimeout = null;
-  }, WHEEL_ZOOM_DISABLED_TIMEOUT);
-}
 function webViewerWheel(evt) {
   const {
     pdfViewer,
@@ -14007,7 +13971,7 @@ function webViewerWheel(evt) {
   const origin = [evt.clientX, evt.clientY];
   if (isPinchToZoom || evt.ctrlKey && supportsMouseWheelZoomCtrlKey || evt.metaKey && supportsMouseWheelZoomMetaKey) {
     evt.preventDefault();
-    if (PDFViewerApplication._isScrolling || zoomDisabledTimeout || document.visibilityState === "hidden" || PDFViewerApplication.overlayManager.active) {
+    if (PDFViewerApplication._isScrolling || document.visibilityState === "hidden" || PDFViewerApplication.overlayManager.active) {
       return;
     }
     if (isPinchToZoom && supportsPinchToZoom) {
@@ -14442,7 +14406,7 @@ function webViewerReportTelemetry({
 
 
 const pdfjsVersion = "4.5.0";
-const pdfjsBuild = "5ee6169";
+const pdfjsBuild = "5059187";
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,

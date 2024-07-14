@@ -997,6 +997,7 @@ class PixelsPerInch {
   static PDF_TO_CSS_UNITS = this.CSS / this.PDF;
 }
 class DOMFilterFactory extends BaseFilterFactory {
+  #baseUrl;
   #_cache;
   #_defs;
   #docId;
@@ -1060,6 +1061,20 @@ class DOMFilterFactory extends BaseFilterFactory {
     }
     return [bufferR.join(","), bufferG.join(","), bufferB.join(",")];
   }
+  #createUrl(id) {
+    if (this.#baseUrl === undefined) {
+      const url = this.#document.URL;
+      if (url === this.#document.baseURI) {
+        this.#baseUrl = "";
+      } else if (isDataScheme(url)) {
+        warn('#createUrl: ignore "data:"-URL for performance reasons.');
+        this.#baseUrl = "";
+      } else {
+        this.#baseUrl = url.split("#", 1)[0];
+      }
+    }
+    return `url(${this.#baseUrl}#${id})`;
+  }
   addFilter(maps) {
     if (!maps) {
       return "none";
@@ -1076,7 +1091,7 @@ class DOMFilterFactory extends BaseFilterFactory {
       return value;
     }
     const id = `g_${this.#docId}_transfer_map_${this.#id++}`;
-    const url = `url(#${id})`;
+    const url = this.#createUrl(id);
     this.#cache.set(maps, url);
     this.#cache.set(key, url);
     const filter = this.#createFilter(id);
@@ -1134,7 +1149,7 @@ class DOMFilterFactory extends BaseFilterFactory {
       return arr.join(",");
     };
     this.#addTransferMapConversion(getSteps(0, 5), getSteps(1, 5), getSteps(2, 5), filter);
-    info.url = `url(#${id})`;
+    info.url = this.#createUrl(id);
     return info.url;
   }
   addAlphaFilter(map) {
@@ -1150,7 +1165,7 @@ class DOMFilterFactory extends BaseFilterFactory {
       return value;
     }
     const id = `g_${this.#docId}_alpha_map_${this.#id++}`;
-    const url = `url(#${id})`;
+    const url = this.#createUrl(id);
     this.#cache.set(map, url);
     this.#cache.set(key, url);
     const filter = this.#createFilter(id);
@@ -1175,7 +1190,7 @@ class DOMFilterFactory extends BaseFilterFactory {
       return value;
     }
     const id = `g_${this.#docId}_luminosity_map_${this.#id++}`;
-    const url = `url(#${id})`;
+    const url = this.#createUrl(id);
     this.#cache.set(map, url);
     this.#cache.set(key, url);
     const filter = this.#createFilter(id);
@@ -1238,7 +1253,7 @@ class DOMFilterFactory extends BaseFilterFactory {
     const filter = info.filter = this.#createFilter(id);
     this.#addGrayConversion(filter);
     this.#addTransferMapConversion(getSteps(newFgRGB[0], newBgRGB[0], 5), getSteps(newFgRGB[1], newBgRGB[1], 5), getSteps(newFgRGB[2], newBgRGB[2], 5), filter);
-    info.url = `url(#${id})`;
+    info.url = this.#createUrl(id);
     return info.url;
   }
   destroy(keepHCM = false) {
@@ -2461,6 +2476,20 @@ class AnnotationEditorUIManager {
   }) {
     return anchorNode.nodeType === Node.TEXT_NODE ? anchorNode.parentElement : anchorNode;
   }
+  #getLayerForTextLayer(textLayer) {
+    const {
+      currentLayer
+    } = this;
+    if (currentLayer.hasTextLayer(textLayer)) {
+      return currentLayer;
+    }
+    for (const layer of this.#allLayers.values()) {
+      if (layer.hasTextLayer(textLayer)) {
+        return layer;
+      }
+    }
+    return null;
+  }
   highlightSelection(methodOfCreation = "") {
     const selection = document.getSelection();
     if (!selection || selection.isCollapsed) {
@@ -2487,22 +2516,20 @@ class AnnotationEditorUIManager {
       });
       this.showAllEditors("highlight", true, true);
     }
-    for (const layer of this.#allLayers.values()) {
-      if (layer.hasTextLayer(textLayer)) {
-        layer.createAndAddNewEditor({
-          x: 0,
-          y: 0
-        }, false, {
-          methodOfCreation,
-          boxes,
-          anchorNode,
-          anchorOffset,
-          focusNode,
-          focusOffset,
-          text
-        });
-        break;
-      }
+    const layer = this.#getLayerForTextLayer(textLayer);
+    if (layer) {
+      layer.createAndAddNewEditor({
+        x: 0,
+        y: 0
+      }, false, {
+        methodOfCreation,
+        boxes,
+        anchorNode,
+        anchorOffset,
+        focusNode,
+        focusOffset,
+        text
+      });
     }
   }
   #displayHighlightToolbar() {
@@ -2567,11 +2594,14 @@ class AnnotationEditorUIManager {
     }
     this.#highlightWhenShiftUp = this.isShiftKeyDown;
     if (!this.isShiftKeyDown) {
+      const activeLayer = this.#mode === AnnotationEditorType.HIGHLIGHT ? this.#getLayerForTextLayer(textLayer) : null;
+      activeLayer?.toggleDrawing();
       const signal = this._signal;
       const pointerup = e => {
         if (e.type === "pointerup" && e.button !== 0) {
           return;
         }
+        activeLayer?.toggleDrawing(true);
         window.removeEventListener("pointerup", pointerup);
         window.removeEventListener("blur", pointerup);
         if (e.type === "pointerup") {
@@ -10682,6 +10712,7 @@ class TextLayer {
     div.style.opacity = 0;
     div.style.lineHeight = 1;
     div.style.fontSize = "1px";
+    div.style.position = "absolute";
     div.textContent = "X";
     document.body.append(div);
     this.#minFontSize = div.getBoundingClientRect().height;
@@ -12665,7 +12696,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.5.0";
-const build = "5ee6169";
+const build = "5059187";
 
 ;// CONCATENATED MODULE: ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -18948,6 +18979,9 @@ class AnnotationEditorLayer {
   addCommands(params) {
     this.#uiManager.addCommands(params);
   }
+  toggleDrawing(enabled = false) {
+    this.div.classList.toggle("drawing", !enabled);
+  }
   togglePointerEvents(enabled = false) {
     this.div.classList.toggle("disabled", !enabled);
   }
@@ -19075,7 +19109,10 @@ class AnnotationEditorLayer {
   }
   #textLayerPointerDown(event) {
     this.#uiManager.unselectAll();
-    if (event.target === this.#textLayer.div) {
+    const {
+      target
+    } = event;
+    if (target === this.#textLayer.div || target.classList.contains("endOfContent") && this.#textLayer.div.contains(target)) {
       const {
         isMac
       } = util_FeatureTest.platform;
@@ -19084,9 +19121,11 @@ class AnnotationEditorLayer {
       }
       this.#uiManager.showAllEditors("highlight", true, true);
       this.#textLayer.div.classList.add("free");
+      this.toggleDrawing();
       HighlightEditor.startHighlighting(this, this.#uiManager.direction === "ltr", event);
       this.#textLayer.div.addEventListener("pointerup", () => {
         this.#textLayer.div.classList.remove("free");
+        this.toggleDrawing(true);
       }, {
         once: true,
         signal: this.#uiManager._signal
@@ -19643,7 +19682,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "4.5.0";
-const pdfjsBuild = "5ee6169";
+const pdfjsBuild = "5059187";
 
 var __webpack_exports__AbortException = __webpack_exports__.AbortException;
 var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;

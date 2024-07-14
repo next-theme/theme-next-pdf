@@ -954,6 +954,9 @@ class Dict {
     }
     return dict;
   }
+  delete(key) {
+    delete this._map[key];
+  }
 }
 class Ref {
   constructor(num, gen) {
@@ -24939,6 +24942,36 @@ class Font {
     builder.addTable("post", createPostTable(properties));
     return builder.toArray();
   }
+  get _spaceWidth() {
+    const possibleSpaceReplacements = ["space", "minus", "one", "i", "I"];
+    let width;
+    for (const glyphName of possibleSpaceReplacements) {
+      if (glyphName in this.widths) {
+        width = this.widths[glyphName];
+        break;
+      }
+      const glyphsUnicodeMap = getGlyphsUnicode();
+      const glyphUnicode = glyphsUnicodeMap[glyphName];
+      let charcode = 0;
+      if (this.composite && this.cMap.contains(glyphUnicode)) {
+        charcode = this.cMap.lookup(glyphUnicode);
+        if (typeof charcode === "string") {
+          charcode = convertCidString(glyphUnicode, charcode);
+        }
+      }
+      if (!charcode && this.toUnicode) {
+        charcode = this.toUnicode.charCodeOf(glyphUnicode);
+      }
+      if (charcode <= 0) {
+        charcode = glyphUnicode;
+      }
+      width = this.widths[charcode];
+      if (width) {
+        break;
+      }
+    }
+    return shadow(this, "_spaceWidth", width || this.defaultWidth);
+  }
   _charToGlyph(charcode, isSpace = false) {
     let glyph = this._glyphCache[charcode];
     if (glyph?.isSpace === isSpace) {
@@ -24967,6 +25000,10 @@ class Font {
       const glyphName = this.differences[charcode] || this.defaultEncoding[charcode];
       if ((glyphName === ".notdef" || glyphName === "") && this.type === "Type1") {
         fontCharCode = 0x20;
+        if (glyphName === "") {
+          width ||= this._spaceWidth;
+          unicode = String.fromCharCode(fontCharCode);
+        }
       }
       fontCharCode = mapSpecialUnicodeValues(fontCharCode);
     }
@@ -37334,7 +37371,7 @@ function isValidExplicitDest(dest) {
     case "FitBH":
     case "FitV":
     case "FitBV":
-      if (args.length !== 1) {
+      if (args.length > 1) {
         return false;
       }
       break;
@@ -50551,14 +50588,21 @@ class MarkupAnnotation extends Annotation {
     this._streams.push(this.appearance, appearanceStream);
   }
   static async createNewAnnotation(xref, annotation, dependencies, params) {
-    const annotationRef = annotation.ref ||= xref.getNewTemporaryRef();
+    let oldAnnotation;
+    if (annotation.ref) {
+      oldAnnotation = (await xref.fetchIfRefAsync(annotation.ref)).clone();
+    } else {
+      annotation.ref = xref.getNewTemporaryRef();
+    }
+    const annotationRef = annotation.ref;
     const ap = await this.createNewAppearanceStream(annotation, xref, params);
     const buffer = [];
     let annotationDict;
     if (ap) {
       const apRef = xref.getNewTemporaryRef();
       annotationDict = this.createNewDict(annotation, xref, {
-        apRef
+        apRef,
+        oldAnnotation
       });
       await writeObject(apRef, ap, buffer, xref);
       dependencies.push({
@@ -50566,7 +50610,9 @@ class MarkupAnnotation extends Annotation {
         data: buffer.join("")
       });
     } else {
-      annotationDict = this.createNewDict(annotation, xref, {});
+      annotationDict = this.createNewDict(annotation, xref, {
+        oldAnnotation
+      });
     }
     if (Number.isInteger(annotation.parentTreeId)) {
       annotationDict.set("StructParent", annotation.parentTreeId);
@@ -51992,7 +52038,8 @@ class FreeTextAnnotation extends MarkupAnnotation {
   }
   static createNewDict(annotation, xref, {
     apRef,
-    ap
+    ap,
+    oldAnnotation
   }) {
     const {
       color,
@@ -52002,10 +52049,15 @@ class FreeTextAnnotation extends MarkupAnnotation {
       user,
       value
     } = annotation;
-    const freetext = new Dict(xref);
+    const freetext = oldAnnotation || new Dict(xref);
     freetext.set("Type", Name.get("Annot"));
     freetext.set("Subtype", Name.get("FreeText"));
-    freetext.set("CreationDate", `D:${getModificationDate()}`);
+    if (oldAnnotation) {
+      freetext.set("M", `D:${getModificationDate()}`);
+      freetext.delete("RC");
+    } else {
+      freetext.set("CreationDate", `D:${getModificationDate()}`);
+    }
     freetext.set("Rect", rect);
     const da = `/Helv ${fontSize} Tf ${getPdfColor(color, true)}`;
     freetext.set("DA", da);
@@ -56335,7 +56387,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = "4.5.0";
-const pdfjsBuild = "5ee6169";
+const pdfjsBuild = "5059187";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };
