@@ -37357,26 +37357,27 @@ function isValidExplicitDest(dest) {
   if (!(zoom instanceof Name)) {
     return false;
   }
+  const argsLen = args.length;
   let allowNull = true;
   switch (zoom.name) {
     case "XYZ":
-      if (args.length !== 3) {
+      if (argsLen < 2 || argsLen > 3) {
         return false;
       }
       break;
     case "Fit":
     case "FitB":
-      return args.length === 0;
+      return argsLen === 0;
     case "FitH":
     case "FitBH":
     case "FitV":
     case "FitBV":
-      if (args.length > 1) {
+      if (argsLen > 1) {
         return false;
       }
       break;
     case "FitR":
-      if (args.length !== 4) {
+      if (argsLen !== 4) {
         return false;
       }
       allowNull = false;
@@ -56387,7 +56388,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = "4.5.0";
-const pdfjsBuild = "5059187";
+const pdfjsBuild = "e92a6a1";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };

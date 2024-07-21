@@ -446,7 +446,7 @@ class ProgressBar {
     }
   }
   setDisableAutoFetch(delay = 5000) {
-    if (isNaN(this.#percent)) {
+    if (this.#percent === 100 || isNaN(this.#percent)) {
       return;
     }
     if (this.#disableAutoFetchTimeout) {
@@ -556,12 +556,24 @@ const OptionKind = {
   PREFERENCE: 0x80
 };
 const defaultOptions = {
+  allowedGlobalEvents: {
+    value: null,
+    kind: OptionKind.BROWSER
+  },
   canvasMaxAreaInBytes: {
     value: -1,
     kind: OptionKind.BROWSER + OptionKind.API
   },
   isInAutomation: {
     value: false,
+    kind: OptionKind.BROWSER
+  },
+  localeProperties: {
+    value: null,
+    kind: OptionKind.BROWSER
+  },
+  nimbusDataStr: {
+    value: "",
     kind: OptionKind.BROWSER
   },
   supportsCaretBrowsingMode: {
@@ -646,6 +658,10 @@ const defaultOptions = {
   },
   enableScripting: {
     value: true,
+    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+  },
+  enableUpdatedAddImage: {
+    value: false,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE
   },
   externalLinkRel: {
@@ -839,25 +855,25 @@ class AppOptions {
     return options;
   }
   static set(name, value) {
+    const defaultOption = defaultOptions[name];
+    if (!defaultOption || typeof value !== typeof defaultOption.value) {
+      return;
+    }
     userOptions[name] = value;
   }
   static setAll(options, prefs = false) {
     let events;
     for (const name in options) {
-      const userOption = options[name];
+      const defaultOption = defaultOptions[name],
+        userOption = options[name];
+      if (!defaultOption || typeof userOption !== typeof defaultOption.value) {
+        continue;
+      }
       if (prefs) {
-        const defaultOption = defaultOptions[name];
-        if (!defaultOption) {
-          continue;
-        }
         const {
-          kind,
-          value
+          kind
         } = defaultOption;
         if (!(kind & OptionKind.BROWSER || kind & OptionKind.PREFERENCE)) {
-          continue;
-        }
-        if (typeof userOption !== typeof value) {
           continue;
         }
         if (this.eventBus && kind & OptionKind.EVENT_DISPATCH) {
@@ -1205,26 +1221,27 @@ class PDFLinkService {
     if (!(typeof zoom === "object" && typeof zoom?.name === "string")) {
       return false;
     }
+    const argsLen = args.length;
     let allowNull = true;
     switch (zoom.name) {
       case "XYZ":
-        if (args.length !== 3) {
+        if (argsLen < 2 || argsLen > 3) {
           return false;
         }
         break;
       case "Fit":
       case "FitB":
-        return args.length === 0;
+        return argsLen === 0;
       case "FitH":
       case "FitBH":
       case "FitV":
       case "FitBV":
-        if (args.length > 1) {
+        if (argsLen > 1) {
           return false;
         }
         break;
       case "FitR":
-        if (args.length !== 4) {
+        if (argsLen !== 4) {
           return false;
         }
         allowNull = false;
@@ -1274,7 +1291,6 @@ const {
   noContextMenu,
   normalizeUnicode,
   OPS,
-  Outliner,
   PasswordResponses,
   PDFDataRangeTransport,
   PDFDateString,
@@ -1433,10 +1449,6 @@ class BaseExternalServices {
   updateEditorStates(data) {
     throw new Error("Not implemented: updateEditorStates");
   }
-  async getNimbusExperimentData() {}
-  async getGlobalEventNames() {
-    return null;
-  }
   dispatchGlobalEvent(_event) {}
 }
 
@@ -1456,6 +1468,7 @@ class BasePreferences {
     enablePermissions: false,
     enablePrintAutoRotate: true,
     enableScripting: true,
+    enableUpdatedAddImage: false,
     externalLinkTarget: 0,
     highlightEditorColors: "yellow=#FFFF98,green=#53FFBC,blue=#80EBFF,pink=#FFCBE6,red=#FF4F5F",
     historyUpdateUrl: false,
@@ -1511,8 +1524,7 @@ class BasePreferences {
     AppOptions.setAll({
       [name]: value
     }, true);
-    const prefs = AppOptions.getAll(OptionKind.PREFERENCE);
-    await this._writeToStorage(prefs);
+    await this._writeToStorage(AppOptions.getAll(OptionKind.PREFERENCE));
   }
   async get(name) {
     await this.#initializedPromise;
@@ -3086,7 +3098,7 @@ class ExternalServices extends BaseExternalServices {
   }
 }
 class MLManager {
-  isEnabledFor(_name) {
+  async isEnabledFor(_name) {
     return false;
   }
   async guess() {
@@ -9987,6 +9999,7 @@ class PDFViewer {
   #enableHWA = false;
   #enableHighlightFloatingButton = false;
   #enablePermissions = false;
+  #enableUpdatedAddImage = false;
   #eventAbortController = null;
   #mlManager = null;
   #onPageRenderedCallback = null;
@@ -10027,6 +10040,7 @@ class PDFViewer {
     this.#annotationEditorMode = options.annotationEditorMode ?? AnnotationEditorType.NONE;
     this.#annotationEditorHighlightColors = options.annotationEditorHighlightColors || null;
     this.#enableHighlightFloatingButton = options.enableHighlightFloatingButton === true;
+    this.#enableUpdatedAddImage = options.enableUpdatedAddImage === true;
     this.imageResourcesPath = options.imageResourcesPath || "";
     this.enablePrintAutoRotate = options.enablePrintAutoRotate || false;
     this.removePageBorders = options.removePageBorders || false;
@@ -10432,7 +10446,7 @@ class PDFViewer {
         if (pdfDocument.isPureXfa) {
           console.warn("Warning: XFA-editing is not implemented.");
         } else if (isValidAnnotationEditorMode(mode)) {
-          this.#annotationEditorUIManager = new AnnotationEditorUIManager(this.container, viewer, this.#altTextManager, eventBus, pdfDocument, pageColors, this.#annotationEditorHighlightColors, this.#enableHighlightFloatingButton, this.#mlManager);
+          this.#annotationEditorUIManager = new AnnotationEditorUIManager(this.container, viewer, this.#altTextManager, eventBus, pdfDocument, pageColors, this.#annotationEditorHighlightColors, this.#enableHighlightFloatingButton, this.#enableUpdatedAddImage, this.#mlManager);
           eventBus.dispatch("annotationeditoruimanager", {
             source: this,
             uiManager: this.#annotationEditorUIManager
@@ -11460,11 +11474,11 @@ class PDFViewer {
     const updater = () => {
       this.#cleanupSwitchAnnotationEditorMode();
       this.#annotationEditorMode = mode;
+      this.#annotationEditorUIManager.updateMode(mode, editId, isFromKeyboard);
       eventBus.dispatch("annotationeditormodechanged", {
         source: this,
         mode
       });
-      this.#annotationEditorUIManager.updateMode(mode, editId, isFromKeyboard);
     };
     if (mode === AnnotationEditorType.NONE || this.#annotationEditorMode === AnnotationEditorType.NONE) {
       const isEditing = mode !== AnnotationEditorType.NONE;
@@ -12198,11 +12212,10 @@ const PDFViewerApplication = {
   l10n: null,
   annotationEditorParams: null,
   isInitialViewSet: false,
-  downloadComplete: false,
   isViewerEmbedded: window.parent !== window,
   url: "",
   baseUrl: "",
-  _allowedGlobalEventsPromise: null,
+  mlManager: null,
   _downloadUrl: "",
   _eventBusAbortController: null,
   _windowAbortController: null,
@@ -12222,11 +12235,9 @@ const PDFViewerApplication = {
   _printAnnotationStoragePromise: null,
   _touchInfo: null,
   _isCtrlKeyDown: false,
-  _nimbusDataPromise: null,
   _caretBrowsing: null,
   _isScrolling: false,
   async initialize(appConfig) {
-    let l10nPromise;
     this.appConfig = appConfig;
     try {
       await this.preferences.initializedPromise;
@@ -12248,8 +12259,7 @@ const PDFViewerApplication = {
     if (mode) {
       document.documentElement.classList.add(mode);
     }
-    l10nPromise = this.externalServices.createL10n();
-    this.l10n = await l10nPromise;
+    this.l10n = await this.externalServices.createL10n();
     document.getElementsByTagName("html")[0].dir = this.l10n.getDirection();
     this.l10n.translate(appConfig.appContainer || document.documentElement);
     if (this.isViewerEmbedded && AppOptions.get("externalLinkTarget") === LinkTarget.NONE) {
@@ -12399,6 +12409,7 @@ const PDFViewerApplication = {
       annotationEditorMode,
       annotationEditorHighlightColors: AppOptions.get("highlightEditorColors"),
       enableHighlightFloatingButton: AppOptions.get("enableHighlightFloatingButton"),
+      enableUpdatedAddImage: AppOptions.get("enableUpdatedAddImage"),
       imageResourcesPath: AppOptions.get("imageResourcesPath"),
       enablePrintAutoRotate: AppOptions.get("enablePrintAutoRotate"),
       maxCanvasPixels: AppOptions.get("maxCanvasPixels"),
@@ -12592,12 +12603,6 @@ const PDFViewerApplication = {
   get externalServices() {
     return shadow(this, "externalServices", new ExternalServices());
   },
-  get mlManager() {
-    const enableAltText = AppOptions.get("enableAltText");
-    return shadow(this, "mlManager", enableAltText === true ? new MLManager({
-      enableAltText
-    }) : null);
-  },
   get initialized() {
     return this._initializedCapability.settled;
   },
@@ -12678,12 +12683,10 @@ const PDFViewerApplication = {
     let title = pdfjs_getPdfFilenameFromUrl(url, "");
     if (!title) {
       try {
-        title = decodeURIComponent(getFilenameFromUrl(url)) || url;
-      } catch {
-        title = url;
-      }
+        title = decodeURIComponent(getFilenameFromUrl(url));
+      } catch {}
     }
-    this.setTitle(title);
+    this.setTitle(title || url);
   },
   setTitle(title = this._title) {
     this._title = title;
@@ -12729,7 +12732,6 @@ const PDFViewerApplication = {
     this.pdfLinkService.externalLinkEnabled = true;
     this.store = null;
     this.isInitialViewSet = false;
-    this.downloadComplete = false;
     this.url = "";
     this.baseUrl = "";
     this._downloadUrl = "";
@@ -12805,9 +12807,7 @@ const PDFViewerApplication = {
   async download(options = {}) {
     let data;
     try {
-      if (this.downloadComplete) {
-        data = await this.pdfDocument.getData();
-      }
+      data = await this.pdfDocument.getData();
     } catch {}
     this.downloadManager.download(data, this._downloadUrl, this._docFilename, options);
   },
@@ -12874,11 +12874,8 @@ const PDFViewerApplication = {
     return message;
   },
   progress(level) {
-    if (!this.loadingBar || this.downloadComplete) {
-      return;
-    }
     const percent = Math.round(level * 100);
-    if (percent <= this.loadingBar.percent) {
+    if (!this.loadingBar || percent <= this.loadingBar.percent) {
       return;
     }
     this.loadingBar.percent = percent;
@@ -12892,7 +12889,6 @@ const PDFViewerApplication = {
       length
     }) => {
       this._contentLength = length;
-      this.downloadComplete = true;
       this.loadingBar?.hide();
       firstPagePromise.then(() => {
         this.eventBus.dispatch("documentloaded", {
@@ -14399,6 +14395,12 @@ function webViewerReportTelemetry({
 }) {
   PDFViewerApplication.externalServices.reportTelemetry(details);
 }
+function webViewerSetPreference({
+  name,
+  value
+}) {
+  PDFViewerApplication.preferences.set(name, value);
+}
 
 ;// CONCATENATED MODULE: ./web/viewer.js
 
@@ -14406,7 +14408,7 @@ function webViewerReportTelemetry({
 
 
 const pdfjsVersion = "4.5.0";
-const pdfjsBuild = "5059187";
+const pdfjsBuild = "e92a6a1";
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,
