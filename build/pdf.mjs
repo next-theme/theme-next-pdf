@@ -363,7 +363,9 @@ const OPS = {
   paintImageXObjectRepeat: 88,
   paintImageMaskXObjectRepeat: 89,
   paintSolidColorImageMask: 90,
-  constructPath: 91
+  constructPath: 91,
+  setStrokeTransparent: 92,
+  setFillTransparent: 93
 };
 const PasswordResponses = {
   NEED_PASSWORD: 1,
@@ -913,7 +915,7 @@ class BaseCMapReaderFactory {
     name
   }) {
     if (!this.baseUrl) {
-      throw new Error('The CMap "baseUrl" parameter must be specified, ensure that ' + 'the "cMapUrl" and "cMapPacked" API parameters are provided.');
+      throw new Error("Ensure that the `cMapUrl` and `cMapPacked` API parameters are provided.");
     }
     if (!name) {
       throw new Error("CMap name must be specified.");
@@ -941,7 +943,7 @@ class BaseStandardFontDataFactory {
     filename
   }) {
     if (!this.baseUrl) {
-      throw new Error('The standard font "baseUrl" parameter must be specified, ensure that ' + 'the "standardFontDataUrl" API parameter is provided.');
+      throw new Error("Ensure that the `standardFontDataUrl` API parameter is provided.");
     }
     if (!filename) {
       throw new Error("Font filename must be specified.");
@@ -7734,14 +7736,17 @@ class CanvasGraphics {
     this.current.patternFill = true;
   }
   setStrokeRGBColor(r, g, b) {
-    const color = Util.makeHexColor(r, g, b);
-    this.ctx.strokeStyle = color;
-    this.current.strokeColor = color;
+    this.ctx.strokeStyle = this.current.strokeColor = Util.makeHexColor(r, g, b);
+  }
+  setStrokeTransparent() {
+    this.ctx.strokeStyle = this.current.strokeColor = "transparent";
   }
   setFillRGBColor(r, g, b) {
-    const color = Util.makeHexColor(r, g, b);
-    this.ctx.fillStyle = color;
-    this.current.fillColor = color;
+    this.ctx.fillStyle = this.current.fillColor = Util.makeHexColor(r, g, b);
+    this.current.patternFill = false;
+  }
+  setFillTransparent() {
+    this.ctx.fillStyle = this.current.fillColor = "transparent";
     this.current.patternFill = false;
   }
   _getPattern(objId, matrix = null) {
@@ -12720,7 +12725,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.5.0";
-const build = "e92a6a1";
+const build = "0ed4521";
 
 ;// CONCATENATED MODULE: ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -19707,7 +19712,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "4.5.0";
-const pdfjsBuild = "e92a6a1";
+const pdfjsBuild = "0ed4521";
 
 var __webpack_exports__AbortException = __webpack_exports__.AbortException;
 var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;

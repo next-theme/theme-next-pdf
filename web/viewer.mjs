@@ -535,15 +535,20 @@ function toggleExpandedBtn(button, toggle, view = null) {
 
 ;// CONCATENATED MODULE: ./web/app_options.js
 {
-  var compatibilityParams = Object.create(null);
+  var compatParams = new Map();
   const userAgent = navigator.userAgent || "";
   const platform = navigator.platform || "";
   const maxTouchPoints = navigator.maxTouchPoints || 1;
   const isAndroid = /Android/.test(userAgent);
   const isIOS = /\b(iPad|iPhone|iPod)(?=;)/.test(userAgent) || platform === "MacIntel" && maxTouchPoints > 1;
-  (function checkCanvasSizeLimitation() {
+  (function () {
     if (isIOS || isAndroid) {
-      compatibilityParams.maxCanvasPixels = 5242880;
+      compatParams.set("maxCanvasPixels", 5242880);
+    }
+  })();
+  (function () {
+    if (isAndroid) {
+      compatParams.set("useSystemFonts", false);
     }
   })();
 }
@@ -554,6 +559,13 @@ const OptionKind = {
   WORKER: 0x08,
   EVENT_DISPATCH: 0x10,
   PREFERENCE: 0x80
+};
+const Type = {
+  BOOLEAN: 0x01,
+  NUMBER: 0x02,
+  OBJECT: 0x04,
+  STRING: 0x08,
+  UNDEFINED: 0x10
 };
 const defaultOptions = {
   allowedGlobalEvents: {
@@ -569,7 +581,9 @@ const defaultOptions = {
     kind: OptionKind.BROWSER
   },
   localeProperties: {
-    value: null,
+    value: {
+      lang: navigator.language || "en-US"
+    },
     kind: OptionKind.BROWSER
   },
   nimbusDataStr: {
@@ -603,6 +617,10 @@ const defaultOptions = {
   toolbarDensity: {
     value: 0,
     kind: OptionKind.BROWSER + OptionKind.EVENT_DISPATCH
+  },
+  altTextLearnMoreUrl: {
+    value: "",
+    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
   },
   annotationEditorMode: {
     value: 0,
@@ -638,6 +656,10 @@ const defaultOptions = {
   },
   enableAltText: {
     value: false,
+    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+  },
+  enableGuessAltText: {
+    value: true,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE
   },
   enableHighlightEditor: {
@@ -792,6 +814,11 @@ const defaultOptions = {
     value: "../web/standard_fonts/",
     kind: OptionKind.API
   },
+  useSystemFonts: {
+    value: undefined,
+    kind: OptionKind.API,
+    type: Type.BOOLEAN + Type.UNDEFINED
+  },
   verbosity: {
     value: 1,
     kind: OptionKind.API
@@ -824,15 +851,11 @@ const defaultOptions = {
     value: false,
     kind: OptionKind.VIEWER
   };
-  defaultOptions.locale = {
-    value: navigator.language || "en-US",
-    kind: OptionKind.VIEWER
-  };
 }
-const userOptions = Object.create(null);
+const userOptions = new Map();
 {
-  for (const name in compatibilityParams) {
-    userOptions[name] = compatibilityParams[name];
+  for (const [name, value] of compatParams) {
+    userOptions.set(name, value);
   }
 }
 class AppOptions {
@@ -841,46 +864,42 @@ class AppOptions {
     throw new Error("Cannot initialize AppOptions.");
   }
   static get(name) {
-    return userOptions[name] ?? defaultOptions[name]?.value ?? undefined;
+    return userOptions.has(name) ? userOptions.get(name) : defaultOptions[name]?.value;
   }
   static getAll(kind = null, defaultOnly = false) {
     const options = Object.create(null);
     for (const name in defaultOptions) {
-      const defaultOption = defaultOptions[name];
-      if (kind && !(kind & defaultOption.kind)) {
+      const defaultOpt = defaultOptions[name];
+      if (kind && !(kind & defaultOpt.kind)) {
         continue;
       }
-      options[name] = defaultOnly ? defaultOption.value : userOptions[name] ?? defaultOption.value;
+      options[name] = !defaultOnly && userOptions.has(name) ? userOptions.get(name) : defaultOpt.value;
     }
     return options;
   }
   static set(name, value) {
-    const defaultOption = defaultOptions[name];
-    if (!defaultOption || typeof value !== typeof defaultOption.value) {
-      return;
-    }
-    userOptions[name] = value;
+    this.setAll({
+      [name]: value
+    });
   }
   static setAll(options, prefs = false) {
     let events;
     for (const name in options) {
-      const defaultOption = defaultOptions[name],
-        userOption = options[name];
-      if (!defaultOption || typeof userOption !== typeof defaultOption.value) {
+      const defaultOpt = defaultOptions[name],
+        userOpt = options[name];
+      if (!defaultOpt || !(typeof userOpt === typeof defaultOpt.value || Type[(typeof userOpt).toUpperCase()] & defaultOpt.type)) {
         continue;
       }
-      if (prefs) {
-        const {
-          kind
-        } = defaultOption;
-        if (!(kind & OptionKind.BROWSER || kind & OptionKind.PREFERENCE)) {
-          continue;
-        }
-        if (this.eventBus && kind & OptionKind.EVENT_DISPATCH) {
-          (events ||= new Map()).set(name, userOption);
-        }
+      const {
+        kind
+      } = defaultOpt;
+      if (prefs && !(kind & OptionKind.BROWSER || kind & OptionKind.PREFERENCE)) {
+        continue;
       }
-      userOptions[name] = userOption;
+      if (this.eventBus && kind & OptionKind.EVENT_DISPATCH) {
+        (events ||= new Map()).set(name, userOpt);
+      }
+      userOptions.set(name, userOpt);
     }
     if (events) {
       for (const [name, value] of events) {
@@ -891,21 +910,14 @@ class AppOptions {
       }
     }
   }
-  static remove(name) {
-    delete userOptions[name];
-    const val = compatibilityParams[name];
-    if (val !== undefined) {
-      userOptions[name] = val;
-    }
-  }
 }
 {
   AppOptions._checkDisablePreferences = () => {
     if (AppOptions.get("disablePreferences")) {
       return true;
     }
-    for (const name in userOptions) {
-      if (compatibilityParams[name] !== undefined) {
+    for (const [name] of userOptions) {
+      if (compatParams.has(name)) {
         continue;
       }
       console.warn("The Preferences may override manually set AppOptions; " + 'please use the "disablePreferences"-option to prevent that.');
@@ -1456,6 +1468,7 @@ class BaseExternalServices {
 
 class BasePreferences {
   #defaults = Object.freeze({
+    altTextLearnMoreUrl: "",
     annotationEditorMode: 0,
     annotationMode: 2,
     cursorToolOnLoad: 0,
@@ -1463,6 +1476,7 @@ class BasePreferences {
     defaultZoomValue: "",
     disablePageLabels: false,
     enableAltText: false,
+    enableGuessAltText: true,
     enableHighlightEditor: false,
     enableHighlightFloatingButton: false,
     enablePermissions: false,
@@ -3091,7 +3105,7 @@ class Preferences extends BasePreferences {
 }
 class ExternalServices extends BaseExternalServices {
   async createL10n() {
-    return new genericl10n_GenericL10n(AppOptions.get("locale"));
+    return new genericl10n_GenericL10n(AppOptions.get("localeProperties")?.lang);
   }
   createScripting() {
     return new GenericScripting(AppOptions.get("sandboxBundleSrc"));
@@ -3100,6 +3114,9 @@ class ExternalServices extends BaseExternalServices {
 class MLManager {
   async isEnabledFor(_name) {
     return false;
+  }
+  async deleteModel(_service) {
+    return null;
   }
   async guess() {
     return null;
@@ -12205,7 +12222,7 @@ const PDFViewerApplication = {
   store: null,
   downloadManager: null,
   overlayManager: null,
-  preferences: null,
+  preferences: new Preferences(),
   toolbar: null,
   secondaryToolbar: null,
   eventBus: null,
@@ -12348,7 +12365,9 @@ const PDFViewerApplication = {
       }
     }
     if (params.has("locale")) {
-      AppOptions.set("locale", params.get("locale"));
+      AppOptions.set("localeProperties", {
+        lang: params.get("locale")
+      });
     }
   },
   async _initializeViewerComponents() {
@@ -12526,7 +12545,6 @@ const PDFViewerApplication = {
     }
   },
   async run(config) {
-    this.preferences = new Preferences();
     await this.initialize(config);
     const {
       appConfig,
@@ -14408,7 +14426,7 @@ function webViewerSetPreference({
 
 
 const pdfjsVersion = "4.5.0";
-const pdfjsBuild = "e92a6a1";
+const pdfjsBuild = "0ed4521";
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,
