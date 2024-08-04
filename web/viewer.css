@@ -22,6 +22,9 @@
   --hover-filter:brightness(0.9);
   --focus-ring-color:#0060df;
   --focus-ring-outline:2px solid var(--focus-ring-color);
+  --link-fg-color:#0060df;
+  --link-hover-fg-color:#0250bb;
+  --separator-color:#f0f0f4;
 
   --textarea-border-color:#8f8f9d;
   --textarea-bg-color:white;
@@ -41,6 +44,7 @@
 
   --button-primary-bg-color:#0060df;
   --button-primary-fg-color:#fbfbfe;
+  --button-primary-border-color:var(--button-primary-bg-color);
   --button-primary-hover-bg-color:var(--button-primary-bg-color);
   --button-primary-hover-fg-color:var(--button-primary-fg-color);
   --button-primary-hover-border-color:var(--button-primary-hover-bg-color);
@@ -67,6 +71,9 @@
     --text-secondary-color:#cfcfd8;
     --focus-ring-color:#0df;
     --hover-filter:brightness(1.4);
+    --link-fg-color:#0df;
+    --link-hover-fg-color:#80ebff;
+    --separator-color:#52525e;
 
     --textarea-bg-color:#42414d;
 
@@ -88,6 +95,9 @@
     --text-secondary-color:#cfcfd8;
     --focus-ring-color:#0df;
     --hover-filter:brightness(1.4);
+    --link-fg-color:#0df;
+    --link-hover-fg-color:#80ebff;
+    --separator-color:#52525e;
 
     --textarea-bg-color:#42414d;
 
@@ -110,6 +120,9 @@
     --text-secondary-color:CanvasText;
     --hover-filter:none;
     --focus-ring-color:ButtonBorder;
+    --link-fg-color:LinkText;
+    --link-hover-fg-color:LinkText;
+    --separator-color:CanvasText;
 
     --textarea-border-color:ButtonBorder;
     --textarea-bg-color:Field;
@@ -136,6 +149,35 @@
 .dialog .mainContainer *:focus-visible{
       outline:var(--focus-ring-outline);
       outline-offset:2px;
+    }
+
+.dialog .mainContainer .title{
+      display:flex;
+      width:auto;
+      flex-direction:column;
+      justify-content:flex-end;
+      align-items:flex-start;
+      gap:12px;
+    }
+
+.dialog .mainContainer .title > span{
+        font-size:13px;
+        font-style:normal;
+        font-weight:590;
+        line-height:150%;
+      }
+
+.dialog .mainContainer .dialogSeparator{
+      width:100%;
+      height:1px;
+      margin-block:4px;
+      background-color:var(--separator-color);
+    }
+
+.dialog .mainContainer .dialogButtonsGroup{
+      display:flex;
+      gap:12px;
+      align-self:flex-end;
     }
 
 .dialog .mainContainer .radio{
@@ -187,7 +229,7 @@
           color:var(--text-secondary-color);
         }
 
-.dialog .mainContainer button{
+.dialog .mainContainer button:not(:is(.toggle-button, .closeButton)){
       border-radius:4px;
       border:1px solid;
       font:menu;
@@ -197,35 +239,43 @@
       height:32px;
     }
 
-.dialog .mainContainer button:hover{
+.dialog .mainContainer button:not(:is(.toggle-button, .closeButton)):hover{
         cursor:pointer;
         filter:var(--hover-filter);
       }
 
-.dialog .mainContainer button.secondaryButton{
+.dialog .mainContainer button.secondaryButton:not(:is(.toggle-button, .closeButton)){
         color:var(--button-secondary-fg-color);
         background-color:var(--button-secondary-bg-color);
         border-color:var(--button-secondary-border-color);
       }
 
-.dialog .mainContainer button.secondaryButton:hover{
+.dialog .mainContainer button.secondaryButton:not(:is(.toggle-button, .closeButton)):hover{
           color:var(--button-secondary-hover-fg-color);
           background-color:var(--button-secondary-hover-bg-color);
           border-color:var(--button-secondary-hover-border-color);
         }
 
-.dialog .mainContainer button.primaryButton{
-        color:var(--button-primary-hover-fg-color);
-        background-color:var(--button-primary-hover-bg-color);
-        border-color:var(--button-primary-hover-border-color);
+.dialog .mainContainer button.primaryButton:not(:is(.toggle-button, .closeButton)){
+        color:var(--button-primary-fg-color);
+        background-color:var(--button-primary-bg-color);
+        border-color:var(--button-primary-border-color);
         opacity:1;
       }
 
-.dialog .mainContainer button.primaryButton:hover{
+.dialog .mainContainer button.primaryButton:not(:is(.toggle-button, .closeButton)):hover{
           color:var(--button-primary-hover-fg-color);
           background-color:var(--button-primary-hover-bg-color);
           border-color:var(--button-primary-hover-border-color);
         }
+
+.dialog .mainContainer a{
+      color:var(--link-fg-color);
+    }
+
+.dialog .mainContainer a:hover{
+        color:var(--link-hover-fg-color);
+      }
 
 .dialog .mainContainer textarea{
       font:inherit;
@@ -247,6 +297,172 @@
 .dialog .mainContainer textarea:disabled{
         pointer-events:none;
         opacity:0.4;
+      }
+
+.dialog .mainContainer .messageBar{
+      --message-bar-warning-icon:url(images/messageBar_warning.svg);
+      --closing-button-icon:url(images/messageBar_closingButton.svg);
+
+      --message-bar-bg-color:#ffebcd;
+      --message-bar-fg-color:#15141a;
+      --message-bar-border-color:rgb(0 0 0 / 0.08);
+      --message-bar-icon-color:#cd411e;
+      --message-bar-close-button-border-radius:4px;
+      --message-bar-close-button-border:none;
+      --message-bar-close-button-color:var(--text-primary-color);
+      --message-bar-close-button-hover-bg-color:rgb(21 20 26 / 0.14);
+      --message-bar-close-button-active-bg-color:rgb(21 20 26 / 0.21);
+      --message-bar-close-button-focus-bg-color:rgb(21 20 26 / 0.07);
+      --message-bar-close-button-color-hover:var(--text-primary-color);
+
+      display:flex;
+      position:relative;
+      padding:12px 8px 12px 0;
+      flex-direction:column;
+      justify-content:center;
+      align-items:flex-start;
+      gap:8px;
+      align-self:stretch;
+
+      border-radius:4px;
+      border:1px solid var(--message-bar-border-color);
+      background:var(--message-bar-bg-color);
+      color:var(--message-bar-fg-color);
+    }
+
+@media (prefers-color-scheme: dark){
+
+:where(html:not(.is-light)) .dialog .mainContainer .messageBar{
+        --message-bar-bg-color:#5a3100;
+        --message-bar-fg-color:#fbfbfe;
+        --message-bar-border-color:rgb(255 255 255 / 0.08);
+        --message-bar-icon-color:#e49c49;
+        --message-bar-close-button-hover-bg-color:rgb(251 251 254 / 0.14);
+        --message-bar-close-button-active-bg-color:rgb(251 251 254 / 0.21);
+        --message-bar-close-button-focus-bg-color:rgb(251 251 254 / 0.07);
+    }
+      }
+
+:where(html.is-dark) .dialog .mainContainer .messageBar{
+        --message-bar-bg-color:#5a3100;
+        --message-bar-fg-color:#fbfbfe;
+        --message-bar-border-color:rgb(255 255 255 / 0.08);
+        --message-bar-icon-color:#e49c49;
+        --message-bar-close-button-hover-bg-color:rgb(251 251 254 / 0.14);
+        --message-bar-close-button-active-bg-color:rgb(251 251 254 / 0.21);
+        --message-bar-close-button-focus-bg-color:rgb(251 251 254 / 0.07);
+    }
+
+@media screen and (forced-colors: active){
+
+.dialog .mainContainer .messageBar{
+        --message-bar-bg-color:HighlightText;
+        --message-bar-fg-color:CanvasText;
+        --message-bar-border-color:CanvasText;
+        --message-bar-icon-color:CanvasText;
+        --message-bar-close-button-color:ButtonText;
+        --message-bar-close-button-border:1px solid ButtonText;
+        --message-bar-close-button-hover-bg-color:ButtonText;
+        --message-bar-close-button-active-bg-color:ButtonText;
+        --message-bar-close-button-focus-bg-color:ButtonText;
+        --message-bar-close-button-color-hover:HighlightText;
+    }
+      }
+
+.dialog .mainContainer .messageBar > div{
+        display:flex;
+        padding-inline-start:16px;
+        align-items:flex-start;
+        gap:8px;
+        align-self:stretch;
+      }
+
+.dialog .mainContainer .messageBar > div::before{
+          content:"";
+          display:inline-block;
+          width:16px;
+          height:16px;
+          -webkit-mask-image:var(--message-bar-warning-icon);
+                  mask-image:var(--message-bar-warning-icon);
+          -webkit-mask-size:cover;
+                  mask-size:cover;
+          background-color:var(--message-bar-icon-color);
+        }
+
+.dialog .mainContainer .messageBar > div > div{
+          display:flex;
+          flex-direction:column;
+          align-items:flex-start;
+          gap:8px;
+          flex:1 0 0;
+        }
+
+.dialog .mainContainer .messageBar > div > div .title{
+            font-size:13px;
+            font-weight:590;
+          }
+
+.dialog .mainContainer .messageBar > div > div .description{
+            font-size:13px;
+          }
+
+.dialog .mainContainer .messageBar .closeButton{
+        position:absolute;
+        width:32px;
+        height:32px;
+        inset-inline-end:8px;
+        inset-block-start:8px;
+        background:none;
+        border-radius:var(--message-bar-close-button-border-radius);
+        border:var(--message-bar-close-button-border);
+      }
+
+.dialog .mainContainer .messageBar .closeButton::before{
+          content:"";
+          display:inline-block;
+          width:16px;
+          height:16px;
+          -webkit-mask-image:var(--closing-button-icon);
+                  mask-image:var(--closing-button-icon);
+          -webkit-mask-size:cover;
+                  mask-size:cover;
+          background-color:var(--message-bar-close-button-color);
+        }
+
+.dialog .mainContainer .messageBar .closeButton:is(:hover, :active, :focus)::before{
+          background-color:var(--message-bar-close-button-color-hover);
+        }
+
+.dialog .mainContainer .messageBar .closeButton:hover{
+          background-color:var(--message-bar-close-button-hover-bg-color);
+        }
+
+.dialog .mainContainer .messageBar .closeButton:active{
+          background-color:var(--message-bar-close-button-active-bg-color);
+        }
+
+.dialog .mainContainer .messageBar .closeButton:focus{
+          background-color:var(--message-bar-close-button-focus-bg-color);
+        }
+
+.dialog .mainContainer .messageBar .closeButton > span{
+          display:inline-block;
+          width:0;
+          height:0;
+          overflow:hidden;
+        }
+
+.dialog .mainContainer .toggler{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      align-self:stretch;
+    }
+
+.dialog .mainContainer .toggler > .togglerLabel{
+        -webkit-user-select:none;
+           -moz-user-select:none;
+                user-select:none;
       }
 
 .textLayer{
@@ -364,9 +580,9 @@
             user-select:none;
   }
 
-.textLayer .endOfContent.active{
-      top:0;
-    }
+.textLayer.selecting .endOfContent{
+    top:0;
+  }
 
 .annotationLayer{
   --annotation-unfocused-field-background:url("data:image/svg+xml;charset=UTF-8,<svg width='1px' height='1px' xmlns='http://www.w3.org/2000/svg'><rect width='100%' height='100%' style='fill:rgba(0, 54, 255, 0.13);'/></svg>");
@@ -484,6 +700,10 @@
 .annotationLayer section:has(div.annotationContent) canvas.annotationContent{
         display:none;
       }
+
+.textLayer.selecting ~ .annotationLayer section{
+    pointer-events:none;
+  }
 
 .annotationLayer :is(.linkAnnotation, .buttonWidgetAnnotation.pushButton) > a{
     position:absolute;
@@ -1384,6 +1604,8 @@
   --editorInk-editing-cursor:url(images/cursor-editorInk.svg) 0 16, pointer;
   --editorHighlight-editing-cursor:url(images/cursor-editorTextHighlight.svg) 24 24, text;
   --editorFreeHighlight-editing-cursor:url(images/cursor-editorFreeHighlight.svg) 1 18, pointer;
+
+  --new-alt-text-warning-image:url(images/altText_warning.svg);
 }
 .visuallyHidden{
   position:absolute;
@@ -1409,6 +1631,10 @@
 
 .textLayer.highlighting.free span{
     cursor:var(--editorFreeHighlight-editing-cursor);
+  }
+
+#viewerContainer.pdfPresentationMode:fullscreen .noAltTextBadge{
+    display:none !important;
   }
 
 @media (min-resolution: 1.1dppx){
@@ -1537,6 +1763,10 @@
     --editor-toolbar-vert-offset:6px;
     --editor-toolbar-height:28px;
     --editor-toolbar-padding:2px;
+    --alt-text-done-color:#2ac3a2;
+    --alt-text-warning-color:#0090ed;
+    --alt-text-hover-done-color:var(--alt-text-done-color);
+    --alt-text-hover-warning-color:var(--alt-text-warning-color);
 
     display:flex;
     width:-moz-fit-content;
@@ -1568,6 +1798,8 @@
       --editor-toolbar-fg-color:#fbfbfe;
       --editor-toolbar-hover-bg-color:#52525e;
       --editor-toolbar-focus-outline-color:#0df;
+      --alt-text-done-color:#54ffbd;
+      --alt-text-warning-color:#80ebff;
   }
     }
 
@@ -1577,6 +1809,8 @@
       --editor-toolbar-fg-color:#fbfbfe;
       --editor-toolbar-hover-bg-color:#52525e;
       --editor-toolbar-focus-outline-color:#0df;
+      --alt-text-done-color:#54ffbd;
+      --alt-text-warning-color:#80ebff;
   }
 
 @media screen and (forced-colors: active){
@@ -1592,6 +1826,10 @@
       --editor-toolbar-hover-outline:2px solid var(--editor-toolbar-hover-border-color);
       --editor-toolbar-focus-outline-color:ButtonBorder;
       --editor-toolbar-shadow:none;
+      --alt-text-done-color:var(--editor-toolbar-fg-color);
+      --alt-text-warning-color:var(--editor-toolbar-fg-color);
+      --alt-text-hover-done-color:var(--editor-toolbar-hover-fg-color);
+      --alt-text-hover-warning-color:var(--editor-toolbar-hover-fg-color);
   }
     }
 
@@ -1768,6 +2006,34 @@
         }
 
 :is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .altText.new::before{
+            width:16px;
+            height:16px;
+            -webkit-mask-image:var(--new-alt-text-warning-image);
+                    mask-image:var(--new-alt-text-warning-image);
+            background-color:var(--alt-text-warning-color);
+            -webkit-mask-size:cover;
+                    mask-size:cover;
+          }
+
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .altText.new:hover::before{
+            background-color:var(--alt-text-hover-warning-color);
+          }
+
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .altText.new.done::before{
+              -webkit-mask-image:var(--alt-text-done-image);
+                      mask-image:var(--alt-text-done-image);
+              background-color:var(--alt-text-done-color);
+            }
+
+:is(.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .altText.new.done:hover::before{
+              background-color:var(--alt-text-hover-done-color);
+            }
+
+:is(.annotationEditorLayer
   :is(.freeTextEditor, .inkEditor, .stampEditor, .highlightEditor),.textLayer) .editToolbar .buttons .altText .tooltip{
           display:none;
         }
@@ -1905,6 +2171,64 @@
     top:0;
     left:0;
   }
+
+.annotationEditorLayer .stampEditor .noAltTextBadge{
+    --no-alt-text-badge-border-color:#f0f0f4;
+    --no-alt-text-badge-bg-color:#cfcfd8;
+    --no-alt-text-badge-fg-color:#5b5b66;
+
+    position:absolute;
+    inset-inline-end:5px;
+    inset-block-end:5px;
+    display:inline-flex;
+    width:32px;
+    height:32px;
+    padding:3px;
+    justify-content:center;
+    align-items:center;
+    pointer-events:none;
+    z-index:1;
+
+    border-radius:2px;
+    border:1px solid var(--no-alt-text-badge-border-color);
+    background:var(--no-alt-text-badge-bg-color);
+  }
+
+@media (prefers-color-scheme: dark){
+
+:where(html:not(.is-light)) .annotationEditorLayer .stampEditor .noAltTextBadge{
+      --no-alt-text-badge-border-color:#52525e;
+      --no-alt-text-badge-bg-color:#fbfbfe;
+      --no-alt-text-badge-fg-color:#15141a;
+  }
+    }
+
+:where(html.is-dark) .annotationEditorLayer .stampEditor .noAltTextBadge{
+      --no-alt-text-badge-border-color:#52525e;
+      --no-alt-text-badge-bg-color:#fbfbfe;
+      --no-alt-text-badge-fg-color:#15141a;
+  }
+
+@media screen and (forced-colors: active){
+
+.annotationEditorLayer .stampEditor .noAltTextBadge{
+      --no-alt-text-badge-border-color:ButtonText;
+      --no-alt-text-badge-bg-color:ButtonFace;
+      --no-alt-text-badge-fg-color:ButtonText;
+  }
+    }
+
+.annotationEditorLayer .stampEditor .noAltTextBadge::before{
+      content:"";
+      display:inline-block;
+      width:16px;
+      height:16px;
+      -webkit-mask-image:var(--new-alt-text-warning-image);
+              mask-image:var(--new-alt-text-warning-image);
+      -webkit-mask-size:cover;
+              mask-size:cover;
+      background-color:var(--no-alt-text-badge-fg-color);
+    }
 
 .annotationEditorLayer :is(.freeTextEditor, .inkEditor, .stampEditor) > .resizers{
       position:absolute;
@@ -2254,6 +2578,184 @@
       align-self:stretch;
     }
 
+.dialog.newAltText{
+  --new-alt-text-ai-disclaimer-icon:url(images/altText_disclaimer.svg);
+  --new-alt-text-spinner-icon:url(images/altText_spinner.svg);
+
+  width:80%;
+  max-width:570px;
+  min-width:300px;
+  padding:0;
+}
+
+.dialog.newAltText.noAi #newAltTextDisclaimer,
+    .dialog.newAltText.noAi #newAltTextCreateAutomatically{
+      display:none !important;
+    }
+
+.dialog.newAltText.aiInstalling #newAltTextCreateAutomatically{
+      display:none !important;
+    }
+
+.dialog.newAltText.aiInstalling #newAltTextDownloadModel{
+      display:flex !important;
+    }
+
+.dialog.newAltText.error #newAltTextNotNow{
+      display:none !important;
+    }
+
+.dialog.newAltText.error #newAltTextCancel{
+      display:inline-block !important;
+    }
+
+.dialog.newAltText:not(.error) #newAltTextError{
+    display:none !important;
+  }
+
+.dialog.newAltText #newAltTextContainer{
+    display:flex;
+    width:auto;
+    padding:16px;
+    flex-direction:column;
+    justify-content:flex-end;
+    align-items:flex-start;
+    gap:12px;
+    flex:0 1 auto;
+  }
+
+.dialog.newAltText #newAltTextContainer #mainContent{
+      display:flex;
+      justify-content:flex-end;
+      align-items:flex-start;
+      gap:12px;
+      align-self:stretch;
+      flex:1 1 auto;
+    }
+
+.dialog.newAltText #newAltTextContainer #mainContent #descriptionAndSettings{
+        display:flex;
+        flex-direction:column;
+        align-items:flex-start;
+        gap:16px;
+        flex:1 0 0;
+        align-self:stretch;
+      }
+
+.dialog.newAltText #newAltTextContainer #mainContent #descriptionInstruction{
+        display:flex;
+        flex-direction:column;
+        align-items:flex-start;
+        gap:8px;
+        align-self:stretch;
+        flex:1 1 auto;
+      }
+
+.dialog.newAltText #newAltTextContainer #mainContent #descriptionInstruction #newAltTextDescriptionContainer{
+          width:100%;
+          height:70px;
+          position:relative;
+        }
+
+.dialog.newAltText #newAltTextContainer #mainContent #descriptionInstruction #newAltTextDescriptionContainer textarea{
+            width:100%;
+            height:100%;
+            padding:8px;
+          }
+
+.dialog.newAltText #newAltTextContainer #mainContent #descriptionInstruction #newAltTextDescriptionContainer textarea::-moz-placeholder{
+              color:var(--text-secondary-color);
+            }
+
+.dialog.newAltText #newAltTextContainer #mainContent #descriptionInstruction #newAltTextDescriptionContainer textarea::placeholder{
+              color:var(--text-secondary-color);
+            }
+
+.dialog.newAltText #newAltTextContainer #mainContent #descriptionInstruction #newAltTextDescriptionContainer .altTextSpinner{
+            display:none;
+            position:absolute;
+            width:16px;
+            height:16px;
+            inset-inline-start:8px;
+            inset-block-start:8px;
+            -webkit-mask-size:cover;
+                    mask-size:cover;
+            background-color:var(--text-secondary-color);
+            pointer-events:none;
+          }
+
+.dialog.newAltText #newAltTextContainer #mainContent #descriptionInstruction #newAltTextDescriptionContainer.loading textarea::-moz-placeholder{
+              color:transparent;
+            }
+
+.dialog.newAltText #newAltTextContainer #mainContent #descriptionInstruction #newAltTextDescriptionContainer.loading textarea::placeholder{
+              color:transparent;
+            }
+
+.dialog.newAltText #newAltTextContainer #mainContent #descriptionInstruction #newAltTextDescriptionContainer.loading .altTextSpinner{
+              display:inline-block;
+              -webkit-mask-image:var(--new-alt-text-spinner-icon);
+                      mask-image:var(--new-alt-text-spinner-icon);
+            }
+
+.dialog.newAltText #newAltTextContainer #mainContent #descriptionInstruction #newAltTextDescription{
+          font-size:11px;
+        }
+
+.dialog.newAltText #newAltTextContainer #mainContent #descriptionInstruction #newAltTextDisclaimer{
+          display:flex;
+          align-items:center;
+          gap:4px;
+          align-self:stretch;
+          flex-wrap:wrap;
+          font-size:11px;
+        }
+
+.dialog.newAltText #newAltTextContainer #mainContent #descriptionInstruction #newAltTextDisclaimer::before{
+            content:"";
+            display:inline-block;
+            width:16px;
+            height:16px;
+            -webkit-mask-image:var(--new-alt-text-ai-disclaimer-icon);
+                    mask-image:var(--new-alt-text-ai-disclaimer-icon);
+            -webkit-mask-size:cover;
+                    mask-size:cover;
+            background-color:var(--text-secondary-color);
+          }
+
+.dialog.newAltText #newAltTextContainer #mainContent #newAltTextDownloadModel{
+        display:flex;
+        align-items:center;
+        gap:4px;
+        align-self:stretch;
+      }
+
+.dialog.newAltText #newAltTextContainer #mainContent #newAltTextDownloadModel::before{
+          content:"";
+          display:inline-block;
+          width:16px;
+          height:16px;
+          -webkit-mask-image:var(--new-alt-text-spinner-icon);
+                  mask-image:var(--new-alt-text-spinner-icon);
+          -webkit-mask-size:cover;
+                  mask-size:cover;
+          background-color:var(--text-secondary-color);
+        }
+
+.dialog.newAltText #newAltTextContainer #mainContent #newAltTextImagePreview{
+        width:180px;
+        aspect-ratio:1;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        flex:0 0 auto;
+      }
+
+.dialog.newAltText #newAltTextContainer #mainContent #newAltTextImagePreview > canvas{
+          max-width:100%;
+          max-height:100%;
+        }
+
 .colorPicker{
   --hover-outline-color:#0250bb;
   --selected-outline-color:#0060df;
@@ -2602,6 +3104,63 @@
       align-self:stretch;
     }
 
+#altTextSettingsDialog{
+  padding:16px;
+}
+
+#altTextSettingsDialog #altTextSettingsContainer{
+    display:flex;
+    width:573px;
+    flex-direction:column;
+    gap:16px;
+  }
+
+#altTextSettingsDialog #altTextSettingsContainer .mainContainer{
+      gap:16px;
+    }
+
+#altTextSettingsDialog #altTextSettingsContainer .description{
+      color:var(--text-secondary-color);
+    }
+
+#altTextSettingsDialog #altTextSettingsContainer #aiModelSettings{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+#altTextSettingsDialog #altTextSettingsContainer #aiModelSettings button{
+        width:-moz-fit-content;
+        width:fit-content;
+      }
+
+#altTextSettingsDialog #altTextSettingsContainer #aiModelSettings.download #deleteModelButton{
+          display:none;
+        }
+
+#altTextSettingsDialog #altTextSettingsContainer #aiModelSettings:not(.download) #downloadModelButton{
+          display:none;
+        }
+
+#altTextSettingsDialog #altTextSettingsContainer #automaticAltText,
+    #altTextSettingsDialog #altTextSettingsContainer #altTextEditor{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
+#altTextSettingsDialog #altTextSettingsContainer #createModelDescription,
+    #altTextSettingsDialog #altTextSettingsContainer #aiModelSettings,
+    #altTextSettingsDialog #altTextSettingsContainer #showAltTextDialogDescription{
+      padding-inline-start:40px;
+    }
+
+#altTextSettingsDialog #altTextSettingsContainer #automaticSettings{
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+    }
+
 :root{
   --viewer-container-height:0;
   --pdfViewer-padding-bottom:0;
@@ -2811,6 +3370,7 @@
   --toolbar-border-color:rgb(184 184 184);
   --toolbar-box-shadow:0 1px 0 var(--toolbar-border-color);
   --toolbar-border-bottom:none;
+  --toolbar-height:32px;
   --toolbarSidebar-box-shadow:inset calc(-1px * var(--dir-factor)) 0 0 rgb(0 0 0 / 0.25), 0 1px 0 rgb(0 0 0 / 0.15), 0 0 1px rgb(0 0 0 / 0.1);
   --toolbarSidebar-border-bottom:none;
   --button-hover-color:rgb(221 222 223);
@@ -2880,6 +3440,9 @@
   --secondaryToolbarButton-spreadNone-icon:url(images/secondaryToolbarButton-spreadNone.svg);
   --secondaryToolbarButton-spreadOdd-icon:url(images/secondaryToolbarButton-spreadOdd.svg);
   --secondaryToolbarButton-spreadEven-icon:url(images/secondaryToolbarButton-spreadEven.svg);
+  --secondaryToolbarButton-imageAltTextSettings-icon:var(
+    --toolbarButton-editorStamp-icon
+  );
   --secondaryToolbarButton-documentProperties-icon:url(images/secondaryToolbarButton-documentProperties.svg);
   --editorParams-stampAddImage-icon:url(images/toolbarButton-zoomIn.svg);
 }
@@ -3071,7 +3634,7 @@ body.wait::before{
 
 #sidebarContainer{
   position:absolute;
-  inset-block:32px 0;
+  inset-block:var(--toolbar-height) 0;
   inset-inline-start:calc(-1 * var(--sidebar-width));
   width:var(--sidebar-width);
   visibility:hidden;
@@ -3098,7 +3661,7 @@ body.wait::before{
 }
 
 #sidebarContent{
-  inset-block:32px 0;
+  inset-block:var(--toolbar-height) 0;
   inset-inline-start:0;
   overflow:auto;
   position:absolute;
@@ -3109,7 +3672,7 @@ body.wait::before{
 #viewerContainer{
   overflow:auto;
   position:absolute;
-  inset:32px 0 0;
+  inset:var(--toolbar-height) 0 0;
   outline:none;
 }
 #viewerContainer:not(.pdfPresentationMode){
@@ -3143,7 +3706,7 @@ body.wait::before{
 
 #toolbarSidebar{
   width:100%;
-  height:32px;
+  height:var(--toolbar-height);
   background-color:var(--sidebar-toolbar-bg-color);
   box-shadow:var(--toolbarSidebar-box-shadow);
   border-bottom:var(--toolbarSidebar-border-bottom);
@@ -3163,14 +3726,14 @@ body.wait::before{
 .secondaryToolbar,
 .editorParamsToolbar{
   position:relative;
-  height:32px;
+  height:var(--toolbar-height);
   background-color:var(--toolbar-bg-color);
   box-shadow:var(--toolbar-box-shadow);
   border-bottom:var(--toolbar-border-bottom);
 }
 
 #toolbarViewer{
-  height:32px;
+  height:var(--toolbar-height);
 }
 
 #loadingBar{
@@ -3245,7 +3808,7 @@ body.wait::before{
 .findbar,
 .secondaryToolbar,
 .editorParamsToolbar{
-  top:32px;
+  top:var(--toolbar-height);
   position:absolute;
   z-index:30000;
   height:auto;
@@ -3264,7 +3827,7 @@ body.wait::before{
   background-color:var(--toolbar-bg-color);
 }
 .findbar > div{
-  height:32px;
+  height:var(--toolbar-height);
 }
 .findbar > div#findbarInputContainer{
   margin-inline-end:4px;
@@ -3909,6 +4472,11 @@ a:is(.toolbarButton, .secondaryToolbarButton)[href="#"]{
 #documentProperties::before{
   -webkit-mask-image:var(--secondaryToolbarButton-documentProperties-icon);
           mask-image:var(--secondaryToolbarButton-documentProperties-icon);
+}
+
+#imageAltTextSettings::before{
+  -webkit-mask-image:var(--secondaryToolbarButton-imageAltTextSettings-icon);
+          mask-image:var(--secondaryToolbarButton-imageAltTextSettings-icon);
 }
 
 .verticalToolbarSeparator{
