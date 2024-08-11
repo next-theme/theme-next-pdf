@@ -2243,6 +2243,7 @@ class AnnotationEditorUIManager {
   #annotationStorage = null;
   #changedExistingAnnotations = null;
   #commandManager = new CommandManager();
+  #copyPasteAC = null;
   #currentPageIndex = 0;
   #deletedAnnotationsElementIds = new Set();
   #draggingEditors = null;
@@ -2253,12 +2254,14 @@ class AnnotationEditorUIManager {
   #enableNewAltTextWhenAddingImage = false;
   #filterFactory = null;
   #focusMainContainerTimeoutId = null;
+  #focusManagerAC = null;
   #highlightColors = null;
   #highlightWhenShiftUp = false;
   #highlightToolbar = null;
   #idManager = new IdManager();
   #isEnabled = false;
   #isWaiting = false;
+  #keyboardManagerAC = null;
   #lastActiveElement = null;
   #mainHighlightColorPicker = null;
   #mlManager = null;
@@ -2267,18 +2270,6 @@ class AnnotationEditorUIManager {
   #selectedTextNode = null;
   #pageColors = null;
   #showAllStates = null;
-  #boundBlur = this.blur.bind(this);
-  #boundFocus = this.focus.bind(this);
-  #boundCopy = this.copy.bind(this);
-  #boundCut = this.cut.bind(this);
-  #boundPaste = this.paste.bind(this);
-  #boundKeydown = this.keydown.bind(this);
-  #boundKeyup = this.keyup.bind(this);
-  #boundOnEditingAction = this.onEditingAction.bind(this);
-  #boundOnPageChanging = this.onPageChanging.bind(this);
-  #boundOnScaleChanging = this.onScaleChanging.bind(this);
-  #boundOnSetPreference = this.onSetPreference.bind(this);
-  #boundOnRotationChanging = this.onRotationChanging.bind(this);
   #previousStates = {
     isEditing: false,
     isEmpty: true,
@@ -2357,19 +2348,19 @@ class AnnotationEditorUIManager {
     this.#viewer = viewer;
     this.#altTextManager = altTextManager;
     this._eventBus = eventBus;
-    this._eventBus._on("editingaction", this.#boundOnEditingAction, {
+    this._eventBus._on("editingaction", this.onEditingAction.bind(this), {
       signal
     });
-    this._eventBus._on("pagechanging", this.#boundOnPageChanging, {
+    this._eventBus._on("pagechanging", this.onPageChanging.bind(this), {
       signal
     });
-    this._eventBus._on("scalechanging", this.#boundOnScaleChanging, {
+    this._eventBus._on("scalechanging", this.onScaleChanging.bind(this), {
       signal
     });
-    this._eventBus._on("rotationchanging", this.#boundOnRotationChanging, {
+    this._eventBus._on("rotationchanging", this.onRotationChanging.bind(this), {
       signal
     });
-    this._eventBus._on("setpreference", this.#boundOnSetPreference, {
+    this._eventBus._on("setpreference", this.onSetPreference.bind(this), {
       signal
     });
     this.#addSelectionListener();
@@ -2413,6 +2404,9 @@ class AnnotationEditorUIManager {
       clearTimeout(this.#translationTimeoutId);
       this.#translationTimeoutId = null;
     }
+  }
+  combinedSignal(ac) {
+    return AbortSignal.any([this._signal, ac.signal]);
   }
   get mlManager() {
     return this.#mlManager;
@@ -2641,14 +2635,14 @@ class AnnotationEditorUIManager {
     if (!this.isShiftKeyDown) {
       const activeLayer = this.#mode === AnnotationEditorType.HIGHLIGHT ? this.#getLayerForTextLayer(textLayer) : null;
       activeLayer?.toggleDrawing();
-      const signal = this._signal;
+      const ac = new AbortController();
+      const signal = this.combinedSignal(ac);
       const pointerup = e => {
         if (e.type === "pointerup" && e.button !== 0) {
           return;
         }
+        ac.abort();
         activeLayer?.toggleDrawing(true);
-        window.removeEventListener("pointerup", pointerup);
-        window.removeEventListener("blur", pointerup);
         if (e.type === "pointerup") {
           this.#onSelectEnd("main_toolbar");
         }
@@ -2674,17 +2668,21 @@ class AnnotationEditorUIManager {
     });
   }
   #addFocusManager() {
-    const signal = this._signal;
-    window.addEventListener("focus", this.#boundFocus, {
+    if (this.#focusManagerAC) {
+      return;
+    }
+    this.#focusManagerAC = new AbortController();
+    const signal = this.combinedSignal(this.#focusManagerAC);
+    window.addEventListener("focus", this.focus.bind(this), {
       signal
     });
-    window.addEventListener("blur", this.#boundBlur, {
+    window.addEventListener("blur", this.blur.bind(this), {
       signal
     });
   }
   #removeFocusManager() {
-    window.removeEventListener("focus", this.#boundFocus);
-    window.removeEventListener("blur", this.#boundBlur);
+    this.#focusManagerAC?.abort();
+    this.#focusManagerAC = null;
   }
   blur() {
     this.isShiftKeyDown = false;
@@ -2721,34 +2719,41 @@ class AnnotationEditorUIManager {
     lastActiveElement.focus();
   }
   #addKeyboardManager() {
-    const signal = this._signal;
-    window.addEventListener("keydown", this.#boundKeydown, {
+    if (this.#keyboardManagerAC) {
+      return;
+    }
+    this.#keyboardManagerAC = new AbortController();
+    const signal = this.combinedSignal(this.#keyboardManagerAC);
+    window.addEventListener("keydown", this.keydown.bind(this), {
       signal
     });
-    window.addEventListener("keyup", this.#boundKeyup, {
+    window.addEventListener("keyup", this.keyup.bind(this), {
       signal
     });
   }
   #removeKeyboardManager() {
-    window.removeEventListener("keydown", this.#boundKeydown);
-    window.removeEventListener("keyup", this.#boundKeyup);
+    this.#keyboardManagerAC?.abort();
+    this.#keyboardManagerAC = null;
   }
   #addCopyPasteListeners() {
-    const signal = this._signal;
-    document.addEventListener("copy", this.#boundCopy, {
+    if (this.#copyPasteAC) {
+      return;
+    }
+    this.#copyPasteAC = new AbortController();
+    const signal = this.combinedSignal(this.#copyPasteAC);
+    document.addEventListener("copy", this.copy.bind(this), {
       signal
     });
-    document.addEventListener("cut", this.#boundCut, {
+    document.addEventListener("cut", this.cut.bind(this), {
       signal
     });
-    document.addEventListener("paste", this.#boundPaste, {
+    document.addEventListener("paste", this.paste.bind(this), {
       signal
     });
   }
   #removeCopyPasteListeners() {
-    document.removeEventListener("copy", this.#boundCopy);
-    document.removeEventListener("cut", this.#boundCut);
-    document.removeEventListener("paste", this.#boundPaste);
+    this.#copyPasteAC?.abort();
+    this.#copyPasteAC = null;
   }
   #addDragAndDropListeners() {
     const signal = this._signal;
@@ -3616,6 +3621,12 @@ class AltText {
     const onClick = event => {
       event.preventDefault();
       this.#editor._uiManager.editAltText(this.#editor);
+      if (this.#useNewAltTextFlow) {
+        this.#editor._reportTelemetry({
+          action: "pdfjs.image.alt_text.image_status_label_clicked",
+          label: this.#label
+        });
+      }
     };
     altText.addEventListener("click", onClick, {
       capture: true,
@@ -3631,6 +3642,9 @@ class AltText {
     });
     await this.#setState();
     return altText;
+  }
+  get #label() {
+    return this.#altText && "added" || this.#altText === null && this.guessedText && "review" || "missing";
   }
   finish() {
     if (!this.#altTextButton) {
@@ -3740,7 +3754,12 @@ class AltText {
       return;
     }
     if (this.#useNewAltTextFlow) {
-      const type = this.#altText && "added" || this.#altText === null && this.guessedText && "to-review" || "missing";
+      const label = this.#label;
+      const type = label === "review" ? "to-review" : label;
+      this.#editor._reportTelemetry({
+        action: "pdfjs.image.alt_text.image_status_label_displayed",
+        label
+      });
       button.classList.toggle("done", !!this.#altText);
       AltText._l10nPromise.get(`pdfjs-editor-new-alt-text-${type}-button-label`).then(msg => {
         button.setAttribute("aria-label", msg);
@@ -3825,8 +3844,7 @@ class AnnotationEditor {
   #keepAspectRatio = false;
   #resizersDiv = null;
   #savedDimensions = null;
-  #boundFocusin = this.focusin.bind(this);
-  #boundFocusout = this.focusout.bind(this);
+  #focusAC = null;
   #focusedResizerName = "";
   #hasBeenClicked = false;
   #initialPosition = null;
@@ -4273,17 +4291,16 @@ class AnnotationEditor {
       return;
     }
     this.#altText?.toggle(false);
-    const boundResizerPointermove = this.#resizerPointermove.bind(this, name);
     const savedDraggable = this._isDraggable;
     this._isDraggable = false;
-    const signal = this._uiManager._signal;
-    const pointerMoveOptions = {
+    const ac = new AbortController();
+    const signal = this._uiManager.combinedSignal(ac);
+    this.parent.togglePointerEvents(false);
+    window.addEventListener("pointermove", this.#resizerPointermove.bind(this, name), {
       passive: true,
       capture: true,
       signal
-    };
-    this.parent.togglePointerEvents(false);
-    window.addEventListener("pointermove", boundResizerPointermove, pointerMoveOptions);
+    });
     window.addEventListener("contextmenu", noContextMenu, {
       signal
     });
@@ -4295,13 +4312,10 @@ class AnnotationEditor {
     const savedCursor = this.div.style.cursor;
     this.div.style.cursor = this.parent.div.style.cursor = window.getComputedStyle(event.target).cursor;
     const pointerUpCallback = () => {
+      ac.abort();
       this.parent.togglePointerEvents(true);
       this.#altText?.toggle(true);
       this._isDraggable = savedDraggable;
-      window.removeEventListener("pointerup", pointerUpCallback);
-      window.removeEventListener("blur", pointerUpCallback);
-      window.removeEventListener("pointermove", boundResizerPointermove, pointerMoveOptions);
-      window.removeEventListener("contextmenu", noContextMenu);
       this.parent.div.style.cursor = savedParentCursor;
       this.div.style.cursor = savedCursor;
       this.#addResizeToUndoStack(savedX, savedY, savedWidth, savedHeight);
@@ -4500,13 +4514,7 @@ class AnnotationEditor {
       this.div.classList.add("hidden");
     }
     this.setInForeground();
-    const signal = this._uiManager._signal;
-    this.div.addEventListener("focusin", this.#boundFocusin, {
-      signal
-    });
-    this.div.addEventListener("focusout", this.#boundFocusout, {
-      signal
-    });
+    this.#addFocusListeners();
     const [parentWidth, parentHeight] = this.parentDimensions;
     if (this.parentRotation % 180 !== 0) {
       this.div.style.maxWidth = `${(100 * parentHeight / parentWidth).toFixed(2)}%`;
@@ -4545,18 +4553,13 @@ class AnnotationEditor {
   #setUpDragSession(event) {
     const isSelected = this._uiManager.isSelected(this);
     this._uiManager.setUpDragSession();
-    let pointerMoveOptions, pointerMoveCallback;
-    const signal = this._uiManager._signal;
+    const ac = new AbortController();
+    const signal = this._uiManager.combinedSignal(ac);
     if (isSelected) {
       this.div.classList.add("moving");
-      pointerMoveOptions = {
-        passive: true,
-        capture: true,
-        signal
-      };
       this.#prevDragX = event.clientX;
       this.#prevDragY = event.clientY;
-      pointerMoveCallback = e => {
+      const pointerMoveCallback = e => {
         const {
           clientX: x,
           clientY: y
@@ -4566,14 +4569,16 @@ class AnnotationEditor {
         this.#prevDragY = y;
         this._uiManager.dragSelectedEditors(tx, ty);
       };
-      window.addEventListener("pointermove", pointerMoveCallback, pointerMoveOptions);
+      window.addEventListener("pointermove", pointerMoveCallback, {
+        passive: true,
+        capture: true,
+        signal
+      });
     }
     const pointerUpCallback = () => {
-      window.removeEventListener("pointerup", pointerUpCallback);
-      window.removeEventListener("blur", pointerUpCallback);
+      ac.abort();
       if (isSelected) {
         this.div.classList.remove("moving");
-        window.removeEventListener("pointermove", pointerMoveCallback, pointerMoveOptions);
       }
       this.#hasBeenClicked = false;
       if (!this._uiManager.endDragSession()) {
@@ -4661,14 +4666,21 @@ class AnnotationEditor {
   needsToBeRebuilt() {
     return this.div && !this.isAttachedToDOM;
   }
+  #addFocusListeners() {
+    if (this.#focusAC || !this.div) {
+      return;
+    }
+    this.#focusAC = new AbortController();
+    const signal = this._uiManager.combinedSignal(this.#focusAC);
+    this.div.addEventListener("focusin", this.focusin.bind(this), {
+      signal
+    });
+    this.div.addEventListener("focusout", this.focusout.bind(this), {
+      signal
+    });
+  }
   rebuild() {
-    const signal = this._uiManager._signal;
-    this.div?.addEventListener("focusin", this.#boundFocusin, {
-      signal
-    });
-    this.div?.addEventListener("focusout", this.#boundFocusout, {
-      signal
-    });
+    this.#addFocusListeners();
   }
   rotate(_angle) {}
   serialize(isForCopying = false, context = null) {
@@ -4694,8 +4706,8 @@ class AnnotationEditor {
     return !!this.annotationElementId && (this.deleted || this.serialize() !== null);
   }
   remove() {
-    this.div.removeEventListener("focusin", this.#boundFocusin);
-    this.div.removeEventListener("focusout", this.#boundFocusout);
+    this.#focusAC?.abort();
+    this.#focusAC = null;
     if (!this.isEmpty()) {
       this.commit();
     }
@@ -11853,31 +11865,29 @@ class PDFWorker {
   static #isWorkerDisabled = false;
   static #workerPorts;
   static {
-    {
-      if (isNodeJS) {
-        this.#isWorkerDisabled = true;
-        GlobalWorkerOptions.workerSrc ||= "./pdf.worker.mjs";
-      }
-      this._isSameOrigin = (baseUrl, otherUrl) => {
-        let base;
-        try {
-          base = new URL(baseUrl);
-          if (!base.origin || base.origin === "null") {
-            return false;
-          }
-        } catch {
+    if (isNodeJS) {
+      this.#isWorkerDisabled = true;
+      GlobalWorkerOptions.workerSrc ||= "./pdf.worker.mjs";
+    }
+    this._isSameOrigin = (baseUrl, otherUrl) => {
+      let base;
+      try {
+        base = new URL(baseUrl);
+        if (!base.origin || base.origin === "null") {
           return false;
         }
-        const other = new URL(otherUrl, base);
-        return base.origin === other.origin;
-      };
-      this._createCDNWrapper = url => {
-        const wrapper = `await import("${url}");`;
-        return URL.createObjectURL(new Blob([wrapper], {
-          type: "text/javascript"
-        }));
-      };
-    }
+      } catch {
+        return false;
+      }
+      const other = new URL(otherUrl, base);
+      return base.origin === other.origin;
+    };
+    this._createCDNWrapper = url => {
+      const wrapper = `await import("${url}");`;
+      return URL.createObjectURL(new Blob([wrapper], {
+        type: "text/javascript"
+      }));
+    };
   }
   constructor({
     name = null,
@@ -12847,7 +12857,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.5.0";
-const build = "c60c0d1";
+const build = "e44e4db";
 
 ;// CONCATENATED MODULE: ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -15686,14 +15696,10 @@ class AnnotationLayer {
 
 const EOL_PATTERN = /\r\n?|\n/g;
 class FreeTextEditor extends AnnotationEditor {
-  #boundEditorDivBlur = this.editorDivBlur.bind(this);
-  #boundEditorDivFocus = this.editorDivFocus.bind(this);
-  #boundEditorDivInput = this.editorDivInput.bind(this);
-  #boundEditorDivKeydown = this.editorDivKeydown.bind(this);
-  #boundEditorDivPaste = this.editorDivPaste.bind(this);
   #color;
   #content = "";
   #editorDivId = `${this.id}-editor`;
+  #editModeAC = null;
   #fontSize;
   #initialData = null;
   static _freeTextDefaultContent = "";
@@ -15839,20 +15845,21 @@ class FreeTextEditor extends AnnotationEditor {
     this.editorDiv.contentEditable = true;
     this._isDraggable = false;
     this.div.removeAttribute("aria-activedescendant");
-    const signal = this._uiManager._signal;
-    this.editorDiv.addEventListener("keydown", this.#boundEditorDivKeydown, {
+    this.#editModeAC = new AbortController();
+    const signal = this._uiManager.combinedSignal(this.#editModeAC);
+    this.editorDiv.addEventListener("keydown", this.editorDivKeydown.bind(this), {
       signal
     });
-    this.editorDiv.addEventListener("focus", this.#boundEditorDivFocus, {
+    this.editorDiv.addEventListener("focus", this.editorDivFocus.bind(this), {
       signal
     });
-    this.editorDiv.addEventListener("blur", this.#boundEditorDivBlur, {
+    this.editorDiv.addEventListener("blur", this.editorDivBlur.bind(this), {
       signal
     });
-    this.editorDiv.addEventListener("input", this.#boundEditorDivInput, {
+    this.editorDiv.addEventListener("input", this.editorDivInput.bind(this), {
       signal
     });
-    this.editorDiv.addEventListener("paste", this.#boundEditorDivPaste, {
+    this.editorDiv.addEventListener("paste", this.editorDivPaste.bind(this), {
       signal
     });
   }
@@ -15866,11 +15873,8 @@ class FreeTextEditor extends AnnotationEditor {
     this.editorDiv.contentEditable = false;
     this.div.setAttribute("aria-activedescendant", this.#editorDivId);
     this._isDraggable = true;
-    this.editorDiv.removeEventListener("keydown", this.#boundEditorDivKeydown);
-    this.editorDiv.removeEventListener("focus", this.#boundEditorDivFocus);
-    this.editorDiv.removeEventListener("blur", this.#boundEditorDivBlur);
-    this.editorDiv.removeEventListener("input", this.#boundEditorDivInput);
-    this.editorDiv.removeEventListener("paste", this.#boundEditorDivPaste);
+    this.#editModeAC?.abort();
+    this.#editModeAC = null;
     this.div.focus({
       preventScroll: true
     });
@@ -17138,7 +17142,6 @@ class HighlightEditor extends AnnotationEditor {
   #highlightOutlines = null;
   #id = null;
   #isFreeHighlight = false;
-  #boundKeydown = this.#keydown.bind(this);
   #lastPoint = null;
   #opacity;
   #outlineId = null;
@@ -17531,7 +17534,7 @@ class HighlightEditor extends AnnotationEditor {
     if (this.#isFreeHighlight) {
       div.classList.add("free");
     } else {
-      this.div.addEventListener("keydown", this.#boundKeydown, {
+      this.div.addEventListener("keydown", this.#keydown.bind(this), {
         signal: this._uiManager._signal
       });
     }
@@ -17649,25 +17652,14 @@ class HighlightEditor extends AnnotationEditor {
       width: parentWidth,
       height: parentHeight
     } = textLayer.getBoundingClientRect();
-    const pointerMove = e => {
-      this.#highlightMove(parent, e);
-    };
-    const signal = parent._signal;
-    const pointerDownOptions = {
-      capture: true,
-      passive: false,
-      signal
-    };
+    const ac = new AbortController();
+    const signal = parent.combinedSignal(ac);
     const pointerDown = e => {
       e.preventDefault();
       e.stopPropagation();
     };
     const pointerUpCallback = e => {
-      textLayer.removeEventListener("pointermove", pointerMove);
-      window.removeEventListener("blur", pointerUpCallback);
-      window.removeEventListener("pointerup", pointerUpCallback);
-      window.removeEventListener("pointerdown", pointerDown, pointerDownOptions);
-      window.removeEventListener("contextmenu", noContextMenu);
+      ac.abort();
       this.#endHighlight(parent, e);
     };
     window.addEventListener("blur", pointerUpCallback, {
@@ -17676,11 +17668,15 @@ class HighlightEditor extends AnnotationEditor {
     window.addEventListener("pointerup", pointerUpCallback, {
       signal
     });
-    window.addEventListener("pointerdown", pointerDown, pointerDownOptions);
+    window.addEventListener("pointerdown", pointerDown, {
+      capture: true,
+      passive: false,
+      signal
+    });
     window.addEventListener("contextmenu", noContextMenu, {
       signal
     });
-    textLayer.addEventListener("pointermove", pointerMove, {
+    textLayer.addEventListener("pointermove", this.#highlightMove.bind(this, parent), {
       signal
     });
     this._freeHighlight = new FreeOutliner({
@@ -17769,16 +17765,14 @@ class HighlightEditor extends AnnotationEditor {
 class InkEditor extends AnnotationEditor {
   #baseHeight = 0;
   #baseWidth = 0;
-  #boundCanvasPointermove = this.canvasPointermove.bind(this);
-  #boundCanvasPointerleave = this.canvasPointerleave.bind(this);
-  #boundCanvasPointerup = this.canvasPointerup.bind(this);
-  #boundCanvasPointerdown = this.canvasPointerdown.bind(this);
   #canvasContextMenuTimeoutId = null;
   #currentPath2D = new Path2D();
   #disableEditing = false;
+  #drawingAC = null;
   #hasSomethingToDraw = false;
   #isCanvasInitialized = false;
   #observer = null;
+  #pointerdownAC = null;
   #realWidth = 0;
   #realHeight = 0;
   #requestFrameCallback = null;
@@ -17945,9 +17939,7 @@ class InkEditor extends AnnotationEditor {
     }
     super.enableEditMode();
     this._isDraggable = false;
-    this.canvas.addEventListener("pointerdown", this.#boundCanvasPointerdown, {
-      signal: this._uiManager._signal
-    });
+    this.#addPointerdownListener();
   }
   disableEditMode() {
     if (!this.isInEditMode() || this.canvas === null) {
@@ -17956,7 +17948,7 @@ class InkEditor extends AnnotationEditor {
     super.disableEditMode();
     this._isDraggable = !this.isEmpty();
     this.div.classList.remove("editing");
-    this.canvas.removeEventListener("pointerdown", this.#boundCanvasPointerdown);
+    this.#removePointerdownListener();
   }
   onceAdded() {
     this._isDraggable = !this.isEmpty();
@@ -17996,20 +17988,21 @@ class InkEditor extends AnnotationEditor {
     ctx.strokeStyle = `${color}${opacityToHex(opacity)}`;
   }
   #startDrawing(x, y) {
-    const signal = this._uiManager._signal;
     this.canvas.addEventListener("contextmenu", noContextMenu, {
+      signal: this._uiManager._signal
+    });
+    this.#removePointerdownListener();
+    this.#drawingAC = new AbortController();
+    const signal = this._uiManager.combinedSignal(this.#drawingAC);
+    this.canvas.addEventListener("pointerleave", this.canvasPointerleave.bind(this), {
       signal
     });
-    this.canvas.addEventListener("pointerleave", this.#boundCanvasPointerleave, {
+    this.canvas.addEventListener("pointermove", this.canvasPointermove.bind(this), {
       signal
     });
-    this.canvas.addEventListener("pointermove", this.#boundCanvasPointermove, {
+    this.canvas.addEventListener("pointerup", this.canvasPointerup.bind(this), {
       signal
     });
-    this.canvas.addEventListener("pointerup", this.#boundCanvasPointerup, {
-      signal
-    });
-    this.canvas.removeEventListener("pointerdown", this.#boundCanvasPointerdown);
     this.isEditing = true;
     if (!this.#isCanvasInitialized) {
       this.#isCanvasInitialized = true;
@@ -18197,6 +18190,20 @@ class InkEditor extends AnnotationEditor {
     super.focusin(event);
     this.enableEditMode();
   }
+  #addPointerdownListener() {
+    if (this.#pointerdownAC) {
+      return;
+    }
+    this.#pointerdownAC = new AbortController();
+    const signal = this._uiManager.combinedSignal(this.#pointerdownAC);
+    this.canvas.addEventListener("pointerdown", this.canvasPointerdown.bind(this), {
+      signal
+    });
+  }
+  #removePointerdownListener() {
+    this.pointerdownAC?.abort();
+    this.pointerdownAC = null;
+  }
   canvasPointerdown(event) {
     if (event.button !== 0 || !this.isInEditMode() || this.#disableEditing) {
       return;
@@ -18222,12 +18229,9 @@ class InkEditor extends AnnotationEditor {
     this.#endDrawing(event);
   }
   #endDrawing(event) {
-    this.canvas.removeEventListener("pointerleave", this.#boundCanvasPointerleave);
-    this.canvas.removeEventListener("pointermove", this.#boundCanvasPointermove);
-    this.canvas.removeEventListener("pointerup", this.#boundCanvasPointerup);
-    this.canvas.addEventListener("pointerdown", this.#boundCanvasPointerdown, {
-      signal: this._uiManager._signal
-    });
+    this.#drawingAC?.abort();
+    this.#drawingAC = null;
+    this.#addPointerdownListener();
     if (this.#canvasContextMenuTimeoutId) {
       clearTimeout(this.#canvasContextMenuTimeoutId);
     }
@@ -18626,6 +18630,19 @@ class StampEditor extends AnnotationEditor {
     }
     super.altTextFinish();
   }
+  get telemetryFinalData() {
+    return {
+      type: "stamp",
+      hasAltText: this.hasAltTextData()
+    };
+  }
+  static computeTelemetryFinalData(data) {
+    const hasAltTextStats = data.get("hasAltText");
+    return {
+      hasAltText: hasAltTextStats.get(true) ?? 0,
+      hasNoAltText: hasAltTextStats.get(false) ?? 0
+    };
+  }
   #getBitmapFetched(data, fromId = false) {
     if (!data) {
       this.remove();
@@ -18653,7 +18670,15 @@ class StampEditor extends AnnotationEditor {
       return;
     }
     if (!this._uiManager.useNewAltTextWhenAddingImage && this._uiManager.useNewAltTextFlow && this.#bitmap) {
-      this.mlGuessAltText();
+      this._reportTelemetry({
+        action: "pdfjs.image.image_added",
+        data: {
+          alt_text_modal: false
+        }
+      });
+      try {
+        this.mlGuessAltText();
+      } catch {}
     }
     this.div.focus();
   }
@@ -18664,8 +18689,11 @@ class StampEditor extends AnnotationEditor {
     const {
       mlManager
     } = this._uiManager;
-    if (!mlManager || !(await mlManager.isEnabledFor("altText"))) {
-      return null;
+    if (!mlManager) {
+      throw new Error("No ML.");
+    }
+    if (!(await mlManager.isEnabledFor("altText"))) {
+      throw new Error("ML isn't enabled for alt text.");
     }
     const {
       data,
@@ -18681,8 +18709,17 @@ class StampEditor extends AnnotationEditor {
         channels: data.length / (width * height)
       }
     });
-    if (!response || response.error || !response.output) {
+    if (!response) {
+      throw new Error("No response from the AI service.");
+    }
+    if (response.error) {
+      throw new Error("Error from the AI service.");
+    }
+    if (response.cancel) {
       return null;
+    }
+    if (!response.output) {
+      throw new Error("No valid response from the AI service.");
     }
     const altText = response.output;
     await this.setGuessedAltText(altText);
@@ -18725,6 +18762,12 @@ class StampEditor extends AnnotationEditor {
         } else {
           this._uiManager.enableWaiting(true);
           const data = await this._uiManager.imageManager.getFromFile(input.files[0]);
+          this._reportTelemetry({
+            action: "pdfjs.image.image_selected",
+            data: {
+              alt_text_modal: this._uiManager.useNewAltTextFlow
+            }
+          });
           this.#getBitmapFetched(data);
         }
         resolve();
@@ -19106,15 +19149,14 @@ class AnnotationEditorLayer {
   #accessibilityManager;
   #allowClick = false;
   #annotationLayer = null;
-  #boundPointerup = null;
-  #boundPointerdown = null;
-  #boundTextLayerPointerDown = null;
+  #clickAC = null;
   #editorFocusTimeoutId = null;
   #editors = new Map();
   #hadPointerDown = false;
   #isCleaningUp = false;
   #isDisabling = false;
   #textLayer = null;
+  #textSelectionAC = null;
   #uiManager;
   static _initialized = false;
   static #editorTypes = new Map([FreeTextEditor, InkEditor, StampEditor, HighlightEditor].map(type => [type._editorType, type]));
@@ -19329,19 +19371,20 @@ class AnnotationEditorLayer {
   }
   enableTextSelection() {
     this.div.tabIndex = -1;
-    if (this.#textLayer?.div && !this.#boundTextLayerPointerDown) {
-      this.#boundTextLayerPointerDown = this.#textLayerPointerDown.bind(this);
-      this.#textLayer.div.addEventListener("pointerdown", this.#boundTextLayerPointerDown, {
-        signal: this.#uiManager._signal
+    if (this.#textLayer?.div && !this.#textSelectionAC) {
+      this.#textSelectionAC = new AbortController();
+      const signal = this.#uiManager.combinedSignal(this.#textSelectionAC);
+      this.#textLayer.div.addEventListener("pointerdown", this.#textLayerPointerDown.bind(this), {
+        signal
       });
       this.#textLayer.div.classList.add("highlighting");
     }
   }
   disableTextSelection() {
     this.div.tabIndex = 0;
-    if (this.#textLayer?.div && this.#boundTextLayerPointerDown) {
-      this.#textLayer.div.removeEventListener("pointerdown", this.#boundTextLayerPointerDown);
-      this.#boundTextLayerPointerDown = null;
+    if (this.#textLayer?.div && this.#textSelectionAC) {
+      this.#textSelectionAC.abort();
+      this.#textSelectionAC = null;
       this.#textLayer.div.classList.remove("highlighting");
     }
   }
@@ -19372,27 +19415,21 @@ class AnnotationEditorLayer {
     }
   }
   enableClick() {
-    if (this.#boundPointerdown) {
+    if (this.#clickAC) {
       return;
     }
-    const signal = this.#uiManager._signal;
-    this.#boundPointerdown = this.pointerdown.bind(this);
-    this.#boundPointerup = this.pointerup.bind(this);
-    this.div.addEventListener("pointerdown", this.#boundPointerdown, {
+    this.#clickAC = new AbortController();
+    const signal = this.#uiManager.combinedSignal(this.#clickAC);
+    this.div.addEventListener("pointerdown", this.pointerdown.bind(this), {
       signal
     });
-    this.div.addEventListener("pointerup", this.#boundPointerup, {
+    this.div.addEventListener("pointerup", this.pointerup.bind(this), {
       signal
     });
   }
   disableClick() {
-    if (!this.#boundPointerdown) {
-      return;
-    }
-    this.div.removeEventListener("pointerdown", this.#boundPointerdown);
-    this.div.removeEventListener("pointerup", this.#boundPointerup);
-    this.#boundPointerdown = null;
-    this.#boundPointerup = null;
+    this.#clickAC?.abort();
+    this.#clickAC = null;
   }
   attach(editor) {
     this.#editors.set(editor.id, editor);
@@ -19505,8 +19542,8 @@ class AnnotationEditorLayer {
   get #currentEditorType() {
     return AnnotationEditorLayer.#editorTypes.get(this.#uiManager.getMode());
   }
-  get _signal() {
-    return this.#uiManager._signal;
+  combinedSignal(ac) {
+    return this.#uiManager.combinedSignal(ac);
   }
   #createNewEditor(params) {
     const editorType = this.#currentEditorType;
@@ -19920,7 +19957,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "4.5.0";
-const pdfjsBuild = "c60c0d1";
+const pdfjsBuild = "e44e4db";
 
 var __webpack_exports__AbortException = __webpack_exports__.AbortException;
 var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;
