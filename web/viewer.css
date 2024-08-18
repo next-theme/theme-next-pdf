@@ -3537,8 +3537,7 @@ body.wait::before{
 }
 
 :is(.toolbar, .editorParamsToolbar, #sidebarContainer)
-  :is(input, button, select),
-.secondaryToolbar :is(input, button, a, select){
+  :is(input, button, select){
   outline:none;
   font:message-box;
 }
@@ -3565,7 +3564,6 @@ body.wait::before{
 }
 
 #toolbarContainer,
-.secondaryToolbar,
 .editorParamsToolbar{
   position:relative;
   height:var(--toolbar-height);
@@ -3647,27 +3645,20 @@ body.wait::before{
   transition-duration:0s;
 }
 
-.secondaryToolbar,
 .editorParamsToolbar{
+  background-color:var(--doorhanger-bg-color);
   top:var(--toolbar-height);
   position:absolute;
   z-index:30000;
   height:auto;
-  padding:0 4px;
+  inset-inline-end:4px;
+  padding:6px 0 10px;
   margin:4px 2px;
   font:message-box;
   font-size:12px;
   line-height:14px;
   text-align:left;
   cursor:default;
-}
-
-.secondaryToolbar,
-.editorParamsToolbar{
-  padding:6px 0 10px;
-  inset-inline-end:4px;
-  height:auto;
-  background-color:var(--doorhanger-bg-color);
 }
 
 .editorParamsToolbarContainer{
@@ -3718,14 +3709,6 @@ body.wait::before{
 .editorParamsToolbarContainer .editorParamsSlider::-webkit-slider-thumb,
 .editorParamsToolbarContainer .editorParamsSlider::-moz-range-thumb{
   background-color:white;
-}
-
-#secondaryToolbarButtonContainer{
-  max-width:220px;
-  min-height:26px;
-  max-height:calc(var(--viewer-container-height) - 40px);
-  overflow-y:auto;
-  margin-bottom:-4px;
 }
 
 #editorStampParamsToolbar{
@@ -3832,7 +3815,6 @@ body.wait::before{
 }
 
 .toolbarButton,
-.secondaryToolbarButton,
 .dialogButton{
   border:none;
   background:none;
@@ -3856,7 +3838,7 @@ body.wait::before{
   overflow:hidden;
 }
 
-:is(.toolbarButton, .secondaryToolbarButton, .dialogButton)[disabled]{
+:is(.toolbarButton, .dialogButton)[disabled]{
   opacity:0.5;
 }
 
@@ -3882,7 +3864,6 @@ body.wait::before{
 
 .toolbarButton,
 .dropdownToolbarButton,
-.secondaryToolbarButton,
 .dialogButton{
   min-width:16px;
   margin:2px 1px;
@@ -3902,27 +3883,23 @@ body.wait::before{
 .toolbarButton:is(:hover, :focus-visible){
   background-color:var(--button-hover-color);
 }
-.secondaryToolbarButton:is(:hover, :focus-visible){
-  background-color:var(--doorhanger-hover-bg-color);
-  color:var(--doorhanger-hover-color);
-}
 
-:is(.toolbarButton, .secondaryToolbarButton).toggled,
+.toolbarButton.toggled,
 .splitToolbarButton.toggled > .toolbarButton.toggled{
   background-color:var(--toggled-btn-bg-color);
   color:var(--toggled-btn-color);
 }
 
-:is(.toolbarButton, .secondaryToolbarButton).toggled:hover,
+.toolbarButton.toggled:hover,
 .splitToolbarButton.toggled > .toolbarButton.toggled:hover{
   outline:var(--toggled-hover-btn-outline) !important;
 }
 
-:is(.toolbarButton, .secondaryToolbarButton).toggled::before{
+.toolbarButton.toggled::before{
   background-color:var(--toggled-btn-color);
 }
 
-:is(.toolbarButton, .secondaryToolbarButton).toggled:hover:active,
+.toolbarButton.toggled:hover:active,
 .splitToolbarButton.toggled > .toolbarButton.toggled:hover:active{
   background-color:var(--toggled-hover-active-btn-color);
 }
@@ -3974,7 +3951,7 @@ body.wait::before{
   height:1px;
 }
 
-:is(.toolbarButton, .secondaryToolbarButton, .treeItemToggler)::before,
+:is(.toolbarButton, .treeItemToggler)::before,
 .dropdownToolbarButton::after{
   position:absolute;
   display:inline-block;
@@ -3997,15 +3974,8 @@ body.wait::before{
   left:6px;
 }
 
-.toolbarButton:is(:hover, :focus-visible)::before,
-.secondaryToolbarButton:is(:hover, :focus-visible)::before{
+.toolbarButton:is(:hover, :focus-visible)::before{
   background-color:var(--toolbar-icon-hover-bg-color);
-}
-
-.secondaryToolbarButton::before{
-  opacity:var(--doorhanger-icon-opacity);
-  top:5px;
-  inset-inline-start:12px;
 }
 
 #sidebarToggle::before{
@@ -4040,11 +4010,6 @@ body.wait::before{
           mask-image:var(--toolbarButton-zoomIn-icon);
 }
 
-#presentationMode::before{
-  -webkit-mask-image:var(--toolbarButton-presentationMode-icon);
-          mask-image:var(--toolbarButton-presentationMode-icon);
-}
-
 #editorFreeText::before{
   -webkit-mask-image:var(--toolbarButton-editorFreeText-icon);
           mask-image:var(--toolbarButton-editorFreeText-icon);
@@ -4065,33 +4030,14 @@ body.wait::before{
           mask-image:var(--toolbarButton-editorStamp-icon);
 }
 
-:is(#print, #secondaryPrint)::before{
+#print::before{
   -webkit-mask-image:var(--toolbarButton-print-icon);
           mask-image:var(--toolbarButton-print-icon);
 }
 
-#secondaryOpenFile::before{
-  -webkit-mask-image:var(--toolbarButton-openFile-icon);
-          mask-image:var(--toolbarButton-openFile-icon);
-}
-
-:is(#download, #secondaryDownload)::before{
+#download::before{
   -webkit-mask-image:var(--toolbarButton-download-icon);
           mask-image:var(--toolbarButton-download-icon);
-}
-
-a.secondaryToolbarButton{
-  padding-top:5px;
-  text-decoration:none;
-}
-a:is(.toolbarButton, .secondaryToolbarButton)[href="#"]{
-  opacity:0.5;
-  pointer-events:none;
-}
-
-#viewBookmark::before{
-  -webkit-mask-image:var(--toolbarButton-bookmark-icon);
-          mask-image:var(--toolbarButton-bookmark-icon);
 }
 
 #viewThumbnail::before{
@@ -4136,100 +4082,6 @@ a:is(.toolbarButton, .secondaryToolbarButton)[href="#"]{
   height:9px;
   width:9px;
   border-radius:50%;
-}
-
-.secondaryToolbarButton{
-  position:relative;
-  margin:0;
-  padding:0 0 1px;
-  padding-inline-start:36px;
-  height:auto;
-  min-height:26px;
-  width:auto;
-  min-width:100%;
-  text-align:start;
-  white-space:normal;
-  border-radius:0;
-  box-sizing:border-box;
-  display:inline-block;
-}
-.secondaryToolbarButton > span{
-  padding-inline-end:4px;
-}
-
-#firstPage::before{
-  -webkit-mask-image:var(--secondaryToolbarButton-firstPage-icon);
-          mask-image:var(--secondaryToolbarButton-firstPage-icon);
-}
-
-#lastPage::before{
-  -webkit-mask-image:var(--secondaryToolbarButton-lastPage-icon);
-          mask-image:var(--secondaryToolbarButton-lastPage-icon);
-}
-
-#pageRotateCcw::before{
-  -webkit-mask-image:var(--secondaryToolbarButton-rotateCcw-icon);
-          mask-image:var(--secondaryToolbarButton-rotateCcw-icon);
-}
-
-#pageRotateCw::before{
-  -webkit-mask-image:var(--secondaryToolbarButton-rotateCw-icon);
-          mask-image:var(--secondaryToolbarButton-rotateCw-icon);
-}
-
-#cursorSelectTool::before{
-  -webkit-mask-image:var(--secondaryToolbarButton-selectTool-icon);
-          mask-image:var(--secondaryToolbarButton-selectTool-icon);
-}
-
-#cursorHandTool::before{
-  -webkit-mask-image:var(--secondaryToolbarButton-handTool-icon);
-          mask-image:var(--secondaryToolbarButton-handTool-icon);
-}
-
-#scrollPage::before{
-  -webkit-mask-image:var(--secondaryToolbarButton-scrollPage-icon);
-          mask-image:var(--secondaryToolbarButton-scrollPage-icon);
-}
-
-#scrollVertical::before{
-  -webkit-mask-image:var(--secondaryToolbarButton-scrollVertical-icon);
-          mask-image:var(--secondaryToolbarButton-scrollVertical-icon);
-}
-
-#scrollHorizontal::before{
-  -webkit-mask-image:var(--secondaryToolbarButton-scrollHorizontal-icon);
-          mask-image:var(--secondaryToolbarButton-scrollHorizontal-icon);
-}
-
-#scrollWrapped::before{
-  -webkit-mask-image:var(--secondaryToolbarButton-scrollWrapped-icon);
-          mask-image:var(--secondaryToolbarButton-scrollWrapped-icon);
-}
-
-#spreadNone::before{
-  -webkit-mask-image:var(--secondaryToolbarButton-spreadNone-icon);
-          mask-image:var(--secondaryToolbarButton-spreadNone-icon);
-}
-
-#spreadOdd::before{
-  -webkit-mask-image:var(--secondaryToolbarButton-spreadOdd-icon);
-          mask-image:var(--secondaryToolbarButton-spreadOdd-icon);
-}
-
-#spreadEven::before{
-  -webkit-mask-image:var(--secondaryToolbarButton-spreadEven-icon);
-          mask-image:var(--secondaryToolbarButton-spreadEven-icon);
-}
-
-#documentProperties::before{
-  -webkit-mask-image:var(--secondaryToolbarButton-documentProperties-icon);
-          mask-image:var(--secondaryToolbarButton-documentProperties-icon);
-}
-
-#imageAltTextSettings::before{
-  -webkit-mask-image:var(--secondaryToolbarButton-imageAltTextSettings-icon);
-          mask-image:var(--secondaryToolbarButton-imageAltTextSettings-icon);
 }
 
 .verticalToolbarSeparator{
@@ -4582,6 +4434,176 @@ dialog :link{
   z-index:50000;
 }
 
+.toolbarButton.labeled{
+    border-radius:0;
+    display:inline-block;
+    height:auto;
+    margin:0;
+    padding:0 0 1px;
+    padding-inline-start:36px;
+    position:relative;
+    min-height:26px;
+    min-width:100%;
+    text-align:start;
+    white-space:normal;
+    width:auto;
+  }
+
+.toolbarButton.labeled:is(a){
+      padding-top:5px;
+      text-decoration:none;
+    }
+
+.toolbarButton.labeled[href="#"]:is(a){
+        opacity:0.5;
+        pointer-events:none;
+      }
+
+.toolbarButton.labeled::before{
+      inset-inline-start:12px;
+      opacity:var(--doorhanger-icon-opacity);
+      top:5px;
+    }
+
+.toolbarButton.labeled:not(.toggled):is(:hover,:focus-visible){
+      background-color:var(--doorhanger-hover-bg-color);
+      color:var(--doorhanger-hover-color);
+    }
+
+.toolbarButton.labeled  > span{
+      display:unset;
+      padding-inline-end:4px;
+    }
+
+#secondaryToolbar{
+  background-color:var(--doorhanger-bg-color);
+  cursor:default;
+  font:message-box;
+  font-size:12px;
+  height:auto;
+  inset-inline-end:4px;
+  line-height:14px;
+  margin:4px 2px;
+  padding:6px 0 10px;
+  position:absolute;
+  text-align:left;
+  top:var(--toolbar-height);
+  z-index:30000;
+}
+
+#secondaryToolbar :is(button,a){
+    font:message-box;
+    outline:none;
+  }
+
+#secondaryToolbar #secondaryToolbarButtonContainer{
+    margin-bottom:-4px;
+    max-height:calc(var(--viewer-container-height) - 40px);
+    max-width:220px;
+    min-height:26px;
+    overflow-y:auto;
+  }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #secondaryOpenFile::before{
+      -webkit-mask-image:var(--toolbarButton-openFile-icon);
+              mask-image:var(--toolbarButton-openFile-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #secondaryPrint::before{
+      -webkit-mask-image:var(--toolbarButton-print-icon);
+              mask-image:var(--toolbarButton-print-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #secondaryDownload::before{
+      -webkit-mask-image:var(--toolbarButton-download-icon);
+              mask-image:var(--toolbarButton-download-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #presentationMode::before{
+      -webkit-mask-image:var(--toolbarButton-presentationMode-icon);
+              mask-image:var(--toolbarButton-presentationMode-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #viewBookmark::before{
+      -webkit-mask-image:var(--toolbarButton-bookmark-icon);
+              mask-image:var(--toolbarButton-bookmark-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #firstPage::before{
+      -webkit-mask-image:var(--secondaryToolbarButton-firstPage-icon);
+              mask-image:var(--secondaryToolbarButton-firstPage-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #lastPage::before{
+      -webkit-mask-image:var(--secondaryToolbarButton-lastPage-icon);
+              mask-image:var(--secondaryToolbarButton-lastPage-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #pageRotateCcw::before{
+      -webkit-mask-image:var(--secondaryToolbarButton-rotateCcw-icon);
+              mask-image:var(--secondaryToolbarButton-rotateCcw-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #pageRotateCw::before{
+      -webkit-mask-image:var(--secondaryToolbarButton-rotateCw-icon);
+              mask-image:var(--secondaryToolbarButton-rotateCw-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #cursorSelectTool::before{
+      -webkit-mask-image:var(--secondaryToolbarButton-selectTool-icon);
+              mask-image:var(--secondaryToolbarButton-selectTool-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #cursorHandTool::before{
+      -webkit-mask-image:var(--secondaryToolbarButton-handTool-icon);
+              mask-image:var(--secondaryToolbarButton-handTool-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #scrollPage::before{
+      -webkit-mask-image:var(--secondaryToolbarButton-scrollPage-icon);
+              mask-image:var(--secondaryToolbarButton-scrollPage-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #scrollVertical::before{
+      -webkit-mask-image:var(--secondaryToolbarButton-scrollVertical-icon);
+              mask-image:var(--secondaryToolbarButton-scrollVertical-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #scrollHorizontal::before{
+      -webkit-mask-image:var(--secondaryToolbarButton-scrollHorizontal-icon);
+              mask-image:var(--secondaryToolbarButton-scrollHorizontal-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #scrollWrapped::before{
+      -webkit-mask-image:var(--secondaryToolbarButton-scrollWrapped-icon);
+              mask-image:var(--secondaryToolbarButton-scrollWrapped-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #spreadNone::before{
+      -webkit-mask-image:var(--secondaryToolbarButton-spreadNone-icon);
+              mask-image:var(--secondaryToolbarButton-spreadNone-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #spreadOdd::before{
+      -webkit-mask-image:var(--secondaryToolbarButton-spreadOdd-icon);
+              mask-image:var(--secondaryToolbarButton-spreadOdd-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #spreadEven::before{
+      -webkit-mask-image:var(--secondaryToolbarButton-spreadEven-icon);
+              mask-image:var(--secondaryToolbarButton-spreadEven-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #imageAltTextSettings::before{
+      -webkit-mask-image:var(--secondaryToolbarButton-imageAltTextSettings-icon);
+              mask-image:var(--secondaryToolbarButton-imageAltTextSettings-icon);
+    }
+
+:is(#secondaryToolbar #secondaryToolbarButtonContainer) #documentProperties::before{
+      -webkit-mask-image:var(--secondaryToolbarButton-documentProperties-icon);
+              mask-image:var(--secondaryToolbarButton-documentProperties-icon);
+    }
+
 #findbar{
   background-color:var(--toolbar-bg-color);
   cursor:default;
@@ -4757,7 +4779,7 @@ dialog :link{
 }
 
 .visibleMediumView{
-  display:none;
+  display:none !important;
 }
 
 @media all and (max-width: 900px){
@@ -4784,17 +4806,17 @@ dialog :link{
     --editor-toolbar-base-offset:40px;
   }
   #outerContainer .hiddenMediumView{
-    display:none;
+    display:none !important;
   }
   #outerContainer .visibleMediumView{
-    display:inherit;
+    display:inherit !important;
   }
 }
 
 @media all and (max-width: 690px){
   .hiddenSmallView,
   .hiddenSmallView *{
-    display:none;
+    display:none !important;
   }
   .toolbarButtonSpacer{
     width:0;
