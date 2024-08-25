@@ -12834,7 +12834,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.6.0";
-const build = "f7d3add";
+const build = "037c181";
 
 ;// CONCATENATED MODULE: ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -19934,7 +19934,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "4.6.0";
-const pdfjsBuild = "f7d3add";
+const pdfjsBuild = "037c181";
 
 var __webpack_exports__AbortException = __webpack_exports__.AbortException;
 var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;

@@ -2905,7 +2905,7 @@ class L10n {
       id: ids,
       args
     }]);
-    return messages?.[0].value || fallback;
+    return messages[0]?.value || fallback;
   }
   async translate(element) {
     this.#elements.add(element);
@@ -2913,6 +2913,13 @@ class L10n {
       this.#l10n.connectRoot(element);
       await this.#l10n.translateRoots();
     } catch {}
+  }
+  async translateOnce(element) {
+    try {
+      await this.#l10n.translateElements([element]);
+    } catch (ex) {
+      console.error(`translateOnce: "${ex}".`);
+    }
   }
   async destroy() {
     for (const element of this.#elements) {
@@ -4974,13 +4981,16 @@ class PDFDocumentProperties {
       this.fields[id].textContent = content || content === 0 ? content : DEFAULT_FIELD_CONTENT;
     }
   }
+  #getL10nStr(id, args = null) {
+    return this.l10n.get(`pdfjs-document-properties-${id}`, args);
+  }
   async #parseFileSize(fileSize = 0) {
     const kb = fileSize / 1024,
       mb = kb / 1024;
     if (!kb) {
       return undefined;
     }
-    return this.l10n.get(`pdfjs-document-properties-${mb >= 1 ? "mb" : "kb"}`, {
+    return this.#getL10nStr(mb >= 1 ? "mb" : "kb", {
       size_mb: mb >= 1 && (+mb.toPrecision(3)).toLocaleString(),
       size_kb: mb < 1 && (+kb.toPrecision(3)).toLocaleString(),
       size_b: fileSize.toLocaleString()
@@ -5029,8 +5039,8 @@ class PDFDocumentProperties {
     const [{
       width,
       height
-    }, unit, name, orientation] = await Promise.all([this._isNonMetricLocale ? sizeInches : sizeMillimeters, this.l10n.get(`pdfjs-document-properties-page-size-unit-${this._isNonMetricLocale ? "inches" : "millimeters"}`), rawName && this.l10n.get(`pdfjs-document-properties-page-size-name-${rawName}`), this.l10n.get(`pdfjs-document-properties-page-size-orientation-${isPortrait ? "portrait" : "landscape"}`)]);
-    return this.l10n.get(`pdfjs-document-properties-page-size-dimension-${name ? "name-" : ""}string`, {
+    }, unit, name, orientation] = await Promise.all([this._isNonMetricLocale ? sizeInches : sizeMillimeters, this.#getL10nStr(`page-size-unit-${this._isNonMetricLocale ? "inches" : "millimeters"}`), rawName && this.#getL10nStr(`page-size-name-${rawName}`), this.#getL10nStr(`page-size-orientation-${isPortrait ? "portrait" : "landscape"}`)]);
+    return this.#getL10nStr(`page-size-dimension-${name ? "name-" : ""}string`, {
       width: width.toLocaleString(),
       height: height.toLocaleString(),
       unit,
@@ -5043,13 +5053,13 @@ class PDFDocumentProperties {
     if (!dateObject) {
       return undefined;
     }
-    return this.l10n.get("pdfjs-document-properties-date-string", {
+    return this.#getL10nStr("date-string", {
       date: dateObject.toLocaleDateString(),
       time: dateObject.toLocaleTimeString()
     });
   }
   #parseLinearization(isLinearized) {
-    return this.l10n.get(`pdfjs-document-properties-linearized-${isLinearized ? "yes" : "no"}`);
+    return this.#getL10nStr(`linearized-${isLinearized ? "yes" : "no"}`);
   }
 }
 
@@ -6540,15 +6550,16 @@ class PDFLayerViewer extends BaseTreeViewer {
       return false;
     };
   }
-  async _setNestedName(element, {
+  _setNestedName(element, {
     name = null
   }) {
     if (typeof name === "string") {
       element.textContent = this._normalizeTextContent(name);
       return;
     }
-    element.textContent = await this._l10n.get("pdfjs-additional-layers");
+    element.setAttribute("data-l10n-id", "pdfjs-additional-layers");
     element.style.fontStyle = "italic";
+    this._l10n.translateOnce(element);
   }
   _addToggleButton(div, {
     name = null
@@ -7416,22 +7427,24 @@ class PDFPrintService {
   useRenderedPage() {
     this.throwIfInactive();
     const img = document.createElement("img");
-    const scratchCanvas = this.scratchCanvas;
-    if ("toBlob" in scratchCanvas) {
-      scratchCanvas.toBlob(function (blob) {
-        img.src = URL.createObjectURL(blob);
-      });
-    } else {
-      img.src = scratchCanvas.toDataURL();
-    }
+    this.scratchCanvas.toBlob(blob => {
+      img.src = URL.createObjectURL(blob);
+    });
     const wrapper = document.createElement("div");
     wrapper.className = "printedPage";
     wrapper.append(img);
     this.printContainer.append(wrapper);
-    return new Promise(function (resolve, reject) {
-      img.onload = resolve;
-      img.onerror = reject;
+    const {
+      promise,
+      resolve,
+      reject
+    } = Promise.withResolvers();
+    img.onload = resolve;
+    img.onerror = reject;
+    promise.catch(() => {}).then(() => {
+      URL.revokeObjectURL(img.src);
     });
+    return promise;
   }
   performPrint() {
     this.throwIfInactive();
@@ -15018,7 +15031,7 @@ function beforeUnload(evt) {
 
 
 const pdfjsVersion = "4.6.0";
-const pdfjsBuild = "f7d3add";
+const pdfjsBuild = "037c181";
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,
