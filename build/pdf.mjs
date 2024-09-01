@@ -1705,6 +1705,7 @@ class EditorToolbar {
   #colorPicker = null;
   #editor;
   #buttons = null;
+  #altText = null;
   constructor(editor) {
     this.#editor = editor;
   }
@@ -1767,6 +1768,7 @@ class EditorToolbar {
   }
   show() {
     this.#toolbar.classList.remove("hidden");
+    this.#altText?.shown();
   }
   #addDeleteButton() {
     const button = document.createElement("button");
@@ -1786,9 +1788,11 @@ class EditorToolbar {
     divider.className = "divider";
     return divider;
   }
-  addAltTextButton(button) {
+  async addAltText(altText) {
+    const button = await altText.render();
     this.#addListenersToElement(button);
     this.#buttons.prepend(button, this.#divider);
+    this.#altText = altText;
   }
   addColorPicker(colorPicker) {
     this.#colorPicker = colorPicker;
@@ -3724,6 +3728,14 @@ class AltText {
     }
     this.#altTextButton.disabled = !enabled;
   }
+  shown() {
+    this.#editor._reportTelemetry({
+      action: "pdfjs.image.alt_text.image_status_label_displayed",
+      data: {
+        label: this.#label
+      }
+    });
+  }
   destroy() {
     this.#altTextButton?.remove();
     this.#altTextButton = null;
@@ -3739,12 +3751,6 @@ class AltText {
     if (this.#useNewAltTextFlow) {
       const label = this.#label;
       const type = label === "review" ? "to-review" : label;
-      this.#editor._reportTelemetry({
-        action: "pdfjs.image.alt_text.image_status_label_displayed",
-        data: {
-          label
-        }
-      });
       button.classList.toggle("done", !!this.#altText);
       AltText._l10nPromise.get(`pdfjs-editor-new-alt-text-${type}-button-label`).then(msg => {
         button.setAttribute("aria-label", msg);
@@ -3845,7 +3851,8 @@ class AnnotationEditor {
   _isVisible = true;
   _uiManager = null;
   _focusEventsAllowed = true;
-  _l10nPromise = null;
+  static _l10nPromise = null;
+  static _l10nResizer = null;
   #isDraggable = false;
   #zIndex = AnnotationEditor._zIndex++;
   static _borderLineWidth = -1;
@@ -3922,8 +3929,17 @@ class AnnotationEditor {
     fakeEditor._uiManager.addToAnnotationStorage(fakeEditor);
   }
   static initialize(l10n, _uiManager, options) {
-    AnnotationEditor._l10nPromise ||= new Map(["pdfjs-editor-alt-text-button-label", "pdfjs-editor-alt-text-edit-button-label", "pdfjs-editor-alt-text-decorative-tooltip", "pdfjs-editor-new-alt-text-added-button-label", "pdfjs-editor-new-alt-text-missing-button-label", "pdfjs-editor-new-alt-text-to-review-button-label", "pdfjs-editor-resizer-label-topLeft", "pdfjs-editor-resizer-label-topMiddle", "pdfjs-editor-resizer-label-topRight", "pdfjs-editor-resizer-label-middleRight", "pdfjs-editor-resizer-label-bottomRight", "pdfjs-editor-resizer-label-bottomMiddle", "pdfjs-editor-resizer-label-bottomLeft", "pdfjs-editor-resizer-label-middleLeft"].map(str => [str, l10n.get(str.replaceAll(/([A-Z])/g, c => `-${c.toLowerCase()}`))]));
-    AnnotationEditor._l10nPromise.set("pdfjs-editor-new-alt-text-generated-alt-text-with-disclaimer", l10n.get.bind(l10n, "pdfjs-editor-new-alt-text-generated-alt-text-with-disclaimer"));
+    AnnotationEditor._l10nResizer ||= Object.freeze({
+      topLeft: "pdfjs-editor-resizer-top-left",
+      topMiddle: "pdfjs-editor-resizer-top-middle",
+      topRight: "pdfjs-editor-resizer-top-right",
+      middleRight: "pdfjs-editor-resizer-middle-right",
+      bottomRight: "pdfjs-editor-resizer-bottom-right",
+      bottomMiddle: "pdfjs-editor-resizer-bottom-middle",
+      bottomLeft: "pdfjs-editor-resizer-bottom-left",
+      middleLeft: "pdfjs-editor-resizer-middle-left"
+    });
+    AnnotationEditor._l10nPromise ||= new Map([...["pdfjs-editor-alt-text-button-label", "pdfjs-editor-alt-text-edit-button-label", "pdfjs-editor-alt-text-decorative-tooltip", "pdfjs-editor-new-alt-text-added-button-label", "pdfjs-editor-new-alt-text-missing-button-label", "pdfjs-editor-new-alt-text-to-review-button-label"].map(str => [str, l10n.get(str)]), ...["pdfjs-editor-new-alt-text-generated-alt-text-with-disclaimer"].map(str => [str, l10n.get.bind(l10n, str)])]);
     if (options?.strings) {
       for (const str of options.strings) {
         AnnotationEditor._l10nPromise.set(str, l10n.get(str));
@@ -4435,7 +4451,7 @@ class AnnotationEditor {
     this._editToolbar = new EditorToolbar(this);
     this.div.append(this._editToolbar.render());
     if (this.#altText) {
-      this._editToolbar.addAltTextButton(await this.#altText.render());
+      await this._editToolbar.addAltText(this.#altText);
     }
     return this._editToolbar;
   }
@@ -4754,7 +4770,7 @@ class AnnotationEditor {
         div.addEventListener("focus", this.#resizerFocus.bind(this, name), {
           signal
         });
-        AnnotationEditor._l10nPromise.get(`pdfjs-editor-resizer-label-${name}`).then(msg => div.setAttribute("aria-label", msg));
+        div.setAttribute("data-l10n-id", AnnotationEditor._l10nResizer[name]);
       }
     }
     const first = this.#allResizerDivs[0];
@@ -4780,7 +4796,7 @@ class AnnotationEditor {
       for (const child of children) {
         const div = this.#allResizerDivs[i++];
         const name = div.getAttribute("data-resizer-name");
-        AnnotationEditor._l10nPromise.get(`pdfjs-editor-resizer-label-${name}`).then(msg => child.setAttribute("aria-label", msg));
+        child.setAttribute("data-l10n-id", AnnotationEditor._l10nResizer[name]);
       }
     }
     this.#setResizerTabIndex(0);
@@ -10199,25 +10215,18 @@ class PDFNetworkStreamRangeRequestReader {
 
 
 
-const fileUriRegex = /^file:\/\/\/[a-zA-Z]:\//;
-function parseUrl(sourceUrl) {
+const urlRegex = /^[a-z][a-z0-9\-+.]+:/i;
+function parseUrlOrPath(sourceUrl) {
+  if (urlRegex.test(sourceUrl)) {
+    return new URL(sourceUrl);
+  }
   const url = NodePackages.get("url");
-  const parsedUrl = url.parse(sourceUrl);
-  if (parsedUrl.protocol === "file:" || parsedUrl.host) {
-    return parsedUrl;
-  }
-  if (/^[a-z]:[/\\]/i.test(sourceUrl)) {
-    return url.parse(`file:///${sourceUrl}`);
-  }
-  if (!parsedUrl.host) {
-    parsedUrl.protocol = "file:";
-  }
-  return parsedUrl;
+  return new URL(url.pathToFileURL(sourceUrl));
 }
 class PDFNodeStream {
   constructor(source) {
     this.source = source;
-    this.url = parseUrl(source.url);
+    this.url = parseUrlOrPath(source.url);
     this.isHttp = this.url.protocol === "http:" || this.url.protocol === "https:";
     this.isFsUrl = this.url.protocol === "file:";
     this.httpHeaders = this.isHttp && source.httpHeaders || {};
@@ -10412,17 +10421,6 @@ class BaseRangeReader {
     }
   }
 }
-function createRequestOptions(parsedUrl, headers) {
-  return {
-    protocol: parsedUrl.protocol,
-    auth: parsedUrl.auth,
-    host: parsedUrl.hostname,
-    port: parsedUrl.port,
-    path: parsedUrl.path,
-    method: "GET",
-    headers
-  };
-}
 class PDFNodeStreamFullReader extends BaseFullReader {
   constructor(stream) {
     super(stream);
@@ -10452,10 +10450,14 @@ class PDFNodeStreamFullReader extends BaseFullReader {
     this._request = null;
     if (this._url.protocol === "http:") {
       const http = NodePackages.get("http");
-      this._request = http.request(createRequestOptions(this._url, stream.httpHeaders), handleResponse);
+      this._request = http.request(this._url, {
+        headers: stream.httpHeaders
+      }, handleResponse);
     } else {
       const https = NodePackages.get("https");
-      this._request = https.request(createRequestOptions(this._url, stream.httpHeaders), handleResponse);
+      this._request = https.request(this._url, {
+        headers: stream.httpHeaders
+      }, handleResponse);
     }
     this._request.on("error", reason => {
       this._storedError = reason;
@@ -10487,10 +10489,14 @@ class PDFNodeStreamRangeReader extends BaseRangeReader {
     this._request = null;
     if (this._url.protocol === "http:") {
       const http = NodePackages.get("http");
-      this._request = http.request(createRequestOptions(this._url, this._httpHeaders), handleResponse);
+      this._request = http.request(this._url, {
+        headers: this._httpHeaders
+      }, handleResponse);
     } else {
       const https = NodePackages.get("https");
-      this._request = https.request(createRequestOptions(this._url, this._httpHeaders), handleResponse);
+      this._request = https.request(this._url, {
+        headers: this._httpHeaders
+      }, handleResponse);
     }
     this._request.on("error", reason => {
       this._storedError = reason;
@@ -10501,18 +10507,14 @@ class PDFNodeStreamRangeReader extends BaseRangeReader {
 class PDFNodeStreamFsFullReader extends BaseFullReader {
   constructor(stream) {
     super(stream);
-    let path = decodeURIComponent(this._url.path);
-    if (fileUriRegex.test(this._url.href)) {
-      path = path.replace(/^\//, "");
-    }
     const fs = NodePackages.get("fs");
-    fs.promises.lstat(path).then(stat => {
+    fs.promises.lstat(this._url).then(stat => {
       this._contentLength = stat.size;
-      this._setReadableStream(fs.createReadStream(path));
+      this._setReadableStream(fs.createReadStream(this._url));
       this._headersCapability.resolve();
     }, error => {
       if (error.code === "ENOENT") {
-        error = new MissingPDFException(`Missing PDF "${path}".`);
+        error = new MissingPDFException(`Missing PDF "${this._url}".`);
       }
       this._storedError = error;
       this._headersCapability.reject(error);
@@ -10522,12 +10524,8 @@ class PDFNodeStreamFsFullReader extends BaseFullReader {
 class PDFNodeStreamFsRangeReader extends BaseRangeReader {
   constructor(stream, start, end) {
     super(stream);
-    let path = decodeURIComponent(this._url.path);
-    if (fileUriRegex.test(this._url.href)) {
-      path = path.replace(/^\//, "");
-    }
     const fs = NodePackages.get("fs");
-    this._setReadableStream(fs.createReadStream(path, {
+    this._setReadableStream(fs.createReadStream(this._url, {
       start,
       end: end - 1
     }));
@@ -12834,7 +12832,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.6.0";
-const build = "037c181";
+const build = "ff76217";
 
 ;// CONCATENATED MODULE: ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -14897,10 +14895,9 @@ class PopupElement {
     if (this.#dateObj) {
       const modificationDate = document.createElement("span");
       modificationDate.classList.add("popupDate");
-      modificationDate.setAttribute("data-l10n-id", "pdfjs-annotation-date-string");
+      modificationDate.setAttribute("data-l10n-id", "pdfjs-annotation-date-time-string");
       modificationDate.setAttribute("data-l10n-args", JSON.stringify({
-        date: this.#dateObj.toLocaleDateString(),
-        time: this.#dateObj.toLocaleTimeString()
+        dateObj: this.#dateObj.valueOf()
       }));
       header.append(modificationDate);
     }
@@ -18650,7 +18647,8 @@ class StampEditor extends AnnotationEditor {
       this._reportTelemetry({
         action: "pdfjs.image.image_added",
         data: {
-          alt_text_modal: false
+          alt_text_modal: false,
+          alt_text_type: "empty"
         }
       });
       try {
@@ -19934,7 +19932,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "4.6.0";
-const pdfjsBuild = "037c181";
+const pdfjsBuild = "ff76217";
 
 var __webpack_exports__AbortException = __webpack_exports__.AbortException;
 var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;
