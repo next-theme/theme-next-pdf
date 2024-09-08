@@ -532,6 +532,11 @@ function toggleExpandedBtn(button, toggle, view = null) {
   button.setAttribute("aria-expanded", toggle);
   view?.classList.toggle("hidden", !toggle);
 }
+const calcRound = function () {
+  const e = document.createElement("div");
+  e.style.width = "round(down, calc(1.6666666666666665 * 792px), 1px)";
+  return e.style.width === "calc(1320px)" ? Math.fround : x => x;
+}();
 
 ;// CONCATENATED MODULE: ./web/app_options.js
 {
@@ -3220,6 +3225,7 @@ class NewAltTextManager {
   #eventBus;
   #firstTime = false;
   #guessedAltText;
+  #hasAI = false;
   #isEditing = null;
   #imagePreview;
   #imageData;
@@ -3291,16 +3297,16 @@ class NewAltTextManager {
     textarea.addEventListener("focus", () => {
       this.#wasAILoading = this.#isAILoading;
       this.#toggleLoading(false);
+      this.#toggleTitleAndDisclaimer();
     });
     textarea.addEventListener("blur", () => {
-      if (textarea.value) {
-        return;
+      if (!textarea.value) {
+        this.#toggleLoading(this.#wasAILoading);
       }
-      this.#toggleLoading(this.#wasAILoading);
+      this.#toggleTitleAndDisclaimer();
     });
     textarea.addEventListener("input", () => {
-      this.#toggleTitle();
-      this.#toggleDisclaimer();
+      this.#toggleTitleAndDisclaimer();
     });
     eventBus._on("enableguessalttext", ({
       value
@@ -3330,14 +3336,6 @@ class NewAltTextManager {
     }
     this.#dialog.classList.toggle("error", value);
   }
-  #toggleTitle() {
-    const isEditing = this.#isAILoading || !!this.#textarea.value;
-    if (this.#isEditing === isEditing) {
-      return;
-    }
-    this.#isEditing = isEditing;
-    this.#title.setAttribute("data-l10n-id", `pdfjs-editor-new-alt-text-dialog-${isEditing ? "edit" : "add"}-label`);
-  }
   async #toggleGuessAltText(value, isInitial = false) {
     if (!this.#uiManager) {
       return;
@@ -3355,8 +3353,7 @@ class NewAltTextManager {
     } else {
       this.#toggleLoading(false);
       this.#isAILoading = false;
-      this.#toggleTitle();
-      this.#toggleDisclaimer();
+      this.#toggleTitleAndDisclaimer();
     }
   }
   #toggleNotNow() {
@@ -3364,15 +3361,22 @@ class NewAltTextManager {
     this.#cancelButton.classList.toggle("hidden", this.#firstTime);
   }
   #toggleAI(value) {
-    this.#dialog.classList.toggle("noAi", !value);
-    this.#toggleTitle();
-  }
-  #toggleDisclaimer(value = null) {
-    if (!this.#uiManager) {
+    if (!this.#uiManager || this.#hasAI === value) {
       return;
     }
-    const hidden = value === null ? !this.#guessedAltText || this.#guessedAltText !== this.#textarea.value : !value;
-    this.#disclaimer.classList.toggle("hidden", hidden);
+    this.#hasAI = value;
+    this.#dialog.classList.toggle("noAi", !value);
+    this.#toggleTitleAndDisclaimer();
+  }
+  #toggleTitleAndDisclaimer() {
+    const visible = this.#isAILoading || this.#guessedAltText && this.#guessedAltText === this.#textarea.value;
+    this.#disclaimer.hidden = !visible;
+    const isEditing = this.#isAILoading || !!this.#textarea.value;
+    if (this.#isEditing === isEditing) {
+      return;
+    }
+    this.#isEditing = isEditing;
+    this.#title.setAttribute("data-l10n-id", isEditing ? "pdfjs-editor-new-alt-text-dialog-edit-label" : "pdfjs-editor-new-alt-text-dialog-add-label");
   }
   async #mlGuessAltText(isInitial) {
     if (this.#isAILoading) {
@@ -3387,13 +3391,10 @@ class NewAltTextManager {
     this.#guessedAltText = this.#currentEditor.guessedAltText;
     if (this.#previousAltText === null && this.#guessedAltText) {
       this.#addAltText(this.#guessedAltText);
-      this.#toggleDisclaimer();
-      this.#toggleTitle();
       return;
     }
     this.#toggleLoading(true);
-    this.#toggleTitle();
-    this.#toggleDisclaimer(true);
+    this.#toggleTitleAndDisclaimer();
     let hasError = false;
     try {
       const altText = await this.#currentEditor.mlGuessAltText(this.#imageData, false);
@@ -3409,10 +3410,9 @@ class NewAltTextManager {
       hasError = true;
     }
     this.#toggleLoading(false);
+    this.#toggleTitleAndDisclaimer();
     if (hasError && this.#uiManager) {
       this.#toggleError(true);
-      this.#toggleTitle();
-      this.#toggleDisclaimer();
     }
   }
   #addAltText(altText) {
@@ -3420,6 +3420,7 @@ class NewAltTextManager {
       return;
     }
     this.#textarea.value = altText;
+    this.#toggleTitleAndDisclaimer();
   }
   #setProgress() {
     this.#downloadModel.classList.toggle("hidden", false);
@@ -4437,7 +4438,7 @@ class PasswordPrompt {
     if (!this._isViewerEmbedded || passwordIncorrect) {
       this.input.focus();
     }
-    this.label.setAttribute("data-l10n-id", `pdfjs-password-${passwordIncorrect ? "invalid" : "label"}`);
+    this.label.setAttribute("data-l10n-id", passwordIncorrect ? "pdfjs-password-invalid" : "pdfjs-password-label");
   }
   async close() {
     if (this.overlayManager.active === this.dialog) {
@@ -5951,7 +5952,7 @@ class PDFFindBar {
         status = "notFound";
         break;
       case FindState.WRAPPED:
-        findMsgId = `pdfjs-find-reached-${previous ? "top" : "bottom"}`;
+        findMsgId = previous ? "pdfjs-find-reached-top" : "pdfjs-find-reached-bottom";
         break;
     }
     findField.setAttribute("data-status", status);
@@ -5974,7 +5975,7 @@ class PDFFindBar {
     } = this;
     if (total > 0) {
       const limit = MATCHES_COUNT_LIMIT;
-      findResultsCount.setAttribute("data-l10n-id", `pdfjs-find-match-count${total > limit ? "-limit" : ""}`);
+      findResultsCount.setAttribute("data-l10n-id", total > limit ? "pdfjs-find-match-count-limit" : "pdfjs-find-match-count");
       findResultsCount.setAttribute("data-l10n-args", JSON.stringify({
         limit,
         current,
@@ -8989,7 +8990,7 @@ class AnnotationLayerBuilder {
     this._cancelled = false;
     this._eventBus = linkService.eventBus;
   }
-  async render(viewport, intent = "display") {
+  async render(viewport, options, intent = "display") {
     if (this.div) {
       if (this._cancelled || !this.annotationLayer) {
         return;
@@ -9022,7 +9023,8 @@ class AnnotationLayerBuilder {
       page: this.pdfPage,
       viewport: viewport.clone({
         dontFlip: true
-      })
+      }),
+      structTreeLayer: options?.structTreeLayer || null
     });
     await this.annotationLayer.render({
       annotations,
@@ -9161,17 +9163,39 @@ const PDF_ROLE_TO_HTML_ROLE = {
 };
 const HEADING_PATTERN = /^H(\d+)$/;
 class StructTreeLayerBuilder {
-  #treeDom = undefined;
-  get renderingDone() {
-    return this.#treeDom !== undefined;
+  #promise;
+  #treeDom = null;
+  #treePromise;
+  #elementAttributes = new Map();
+  #rawDims;
+  #elementsToAddToTextLayer = null;
+  constructor(pdfPage, rawDims) {
+    this.#promise = pdfPage.getStructTree();
+    this.#rawDims = rawDims;
   }
-  render(structTree) {
-    if (this.#treeDom !== undefined) {
-      return this.#treeDom;
+  async render() {
+    if (this.#treePromise) {
+      return this.#treePromise;
     }
-    const treeDom = this.#walk(structTree);
-    treeDom?.classList.add("structTree");
-    return this.#treeDom = treeDom;
+    const {
+      promise,
+      resolve,
+      reject
+    } = Promise.withResolvers();
+    this.#treePromise = promise;
+    try {
+      this.#treeDom = this.#walk(await this.#promise);
+    } catch (ex) {
+      reject(ex);
+    }
+    this.#promise = null;
+    this.#treeDom?.classList.add("structTree");
+    resolve(this.#treeDom);
+    return promise;
+  }
+  async getAriaAttributes(annotationId) {
+    await this.render();
+    return this.#elementAttributes.get(annotationId);
   }
   hide() {
     if (this.#treeDom && !this.#treeDom.hidden) {
@@ -9190,7 +9214,22 @@ class StructTreeLayerBuilder {
       lang
     } = structElement;
     if (alt !== undefined) {
-      htmlElement.setAttribute("aria-label", removeNullCharacters(alt));
+      let added = false;
+      const label = removeNullCharacters(alt);
+      for (const child of structElement.children) {
+        if (child.type === "annotation") {
+          let attrs = this.#elementAttributes.get(child.id);
+          if (!attrs) {
+            attrs = new Map();
+            this.#elementAttributes.set(child.id, attrs);
+          }
+          attrs.set("aria-label", label);
+          added = true;
+        }
+      }
+      if (!added) {
+        htmlElement.setAttribute("aria-label", label);
+      }
     }
     if (id !== undefined) {
       htmlElement.setAttribute("aria-owns", id);
@@ -9198,6 +9237,52 @@ class StructTreeLayerBuilder {
     if (lang !== undefined) {
       htmlElement.setAttribute("lang", removeNullCharacters(lang, true));
     }
+  }
+  #addImageInTextLayer(node, element) {
+    const {
+      alt,
+      bbox,
+      children
+    } = node;
+    const child = children?.[0];
+    if (!this.#rawDims || !alt || !bbox || child?.type !== "content") {
+      return false;
+    }
+    const {
+      id
+    } = child;
+    if (!id) {
+      return false;
+    }
+    element.setAttribute("aria-owns", id);
+    const img = document.createElement("span");
+    (this.#elementsToAddToTextLayer ||= new Map()).set(id, img);
+    img.setAttribute("role", "img");
+    img.setAttribute("aria-label", removeNullCharacters(alt));
+    const {
+      pageHeight,
+      pageX,
+      pageY
+    } = this.#rawDims;
+    const calc = "calc(var(--scale-factor)*";
+    const {
+      style
+    } = img;
+    style.width = `${calc}${bbox[2] - bbox[0]}px)`;
+    style.height = `${calc}${bbox[3] - bbox[1]}px)`;
+    style.left = `${calc}${bbox[0] - pageX}px)`;
+    style.top = `${calc}${pageHeight - bbox[3] + pageY}px)`;
+    return true;
+  }
+  addElementsToTextLayer() {
+    if (!this.#elementsToAddToTextLayer) {
+      return;
+    }
+    for (const [id, img] of this.#elementsToAddToTextLayer) {
+      document.getElementById(id)?.append(img);
+    }
+    this.#elementsToAddToTextLayer.clear();
+    this.#elementsToAddToTextLayer = null;
   }
   #walk(node) {
     if (!node) {
@@ -9214,6 +9299,9 @@ class StructTreeLayerBuilder {
         element.setAttribute("aria-level", match[1]);
       } else if (PDF_ROLE_TO_HTML_ROLE[role]) {
         element.setAttribute("role", PDF_ROLE_TO_HTML_ROLE[role]);
+      }
+      if (role === "Figure" && this.#addImageInTextLayer(node, element)) {
+        return element;
       }
     }
     this.#setAttributes(node, element);
@@ -9816,6 +9904,8 @@ class PDFPageView {
   #layerProperties = null;
   #loadingId = null;
   #previousRotation = null;
+  #scaleRoundX = 1;
+  #scaleRoundY = 1;
   #renderError = null;
   #renderingState = RenderingStates.INITIAL;
   #textLayerMode = TextLayerMode.ENABLE;
@@ -9987,7 +10077,9 @@ class PDFPageView {
   async #renderAnnotationLayer() {
     let error = null;
     try {
-      await this.annotationLayer.render(this.viewport, "display");
+      await this.annotationLayer.render(this.viewport, {
+        structTreeLayer: this.structTreeLayer
+      }, "display");
     } catch (ex) {
       console.error(`#renderAnnotationLayer: "${ex}".`);
       error = ex;
@@ -10053,12 +10145,13 @@ class PDFPageView {
     if (!this.textLayer) {
       return;
     }
-    this.structTreeLayer ||= new StructTreeLayerBuilder();
-    const tree = await (!this.structTreeLayer.renderingDone ? this.pdfPage.getStructTree() : null);
-    const treeDom = this.structTreeLayer?.render(tree);
+    const treeDom = await this.structTreeLayer?.render();
     if (treeDom) {
       this.l10n.pause();
-      this.canvas?.append(treeDom);
+      this.structTreeLayer?.addElementsToTextLayer();
+      if (this.canvas && treeDom.parentNode !== this.canvas) {
+        this.canvas.append(treeDom);
+      }
       this.l10n.resume();
     }
     this.structTreeLayer?.show();
@@ -10273,13 +10366,13 @@ class PDFPageView {
       this.textLayer.cancel();
       this.textLayer = null;
     }
-    if (this.structTreeLayer && !this.textLayer) {
-      this.structTreeLayer = null;
-    }
     if (this.annotationLayer && (!keepAnnotationLayer || !this.annotationLayer.div)) {
       this.annotationLayer.cancel();
       this.annotationLayer = null;
       this._annotationCanvasMap = null;
+    }
+    if (this.structTreeLayer && !this.textLayer) {
+      this.structTreeLayer = null;
     }
     if (this.annotationEditorLayer && (!keepAnnotationEditorLayer || !this.annotationEditorLayer.div)) {
       if (this.drawLayer) {
@@ -10493,13 +10586,20 @@ class PDFPageView {
     }
     const sfx = approximateFraction(outputScale.sx);
     const sfy = approximateFraction(outputScale.sy);
-    canvas.width = floorToDivide(width * outputScale.sx, sfx[0]);
-    canvas.height = floorToDivide(height * outputScale.sy, sfy[0]);
-    const {
-      style
-    } = canvas;
-    style.width = floorToDivide(width, sfx[1]) + "px";
-    style.height = floorToDivide(height, sfy[1]) + "px";
+    const canvasWidth = canvas.width = floorToDivide(calcRound(width * outputScale.sx), sfx[0]);
+    const canvasHeight = canvas.height = floorToDivide(calcRound(height * outputScale.sy), sfy[0]);
+    const pageWidth = floorToDivide(calcRound(width), sfx[1]);
+    const pageHeight = floorToDivide(calcRound(height), sfy[1]);
+    outputScale.sx = canvasWidth / pageWidth;
+    outputScale.sy = canvasHeight / pageHeight;
+    if (this.#scaleRoundX !== sfx[1]) {
+      div.style.setProperty("--scale-round-x", `${sfx[1]}px`);
+      this.#scaleRoundX = sfx[1];
+    }
+    if (this.#scaleRoundY !== sfy[1]) {
+      div.style.setProperty("--scale-round-y", `${sfy[1]}px`);
+      this.#scaleRoundY = sfy[1];
+    }
     this.#viewportMap.set(canvas, viewport);
     const transform = outputScale.scaled ? [outputScale.sx, 0, 0, outputScale.sy, 0, 0] : null;
     const renderContext = {
@@ -10517,6 +10617,9 @@ class PDFPageView {
     const resultPromise = renderTask.promise.then(async () => {
       showCanvas?.(true);
       await this.#finishRenderTask(renderTask);
+      if (this.textLayer || this.annotationLayer) {
+        this.structTreeLayer ||= new StructTreeLayerBuilder(pdfPage, viewport.rawDims);
+      }
       this.#renderTextLayer();
       if (this.annotationLayer) {
         await this.#renderAnnotationLayer();
@@ -10532,20 +10635,18 @@ class PDFPageView {
       });
       await this.#renderDrawLayer();
       this.drawLayer.setParent(canvasWrapper);
-      if (!this.annotationEditorLayer) {
-        this.annotationEditorLayer = new AnnotationEditorLayerBuilder({
-          uiManager: annotationEditorUIManager,
-          pdfPage,
-          l10n,
-          accessibilityManager: this._accessibilityManager,
-          annotationLayer: this.annotationLayer?.annotationLayer,
-          textLayer: this.textLayer,
-          drawLayer: this.drawLayer.getDrawLayer(),
-          onAppend: annotationEditorLayerDiv => {
-            this.#addLayer(annotationEditorLayerDiv, "annotationEditorLayer");
-          }
-        });
-      }
+      this.annotationEditorLayer ||= new AnnotationEditorLayerBuilder({
+        uiManager: annotationEditorUIManager,
+        pdfPage,
+        l10n,
+        accessibilityManager: this._accessibilityManager,
+        annotationLayer: this.annotationLayer?.annotationLayer,
+        textLayer: this.textLayer,
+        drawLayer: this.drawLayer.getDrawLayer(),
+        onAppend: annotationEditorLayerDiv => {
+          this.#addLayer(annotationEditorLayerDiv, "annotationEditorLayer");
+        }
+      });
       this.#renderAnnotationEditorLayer();
     }, error => {
       if (!(error instanceof RenderingCancelledException)) {
@@ -15022,7 +15123,7 @@ function beforeUnload(evt) {
 
 
 const pdfjsVersion = "4.6.0";
-const pdfjsBuild = "ff76217";
+const pdfjsBuild = "5d0c82c";
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,
