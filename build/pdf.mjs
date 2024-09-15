@@ -4239,9 +4239,7 @@ class AnnotationEditor {
       parentScale,
       pageDimensions: [pageWidth, pageHeight]
     } = this;
-    const scaledWidth = pageWidth * parentScale;
-    const scaledHeight = pageHeight * parentScale;
-    return util_FeatureTest.isCSSRoundSupported ? [Math.round(scaledWidth), Math.round(scaledHeight)] : [scaledWidth, scaledHeight];
+    return [pageWidth * parentScale, pageHeight * parentScale];
   }
   setDims(width, height) {
     const [parentWidth, parentHeight] = this.parentDimensions;
@@ -8091,9 +8089,10 @@ class CanvasGraphics {
         resetCtxToDefault(this.ctx);
       } else {
         resetCtxToDefault(this.ctx);
+        this.endPath();
         this.ctx.rect(rect[0], rect[1], width, height);
         this.ctx.clip();
-        this.endPath();
+        this.ctx.beginPath();
       }
     }
     this.current = new CanvasExtraState(this.ctx.canvas.width, this.ctx.canvas.height);
@@ -9584,7 +9583,7 @@ function createHeaders(isHttp, httpHeaders) {
   return headers;
 }
 function validateRangeRequestCapabilities({
-  getResponseHeader,
+  responseHeaders,
   isHttp,
   rangeChunkSize,
   disableRange
@@ -9593,7 +9592,7 @@ function validateRangeRequestCapabilities({
     allowRangeRequests: false,
     suggestedLength: undefined
   };
-  const length = parseInt(getResponseHeader("Content-Length"), 10);
+  const length = parseInt(responseHeaders.get("Content-Length"), 10);
   if (!Number.isInteger(length)) {
     return returnValues;
   }
@@ -9604,18 +9603,18 @@ function validateRangeRequestCapabilities({
   if (disableRange || !isHttp) {
     return returnValues;
   }
-  if (getResponseHeader("Accept-Ranges") !== "bytes") {
+  if (responseHeaders.get("Accept-Ranges") !== "bytes") {
     return returnValues;
   }
-  const contentEncoding = getResponseHeader("Content-Encoding") || "identity";
+  const contentEncoding = responseHeaders.get("Content-Encoding") || "identity";
   if (contentEncoding !== "identity") {
     return returnValues;
   }
   returnValues.allowRangeRequests = true;
   return returnValues;
 }
-function extractFilenameFromHeader(getResponseHeader) {
-  const contentDisposition = getResponseHeader("Content-Disposition");
+function extractFilenameFromHeader(responseHeaders) {
+  const contentDisposition = responseHeaders.get("Content-Disposition");
   if (contentDisposition) {
     let filename = getFilenameFromContentDispositionHeader(contentDisposition);
     if (filename.includes("%")) {
@@ -9719,19 +9718,19 @@ class PDFFetchStreamReader {
       }
       this._reader = response.body.getReader();
       this._headersCapability.resolve();
-      const getResponseHeader = name => response.headers.get(name);
+      const responseHeaders = response.headers;
       const {
         allowRangeRequests,
         suggestedLength
       } = validateRangeRequestCapabilities({
-        getResponseHeader,
+        responseHeaders,
         isHttp: stream.isHttp,
         rangeChunkSize: this._rangeChunkSize,
         disableRange: this._disableRange
       });
       this._isRangeSupported = allowRangeRequests;
       this._contentLength = suggestedLength || this._contentLength;
-      this._filename = extractFilenameFromHeader(getResponseHeader);
+      this._filename = extractFilenameFromHeader(responseHeaders);
       if (!this._isStreamingSupported && this._isRangeSupported) {
         this.cancel(new AbortException("Streaming is disabled."));
       }
@@ -10008,7 +10007,7 @@ class PDFNetworkStreamFullRequestReader {
     };
     this._url = source.url;
     this._fullRequestId = manager.requestFull(args);
-    this._headersReceivedCapability = Promise.withResolvers();
+    this._headersCapability = Promise.withResolvers();
     this._disableRange = source.disableRange || false;
     this._contentLength = source.length;
     this._rangeChunkSize = source.rangeChunkSize;
@@ -10027,12 +10026,15 @@ class PDFNetworkStreamFullRequestReader {
   _onHeadersReceived() {
     const fullRequestXhrId = this._fullRequestId;
     const fullRequestXhr = this._manager.getRequestXhr(fullRequestXhrId);
-    const getResponseHeader = name => fullRequestXhr.getResponseHeader(name);
+    const responseHeaders = new Headers(fullRequestXhr.getAllResponseHeaders().trim().split(/[\r\n]+/).map(x => {
+      const [key, ...val] = x.split(": ");
+      return [key, val.join(": ")];
+    }));
     const {
       allowRangeRequests,
       suggestedLength
     } = validateRangeRequestCapabilities({
-      getResponseHeader,
+      responseHeaders,
       isHttp: this._manager.isHttp,
       rangeChunkSize: this._rangeChunkSize,
       disableRange: this._disableRange
@@ -10041,11 +10043,11 @@ class PDFNetworkStreamFullRequestReader {
       this._isRangeSupported = true;
     }
     this._contentLength = suggestedLength || this._contentLength;
-    this._filename = extractFilenameFromHeader(getResponseHeader);
+    this._filename = extractFilenameFromHeader(responseHeaders);
     if (this._isRangeSupported) {
       this._manager.abortRequest(fullRequestXhrId);
     }
-    this._headersReceivedCapability.resolve();
+    this._headersCapability.resolve();
   }
   _onDone(data) {
     if (data) {
@@ -10073,7 +10075,7 @@ class PDFNetworkStreamFullRequestReader {
   }
   _onError(status) {
     this._storedError = createResponseStatusError(status, this._url);
-    this._headersReceivedCapability.reject(this._storedError);
+    this._headersCapability.reject(this._storedError);
     for (const requestCapability of this._requests) {
       requestCapability.reject(this._storedError);
     }
@@ -10099,7 +10101,7 @@ class PDFNetworkStreamFullRequestReader {
     return this._contentLength;
   }
   get headersReady() {
-    return this._headersReceivedCapability.promise;
+    return this._headersCapability.promise;
   }
   async read() {
     if (this._storedError) {
@@ -10124,7 +10126,7 @@ class PDFNetworkStreamFullRequestReader {
   }
   cancel(reason) {
     this._done = true;
-    this._headersReceivedCapability.reject(reason);
+    this._headersCapability.reject(reason);
     for (const requestCapability of this._requests) {
       requestCapability.resolve({
         value: undefined,
@@ -10470,19 +10472,19 @@ class PDFNodeStreamFullReader extends BaseFullReader {
       }
       this._headersCapability.resolve();
       this._setReadableStream(response);
-      const getResponseHeader = name => this._readableStream.headers[name.toLowerCase()];
+      const responseHeaders = new Headers(this._readableStream.headers);
       const {
         allowRangeRequests,
         suggestedLength
       } = validateRangeRequestCapabilities({
-        getResponseHeader,
+        responseHeaders,
         isHttp: stream.isHttp,
         rangeChunkSize: this._rangeChunkSize,
         disableRange: this._disableRange
       });
       this._isRangeSupported = allowRangeRequests;
       this._contentLength = suggestedLength || this._contentLength;
-      this._filename = extractFilenameFromHeader(getResponseHeader);
+      this._filename = extractFilenameFromHeader(responseHeaders);
     };
     this._request = createRequest(this._url, headers, handleResponse);
     this._request.on("error", reason => {
@@ -10567,6 +10569,7 @@ class TextLayer {
   #transform = null;
   static #ascentCache = new Map();
   static #canvasContexts = new Map();
+  static #canvasCtxFonts = new WeakMap();
   static #minFontSize = null;
   static #pendingTextLayers = new Set();
   constructor({
@@ -10590,8 +10593,6 @@ class TextLayer {
     this.#scale = viewport.scale * (globalThis.devicePixelRatio || 1);
     this.#rotation = viewport.rotation;
     this.#layoutTextParams = {
-      prevFontSize: null,
-      prevFontFamily: null,
       div: null,
       properties: null,
       ctx: null
@@ -10607,11 +10608,11 @@ class TextLayer {
     this.#pageHeight = pageHeight;
     TextLayer.#ensureMinFontSizeComputed();
     setLayerDimensions(container, viewport);
-    this.#capability.promise.catch(() => {}).then(() => {
+    this.#capability.promise.finally(() => {
       TextLayer.#pendingTextLayers.delete(this);
       this.#layoutTextParams = null;
       this.#styleCache = null;
-    });
+    }).catch(() => {});
   }
   render() {
     const pump = () => {
@@ -10651,8 +10652,6 @@ class TextLayer {
       onBefore?.();
       this.#scale = scale;
       const params = {
-        prevFontSize: null,
-        prevFontFamily: null,
         div: null,
         properties: null,
         ctx: TextLayer.#getCtx(this.#lang)
@@ -10785,9 +10784,7 @@ class TextLayer {
     const {
       div,
       properties,
-      ctx,
-      prevFontSize,
-      prevFontFamily
+      ctx
     } = params;
     const {
       style
@@ -10804,11 +10801,7 @@ class TextLayer {
         canvasWidth,
         fontSize
       } = properties;
-      if (prevFontSize !== fontSize || prevFontFamily !== fontFamily) {
-        ctx.font = `${fontSize * this.#scale}px ${fontFamily}`;
-        params.prevFontSize = fontSize;
-        params.prevFontFamily = fontFamily;
-      }
+      TextLayer.#ensureCtxFont(ctx, fontSize * this.#scale, fontFamily);
       const {
         width
       } = ctx.measureText(div.textContent);
@@ -10836,19 +10829,32 @@ class TextLayer {
     this.#canvasContexts.clear();
   }
   static #getCtx(lang = null) {
-    let canvasContext = this.#canvasContexts.get(lang ||= "");
-    if (!canvasContext) {
+    let ctx = this.#canvasContexts.get(lang ||= "");
+    if (!ctx) {
       const canvas = document.createElement("canvas");
       canvas.className = "hiddenCanvasElement";
       canvas.lang = lang;
       document.body.append(canvas);
-      canvasContext = canvas.getContext("2d", {
+      ctx = canvas.getContext("2d", {
         alpha: false,
         willReadFrequently: true
       });
-      this.#canvasContexts.set(lang, canvasContext);
+      this.#canvasContexts.set(lang, ctx);
+      this.#canvasCtxFonts.set(ctx, {
+        size: 0,
+        family: ""
+      });
     }
-    return canvasContext;
+    return ctx;
+  }
+  static #ensureCtxFont(ctx, size, family) {
+    const cached = this.#canvasCtxFonts.get(ctx);
+    if (size === cached.size && family === cached.family) {
+      return;
+    }
+    ctx.font = `${size}px ${family}`;
+    cached.size = size;
+    cached.family = family;
   }
   static #ensureMinFontSizeComputed() {
     if (this.#minFontSize !== null) {
@@ -10870,9 +10876,8 @@ class TextLayer {
       return cachedAscent;
     }
     const ctx = this.#getCtx(lang);
-    const savedFont = ctx.font;
     ctx.canvas.width = ctx.canvas.height = DEFAULT_FONT_SIZE;
-    ctx.font = `${DEFAULT_FONT_SIZE}px ${fontFamily}`;
+    this.#ensureCtxFont(ctx, DEFAULT_FONT_SIZE, fontFamily);
     const metrics = ctx.measureText("");
     let ascent = metrics.fontBoundingBoxAscent;
     let descent = Math.abs(metrics.fontBoundingBoxDescent);
@@ -10880,7 +10885,6 @@ class TextLayer {
       const ratio = ascent / (ascent + descent);
       this.#ascentCache.set(fontFamily, ratio);
       ctx.canvas.width = ctx.canvas.height = 0;
-      ctx.font = savedFont;
       return ratio;
     }
     ctx.strokeStyle = "red";
@@ -10905,7 +10909,6 @@ class TextLayer {
       }
     }
     ctx.canvas.width = ctx.canvas.height = 0;
-    ctx.font = savedFont;
     const ratio = ascent ? ascent / (ascent + descent) : DEFAULT_FONT_ASCENT;
     this.#ascentCache.set(fontFamily, ratio);
     return ratio;
@@ -12840,7 +12843,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.6.0";
-const build = "5d0c82c";
+const build = "c72fb9b";
 
 ;// CONCATENATED MODULE: ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -15912,8 +15915,13 @@ class FreeTextEditor extends AnnotationEditor {
   #extractText() {
     const buffer = [];
     this.editorDiv.normalize();
+    let prevChild = null;
     for (const child of this.editorDiv.childNodes) {
+      if (prevChild?.nodeType === Node.TEXT_NODE && child.nodeName === "BR") {
+        continue;
+      }
       buffer.push(FreeTextEditor.#getNodeContent(child));
+      prevChild = child;
     }
     return buffer.join("\n");
   }
@@ -17158,7 +17166,6 @@ class HighlightEditor extends AnnotationEditor {
   static _defaultColor = null;
   static _defaultOpacity = 1;
   static _defaultThickness = 12;
-  static _l10nPromise;
   static _type = "highlight";
   static _editorType = AnnotationEditorType.HIGHLIGHT;
   static _freeHighlightId = -1;
@@ -19088,7 +19095,6 @@ class StampEditor extends AnnotationEditor {
     const [parentWidth, parentHeight] = this.parentDimensions;
     this.width = width / parentWidth;
     this.height = height / parentHeight;
-    this.setDims(width, height);
     if (this._initialOptions?.isCentered) {
       this.center();
     } else {
@@ -20096,7 +20102,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "4.6.0";
-const pdfjsBuild = "5d0c82c";
+const pdfjsBuild = "c72fb9b";
 
 var __webpack_exports__AbortException = __webpack_exports__.AbortException;
 var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;
