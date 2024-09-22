@@ -63,6 +63,7 @@ __webpack_require__.d(__webpack_exports__, {
   InvalidPDFException: () => (/* reexport */ InvalidPDFException),
   MissingPDFException: () => (/* reexport */ MissingPDFException),
   OPS: () => (/* reexport */ OPS),
+  OutputScale: () => (/* reexport */ OutputScale),
   PDFDataRangeTransport: () => (/* reexport */ PDFDataRangeTransport),
   PDFDateString: () => (/* reexport */ PDFDateString),
   PDFWorker: () => (/* reexport */ PDFWorker),
@@ -1695,6 +1696,19 @@ function setLayerDimensions(div, viewport, mustFlip = false, mustRotate = true) 
   }
   if (mustRotate) {
     div.setAttribute("data-main-rotation", viewport.rotation);
+  }
+}
+class OutputScale {
+  constructor() {
+    const pixelRatio = window.devicePixelRatio || 1;
+    this.sx = pixelRatio;
+    this.sy = pixelRatio;
+  }
+  get scaled() {
+    return this.sx !== 1 || this.sy !== 1;
+  }
+  get symmetric() {
+    return this.sx === this.sy;
   }
 }
 
@@ -11111,16 +11125,14 @@ function getDocument(src = {}) {
       if (!url) {
         throw new Error("getDocument - no `url` parameter provided.");
       }
-      const createPDFNetworkStream = params => {
-        if (isNodeJS) {
-          const isFetchSupported = function () {
-            return typeof fetch !== "undefined" && typeof Response !== "undefined" && "body" in Response.prototype;
-          };
-          return isFetchSupported() && isValidFetchUrl(params.url) ? new PDFFetchStream(params) : new PDFNodeStream(params);
-        }
-        return isValidFetchUrl(params.url) ? new PDFFetchStream(params) : new PDFNetworkStream(params);
-      };
-      networkStream = createPDFNetworkStream({
+      let NetworkStream;
+      if (isNodeJS) {
+        const isFetchSupported = typeof fetch !== "undefined" && typeof Response !== "undefined" && "body" in Response.prototype;
+        NetworkStream = isFetchSupported && isValidFetchUrl(url) ? PDFFetchStream : PDFNodeStream;
+      } else {
+        NetworkStream = isValidFetchUrl(url) ? PDFFetchStream : PDFNetworkStream;
+      }
+      networkStream = new NetworkStream({
         url,
         length,
         httpHeaders,
@@ -12843,7 +12855,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.6.0";
-const build = "c72fb9b";
+const build = "ea2172e";
 
 ;// CONCATENATED MODULE: ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -18835,7 +18847,7 @@ class StampEditor extends AnnotationEditor {
       data,
       width,
       height
-    } = imageData || this.copyCanvas(null, true).imageData;
+    } = imageData || this.copyCanvas(null, null, true).imageData;
     const response = await mlManager.guess({
       name: "altText",
       request: {
@@ -19026,69 +19038,88 @@ class StampEditor extends AnnotationEditor {
       canvas.setAttribute("aria-label", this.#bitmapFileName);
     }
   }
-  copyCanvas(maxDimension, createImageData = false) {
-    if (!maxDimension) {
-      maxDimension = 224;
+  copyCanvas(maxDataDimension, maxPreviewDimension, createImageData = false) {
+    if (!maxDataDimension) {
+      maxDataDimension = 224;
     }
     const {
       width: bitmapWidth,
       height: bitmapHeight
     } = this.#bitmap;
-    const canvas = document.createElement("canvas");
+    const outputScale = new OutputScale();
     let bitmap = this.#bitmap;
     let width = bitmapWidth,
       height = bitmapHeight;
-    if (bitmapWidth > maxDimension || bitmapHeight > maxDimension) {
-      const ratio = Math.min(maxDimension / bitmapWidth, maxDimension / bitmapHeight);
-      width = Math.floor(bitmapWidth * ratio);
-      height = Math.floor(bitmapHeight * ratio);
-      if (!this.#isSvg) {
-        bitmap = this.#scaleBitmap(width, height);
+    let canvas = null;
+    if (maxPreviewDimension) {
+      if (bitmapWidth > maxPreviewDimension || bitmapHeight > maxPreviewDimension) {
+        const ratio = Math.min(maxPreviewDimension / bitmapWidth, maxPreviewDimension / bitmapHeight);
+        width = Math.floor(bitmapWidth * ratio);
+        height = Math.floor(bitmapHeight * ratio);
       }
+      canvas = document.createElement("canvas");
+      const scaledWidth = canvas.width = Math.ceil(width * outputScale.sx);
+      const scaledHeight = canvas.height = Math.ceil(height * outputScale.sy);
+      if (!this.#isSvg) {
+        bitmap = this.#scaleBitmap(scaledWidth, scaledHeight);
+      }
+      const ctx = canvas.getContext("2d");
+      ctx.filter = this._uiManager.hcmFilter;
+      let white = "white",
+        black = "#cfcfd8";
+      if (this._uiManager.hcmFilter !== "none") {
+        black = "black";
+      } else if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+        white = "#8f8f9d";
+        black = "#42414d";
+      }
+      const boxDim = 15;
+      const boxDimWidth = boxDim * outputScale.sx;
+      const boxDimHeight = boxDim * outputScale.sy;
+      const pattern = new OffscreenCanvas(boxDimWidth * 2, boxDimHeight * 2);
+      const patternCtx = pattern.getContext("2d");
+      patternCtx.fillStyle = white;
+      patternCtx.fillRect(0, 0, boxDimWidth * 2, boxDimHeight * 2);
+      patternCtx.fillStyle = black;
+      patternCtx.fillRect(0, 0, boxDimWidth, boxDimHeight);
+      patternCtx.fillRect(boxDimWidth, boxDimHeight, boxDimWidth, boxDimHeight);
+      ctx.fillStyle = ctx.createPattern(pattern, "repeat");
+      ctx.fillRect(0, 0, scaledWidth, scaledHeight);
+      ctx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height, 0, 0, scaledWidth, scaledHeight);
     }
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    ctx.filter = this._uiManager.hcmFilter;
-    let white = "white",
-      black = "#cfcfd8";
-    if (this._uiManager.hcmFilter !== "none") {
-      black = "black";
-    } else if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
-      white = "#8f8f9d";
-      black = "#42414d";
-    }
-    const boxDim = 15;
-    const pattern = new OffscreenCanvas(boxDim * 2, boxDim * 2);
-    const patternCtx = pattern.getContext("2d");
-    patternCtx.fillStyle = white;
-    patternCtx.fillRect(0, 0, boxDim * 2, boxDim * 2);
-    patternCtx.fillStyle = black;
-    patternCtx.fillRect(0, 0, boxDim, boxDim);
-    patternCtx.fillRect(boxDim, boxDim, boxDim, boxDim);
-    ctx.fillStyle = ctx.createPattern(pattern, "repeat");
-    ctx.fillRect(0, 0, width, height);
+    let imageData = null;
     if (createImageData) {
-      const offscreen = new OffscreenCanvas(width, height);
+      let dataWidth, dataHeight;
+      if (outputScale.symmetric && bitmap.width < maxDataDimension && bitmap.height < maxDataDimension) {
+        dataWidth = bitmap.width;
+        dataHeight = bitmap.height;
+      } else {
+        bitmap = this.#bitmap;
+        if (bitmapWidth > maxDataDimension || bitmapHeight > maxDataDimension) {
+          const ratio = Math.min(maxDataDimension / bitmapWidth, maxDataDimension / bitmapHeight);
+          dataWidth = Math.floor(bitmapWidth * ratio);
+          dataHeight = Math.floor(bitmapHeight * ratio);
+          if (!this.#isSvg) {
+            bitmap = this.#scaleBitmap(dataWidth, dataHeight);
+          }
+        }
+      }
+      const offscreen = new OffscreenCanvas(dataWidth, dataHeight);
       const offscreenCtx = offscreen.getContext("2d", {
         willReadFrequently: true
       });
-      offscreenCtx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height, 0, 0, width, height);
-      const data = offscreenCtx.getImageData(0, 0, width, height).data;
-      ctx.drawImage(offscreen, 0, 0);
-      return {
-        canvas,
-        imageData: {
-          width,
-          height,
-          data
-        }
+      offscreenCtx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height, 0, 0, dataWidth, dataHeight);
+      imageData = {
+        width: dataWidth,
+        height: dataHeight,
+        data: offscreenCtx.getImageData(0, 0, dataWidth, dataHeight).data
       };
     }
-    ctx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height, 0, 0, width, height);
     return {
       canvas,
-      imageData: null
+      width,
+      height,
+      imageData
     };
   }
   #setDimensions(width, height) {
@@ -19135,18 +19166,19 @@ class StampEditor extends AnnotationEditor {
     return bitmap;
   }
   #drawBitmap(width, height) {
-    width = Math.ceil(width);
-    height = Math.ceil(height);
+    const outputScale = new OutputScale();
+    const scaledWidth = Math.ceil(width * outputScale.sx);
+    const scaledHeight = Math.ceil(height * outputScale.sy);
     const canvas = this.#canvas;
-    if (!canvas || canvas.width === width && canvas.height === height) {
+    if (!canvas || canvas.width === scaledWidth && canvas.height === scaledHeight) {
       return;
     }
-    canvas.width = width;
-    canvas.height = height;
-    const bitmap = this.#isSvg ? this.#bitmap : this.#scaleBitmap(width, height);
+    canvas.width = scaledWidth;
+    canvas.height = scaledHeight;
+    const bitmap = this.#isSvg ? this.#bitmap : this.#scaleBitmap(scaledWidth, scaledHeight);
     const ctx = canvas.getContext("2d");
     ctx.filter = this._uiManager.hcmFilter;
-    ctx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height, 0, 0, width, height);
+    ctx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height, 0, 0, scaledWidth, scaledHeight);
   }
   getImageForAltText() {
     return this.#canvas;
@@ -20102,7 +20134,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "4.6.0";
-const pdfjsBuild = "c72fb9b";
+const pdfjsBuild = "ea2172e";
 
 var __webpack_exports__AbortException = __webpack_exports__.AbortException;
 var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;
@@ -20121,6 +20153,7 @@ var __webpack_exports__ImageKind = __webpack_exports__.ImageKind;
 var __webpack_exports__InvalidPDFException = __webpack_exports__.InvalidPDFException;
 var __webpack_exports__MissingPDFException = __webpack_exports__.MissingPDFException;
 var __webpack_exports__OPS = __webpack_exports__.OPS;
+var __webpack_exports__OutputScale = __webpack_exports__.OutputScale;
 var __webpack_exports__PDFDataRangeTransport = __webpack_exports__.PDFDataRangeTransport;
 var __webpack_exports__PDFDateString = __webpack_exports__.PDFDateString;
 var __webpack_exports__PDFWorker = __webpack_exports__.PDFWorker;
@@ -20147,6 +20180,6 @@ var __webpack_exports__normalizeUnicode = __webpack_exports__.normalizeUnicode;
 var __webpack_exports__setLayerDimensions = __webpack_exports__.setLayerDimensions;
 var __webpack_exports__shadow = __webpack_exports__.shadow;
 var __webpack_exports__version = __webpack_exports__.version;
-export { __webpack_exports__AbortException as AbortException, __webpack_exports__AnnotationEditorLayer as AnnotationEditorLayer, __webpack_exports__AnnotationEditorParamsType as AnnotationEditorParamsType, __webpack_exports__AnnotationEditorType as AnnotationEditorType, __webpack_exports__AnnotationEditorUIManager as AnnotationEditorUIManager, __webpack_exports__AnnotationLayer as AnnotationLayer, __webpack_exports__AnnotationMode as AnnotationMode, __webpack_exports__CMapCompressionType as CMapCompressionType, __webpack_exports__ColorPicker as ColorPicker, __webpack_exports__DOMSVGFactory as DOMSVGFactory, __webpack_exports__DrawLayer as DrawLayer, __webpack_exports__FeatureTest as FeatureTest, __webpack_exports__GlobalWorkerOptions as GlobalWorkerOptions, __webpack_exports__ImageKind as ImageKind, __webpack_exports__InvalidPDFException as InvalidPDFException, __webpack_exports__MissingPDFException as MissingPDFException, __webpack_exports__OPS as OPS, __webpack_exports__PDFDataRangeTransport as PDFDataRangeTransport, __webpack_exports__PDFDateString as PDFDateString, __webpack_exports__PDFWorker as PDFWorker, __webpack_exports__PasswordResponses as PasswordResponses, __webpack_exports__PermissionFlag as PermissionFlag, __webpack_exports__PixelsPerInch as PixelsPerInch, __webpack_exports__RenderingCancelledException as RenderingCancelledException, __webpack_exports__TextLayer as TextLayer, __webpack_exports__UnexpectedResponseException as UnexpectedResponseException, __webpack_exports__Util as Util, __webpack_exports__VerbosityLevel as VerbosityLevel, __webpack_exports__XfaLayer as XfaLayer, __webpack_exports__build as build, __webpack_exports__createValidAbsoluteUrl as createValidAbsoluteUrl, __webpack_exports__fetchData as fetchData, __webpack_exports__getDocument as getDocument, __webpack_exports__getFilenameFromUrl as getFilenameFromUrl, __webpack_exports__getPdfFilenameFromUrl as getPdfFilenameFromUrl, __webpack_exports__getXfaPageViewport as getXfaPageViewport, __webpack_exports__isDataScheme as isDataScheme, __webpack_exports__isPdfFile as isPdfFile, __webpack_exports__noContextMenu as noContextMenu, __webpack_exports__normalizeUnicode as normalizeUnicode, __webpack_exports__setLayerDimensions as setLayerDimensions, __webpack_exports__shadow as shadow, __webpack_exports__version as version };
+export { __webpack_exports__AbortException as AbortException, __webpack_exports__AnnotationEditorLayer as AnnotationEditorLayer, __webpack_exports__AnnotationEditorParamsType as AnnotationEditorParamsType, __webpack_exports__AnnotationEditorType as AnnotationEditorType, __webpack_exports__AnnotationEditorUIManager as AnnotationEditorUIManager, __webpack_exports__AnnotationLayer as AnnotationLayer, __webpack_exports__AnnotationMode as AnnotationMode, __webpack_exports__CMapCompressionType as CMapCompressionType, __webpack_exports__ColorPicker as ColorPicker, __webpack_exports__DOMSVGFactory as DOMSVGFactory, __webpack_exports__DrawLayer as DrawLayer, __webpack_exports__FeatureTest as FeatureTest, __webpack_exports__GlobalWorkerOptions as GlobalWorkerOptions, __webpack_exports__ImageKind as ImageKind, __webpack_exports__InvalidPDFException as InvalidPDFException, __webpack_exports__MissingPDFException as MissingPDFException, __webpack_exports__OPS as OPS, __webpack_exports__OutputScale as OutputScale, __webpack_exports__PDFDataRangeTransport as PDFDataRangeTransport, __webpack_exports__PDFDateString as PDFDateString, __webpack_exports__PDFWorker as PDFWorker, __webpack_exports__PasswordResponses as PasswordResponses, __webpack_exports__PermissionFlag as PermissionFlag, __webpack_exports__PixelsPerInch as PixelsPerInch, __webpack_exports__RenderingCancelledException as RenderingCancelledException, __webpack_exports__TextLayer as TextLayer, __webpack_exports__UnexpectedResponseException as UnexpectedResponseException, __webpack_exports__Util as Util, __webpack_exports__VerbosityLevel as VerbosityLevel, __webpack_exports__XfaLayer as XfaLayer, __webpack_exports__build as build, __webpack_exports__createValidAbsoluteUrl as createValidAbsoluteUrl, __webpack_exports__fetchData as fetchData, __webpack_exports__getDocument as getDocument, __webpack_exports__getFilenameFromUrl as getFilenameFromUrl, __webpack_exports__getPdfFilenameFromUrl as getPdfFilenameFromUrl, __webpack_exports__getXfaPageViewport as getXfaPageViewport, __webpack_exports__isDataScheme as isDataScheme, __webpack_exports__isPdfFile as isPdfFile, __webpack_exports__noContextMenu as noContextMenu, __webpack_exports__normalizeUnicode as normalizeUnicode, __webpack_exports__setLayerDimensions as setLayerDimensions, __webpack_exports__shadow as shadow, __webpack_exports__version as version };
 
 //# sourceMappingURL=pdf.mjs.map

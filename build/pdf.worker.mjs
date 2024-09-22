@@ -24321,7 +24321,7 @@ class Font {
           } else {
             for (j = 0; j < n; j++) {
               b = data[i++];
-              stack.push(b << 8 | data[i++]);
+              stack.push(signedInt16(b, data[i++]));
             }
           }
         } else if (op === 0x2b && !tooComplexToFollowFunctions) {
@@ -31304,13 +31304,25 @@ class PartialEvaluator {
             fn = OPS.setStrokeRGBColor;
             break;
           case OPS.shadingFill:
-            var shadingRes = resources.get("Shading");
-            if (!shadingRes) {
-              throw new FormatError("No shading resource found");
-            }
-            var shading = shadingRes.get(args[0].name);
-            if (!shading) {
-              throw new FormatError("No shading object found");
+            let shading;
+            try {
+              const shadingRes = resources.get("Shading");
+              if (!shadingRes) {
+                throw new FormatError("No shading resource found");
+              }
+              shading = shadingRes.get(args[0].name);
+              if (!shading) {
+                throw new FormatError("No shading object found");
+              }
+            } catch (reason) {
+              if (reason instanceof AbortException) {
+                continue;
+              }
+              if (self.options.ignoreErrors) {
+                warn(`getOperatorList - ignoring Shading: "${reason}".`);
+                continue;
+              }
+              throw reason;
             }
             const patternId = self.parseShading({
               shading,
@@ -56423,7 +56435,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = "4.6.0";
-const pdfjsBuild = "c72fb9b";
+const pdfjsBuild = "ea2172e";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };

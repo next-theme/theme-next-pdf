@@ -105,16 +105,6 @@ const CursorTool = {
   ZOOM: 2
 };
 const AutoPrintRegExp = /\bprint\s*\(/;
-class OutputScale {
-  constructor() {
-    const pixelRatio = window.devicePixelRatio || 1;
-    this.sx = pixelRatio;
-    this.sy = pixelRatio;
-  }
-  get scaled() {
-    return this.sx !== 1 || this.sy !== 1;
-  }
-}
 function scrollIntoView(element, spot, scrollMatches = false) {
   let parent = element.offsetParent;
   if (!parent) {
@@ -1312,6 +1302,7 @@ const {
   noContextMenu,
   normalizeUnicode,
   OPS,
+  OutputScale,
   PasswordResponses,
   PDFDataRangeTransport,
   PDFDateString,
@@ -3489,21 +3480,31 @@ class NewAltTextManager {
     } = editor.altTextData);
     this.#textarea.value = this.#previousAltText ?? "";
     const AI_MAX_IMAGE_DIMENSION = 224;
-    let canvas;
+    const MAX_PREVIEW_DIMENSION = 180;
+    let canvas, width, height;
     if (mlManager) {
       ({
         canvas,
+        width,
+        height,
         imageData: this.#imageData
-      } = editor.copyCanvas(AI_MAX_IMAGE_DIMENSION, true));
+      } = editor.copyCanvas(AI_MAX_IMAGE_DIMENSION, MAX_PREVIEW_DIMENSION, true));
       if (hasAI) {
         this.#toggleGuessAltText(await isAltTextEnabledPromise, true);
       }
     } else {
       ({
-        canvas
-      } = editor.copyCanvas(AI_MAX_IMAGE_DIMENSION, false));
+        canvas,
+        width,
+        height
+      } = editor.copyCanvas(AI_MAX_IMAGE_DIMENSION, MAX_PREVIEW_DIMENSION, false));
     }
     canvas.setAttribute("role", "presentation");
+    const {
+      style
+    } = canvas;
+    style.width = `${width}px`;
+    style.height = `${height}px`;
     this.#imagePreview.append(canvas);
     this.#toggleNotNow();
     this.#toggleAI(hasAI);
@@ -15138,7 +15139,7 @@ function beforeUnload(evt) {
 
 
 const pdfjsVersion = "4.6.0";
-const pdfjsBuild = "c72fb9b";
+const pdfjsBuild = "ea2172e";
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,
@@ -15161,23 +15162,23 @@ function getViewerConfiguration() {
       customScaleOption: document.getElementById("customScaleOption"),
       previous: document.getElementById("previous"),
       next: document.getElementById("next"),
-      zoomIn: document.getElementById("zoomIn"),
-      zoomOut: document.getElementById("zoomOut"),
-      print: document.getElementById("print"),
-      editorFreeTextButton: document.getElementById("editorFreeText"),
+      zoomIn: document.getElementById("zoomInButton"),
+      zoomOut: document.getElementById("zoomOutButton"),
+      print: document.getElementById("printButton"),
+      editorFreeTextButton: document.getElementById("editorFreeTextButton"),
       editorFreeTextParamsToolbar: document.getElementById("editorFreeTextParamsToolbar"),
-      editorHighlightButton: document.getElementById("editorHighlight"),
+      editorHighlightButton: document.getElementById("editorHighlightButton"),
       editorHighlightParamsToolbar: document.getElementById("editorHighlightParamsToolbar"),
       editorHighlightColorPicker: document.getElementById("editorHighlightColorPicker"),
-      editorInkButton: document.getElementById("editorInk"),
+      editorInkButton: document.getElementById("editorInkButton"),
       editorInkParamsToolbar: document.getElementById("editorInkParamsToolbar"),
-      editorStampButton: document.getElementById("editorStamp"),
+      editorStampButton: document.getElementById("editorStampButton"),
       editorStampParamsToolbar: document.getElementById("editorStampParamsToolbar"),
-      download: document.getElementById("download")
+      download: document.getElementById("downloadButton")
     },
     secondaryToolbar: {
       toolbar: document.getElementById("secondaryToolbar"),
-      toggleButton: document.getElementById("secondaryToolbarToggle"),
+      toggleButton: document.getElementById("secondaryToolbarToggleButton"),
       presentationModeButton: document.getElementById("presentationMode"),
       openFileButton: document.getElementById("secondaryOpenFile"),
       printButton: document.getElementById("secondaryPrint"),
@@ -15203,7 +15204,7 @@ function getViewerConfiguration() {
     sidebar: {
       outerContainer: document.getElementById("outerContainer"),
       sidebarContainer: document.getElementById("sidebarContainer"),
-      toggleButton: document.getElementById("sidebarToggle"),
+      toggleButton: document.getElementById("sidebarToggleButton"),
       resizer: document.getElementById("sidebarResizer"),
       thumbnailButton: document.getElementById("viewThumbnail"),
       outlineButton: document.getElementById("viewOutline"),
@@ -15217,7 +15218,7 @@ function getViewerConfiguration() {
     },
     findBar: {
       bar: document.getElementById("findbar"),
-      toggleButton: document.getElementById("viewFind"),
+      toggleButton: document.getElementById("viewFindButton"),
       findField: document.getElementById("findInput"),
       highlightAllCheckbox: document.getElementById("findHighlightAll"),
       caseSensitiveCheckbox: document.getElementById("findMatchCase"),
@@ -15225,8 +15226,8 @@ function getViewerConfiguration() {
       entireWordCheckbox: document.getElementById("findEntireWord"),
       findMsg: document.getElementById("findMsg"),
       findResultsCount: document.getElementById("findResultsCount"),
-      findPreviousButton: document.getElementById("findPrevious"),
-      findNextButton: document.getElementById("findNext")
+      findPreviousButton: document.getElementById("findPreviousButton"),
+      findNextButton: document.getElementById("findNextButton")
     },
     passwordOverlay: {
       dialog: document.getElementById("passwordDialog"),
