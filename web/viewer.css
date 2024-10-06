@@ -1651,7 +1651,7 @@
     cursor:var(--editorFreeHighlight-editing-cursor);
   }
 
-#viewerContainer.pdfPresentationMode:fullscreen .noAltTextBadge{
+:is(#viewerContainer.pdfPresentationMode:fullscreen,.annotationEditorLayer.disabled) .noAltTextBadge{
     display:none !important;
   }
 

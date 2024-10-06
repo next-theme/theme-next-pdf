@@ -1732,7 +1732,7 @@ class EditorToolbar {
   }
   render() {
     const editToolbar = this.#toolbar = document.createElement("div");
-    editToolbar.className = "editToolbar";
+    editToolbar.classList.add("editToolbar", "hidden");
     editToolbar.setAttribute("role", "toolbar");
     const signal = this.#editor._uiManager._signal;
     editToolbar.addEventListener("contextmenu", noContextMenu, {
@@ -1969,8 +1969,10 @@ class ImageManager {
       if (typeof rawData === "string") {
         data.url = rawData;
         image = await fetchData(rawData, "blob");
-      } else {
+      } else if (rawData instanceof File) {
         image = data.file = rawData;
+      } else if (rawData instanceof Blob) {
+        image = rawData;
       }
       if (image.type === "image/svg+xml") {
         const mustRemoveAspectRatioPromise = ImageManager._isSVGFittingCanvas;
@@ -2016,6 +2018,10 @@ class ImageManager {
   async getFromUrl(url) {
     return this.#get(url, url);
   }
+  async getFromBlob(id, blobPromise) {
+    const blob = await blobPromise;
+    return this.#get(id, blob);
+  }
   async getFromId(id) {
     this.#cache ||= new Map();
     const data = this.#cache.get(id);
@@ -2029,7 +2035,34 @@ class ImageManager {
     if (data.file) {
       return this.getFromFile(data.file);
     }
+    if (data.blobPromise) {
+      const {
+        blobPromise
+      } = data;
+      delete data.blobPromise;
+      return this.getFromBlob(data.id, blobPromise);
+    }
     return this.getFromUrl(data.url);
+  }
+  getFromCanvas(id, canvas) {
+    this.#cache ||= new Map();
+    let data = this.#cache.get(id);
+    if (data?.bitmap) {
+      data.refCounter += 1;
+      return data;
+    }
+    const offscreen = new OffscreenCanvas(canvas.width, canvas.height);
+    const ctx = offscreen.getContext("2d");
+    ctx.drawImage(canvas, 0, 0);
+    data = {
+      bitmap: offscreen.transferToImageBitmap(),
+      id: `image_${this.#baseId}_${this.#id++}`,
+      refCounter: 1,
+      isSvg: false
+    };
+    this.#cache.set(id, data);
+    this.#cache.set(data.id, data);
+    return data;
   }
   getSvgUrl(id) {
     const data = this.#cache.get(id);
@@ -2048,6 +2081,16 @@ class ImageManager {
     if (data.refCounter !== 0) {
       return;
     }
+    const {
+      bitmap
+    } = data;
+    if (!data.url && !data.file) {
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const ctx = canvas.getContext("bitmaprenderer");
+      ctx.transferFromImageBitmap(bitmap);
+      data.blobPromise = canvas.convertToBlob();
+    }
+    bitmap.close?.();
     data.bitmap = null;
   }
   isValidId(id) {
@@ -2292,6 +2335,7 @@ class AnnotationEditorUIManager {
   #translationTimeoutId = null;
   #container = null;
   #viewer = null;
+  #updateModeCapability = null;
   static TRANSLATE_SMALL = 1;
   static TRANSLATE_BIG = 10;
   static get _keyboardManager() {
@@ -2394,6 +2438,8 @@ class AnnotationEditorUIManager {
     this.isShiftKeyDown = false;
   }
   destroy() {
+    this.#updateModeCapability?.resolve();
+    this.#updateModeCapability = null;
     this.#abortController?.abort();
     this.#abortController = null;
     this._signal = null;
@@ -2831,7 +2877,7 @@ class AnnotationEditorUIManager {
     this.copy(event);
     this.delete();
   }
-  paste(event) {
+  async paste(event) {
     event.preventDefault();
     const {
       clipboardData
@@ -2862,7 +2908,7 @@ class AnnotationEditorUIManager {
     try {
       const newEditors = [];
       for (const editor of data) {
-        const deserializedEditor = layer.deserialize(editor);
+        const deserializedEditor = await layer.deserialize(editor);
         if (!deserializedEditor) {
           return;
         }
@@ -2990,36 +3036,46 @@ class AnnotationEditorUIManager {
   removeLayer(layer) {
     this.#allLayers.delete(layer.pageIndex);
   }
-  updateMode(mode, editId = null, isFromKeyboard = false) {
+  async updateMode(mode, editId = null, isFromKeyboard = false) {
     if (this.#mode === mode) {
       return;
     }
+    if (this.#updateModeCapability) {
+      await this.#updateModeCapability.promise;
+      if (!this.#updateModeCapability) {
+        return;
+      }
+    }
+    this.#updateModeCapability = Promise.withResolvers();
     this.#mode = mode;
     if (mode === AnnotationEditorType.NONE) {
       this.setEditingState(false);
       this.#disableAll();
+      this.#updateModeCapability.resolve();
       return;
     }
     this.setEditingState(true);
-    this.#enableAll();
+    await this.#enableAll();
     this.unselectAll();
     for (const layer of this.#allLayers.values()) {
       layer.updateMode(mode);
     }
-    if (!editId && isFromKeyboard) {
-      this.addNewEditorFromKeyboard();
-      return;
-    }
     if (!editId) {
+      if (isFromKeyboard) {
+        this.addNewEditorFromKeyboard();
+      }
+      this.#updateModeCapability.resolve();
       return;
     }
     for (const editor of this.#allEditors.values()) {
       if (editor.annotationElementId === editId) {
         this.setSelected(editor);
         editor.enterInEditMode();
-        break;
+      } else {
+        editor.unselect();
       }
     }
+    this.#updateModeCapability.resolve();
   }
   addNewEditorFromKeyboard() {
     if (this.currentLayer.canCreateNewEmptyEditor()) {
@@ -3093,12 +3149,14 @@ class AnnotationEditorUIManager {
       layer.div.classList.toggle("waiting", mustWait);
     }
   }
-  #enableAll() {
+  async #enableAll() {
     if (!this.#isEnabled) {
       this.#isEnabled = true;
+      const promises = [];
       for (const layer of this.#allLayers.values()) {
-        layer.enable();
+        promises.push(layer.enable());
       }
+      await Promise.all(promises);
       for (const editor of this.#allEditors.values()) {
         editor.enable();
       }
@@ -4730,7 +4788,7 @@ class AnnotationEditor {
   serialize(isForCopying = false, context = null) {
     unreachable("An editor must be serializable");
   }
-  static deserialize(data, parent, uiManager) {
+  static async deserialize(data, parent, uiManager) {
     const editor = new this.prototype.constructor({
       parent,
       id: parent.getNextId(),
@@ -12911,7 +12969,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.7.0";
-const build = "a7e1bf6";
+const build = "5a25c47";
 
 ;// CONCATENATED MODULE: ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -15453,9 +15511,7 @@ class InkAnnotationElement extends AnnotationElement {
       svg.append(polyline);
     }
     this.container.append(svg);
-    if (this._isEditable) {
-      this._editOnDoubleClick();
-    }
+    this._editOnDoubleClick();
     return this.container;
   }
   getElementsToTriggerPopup() {
@@ -15537,6 +15593,7 @@ class StampAnnotationElement extends AnnotationElement {
       isRenderable: true,
       ignoreBorder: true
     });
+    this.annotationEditorType = AnnotationEditorType.STAMP;
   }
   render() {
     this.container.classList.add("stampAnnotation");
@@ -15544,6 +15601,7 @@ class StampAnnotationElement extends AnnotationElement {
     if (!this.data.popupRef && this.hasPopupData) {
       this._createPopup();
     }
+    this._editOnDoubleClick();
     return this.container;
   }
 }
@@ -16260,7 +16318,7 @@ class FreeTextEditor extends AnnotationEditor {
   get contentDiv() {
     return this.editorDiv;
   }
-  static deserialize(data, parent, uiManager) {
+  static async deserialize(data, parent, uiManager) {
     let initialData = null;
     if (data instanceof FreeTextAnnotationElement) {
       const {
@@ -16299,7 +16357,7 @@ class FreeTextEditor extends AnnotationEditor {
         popupRef
       };
     }
-    const editor = super.deserialize(data, parent, uiManager);
+    const editor = await super.deserialize(data, parent, uiManager);
     editor.#fontSize = data.fontSize;
     editor.#color = Util.makeHexColor(...data.color);
     editor.#content = FreeTextEditor.#deserializeContent(data.value);
@@ -17791,7 +17849,7 @@ class HighlightEditor extends AnnotationEditor {
     this._freeHighlight = null;
     this._freeHighlightClipId = "";
   }
-  static deserialize(data, parent, uiManager) {
+  static async deserialize(data, parent, uiManager) {
     let initialData = null;
     if (data instanceof HighlightAnnotationElement) {
       const {
@@ -17862,7 +17920,7 @@ class HighlightEditor extends AnnotationEditor {
       inkLists,
       opacity
     } = data;
-    const editor = super.deserialize(data, parent, uiManager);
+    const editor = await super.deserialize(data, parent, uiManager);
     editor.color = Util.makeHexColor(...color);
     editor.#opacity = opacity || 1;
     if (inkLists) {
@@ -18709,11 +18767,11 @@ class InkEditor extends AnnotationEditor {
     const unscaledPadding = firstTime ? padding / this.scaleFactor / 2 : 0;
     this.translate(prevTranslationX - this.translationX - unscaledPadding, prevTranslationY - this.translationY - unscaledPadding);
   }
-  static deserialize(data, parent, uiManager) {
+  static async deserialize(data, parent, uiManager) {
     if (data instanceof InkAnnotationElement) {
       return null;
     }
-    const editor = super.deserialize(data, parent, uiManager);
+    const editor = await super.deserialize(data, parent, uiManager);
     editor.thickness = data.thickness;
     editor.color = Util.makeHexColor(...data.color);
     editor.opacity = data.opacity;
@@ -19044,7 +19102,7 @@ class StampEditor extends AnnotationEditor {
     } else {
       this.#getBitmap();
     }
-    if (this.width) {
+    if (this.width && !this.annotationElementId) {
       const [parentWidth, parentHeight] = this.parentDimensions;
       this.setAt(baseX * parentWidth, baseY * parentHeight, this.width * parentWidth, this.height * parentHeight);
     }
@@ -19074,7 +19132,7 @@ class StampEditor extends AnnotationEditor {
     const canvas = this.#canvas = document.createElement("canvas");
     canvas.setAttribute("role", "img");
     this.addContainer(canvas);
-    if (!this._uiManager.useNewAltTextWhenAddingImage || !this._uiManager.useNewAltTextFlow) {
+    if (!this._uiManager.useNewAltTextWhenAddingImage || !this._uiManager.useNewAltTextFlow || this.annotationElementId) {
       div.hidden = false;
     }
     this.#drawBitmap(width, height);
@@ -19281,13 +19339,50 @@ class StampEditor extends AnnotationEditor {
       once: true
     });
   }
-  static deserialize(data, parent, uiManager) {
+  static async deserialize(data, parent, uiManager) {
+    let initialData = null;
     if (data instanceof StampAnnotationElement) {
-      return null;
+      const {
+        data: {
+          rect,
+          rotation,
+          id,
+          structParent,
+          popupRef
+        },
+        container,
+        parent: {
+          page: {
+            pageNumber
+          }
+        }
+      } = data;
+      const canvas = container.querySelector("canvas");
+      const imageData = uiManager.imageManager.getFromCanvas(container.id, canvas);
+      canvas.remove();
+      const altText = (await parent._structTree.getAriaAttributes(`${AnnotationPrefix}${id}`))?.get("aria-label") || "";
+      initialData = data = {
+        annotationType: AnnotationEditorType.STAMP,
+        bitmapId: imageData.id,
+        bitmap: imageData.bitmap,
+        pageIndex: pageNumber - 1,
+        rect: rect.slice(0),
+        rotation,
+        id,
+        deleted: false,
+        accessibilityData: {
+          decorative: false,
+          altText
+        },
+        isSvg: false,
+        structParent,
+        popupRef
+      };
     }
-    const editor = super.deserialize(data, parent, uiManager);
+    const editor = await super.deserialize(data, parent, uiManager);
     const {
       rect,
+      bitmap,
       bitmapUrl,
       bitmapId,
       isSvg,
@@ -19295,6 +19390,9 @@ class StampEditor extends AnnotationEditor {
     } = data;
     if (bitmapId && uiManager.imageManager.isValidId(bitmapId)) {
       editor.#bitmapId = bitmapId;
+      if (bitmap) {
+        editor.#bitmap = bitmap;
+      }
     } else {
       editor.#bitmapUrl = bitmapUrl;
     }
@@ -19302,14 +19400,20 @@ class StampEditor extends AnnotationEditor {
     const [parentWidth, parentHeight] = editor.pageDimensions;
     editor.width = (rect[2] - rect[0]) / parentWidth;
     editor.height = (rect[3] - rect[1]) / parentHeight;
+    editor.annotationElementId = data.id || null;
     if (accessibilityData) {
       editor.altTextData = accessibilityData;
     }
+    editor._initialData = initialData;
+    editor.#hasBeenAddedInUndoStack = !!initialData;
     return editor;
   }
   serialize(isForCopying = false, context = null) {
     if (this.isEmpty()) {
       return null;
+    }
+    if (this.deleted) {
+      return this.serializeDeleted();
     }
     const serialized = {
       annotationType: AnnotationEditorType.STAMP,
@@ -19335,6 +19439,18 @@ class StampEditor extends AnnotationEditor {
         alt: altText
       };
     }
+    if (this.annotationElementId) {
+      const changes = this.#hasElementChanged(serialized);
+      if (changes.isSame) {
+        return null;
+      }
+      if (changes.isSameAltText) {
+        delete serialized.accessibilityData;
+      } else {
+        serialized.accessibilityData.structParent = this._initialData.structParent ?? -1;
+      }
+    }
+    serialized.id = this.annotationElementId;
     if (context === null) {
       return serialized;
     }
@@ -19355,6 +19471,28 @@ class StampEditor extends AnnotationEditor {
       }
     }
     return serialized;
+  }
+  #hasElementChanged(serialized) {
+    const {
+      rect,
+      pageIndex,
+      accessibilityData: {
+        altText
+      }
+    } = this._initialData;
+    const isSameRect = serialized.rect.every((x, i) => Math.abs(x - rect[i]) < 1);
+    const isSamePageIndex = serialized.pageIndex === pageIndex;
+    const isSameAltText = (serialized.accessibilityData?.alt || "") === altText;
+    return {
+      isSame: isSameRect && isSamePageIndex && isSameAltText,
+      isSameAltText
+    };
+  }
+  renderAnnotationElement(annotation) {
+    annotation.updateEdited({
+      rect: this.getRect(0, 0)
+    });
+    return null;
   }
 }
 
@@ -19385,6 +19523,7 @@ class AnnotationEditorLayer {
     uiManager,
     pageIndex,
     div,
+    structTreeLayer,
     accessibilityManager,
     annotationLayer,
     drawLayer,
@@ -19408,6 +19547,7 @@ class AnnotationEditorLayer {
     this.viewport = viewport;
     this.#textLayer = textLayer;
     this.drawLayer = drawLayer;
+    this._structTree = structTreeLayer;
     this.#uiManager.addLayer(this);
   }
   get isEmpty() {
@@ -19489,7 +19629,7 @@ class AnnotationEditorLayer {
   toggleAnnotationLayerPointerEvents(enabled = false) {
     this.#annotationLayer?.div.classList.toggle("disabled", !enabled);
   }
-  enable() {
+  async enable() {
     this.div.tabIndex = 0;
     this.togglePointerEvents(true);
     const annotationElementIds = new Set();
@@ -19513,7 +19653,7 @@ class AnnotationEditorLayer {
       if (annotationElementIds.has(editable.data.id)) {
         continue;
       }
-      const editor = this.deserialize(editable);
+      const editor = await this.deserialize(editable);
       if (!editor) {
         continue;
       }
@@ -19799,8 +19939,8 @@ class AnnotationEditorLayer {
       this.add(editor);
     }
   }
-  deserialize(data) {
-    return AnnotationEditorLayer.#editorTypes.get(data.annotationType ?? data.annotationEditorType)?.deserialize(data, this, this.#uiManager) || null;
+  async deserialize(data) {
+    return (await AnnotationEditorLayer.#editorTypes.get(data.annotationType ?? data.annotationEditorType)?.deserialize(data, this, this.#uiManager)) || null;
   }
   createAndAddNewEditor(event, isCentered, data = {}) {
     const id = this.getNextId();
@@ -20186,7 +20326,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "4.7.0";
-const pdfjsBuild = "a7e1bf6";
+const pdfjsBuild = "5a25c47";
 
 var __webpack_exports__AbortException = __webpack_exports__.AbortException;
 var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;

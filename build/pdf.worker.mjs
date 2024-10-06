@@ -34259,7 +34259,7 @@ class NameOrNumberTree {
     }
     return map;
   }
-  get(key) {
+  getRaw(key) {
     if (!this.root) {
       return null;
     }
@@ -34308,11 +34308,14 @@ class NameOrNumberTree {
         } else if (key > currentKey) {
           l = m + 2;
         } else {
-          return xref.fetchIfRef(entries[m + 1]);
+          return entries[m + 1];
         }
       }
     }
     return null;
+  }
+  get(key) {
+    return this.xref.fetchIfRef(this.getRaw(key));
   }
 }
 class NameTree extends NameOrNumberTree {
@@ -36755,10 +36758,12 @@ class StructTreeRoot {
     const nextKey = await this.#writeKids({
       newAnnotationsByPage,
       structTreeRootRef,
+      structTreeRoot: null,
       kids,
       nums,
       xref,
       pdfManager,
+      newRefs,
       cache
     });
     structTreeRoot.set("ParentTreeNextKey", nextKey);
@@ -36824,7 +36829,9 @@ class StructTreeRoot {
       });
       for (const element of elements) {
         if (element.accessibilityData?.type) {
-          element.parentTreeId = nextKey++;
+          if (!(element.accessibilityData.structParent >= 0)) {
+            element.parentTreeId = nextKey++;
+          }
           hasNothingToUpdate = false;
         }
       }
@@ -36871,16 +36878,21 @@ class StructTreeRoot {
     if (!numsRef) {
       parentTree.set("Nums", nums);
     }
-    const newNextkey = await StructTreeRoot.#writeKids({
+    const newNextKey = await StructTreeRoot.#writeKids({
       newAnnotationsByPage,
       structTreeRootRef,
+      structTreeRoot: this,
       kids: null,
       nums,
       xref,
       pdfManager,
+      newRefs,
       cache
     });
-    structTreeRoot.set("ParentTreeNextKey", newNextkey);
+    if (newNextKey === -1) {
+      return;
+    }
+    structTreeRoot.set("ParentTreeNextKey", newNextKey);
     if (numsRef) {
       cache.put(numsRef, nums);
     }
@@ -36897,18 +36909,23 @@ class StructTreeRoot {
   static async #writeKids({
     newAnnotationsByPage,
     structTreeRootRef,
+    structTreeRoot,
     kids,
     nums,
     xref,
     pdfManager,
+    newRefs,
     cache
   }) {
     const objr = Name.get("OBJR");
-    let nextKey = -Infinity;
+    let nextKey = -1;
+    let structTreePageObjs;
+    const buffer = [];
     for (const [pageIndex, elements] of newAnnotationsByPage) {
+      const page = await pdfManager.getPage(pageIndex);
       const {
         ref: pageRef
-      } = await pdfManager.getPage(pageIndex);
+      } = page;
       const isPageRef = pageRef instanceof Ref;
       for (const {
         accessibilityData,
@@ -36920,32 +36937,32 @@ class StructTreeRoot {
           continue;
         }
         const {
-          type,
-          title,
-          lang,
-          alt,
-          expanded,
-          actualText
+          structParent
         } = accessibilityData;
+        if (structTreeRoot && Number.isInteger(structParent) && structParent >= 0) {
+          let objs = (structTreePageObjs ||= new Map()).get(pageIndex);
+          if (objs === undefined) {
+            const structTreePage = new StructTreePage(structTreeRoot, page.pageDict);
+            objs = structTreePage.collectObjects(pageRef);
+            structTreePageObjs.set(pageIndex, objs);
+          }
+          const objRef = objs?.get(structParent);
+          if (objRef) {
+            const tagDict = xref.fetch(objRef).clone();
+            StructTreeRoot.#writeProperties(tagDict, accessibilityData);
+            buffer.length = 0;
+            await writeObject(objRef, tagDict, buffer, xref);
+            newRefs.push({
+              ref: objRef,
+              data: buffer.join("")
+            });
+            continue;
+          }
+        }
         nextKey = Math.max(nextKey, parentTreeId);
         const tagRef = xref.getNewTemporaryRef();
         const tagDict = new Dict(xref);
-        tagDict.set("S", Name.get(type));
-        if (title) {
-          tagDict.set("T", stringToAsciiOrUTF16BE(title));
-        }
-        if (lang) {
-          tagDict.set("Lang", lang);
-        }
-        if (alt) {
-          tagDict.set("Alt", stringToAsciiOrUTF16BE(alt));
-        }
-        if (expanded) {
-          tagDict.set("E", stringToAsciiOrUTF16BE(expanded));
-        }
-        if (actualText) {
-          tagDict.set("ActualText", stringToAsciiOrUTF16BE(actualText));
-        }
+        StructTreeRoot.#writeProperties(tagDict, accessibilityData);
         await this.#updateParentTag({
           structTreeParent,
           tagDict,
@@ -36967,6 +36984,31 @@ class StructTreeRoot {
       }
     }
     return nextKey + 1;
+  }
+  static #writeProperties(tagDict, {
+    type,
+    title,
+    lang,
+    alt,
+    expanded,
+    actualText
+  }) {
+    tagDict.set("S", Name.get(type));
+    if (title) {
+      tagDict.set("T", stringToAsciiOrUTF16BE(title));
+    }
+    if (lang) {
+      tagDict.set("Lang", stringToAsciiOrUTF16BE(lang));
+    }
+    if (alt) {
+      tagDict.set("Alt", stringToAsciiOrUTF16BE(alt));
+    }
+    if (expanded) {
+      tagDict.set("E", stringToAsciiOrUTF16BE(expanded));
+    }
+    if (actualText) {
+      tagDict.set("ActualText", stringToAsciiOrUTF16BE(actualText));
+    }
   }
   static #collectParents({
     elements,
@@ -37199,8 +37241,30 @@ class StructTreePage {
     this.pageDict = pageDict;
     this.nodes = [];
   }
+  collectObjects(pageRef) {
+    if (!this.root || !this.rootDict || !(pageRef instanceof Ref)) {
+      return null;
+    }
+    const parentTree = this.rootDict.get("ParentTree");
+    if (!parentTree) {
+      return null;
+    }
+    const ids = this.root.structParentIds?.get(pageRef);
+    if (!ids) {
+      return null;
+    }
+    const map = new Map();
+    const numberTree = new NumberTree(parentTree, this.rootDict.xref);
+    for (const [elemId] of ids) {
+      const obj = numberTree.getRaw(elemId);
+      if (obj instanceof Ref) {
+        map.set(elemId, obj);
+      }
+    }
+    return map;
+  }
   parse(pageRef) {
-    if (!this.root || !this.rootDict) {
+    if (!this.root || !this.rootDict || !(pageRef instanceof Ref)) {
       return;
     }
     const parentTree = this.rootDict.get("ParentTree");
@@ -37208,7 +37272,7 @@ class StructTreePage {
       return;
     }
     const id = this.pageDict.get("StructParents");
-    const ids = pageRef instanceof Ref && this.root.structParentIds?.get(pageRef);
+    const ids = this.root.structParentIds?.get(pageRef);
     if (!Number.isInteger(id) && !ids) {
       return;
     }
@@ -49628,11 +49692,11 @@ class AnnotationFactory {
       return null;
     });
   }
-  static async create(xref, ref, annotationGlobals, idFactory, collectFields, pageRef) {
+  static async create(xref, ref, annotationGlobals, idFactory, collectFields, orphanFields, pageRef) {
     const pageIndex = collectFields ? await this._getPageIndex(xref, ref, annotationGlobals.pdfManager) : null;
-    return annotationGlobals.pdfManager.ensure(this, "_create", [xref, ref, annotationGlobals, idFactory, collectFields, pageIndex, pageRef]);
+    return annotationGlobals.pdfManager.ensure(this, "_create", [xref, ref, annotationGlobals, idFactory, collectFields, orphanFields, pageIndex, pageRef]);
   }
-  static _create(xref, ref, annotationGlobals, idFactory, collectFields = false, pageIndex = null, pageRef = null) {
+  static _create(xref, ref, annotationGlobals, idFactory, collectFields = false, orphanFields = null, pageIndex = null, pageRef = null) {
     const dict = xref.fetchIfRef(ref);
     if (!(dict instanceof Dict)) {
       return undefined;
@@ -49652,6 +49716,7 @@ class AnnotationFactory {
       id,
       annotationGlobals,
       collectFields,
+      orphanFields,
       needAppearances: !collectFields && acroForm.get("NeedAppearances") === true,
       pageIndex,
       evaluatorOptions: pdfManager.evaluatorOptions,
@@ -49817,11 +49882,8 @@ class AnnotationFactory {
           promises.push(InkAnnotation.createNewAnnotation(xref, annotation, dependencies));
           break;
         case AnnotationEditorType.STAMP:
-          if (!isOffscreenCanvasSupported) {
-            break;
-          }
-          const image = await imagePromises.get(annotation.bitmapId);
-          if (image.imageStream) {
+          const image = isOffscreenCanvasSupported ? await imagePromises?.get(annotation.bitmapId) : null;
+          if (image?.imageStream) {
             const {
               imageStream,
               smaskStream
@@ -49894,11 +49956,8 @@ class AnnotationFactory {
           }));
           break;
         case AnnotationEditorType.STAMP:
-          if (!options.isOffscreenCanvasSupported) {
-            break;
-          }
-          const image = await imagePromises.get(annotation.bitmapId);
-          if (image.imageStream) {
+          const image = options.isOffscreenCanvasSupported ? await imagePromises?.get(annotation.bitmapId) : null;
+          if (image?.imageStream) {
             const {
               imageStream,
               smaskStream
@@ -49976,8 +50035,14 @@ class Annotation {
     const {
       dict,
       xref,
-      annotationGlobals
+      annotationGlobals,
+      ref,
+      orphanFields
     } = params;
+    const parentRef = orphanFields?.get(ref);
+    if (parentRef) {
+      dict.set("Parent", parentRef);
+    }
     this.setTitle(dict.get("T"));
     this.setContents(dict.get("Contents"));
     this.setModificationDate(dict.get("M"));
@@ -49997,11 +50062,6 @@ class Annotation {
     }
     const isLocked = !!(this.flags & AnnotationFlag.LOCKED);
     const isContentLocked = !!(this.flags & AnnotationFlag.LOCKEDCONTENTS);
-    if (annotationGlobals.structTreeRoot) {
-      let structParent = dict.get("StructParent");
-      structParent = Number.isInteger(structParent) && structParent >= 0 ? structParent : -1;
-      annotationGlobals.structTreeRoot.addAnnotationIdToPage(params.pageRef, structParent);
-    }
     this.data = {
       annotationFlags: this.flags,
       borderStyle: this.borderStyle,
@@ -50018,8 +50078,14 @@ class Annotation {
       hasOwnCanvas: false,
       noRotate: !!(this.flags & AnnotationFlag.NOROTATE),
       noHTML: isLocked && isContentLocked,
-      isEditable: false
+      isEditable: false,
+      structParent: -1
     };
+    if (annotationGlobals.structTreeRoot) {
+      let structParent = dict.get("StructParent");
+      this.data.structParent = structParent = Number.isInteger(structParent) && structParent >= 0 ? structParent : -1;
+      annotationGlobals.structTreeRoot.addAnnotationIdToPage(params.pageRef, structParent);
+    }
     if (params.collectFields) {
       const kids = dict.get("Kids");
       if (Array.isArray(kids)) {
@@ -50047,6 +50113,32 @@ class Annotation {
   }
   _hasFlag(flags, flag) {
     return !!(flags & flag);
+  }
+  _buildFlags(noView, noPrint) {
+    let {
+      flags
+    } = this;
+    if (noView === undefined) {
+      if (noPrint === undefined) {
+        return undefined;
+      }
+      if (noPrint) {
+        return flags & ~AnnotationFlag.PRINT;
+      }
+      return flags & ~AnnotationFlag.HIDDEN | AnnotationFlag.PRINT;
+    }
+    if (noView) {
+      flags |= AnnotationFlag.PRINT;
+      if (noPrint) {
+        return flags & ~AnnotationFlag.NOVIEW | AnnotationFlag.HIDDEN;
+      }
+      return flags & ~AnnotationFlag.HIDDEN | AnnotationFlag.NOVIEW;
+    }
+    flags &= ~(AnnotationFlag.HIDDEN | AnnotationFlag.NOVIEW);
+    if (noPrint) {
+      return flags & ~AnnotationFlag.PRINT;
+    }
+    return flags | AnnotationFlag.PRINT;
   }
   _isViewable(flags) {
     return !this._hasFlag(flags, AnnotationFlag.INVISIBLE) && !this._hasFlag(flags, AnnotationFlag.NOVIEW);
@@ -50636,10 +50728,7 @@ class MarkupAnnotation extends Annotation {
     this._streams.push(this.appearance, appearanceStream);
   }
   static async createNewAnnotation(xref, annotation, dependencies, params) {
-    let oldAnnotation;
-    if (annotation.ref) {
-      oldAnnotation = (await xref.fetchIfRefAsync(annotation.ref)).clone();
-    } else {
+    if (!annotation.ref) {
       annotation.ref = xref.getNewTemporaryRef();
     }
     const annotationRef = annotation.ref;
@@ -50649,8 +50738,7 @@ class MarkupAnnotation extends Annotation {
     if (ap) {
       const apRef = xref.getNewTemporaryRef();
       annotationDict = this.createNewDict(annotation, xref, {
-        apRef,
-        oldAnnotation
+        apRef
       });
       await writeObject(apRef, ap, buffer, xref);
       dependencies.push({
@@ -50658,9 +50746,7 @@ class MarkupAnnotation extends Annotation {
         data: buffer.join("")
       });
     } else {
-      annotationDict = this.createNewDict(annotation, xref, {
-        oldAnnotation
-      });
+      annotationDict = this.createNewDict(annotation, xref, {});
     }
     if (Number.isInteger(annotation.parentTreeId)) {
       annotationDict.set("StructParent", annotation.parentTreeId);
@@ -50674,9 +50760,9 @@ class MarkupAnnotation extends Annotation {
   }
   static async createNewPrintAnnotation(annotationGlobals, xref, annotation, params) {
     const ap = await this.createNewAppearanceStream(annotation, xref, params);
-    const annotationDict = this.createNewDict(annotation, xref, {
+    const annotationDict = this.createNewDict(annotation, xref, ap ? {
       ap
-    });
+    } : {});
     const newAnnotation = new this.prototype.constructor({
       dict: annotationDict,
       xref,
@@ -50886,15 +50972,16 @@ class WidgetAnnotation extends Annotation {
   amendSavedDict(annotationStorage, dict) {}
   async save(evaluator, task, annotationStorage) {
     const storageEntry = annotationStorage?.get(this.data.id);
+    const flags = this._buildFlags(storageEntry?.noView, storageEntry?.noPrint);
     let value = storageEntry?.value,
       rotation = storageEntry?.rotation;
     if (value === this.data.fieldValue || value === undefined) {
-      if (!this._hasValueFromXFA && rotation === undefined) {
+      if (!this._hasValueFromXFA && rotation === undefined && flags === undefined) {
         return null;
       }
       value ||= this.data.fieldValue;
     }
-    if (rotation === undefined && !this._hasValueFromXFA && Array.isArray(value) && Array.isArray(this.data.fieldValue) && value.length === this.data.fieldValue.length && value.every((x, i) => x === this.data.fieldValue[i])) {
+    if (rotation === undefined && !this._hasValueFromXFA && Array.isArray(value) && Array.isArray(this.data.fieldValue) && isArrayEqual(value, this.data.fieldValue) && flags === undefined) {
       return null;
     }
     if (rotation === undefined) {
@@ -50903,7 +50990,7 @@ class WidgetAnnotation extends Annotation {
     let appearance = null;
     if (!this._needAppearances) {
       appearance = await this._getAppearance(evaluator, task, RenderingIntentFlag.SAVE, annotationStorage);
-      if (appearance === null) {
+      if (appearance === null && flags === undefined) {
         return null;
       }
     } else {}
@@ -50923,6 +51010,15 @@ class WidgetAnnotation extends Annotation {
     for (const key of originalDict.getKeys()) {
       if (key !== "AP") {
         dict.set(key, originalDict.getRaw(key));
+      }
+    }
+    if (flags !== undefined) {
+      dict.set("F", flags);
+      if (appearance === null && !needAppearances) {
+        const ap = originalDict.getRaw("AP");
+        if (ap) {
+          dict.set("AP", ap);
+        }
       }
     }
     const xfa = {
@@ -50998,7 +51094,7 @@ class WidgetAnnotation extends Annotation {
       value = value[0];
     }
     assert(typeof value === "string", "Expected `value` to be a string.");
-    value = value.trim();
+    value = value.trimEnd();
     if (this.data.combo) {
       const option = this.data.options.find(({
         exportValue
@@ -51353,6 +51449,21 @@ class TextWidgetAnnotation extends WidgetAnnotation {
     }
     return chunks;
   }
+  async extractTextContent(evaluator, task, viewBox) {
+    await super.extractTextContent(evaluator, task, viewBox);
+    const text = this.data.textContent;
+    if (!text) {
+      return;
+    }
+    const allText = text.join("\n");
+    if (allText === this.data.fieldValue) {
+      return;
+    }
+    const regex = allText.replaceAll(/([.*+?^${}()|[\]\\])|(\s+)/g, (_m, p1) => p1 ? `\\${p1}` : "\\s+");
+    if (new RegExp(`^\\s*${regex}\\s*$`).test(this.data.fieldValue)) {
+      this.data.textContent = this.data.fieldValue.split("\n");
+    }
+  }
   getFieldObject() {
     return {
       id: this.data.id,
@@ -51446,9 +51557,10 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
       return null;
     }
     const storageEntry = annotationStorage.get(this.data.id);
+    const flags = this._buildFlags(storageEntry?.noView, storageEntry?.noPrint);
     let rotation = storageEntry?.rotation,
       value = storageEntry?.value;
-    if (rotation === undefined) {
+    if (rotation === undefined && flags === undefined) {
       if (value === undefined) {
         return null;
       }
@@ -51457,10 +51569,11 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
         return null;
       }
     }
-    const dict = evaluator.xref.fetchIfRef(this.ref);
+    let dict = evaluator.xref.fetchIfRef(this.ref);
     if (!(dict instanceof Dict)) {
       return null;
     }
+    dict = dict.clone();
     if (rotation === undefined) {
       rotation = this.rotation;
     }
@@ -51475,6 +51588,9 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
     dict.set("V", name);
     dict.set("AS", name);
     dict.set("M", `D:${getModificationDate()}`);
+    if (flags !== undefined) {
+      dict.set("F", flags);
+    }
     const maybeMK = this._getMKDict(rotation);
     if (maybeMK) {
       dict.set("MK", maybeMK);
@@ -51492,9 +51608,10 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
       return null;
     }
     const storageEntry = annotationStorage.get(this.data.id);
+    const flags = this._buildFlags(storageEntry?.noView, storageEntry?.noPrint);
     let rotation = storageEntry?.rotation,
       value = storageEntry?.value;
-    if (rotation === undefined) {
+    if (rotation === undefined && flags === undefined) {
       if (value === undefined) {
         return null;
       }
@@ -51503,10 +51620,11 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
         return null;
       }
     }
-    const dict = evaluator.xref.fetchIfRef(this.ref);
+    let dict = evaluator.xref.fetchIfRef(this.ref);
     if (!(dict instanceof Dict)) {
       return null;
     }
+    dict = dict.clone();
     if (value === undefined) {
       value = this.data.fieldValue === this.data.buttonValue;
     }
@@ -51531,8 +51649,14 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
         this.parent.set("V", name);
       }
     }
+    if (!this.parent) {
+      dict.set("V", name);
+    }
     dict.set("AS", name);
     dict.set("M", `D:${getModificationDate()}`);
+    if (flags !== undefined) {
+      dict.set("F", flags);
+    }
     const maybeMK = this._getMKDict(rotation);
     if (maybeMK) {
       dict.set("MK", maybeMK);
@@ -52085,12 +52209,12 @@ class FreeTextAnnotation extends MarkupAnnotation {
   }
   static createNewDict(annotation, xref, {
     apRef,
-    ap,
-    oldAnnotation
+    ap
   }) {
     const {
       color,
       fontSize,
+      oldAnnotation,
       rect,
       rotation,
       user,
@@ -52668,11 +52792,11 @@ class HighlightAnnotation extends MarkupAnnotation {
   }
   static createNewDict(annotation, xref, {
     apRef,
-    ap,
-    oldAnnotation
+    ap
   }) {
     const {
       color,
+      oldAnnotation,
       opacity,
       rect,
       rotation,
@@ -52842,11 +52966,25 @@ class StrikeOutAnnotation extends MarkupAnnotation {
   }
 }
 class StampAnnotation extends MarkupAnnotation {
+  #savedHasOwnCanvas;
   constructor(params) {
     super(params);
     this.data.annotationType = AnnotationType.STAMP;
-    this.data.hasOwnCanvas = this.data.noRotate;
+    this.#savedHasOwnCanvas = this.data.hasOwnCanvas = this.data.noRotate;
+    this.data.isEditable = !this.data.noHTML;
     this.data.noHTML = false;
+  }
+  mustBeViewedWhenEditing(isEditing, modifiedIds = null) {
+    if (isEditing) {
+      if (!this.data.isEditable) {
+        return false;
+      }
+      this.#savedHasOwnCanvas = this.data.hasOwnCanvas;
+      this.data.hasOwnCanvas = true;
+      return true;
+    }
+    this.data.hasOwnCanvas = this.#savedHasOwnCanvas;
+    return !modifiedIds?.has(this.data.id);
   }
   static async createImage(bitmap, xref) {
     const {
@@ -52915,13 +53053,15 @@ class StampAnnotation extends MarkupAnnotation {
     ap
   }) {
     const {
+      oldAnnotation,
       rect,
       rotation,
       user
     } = annotation;
-    const stamp = new Dict(xref);
+    const stamp = oldAnnotation || new Dict(xref);
     stamp.set("Type", Name.get("Annot"));
     stamp.set("Subtype", Name.get("Stamp"));
+    stamp.set(oldAnnotation ? "M" : "CreationDate", `D:${getModificationDate()}`);
     stamp.set("CreationDate", `D:${getModificationDate()}`);
     stamp.set("Rect", rect);
     stamp.set("F", 4);
@@ -52942,6 +53082,9 @@ class StampAnnotation extends MarkupAnnotation {
     return stamp;
   }
   static async createNewAppearanceStream(annotation, xref, params) {
+    if (annotation.oldAnnotation) {
+      return null;
+    }
     const {
       rotation
     } = annotation;
@@ -53936,7 +54079,8 @@ class Page {
       bbox: this.xfaFactory.getBoundingBox(this.pageIndex)
     } : null);
   }
-  #replaceIdByRef(annotations, deletedAnnotations, existingAnnotations) {
+  async #replaceIdByRef(annotations, deletedAnnotations, existingAnnotations) {
+    const promises = [];
     for (const annotation of annotations) {
       if (annotation.id) {
         const ref = Ref.fromString(annotation.id);
@@ -53956,9 +54100,17 @@ class Page {
         }
         existingAnnotations?.put(ref);
         annotation.ref = ref;
+        promises.push(this.xref.fetchAsync(ref).then(obj => {
+          if (obj instanceof Dict) {
+            annotation.oldAnnotation = obj.clone();
+          }
+        }, () => {
+          warn(`Cannot fetch \`oldAnnotation\` for: ${ref}.`);
+        }));
         delete annotation.id;
       }
     }
+    await Promise.all(promises);
   }
   async saveNewAnnotations(handler, task, annotations, imagePromises) {
     if (this.xfaFactory) {
@@ -53978,7 +54130,7 @@ class Page {
     });
     const deletedAnnotations = new RefSetCache();
     const existingAnnotations = new RefSet();
-    this.#replaceIdByRef(annotations, deletedAnnotations, existingAnnotations);
+    await this.#replaceIdByRef(annotations, deletedAnnotations, existingAnnotations);
     const pageDict = this.pageDict;
     const annotationsArray = this.annotations.filter(a => !(a instanceof Ref && deletedAnnotations.has(a)));
     const newData = await AnnotationFactory.saveNewAnnotations(partialEvaluator, task, annotations, imagePromises);
@@ -54025,9 +54177,6 @@ class Page {
     return this._parsedAnnotations.then(function (annotations) {
       const newRefsPromises = [];
       for (const annotation of annotations) {
-        if (!annotation.mustBePrinted(annotationStorage)) {
-          continue;
-        }
         newRefsPromises.push(annotation.save(partialEvaluator, task, annotationStorage).catch(function (reason) {
           warn("save - ignoring annotation data during " + `"${task.name}" task: "${reason}".`);
           return null;
@@ -54102,8 +54251,7 @@ class Page {
         imagePromises = AnnotationFactory.generateImages(newAnnots, this.xref, isOffscreenCanvasSupported);
       }
       deletedAnnotations = new RefSet();
-      this.#replaceIdByRef(newAnnots, deletedAnnotations, null);
-      newAnnotationsPromise = annotationGlobalsPromise.then(annotationGlobals => {
+      newAnnotationsPromise = Promise.all([annotationGlobalsPromise, this.#replaceIdByRef(newAnnots, deletedAnnotations, null)]).then(([annotationGlobals]) => {
         if (!annotationGlobals) {
           return null;
         }
@@ -54282,13 +54430,14 @@ class Page {
       if (annots.length === 0) {
         return annots;
       }
-      const annotationGlobals = await this.pdfManager.ensureDoc("annotationGlobals");
+      const [annotationGlobals, fieldObjects] = await Promise.all([this.pdfManager.ensureDoc("annotationGlobals"), this.pdfManager.ensureDoc("fieldObjects")]);
       if (!annotationGlobals) {
         return [];
       }
+      const orphanFields = fieldObjects?.orphanFields;
       const annotationPromises = [];
       for (const annotationRef of annots) {
-        annotationPromises.push(AnnotationFactory.create(this.xref, annotationRef, annotationGlobals, this._localIdFactory, false, this.ref).catch(function (reason) {
+        annotationPromises.push(AnnotationFactory.create(this.xref, annotationRef, annotationGlobals, this._localIdFactory, false, orphanFields, this.ref).catch(function (reason) {
           warn(`_parsedAnnotations: "${reason}".`);
           return null;
         }));
@@ -55038,7 +55187,7 @@ class PDFDocument {
   async cleanup(manuallyTriggered = false) {
     return this.catalog ? this.catalog.cleanup(manuallyTriggered) : clearGlobalCaches();
   }
-  async #collectFieldObjects(name, fieldRef, promises, annotationGlobals, visitedRefs) {
+  async #collectFieldObjects(name, parentRef, fieldRef, promises, annotationGlobals, visitedRefs, orphanFields) {
     const {
       xref
     } = this;
@@ -55056,7 +55205,7 @@ class PDFDocument {
     } else {
       let obj = field;
       while (true) {
-        obj = obj.getRaw("Parent");
+        obj = obj.getRaw("Parent") || parentRef;
         if (obj instanceof Ref) {
           if (visitedRefs.has(obj)) {
             break;
@@ -55073,10 +55222,13 @@ class PDFDocument {
         }
       }
     }
+    if (parentRef && !field.has("Parent") && isName(field.get("Subtype"), "Widget")) {
+      orphanFields.put(fieldRef, parentRef);
+    }
     if (!promises.has(name)) {
       promises.set(name, []);
     }
-    promises.get(name).push(AnnotationFactory.create(xref, fieldRef, annotationGlobals, null, true, null).then(annotation => annotation?.getFieldObject()).catch(function (reason) {
+    promises.get(name).push(AnnotationFactory.create(xref, fieldRef, annotationGlobals, null, true, orphanFields, null).then(annotation => annotation?.getFieldObject()).catch(function (reason) {
       warn(`#collectFieldObjects: "${reason}".`);
       return null;
     }));
@@ -55086,7 +55238,7 @@ class PDFDocument {
     const kids = await field.getAsync("Kids");
     if (Array.isArray(kids)) {
       for (const kid of kids) {
-        await this.#collectFieldObjects(name, kid, promises, annotationGlobals, visitedRefs);
+        await this.#collectFieldObjects(name, fieldRef, kid, promises, annotationGlobals, visitedRefs, orphanFields);
       }
     }
   }
@@ -55101,8 +55253,9 @@ class PDFDocument {
       const visitedRefs = new RefSet();
       const allFields = Object.create(null);
       const fieldPromises = new Map();
+      const orphanFields = new RefSetCache();
       for (const fieldRef of await acroForm.getAsync("Fields")) {
-        await this.#collectFieldObjects("", fieldRef, fieldPromises, annotationGlobals, visitedRefs);
+        await this.#collectFieldObjects("", null, fieldRef, fieldPromises, annotationGlobals, visitedRefs, orphanFields);
       }
       const allPromises = [];
       for (const [name, promises] of fieldPromises) {
@@ -55114,7 +55267,10 @@ class PDFDocument {
         }));
       }
       await Promise.all(allPromises);
-      return allFields;
+      return {
+        allFields,
+        orphanFields
+      };
     });
     return shadow(this, "fieldObjects", promise);
   }
@@ -55128,7 +55284,7 @@ class PDFDocument {
       return true;
     }
     if (fieldObjects) {
-      return Object.values(fieldObjects).some(fieldObject => fieldObject.some(object => object.actions !== null));
+      return Object.values(fieldObjects.allFields).some(fieldObject => fieldObject.some(object => object.actions !== null));
     }
     return false;
   }
@@ -56179,7 +56335,7 @@ class WorkerMessageHandler {
       });
     });
     handler.on("GetFieldObjects", function (data) {
-      return pdfManager.ensureDoc("fieldObjects");
+      return pdfManager.ensureDoc("fieldObjects").then(fieldObjects => fieldObjects?.allFields || null);
     });
     handler.on("HasJSActions", function (data) {
       return pdfManager.ensureDoc("hasJSActions");
@@ -56445,7 +56601,7 @@ if (typeof window === "undefined" && !isNodeJS && typeof self !== "undefined" &&
 ;// CONCATENATED MODULE: ./src/pdf.worker.js
 
 const pdfjsVersion = "4.7.0";
-const pdfjsBuild = "a7e1bf6";
+const pdfjsBuild = "5a25c47";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };
