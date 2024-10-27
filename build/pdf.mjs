@@ -912,13 +912,15 @@ class BaseCMapReaderFactory {
       throw new Error("CMap name must be specified.");
     }
     const url = this.baseUrl + name + (this.isCompressed ? ".bcmap" : "");
-    const compressionType = this.isCompressed ? CMapCompressionType.BINARY : CMapCompressionType.NONE;
-    return this._fetchData(url, compressionType).catch(reason => {
+    return this._fetch(url).then(cMapData => ({
+      cMapData,
+      compressionType: this.isCompressed ? CMapCompressionType.BINARY : CMapCompressionType.NONE
+    })).catch(reason => {
       throw new Error(`Unable to load ${this.isCompressed ? "binary " : ""}CMap at: ${url}`);
     });
   }
-  _fetchData(url, compressionType) {
-    unreachable("Abstract method `_fetchData` called.");
+  async _fetch(url) {
+    unreachable("Abstract method `_fetch` called.");
   }
 }
 class BaseStandardFontDataFactory {
@@ -937,12 +939,12 @@ class BaseStandardFontDataFactory {
       throw new Error("Font filename must be specified.");
     }
     const url = `${this.baseUrl}${filename}`;
-    return this._fetchData(url).catch(reason => {
+    return this._fetch(url).catch(reason => {
       throw new Error(`Unable to load font data at: ${url}`);
     });
   }
-  _fetchData(url) {
-    unreachable("Abstract method `_fetchData` called.");
+  async _fetch(url) {
+    unreachable("Abstract method `_fetch` called.");
   }
 }
 class BaseSVGFactory {
@@ -1354,16 +1356,15 @@ async function fetchData(url, type = "text") {
   });
 }
 class DOMCMapReaderFactory extends BaseCMapReaderFactory {
-  _fetchData(url, compressionType) {
-    return fetchData(url, this.isCompressed ? "arraybuffer" : "text").then(data => ({
-      cMapData: data instanceof ArrayBuffer ? new Uint8Array(data) : stringToBytes(data),
-      compressionType
-    }));
+  async _fetch(url) {
+    const data = await fetchData(url, this.isCompressed ? "arraybuffer" : "text");
+    return data instanceof ArrayBuffer ? new Uint8Array(data) : stringToBytes(data);
   }
 }
 class DOMStandardFontDataFactory extends BaseStandardFontDataFactory {
-  _fetchData(url) {
-    return fetchData(url, "arraybuffer").then(data => new Uint8Array(data));
+  async _fetch(url) {
+    const data = await fetchData(url, "arraybuffer");
+    return new Uint8Array(data);
   }
 }
 class DOMSVGFactory extends BaseSVGFactory {
@@ -4022,7 +4023,7 @@ class AnnotationEditor {
     fakeEditor.deleted = true;
     fakeEditor._uiManager.addToAnnotationStorage(fakeEditor);
   }
-  static initialize(l10n, _uiManager, options) {
+  static initialize(l10n, _uiManager) {
     AnnotationEditor._l10nResizer ||= Object.freeze({
       topLeft: "pdfjs-editor-resizer-top-left",
       topMiddle: "pdfjs-editor-resizer-top-middle",
@@ -4034,11 +4035,6 @@ class AnnotationEditor {
       middleLeft: "pdfjs-editor-resizer-middle-left"
     });
     AnnotationEditor._l10nPromise ||= new Map([...["pdfjs-editor-alt-text-button-label", "pdfjs-editor-alt-text-edit-button-label", "pdfjs-editor-alt-text-decorative-tooltip", "pdfjs-editor-new-alt-text-added-button-label", "pdfjs-editor-new-alt-text-missing-button-label", "pdfjs-editor-new-alt-text-to-review-button-label"].map(str => [str, l10n.get(str)]), ...["pdfjs-editor-new-alt-text-generated-alt-text-with-disclaimer"].map(str => [str, l10n.get.bind(l10n, str)])]);
-    if (options?.strings) {
-      for (const str of options.strings) {
-        AnnotationEditor._l10nPromise.set(str, l10n.get(str));
-      }
-    }
     if (AnnotationEditor._borderLineWidth !== -1) {
       return;
     }
@@ -5800,10 +5796,11 @@ class NodePackages {
     return packageMap?.get(name);
   }
 }
-const node_utils_fetchData = function (url) {
+async function node_utils_fetchData(url) {
   const fs = NodePackages.get("fs");
-  return fs.promises.readFile(url).then(data => new Uint8Array(data));
-};
+  const data = await fs.promises.readFile(url);
+  return new Uint8Array(data);
+}
 class NodeFilterFactory extends BaseFilterFactory {}
 class NodeCanvasFactory extends BaseCanvasFactory {
   _createCanvas(width, height) {
@@ -5812,15 +5809,12 @@ class NodeCanvasFactory extends BaseCanvasFactory {
   }
 }
 class NodeCMapReaderFactory extends BaseCMapReaderFactory {
-  _fetchData(url, compressionType) {
-    return node_utils_fetchData(url).then(data => ({
-      cMapData: data,
-      compressionType
-    }));
+  async _fetch(url) {
+    return node_utils_fetchData(url);
   }
 }
 class NodeStandardFontDataFactory extends BaseStandardFontDataFactory {
-  _fetchData(url) {
+  async _fetch(url) {
     return node_utils_fetchData(url);
   }
 }
@@ -7147,8 +7141,8 @@ class CanvasGraphics {
     }
   }
   _scaleImage(img, inverseTransform) {
-    const width = img.width;
-    const height = img.height;
+    const width = img.width ?? img.displayWidth;
+    const height = img.height ?? img.displayHeight;
     let widthScale = Math.max(Math.hypot(inverseTransform[0], inverseTransform[1]), 1);
     let heightScale = Math.max(Math.hypot(inverseTransform[2], inverseTransform[3]), 1);
     let paintWidth = width,
@@ -7399,19 +7393,18 @@ class CanvasGraphics {
     let maskX = layerOffsetX - maskOffsetX;
     let maskY = layerOffsetY - maskOffsetY;
     if (backdrop) {
+      const backdropRGB = Util.makeHexColor(...backdrop);
       if (maskX < 0 || maskY < 0 || maskX + width > maskCanvas.width || maskY + height > maskCanvas.height) {
         const canvas = this.cachedCanvases.getCanvas("maskExtension", width, height);
         const ctx = canvas.context;
         ctx.drawImage(maskCanvas, -maskX, -maskY);
-        if (backdrop.some(c => c !== 0)) {
-          ctx.globalCompositeOperation = "destination-atop";
-          ctx.fillStyle = Util.makeHexColor(...backdrop);
-          ctx.fillRect(0, 0, width, height);
-          ctx.globalCompositeOperation = "source-over";
-        }
+        ctx.globalCompositeOperation = "destination-atop";
+        ctx.fillStyle = backdropRGB;
+        ctx.fillRect(0, 0, width, height);
+        ctx.globalCompositeOperation = "source-over";
         maskCanvas = canvas.canvas;
         maskX = maskY = 0;
-      } else if (backdrop.some(c => c !== 0)) {
+      } else {
         maskCtx.save();
         maskCtx.globalAlpha = 1;
         maskCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -7419,7 +7412,7 @@ class CanvasGraphics {
         clip.rect(maskX, maskY, width, height);
         maskCtx.clip(clip);
         maskCtx.globalCompositeOperation = "destination-atop";
-        maskCtx.fillStyle = Util.makeHexColor(...backdrop);
+        maskCtx.fillStyle = backdropRGB;
         maskCtx.fillRect(maskX, maskY, width, height);
         maskCtx.restore();
       }
@@ -11220,7 +11213,7 @@ function getDocument(src = {}) {
   }
   const docParams = {
     docId,
-    apiVersion: "4.7.0",
+    apiVersion: "4.8.0",
     data,
     password,
     disableAutoFetch,
@@ -13020,8 +13013,8 @@ class InternalRenderTask {
     }
   }
 }
-const version = "4.7.0";
-const build = "025c087";
+const version = "4.8.0";
+const build = "0d42e56";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -15923,9 +15916,7 @@ class FreeTextEditor extends AnnotationEditor {
     this.#fontSize = params.fontSize || FreeTextEditor._defaultFontSize;
   }
   static initialize(l10n, uiManager) {
-    AnnotationEditor.initialize(l10n, uiManager, {
-      strings: ["pdfjs-free-text-default-content"]
-    });
+    AnnotationEditor.initialize(l10n, uiManager);
     const style = getComputedStyle(document.documentElement);
     this._internalPadding = parseFloat(style.getPropertyValue("--freetext-padding"));
   }
@@ -16208,9 +16199,9 @@ class FreeTextEditor extends AnnotationEditor {
     this.editorDiv = document.createElement("div");
     this.editorDiv.className = "internal";
     this.editorDiv.setAttribute("id", this.#editorDivId);
-    this.editorDiv.setAttribute("data-l10n-id", "pdfjs-free-text");
+    this.editorDiv.setAttribute("data-l10n-id", "pdfjs-free-text2");
+    this.editorDiv.setAttribute("data-l10n-attrs", "default-content");
     this.enableEditing();
-    AnnotationEditor._l10nPromise.get("pdfjs-free-text-default-content").then(msg => this.editorDiv?.setAttribute("default-content", msg));
     this.editorDiv.contentEditable = true;
     const {
       style
@@ -20377,8 +20368,8 @@ class DrawLayer {
 
 
 
-const pdfjsVersion = "4.7.0";
-const pdfjsBuild = "025c087";
+const pdfjsVersion = "4.8.0";
+const pdfjsBuild = "0d42e56";
 
 var __webpack_exports__AbortException = __webpack_exports__.AbortException;
 var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;

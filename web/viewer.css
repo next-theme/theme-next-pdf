@@ -3795,7 +3795,7 @@ body.wait::before{
           mask-image:var(--toolbarButton-editorStamp-icon);
 }
 
-:is(#printButton, #secondaryPrint)::before{
+#printButton::before{
   -webkit-mask-image:var(--toolbarButton-print-icon);
           mask-image:var(--toolbarButton-print-icon);
 }
@@ -3805,7 +3805,7 @@ body.wait::before{
           mask-image:var(--toolbarButton-openFile-icon);
 }
 
-:is(#downloadButton, #secondaryDownload)::before{
+#downloadButton::before{
   -webkit-mask-image:var(--toolbarButton-download-icon);
           mask-image:var(--toolbarButton-download-icon);
 }
