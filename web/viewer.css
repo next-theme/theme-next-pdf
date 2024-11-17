@@ -1874,6 +1874,10 @@
       height:100%;
     }
 
+:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) button{
+        padding:0;
+      }
+
 :is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .divider{
         width:0;
         height:calc(
@@ -4226,6 +4230,7 @@ dialog :link{
   font:message-box;
   flex:none;
   position:relative;
+  padding:0;
 }
 
 .toolbarButton  > span{

@@ -552,6 +552,9 @@ class util_FeatureTest {
   static get isOffscreenCanvasSupported() {
     return shadow(this, "isOffscreenCanvasSupported", typeof OffscreenCanvas !== "undefined");
   }
+  static get isImageDecoderSupported() {
+    return shadow(this, "isImageDecoderSupported", typeof ImageDecoder !== "undefined");
+  }
   static get platform() {
     if (typeof navigator !== "undefined" && typeof navigator?.platform === "string") {
       return shadow(this, "platform", {
@@ -5269,6 +5272,7 @@ class FontFaceObject {
           break;
       }
     }
+    commands.push(ctx => ctx.closePath());
     return this.compiledGlyphs[character] = function glyphDrawer(ctx, size) {
       commands[0](ctx);
       commands[1](ctx);
@@ -5768,7 +5772,7 @@ class NodeFilterFactory extends BaseFilterFactory {}
 class NodeCanvasFactory extends BaseCanvasFactory {
   _createCanvas(width, height) {
     const require = process.getBuiltinModule("module").createRequire("file:///home/runner/work/theme-next-pdf/theme-next-pdf/pdf.js/src/display/node_utils.js");
-    const canvas = require("canvas");
+    const canvas = require("@napi-rs/canvas");
     return canvas.createCanvas(width, height);
   }
 }
@@ -6691,6 +6695,7 @@ class CanvasExtraState {
     this.fillColor = "#000000";
     this.strokeColor = "#000000";
     this.patternFill = false;
+    this.patternStroke = false;
     this.fillAlpha = 1;
     this.strokeAlpha = 1;
     this.lineWidth = 1;
@@ -6773,7 +6778,7 @@ class CanvasExtraState {
   }
 }
 function putBinaryImageData(ctx, imgData) {
-  if (typeof ImageData !== "undefined" && imgData instanceof ImageData) {
+  if (imgData instanceof ImageData) {
     ctx.putImageData(imgData, 0, 0);
     return;
   }
@@ -7696,7 +7701,7 @@ class CanvasGraphics {
   nextLine() {
     this.moveText(0, this.current.leading);
   }
-  paintChar(character, x, y, patternTransform) {
+  paintChar(character, x, y, patternFillTransform, patternStrokeTransform) {
     const ctx = this.ctx;
     const current = this.current;
     const font = current.font;
@@ -7705,22 +7710,26 @@ class CanvasGraphics {
     const fillStrokeMode = textRenderingMode & TextRenderingMode.FILL_STROKE_MASK;
     const isAddToPathSet = !!(textRenderingMode & TextRenderingMode.ADD_TO_PATH_FLAG);
     const patternFill = current.patternFill && !font.missingFile;
+    const patternStroke = current.patternStroke && !font.missingFile;
     let addToPath;
-    if (font.disableFontFace || isAddToPathSet || patternFill) {
+    if (font.disableFontFace || isAddToPathSet || patternFill || patternStroke) {
       addToPath = font.getPathGenerator(this.commonObjs, character);
     }
-    if (font.disableFontFace || patternFill) {
+    if (font.disableFontFace || patternFill || patternStroke) {
       ctx.save();
       ctx.translate(x, y);
       ctx.beginPath();
       addToPath(ctx, fontSize);
-      if (patternTransform) {
-        ctx.setTransform(...patternTransform);
-      }
       if (fillStrokeMode === TextRenderingMode.FILL || fillStrokeMode === TextRenderingMode.FILL_STROKE) {
+        if (patternFillTransform) {
+          ctx.setTransform(...patternFillTransform);
+        }
         ctx.fill();
       }
       if (fillStrokeMode === TextRenderingMode.STROKE || fillStrokeMode === TextRenderingMode.FILL_STROKE) {
+        if (patternStrokeTransform) {
+          ctx.setTransform(...patternStrokeTransform);
+        }
         ctx.stroke();
       }
       ctx.restore();
@@ -7789,13 +7798,20 @@ class CanvasGraphics {
     } else {
       ctx.scale(textHScale, 1);
     }
-    let patternTransform;
+    let patternFillTransform, patternStrokeTransform;
     if (current.patternFill) {
       ctx.save();
       const pattern = current.fillColor.getPattern(ctx, this, getCurrentTransformInverse(ctx), PathType.FILL);
-      patternTransform = getCurrentTransform(ctx);
+      patternFillTransform = getCurrentTransform(ctx);
       ctx.restore();
       ctx.fillStyle = pattern;
+    }
+    if (current.patternStroke) {
+      ctx.save();
+      const pattern = current.strokeColor.getPattern(ctx, this, getCurrentTransformInverse(ctx), PathType.STROKE);
+      patternStrokeTransform = getCurrentTransform(ctx);
+      ctx.restore();
+      ctx.strokeStyle = pattern;
     }
     let lineWidth = current.lineWidth;
     const scale = current.textMatrixScale;
@@ -7866,11 +7882,11 @@ class CanvasGraphics {
         if (simpleFillText && !accent) {
           ctx.fillText(character, scaledX, scaledY);
         } else {
-          this.paintChar(character, scaledX, scaledY, patternTransform);
+          this.paintChar(character, scaledX, scaledY, patternFillTransform, patternStrokeTransform);
           if (accent) {
             const scaledAccentX = scaledX + fontSize * accent.offset.x / fontSizeScale;
             const scaledAccentY = scaledY - fontSize * accent.offset.y / fontSizeScale;
-            this.paintChar(accent.fontChar, scaledAccentX, scaledAccentY, patternTransform);
+            this.paintChar(accent.fontChar, scaledAccentX, scaledAccentY, patternFillTransform, patternStrokeTransform);
           }
         }
       }
@@ -7967,6 +7983,7 @@ class CanvasGraphics {
   }
   setStrokeColorN() {
     this.current.strokeColor = this.getColorN_Pattern(arguments);
+    this.current.patternStroke = true;
   }
   setFillColorN() {
     this.current.fillColor = this.getColorN_Pattern(arguments);
@@ -7974,9 +7991,11 @@ class CanvasGraphics {
   }
   setStrokeRGBColor(r, g, b) {
     this.ctx.strokeStyle = this.current.strokeColor = Util.makeHexColor(r, g, b);
+    this.current.patternStroke = false;
   }
   setStrokeTransparent() {
     this.ctx.strokeStyle = this.current.strokeColor = "transparent";
+    this.current.patternStroke = false;
   }
   setFillRGBColor(r, g, b) {
     this.ctx.fillStyle = this.current.fillColor = Util.makeHexColor(r, g, b);
@@ -11051,6 +11070,7 @@ function getDocument(src = {}) {
   const maxImageSize = Number.isInteger(src.maxImageSize) && src.maxImageSize > -1 ? src.maxImageSize : -1;
   const isEvalSupported = src.isEvalSupported !== false;
   const isOffscreenCanvasSupported = typeof src.isOffscreenCanvasSupported === "boolean" ? src.isOffscreenCanvasSupported : !isNodeJS;
+  const isImageDecoderSupported = typeof src.isImageDecoderSupported === "boolean" ? src.isImageDecoderSupported : !isNodeJS;
   const isChrome = typeof src.isChrome === "boolean" ? src.isChrome : !util_FeatureTest.platform.isFirefox && typeof window !== "undefined" && !!window?.chrome;
   const canvasMaxAreaInBytes = Number.isInteger(src.canvasMaxAreaInBytes) ? src.canvasMaxAreaInBytes : -1;
   const disableFontFace = typeof src.disableFontFace === "boolean" ? src.disableFontFace : isNodeJS;
@@ -11116,6 +11136,7 @@ function getDocument(src = {}) {
       ignoreErrors,
       isEvalSupported,
       isOffscreenCanvasSupported,
+      isImageDecoderSupported,
       isChrome,
       canvasMaxAreaInBytes,
       fontExtraProperties,
@@ -12908,7 +12929,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.9.0";
-const build = "bff6738";
+const build = "9bf9bbd";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -20365,7 +20386,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "4.9.0";
-const pdfjsBuild = "bff6738";
+const pdfjsBuild = "9bf9bbd";
 
 var __webpack_exports__AbortException = __webpack_exports__.AbortException;
 var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;
