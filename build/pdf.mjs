@@ -804,17 +804,11 @@ function normalizeUnicode(str) {
   return str.replaceAll(NormalizeRegex, (_, p1, p2) => p1 ? p1.normalize("NFKC") : NormalizationMap.get(p2));
 }
 function getUuid() {
-  if (typeof crypto !== "undefined" && typeof crypto?.randomUUID === "function") {
+  if (typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
   const buf = new Uint8Array(32);
-  if (typeof crypto !== "undefined" && typeof crypto?.getRandomValues === "function") {
-    crypto.getRandomValues(buf);
-  } else {
-    for (let i = 0; i < 32; i++) {
-      buf[i] = Math.floor(Math.random() * 255);
-    }
-  }
+  crypto.getRandomValues(buf);
   return bytesToString(buf);
 }
 const AnnotationPrefix = "pdfjs_internal_id_";
@@ -1526,7 +1520,7 @@ class ImageManager {
       }
       data.refCounter = 1;
     } catch (e) {
-      console.error(e);
+      warn(e);
       data = null;
     }
     this.#cache.set(key, data);
@@ -3454,6 +3448,7 @@ class AnnotationEditor {
   #disabled = false;
   #keepAspectRatio = false;
   #resizersDiv = null;
+  #lastPointerCoords = null;
   #savedDimensions = null;
   #focusAC = null;
   #focusedResizerName = "";
@@ -3905,12 +3900,19 @@ class AnnotationEditor {
     this.#altText?.toggle(false);
     const savedDraggable = this._isDraggable;
     this._isDraggable = false;
+    this.#lastPointerCoords = [event.screenX, event.screenY];
     const ac = new AbortController();
     const signal = this._uiManager.combinedSignal(ac);
     this.parent.togglePointerEvents(false);
     window.addEventListener("pointermove", this.#resizerPointermove.bind(this, name), {
       passive: true,
       capture: true,
+      signal
+    });
+    window.addEventListener("touchmove", e => {
+      e.preventDefault();
+    }, {
+      passive: false,
       signal
     });
     window.addEventListener("contextmenu", noContextMenu, {
@@ -4033,7 +4035,22 @@ class AnnotationEditor {
     const oppositeY = round(savedY + transfOppositePoint[1]);
     let ratioX = 1;
     let ratioY = 1;
-    let [deltaX, deltaY] = this.screenToPageTranslation(event.movementX, event.movementY);
+    let deltaX, deltaY;
+    if (!event.fromKeyboard) {
+      const {
+        screenX,
+        screenY
+      } = event;
+      const [lastScreenX, lastScreenY] = this.#lastPointerCoords;
+      [deltaX, deltaY] = this.screenToPageTranslation(screenX - lastScreenX, screenY - lastScreenY);
+      this.#lastPointerCoords[0] = screenX;
+      this.#lastPointerCoords[1] = screenY;
+    } else {
+      ({
+        deltaX,
+        deltaY
+      } = event);
+    }
     [deltaX, deltaY] = invTransf(deltaX / parentWidth, deltaY / parentHeight);
     if (isDiagonal) {
       const oldDiag = Math.hypot(savedWidth, savedHeight);
@@ -4197,6 +4214,12 @@ class AnnotationEditor {
       window.addEventListener("pointermove", pointerMoveCallback, {
         passive: true,
         capture: true,
+        signal
+      });
+      window.addEventListener("touchmove", e => {
+        e.preventDefault();
+      }, {
+        passive: false,
         signal
       });
     }
@@ -4466,8 +4489,9 @@ class AnnotationEditor {
       return;
     }
     this.#resizerPointermove(this.#focusedResizerName, {
-      movementX: x,
-      movementY: y
+      deltaX: x,
+      deltaY: y,
+      fromKeyboard: true
     });
   }
   #stopResizing() {
@@ -5667,17 +5691,15 @@ class DOMFilterFactory extends BaseFilterFactory {
     return info.url;
   }
   destroy(keepHCM = false) {
-    if (keepHCM && this.#hcmCache.size !== 0) {
+    if (keepHCM && this.#_hcmCache?.size) {
       return;
     }
-    if (this.#_defs) {
-      this.#_defs.parentNode.parentNode.remove();
-      this.#_defs = null;
-    }
-    if (this.#_cache) {
-      this.#_cache.clear();
-      this.#_cache = null;
-    }
+    this.#_defs?.parentNode.parentNode.remove();
+    this.#_defs = null;
+    this.#_cache?.clear();
+    this.#_cache = null;
+    this.#_hcmCache?.clear();
+    this.#_hcmCache = null;
     this.#id = 0;
   }
   #addLuminosityConversion(filter) {
@@ -11070,8 +11092,7 @@ function getDocument(src = {}) {
   const maxImageSize = Number.isInteger(src.maxImageSize) && src.maxImageSize > -1 ? src.maxImageSize : -1;
   const isEvalSupported = src.isEvalSupported !== false;
   const isOffscreenCanvasSupported = typeof src.isOffscreenCanvasSupported === "boolean" ? src.isOffscreenCanvasSupported : !isNodeJS;
-  const isImageDecoderSupported = typeof src.isImageDecoderSupported === "boolean" ? src.isImageDecoderSupported : !isNodeJS;
-  const isChrome = typeof src.isChrome === "boolean" ? src.isChrome : !util_FeatureTest.platform.isFirefox && typeof window !== "undefined" && !!window?.chrome;
+  const isImageDecoderSupported = typeof src.isImageDecoderSupported === "boolean" ? src.isImageDecoderSupported : !isNodeJS && (util_FeatureTest.platform.isFirefox || !globalThis.chrome);
   const canvasMaxAreaInBytes = Number.isInteger(src.canvasMaxAreaInBytes) ? src.canvasMaxAreaInBytes : -1;
   const disableFontFace = typeof src.disableFontFace === "boolean" ? src.disableFontFace : isNodeJS;
   const fontExtraProperties = src.fontExtraProperties === true;
@@ -11137,7 +11158,6 @@ function getDocument(src = {}) {
       isEvalSupported,
       isOffscreenCanvasSupported,
       isImageDecoderSupported,
-      isChrome,
       canvasMaxAreaInBytes,
       fontExtraProperties,
       useSystemFonts,
@@ -12929,7 +12949,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.9.0";
-const build = "9bf9bbd";
+const build = "1f6cc85";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -16433,14 +16453,21 @@ class Outline {
   serialize(_bbox, _rotation) {
     unreachable("Abstract method `serialize` must be implemented.");
   }
-  get classNamesForDrawing() {
-    unreachable("Abstract getter `classNamesForDrawing` must be implemented.");
+  static _rescale(src, tx, ty, sx, sy, dest) {
+    dest ||= new Float32Array(src.length);
+    for (let i = 0, ii = src.length; i < ii; i += 2) {
+      dest[i] = tx + src[i] * sx;
+      dest[i + 1] = ty + src[i + 1] * sy;
+    }
+    return dest;
   }
-  get classNamesForOutlining() {
-    unreachable("Abstract getter `classNamesForOutlining` must be implemented.");
-  }
-  get mustRemoveSelfIntersections() {
-    return false;
+  static _rescaleAndSwap(src, tx, ty, sx, sy, dest) {
+    dest ||= new Float32Array(src.length);
+    for (let i = 0, ii = src.length; i < ii; i += 2) {
+      dest[i] = tx + src[i + 1] * sx;
+      dest[i + 1] = ty + src[i] * sy;
+    }
+    return dest;
   }
 }
 
@@ -16453,7 +16480,7 @@ class FreeDrawOutliner {
   #innerMargin;
   #isLTR;
   #top = [];
-  #last = new Float64Array(18);
+  #last = new Float32Array(18);
   #lastX;
   #lastY;
   #min;
@@ -16598,7 +16625,7 @@ class FreeDrawOutliner {
     const bottom = this.#bottom;
     const last = this.#last;
     const [layerX, layerY, layerWidth, layerHeight] = this.#box;
-    const points = new Float64Array((this.#points?.length ?? 0) + 2);
+    const points = new Float32Array((this.#points?.length ?? 0) + 2);
     for (let i = 0, ii = points.length - 2; i < ii; i += 2) {
       points[i] = (this.#points[i] - layerX) / layerWidth;
       points[i + 1] = (this.#points[i + 1] - layerY) / layerHeight;
@@ -16608,7 +16635,7 @@ class FreeDrawOutliner {
     if (isNaN(last[6]) && !this.isEmpty()) {
       return this.#getOutlineTwoPoints(points);
     }
-    const outline = new Float64Array(this.#top.length + 24 + this.#bottom.length);
+    const outline = new Float32Array(this.#top.length + 24 + this.#bottom.length);
     let N = top.length;
     for (let i = 0; i < N; i += 2) {
       if (isNaN(top[i])) {
@@ -16638,7 +16665,7 @@ class FreeDrawOutliner {
     const last = this.#last;
     const [layerX, layerY, layerWidth, layerHeight] = this.#box;
     const [lastTopX, lastTopY, lastBottomX, lastBottomY] = this.#getLastCoords();
-    const outline = new Float64Array(36);
+    const outline = new Float32Array(36);
     outline.set([NaN, NaN, NaN, NaN, (last[2] - layerX) / layerWidth, (last[3] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (last[4] - layerX) / layerWidth, (last[5] - layerY) / layerHeight, NaN, NaN, NaN, NaN, lastTopX, lastTopY, NaN, NaN, NaN, NaN, lastBottomX, lastBottomY, NaN, NaN, NaN, NaN, (last[16] - layerX) / layerWidth, (last[17] - layerY) / layerHeight, NaN, NaN, NaN, NaN, (last[14] - layerX) / layerWidth, (last[15] - layerY) / layerHeight], 0);
     return this.newFreeDrawOutline(outline, points, this.#box, this.#scaleFactor, this.#innerMargin, this.#isLTR);
   }
@@ -16658,7 +16685,7 @@ class FreeDrawOutliner {
 }
 class FreeDrawOutline extends Outline {
   #box;
-  #bbox = null;
+  #bbox = new Float32Array(4);
   #innerMargin;
   #isLTR;
   #points;
@@ -16672,13 +16699,9 @@ class FreeDrawOutline extends Outline {
     this.#scaleFactor = scaleFactor;
     this.#innerMargin = innerMargin;
     this.#isLTR = isLTR;
+    this.lastPoint = [NaN, NaN];
     this.#computeMinMax(isLTR);
-    const {
-      x,
-      y,
-      width,
-      height
-    } = this.#bbox;
+    const [x, y, width, height] = this.#bbox;
     for (let i = 0, ii = outline.length; i < ii; i += 2) {
       outline[i] = (outline[i] - x) / width;
       outline[i + 1] = (outline[i + 1] - y) / height;
@@ -16707,42 +16730,26 @@ class FreeDrawOutline extends Outline {
     let points;
     switch (rotation) {
       case 0:
-        outline = this.#rescale(this.#outline, blX, trY, width, -height);
-        points = this.#rescale(this.#points, blX, trY, width, -height);
+        outline = Outline._rescale(this.#outline, blX, trY, width, -height);
+        points = Outline._rescale(this.#points, blX, trY, width, -height);
         break;
       case 90:
-        outline = this.#rescaleAndSwap(this.#outline, blX, blY, width, height);
-        points = this.#rescaleAndSwap(this.#points, blX, blY, width, height);
+        outline = Outline._rescaleAndSwap(this.#outline, blX, blY, width, height);
+        points = Outline._rescaleAndSwap(this.#points, blX, blY, width, height);
         break;
       case 180:
-        outline = this.#rescale(this.#outline, trX, blY, -width, height);
-        points = this.#rescale(this.#points, trX, blY, -width, height);
+        outline = Outline._rescale(this.#outline, trX, blY, -width, height);
+        points = Outline._rescale(this.#points, trX, blY, -width, height);
         break;
       case 270:
-        outline = this.#rescaleAndSwap(this.#outline, trX, trY, -width, -height);
-        points = this.#rescaleAndSwap(this.#points, trX, trY, -width, -height);
+        outline = Outline._rescaleAndSwap(this.#outline, trX, trY, -width, -height);
+        points = Outline._rescaleAndSwap(this.#points, trX, trY, -width, -height);
         break;
     }
     return {
       outline: Array.from(outline),
       points: [Array.from(points)]
     };
-  }
-  #rescale(src, tx, ty, sx, sy) {
-    const dest = new Float64Array(src.length);
-    for (let i = 0, ii = src.length; i < ii; i += 2) {
-      dest[i] = tx + src[i] * sx;
-      dest[i + 1] = ty + src[i + 1] * sy;
-    }
-    return dest;
-  }
-  #rescaleAndSwap(src, tx, ty, sx, sy) {
-    const dest = new Float64Array(src.length);
-    for (let i = 0, ii = src.length; i < ii; i += 2) {
-      dest[i] = tx + src[i + 1] * sx;
-      dest[i + 1] = ty + src[i] * sy;
-    }
-    return dest;
   }
   #computeMinMax(isLTR) {
     const outline = this.#outline;
@@ -16783,17 +16790,12 @@ class FreeDrawOutline extends Outline {
       lastX = outline[i + 4];
       lastY = outline[i + 5];
     }
-    const x = minX - this.#innerMargin,
-      y = minY - this.#innerMargin,
-      width = maxX - minX + 2 * this.#innerMargin,
-      height = maxY - minY + 2 * this.#innerMargin;
-    this.#bbox = {
-      x,
-      y,
-      width,
-      height,
-      lastPoint: [lastPointX, lastPointY]
-    };
+    const bbox = this.#bbox;
+    bbox[0] = minX - this.#innerMargin;
+    bbox[1] = minY - this.#innerMargin;
+    bbox[2] = maxX - minX + 2 * this.#innerMargin;
+    bbox[3] = maxY - minY + 2 * this.#innerMargin;
+    this.lastPoint = [lastPointX, lastPointY];
   }
   get box() {
     return this.#bbox;
@@ -16802,12 +16804,7 @@ class FreeDrawOutline extends Outline {
     return new FreeDrawOutliner(point, box, scaleFactor, thickness, isLTR, innerMargin);
   }
   getNewOutline(thickness, innerMargin) {
-    const {
-      x,
-      y,
-      width,
-      height
-    } = this.#bbox;
+    const [x, y, width, height] = this.#bbox;
     const [layerX, layerY, layerWidth, layerHeight] = this.#box;
     const sx = width * layerWidth;
     const sy = height * layerHeight;
@@ -16825,9 +16822,6 @@ class FreeDrawOutline extends Outline {
     }
     return outliner.getOutlines();
   }
-  get mustRemoveSelfIntersections() {
-    return true;
-  }
 }
 
 ;// ./src/display/editor/drawers/highlight.js
@@ -16835,6 +16829,7 @@ class FreeDrawOutline extends Outline {
 
 class HighlightOutliner {
   #box;
+  #lastPoint;
   #verticalEdges = [];
   #intervals = [];
   constructor(boxes, borderWidth = 0, innerMargin = 0, isLTR = true) {
@@ -16874,13 +16869,8 @@ class HighlightOutliner {
       edge[1] = (y1 - shiftedMinY) / bboxHeight;
       edge[2] = (y2 - shiftedMinY) / bboxHeight;
     }
-    this.#box = {
-      x: shiftedMinX,
-      y: shiftedMinY,
-      width: bboxWidth,
-      height: bboxHeight,
-      lastPoint
-    };
+    this.#box = new Float32Array([shiftedMinX, shiftedMinY, bboxWidth, bboxHeight]);
+    this.#lastPoint = lastPoint;
   }
   getOutlines() {
     this.#verticalEdges.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
@@ -16941,7 +16931,7 @@ class HighlightOutliner {
       }
       outline.push(lastPointX, lastPointY);
     }
-    return new HighlightOutline(outlines, this.#box);
+    return new HighlightOutline(outlines, this.#box, this.#lastPoint);
   }
   #binarySearch(y) {
     const array = this.#intervals;
@@ -17024,10 +17014,11 @@ class HighlightOutliner {
 class HighlightOutline extends Outline {
   #box;
   #outlines;
-  constructor(outlines, box) {
+  constructor(outlines, box, lastPoint) {
     super();
     this.#outlines = outlines;
     this.#box = box;
+    this.lastPoint = lastPoint;
   }
   toSVGPath() {
     const buffer = [];
@@ -17066,9 +17057,6 @@ class HighlightOutline extends Outline {
   get box() {
     return this.#box;
   }
-  get classNamesForDrawing() {
-    return ["highlight"];
-  }
   get classNamesForOutlining() {
     return ["highlightOutline"];
   }
@@ -17077,17 +17065,8 @@ class FreeHighlightOutliner extends FreeDrawOutliner {
   newFreeDrawOutline(outline, points, box, scaleFactor, innerMargin, isLTR) {
     return new FreeHighlightOutline(outline, points, box, scaleFactor, innerMargin, isLTR);
   }
-  get classNamesForDrawing() {
-    return ["highlight", "free"];
-  }
 }
 class FreeHighlightOutline extends FreeDrawOutline {
-  get classNamesForDrawing() {
-    return ["highlight", "free"];
-  }
-  get classNamesForOutlining() {
-    return ["highlightOutline", "free"];
-  }
   newOutliner(point, box, scaleFactor, thickness, isLTR, innerMargin = 0) {
     return new FreeHighlightOutliner(point, box, scaleFactor, thickness, isLTR, innerMargin);
   }
@@ -17418,17 +17397,12 @@ class HighlightEditor extends AnnotationEditor {
   #createOutlines() {
     const outliner = new HighlightOutliner(this.#boxes, 0.001);
     this.#highlightOutlines = outliner.getOutlines();
-    ({
-      x: this.x,
-      y: this.y,
-      width: this.width,
-      height: this.height
-    } = this.#highlightOutlines.box);
+    [this.x, this.y, this.width, this.height] = this.#highlightOutlines.box;
     const outlinerForOutline = new HighlightOutliner(this.#boxes, 0.0025, 0.001, this._uiManager.direction === "ltr");
     this.#focusOutlines = outlinerForOutline.getOutlines();
     const {
       lastPoint
-    } = this.#focusOutlines.box;
+    } = this.#focusOutlines;
     this.#lastPoint = [(lastPoint[0] - this.x) / this.width, (lastPoint[1] - this.y) / this.height];
   }
   #createFreeOutlines({
@@ -17442,21 +17416,38 @@ class HighlightEditor extends AnnotationEditor {
     if (highlightId >= 0) {
       this.#id = highlightId;
       this.#clipPathId = clipPathId;
-      this.parent.drawLayer.finalizeLine(highlightId, highlightOutlines);
-      this.#outlineId = this.parent.drawLayer.drawOutline(this.#focusOutlines);
+      this.parent.drawLayer.finalizeDraw(highlightId, {
+        bbox: highlightOutlines.box,
+        path: {
+          d: highlightOutlines.toSVGPath()
+        }
+      });
+      this.#outlineId = this.parent.drawLayer.drawOutline({
+        rootClass: {
+          highlightOutline: true,
+          free: true
+        },
+        bbox: this.#focusOutlines.box,
+        path: {
+          d: this.#focusOutlines.toSVGPath()
+        }
+      }, true);
     } else if (this.parent) {
       const angle = this.parent.viewport.rotation;
-      this.parent.drawLayer.updateLine(this.#id, highlightOutlines);
-      this.parent.drawLayer.updateBox(this.#id, HighlightEditor.#rotateBbox(this.#highlightOutlines.box, (angle - this.rotation + 360) % 360));
-      this.parent.drawLayer.updateLine(this.#outlineId, this.#focusOutlines);
-      this.parent.drawLayer.updateBox(this.#outlineId, HighlightEditor.#rotateBbox(this.#focusOutlines.box, angle));
+      this.parent.drawLayer.updateProperties(this.#id, {
+        bbox: HighlightEditor.#rotateBbox(this.#highlightOutlines.box, (angle - this.rotation + 360) % 360),
+        path: {
+          d: highlightOutlines.toSVGPath()
+        }
+      });
+      this.parent.drawLayer.updateProperties(this.#outlineId, {
+        bbox: HighlightEditor.#rotateBbox(this.#focusOutlines.box, angle),
+        path: {
+          d: this.#focusOutlines.toSVGPath()
+        }
+      });
     }
-    const {
-      x,
-      y,
-      width,
-      height
-    } = highlightOutlines.box;
+    const [x, y, width, height] = highlightOutlines.box;
     switch (this.rotation) {
       case 0:
         this.x = x;
@@ -17491,7 +17482,7 @@ class HighlightEditor extends AnnotationEditor {
     }
     const {
       lastPoint
-    } = this.#focusOutlines.box;
+    } = this.#focusOutlines;
     this.#lastPoint = [(lastPoint[0] - x) / width, (lastPoint[1] - y) / height];
   }
   static initialize(l10n, uiManager) {
@@ -17531,10 +17522,14 @@ class HighlightEditor extends AnnotationEditor {
   #updateColor(color) {
     const setColorAndOpacity = (col, opa) => {
       this.color = col;
-      this.parent?.drawLayer.changeColor(this.#id, col);
-      this.#colorPicker?.updateColor(col);
       this.#opacity = opa;
-      this.parent?.drawLayer.changeOpacity(this.#id, opa);
+      this.parent?.drawLayer.updateProperties(this.#id, {
+        root: {
+          fill: col,
+          "fill-opacity": opa
+        }
+      });
+      this.#colorPicker?.updateColor(col);
     };
     const savedColor = this.color;
     const savedOpacity = this.#opacity;
@@ -17669,47 +17664,45 @@ class HighlightEditor extends AnnotationEditor {
     ({
       id: this.#id,
       clipPathId: this.#clipPathId
-    } = parent.drawLayer.draw(this.#highlightOutlines, this.color, this.#opacity));
-    this.#outlineId = parent.drawLayer.drawOutline(this.#focusOutlines);
+    } = parent.drawLayer.draw({
+      bbox: this.#highlightOutlines.box,
+      root: {
+        viewBox: "0 0 1 1",
+        fill: this.color,
+        "fill-opacity": this.#opacity
+      },
+      rootClass: {
+        highlight: true,
+        free: this.#isFreeHighlight
+      },
+      path: {
+        d: this.#highlightOutlines.toSVGPath()
+      }
+    }, false, true));
+    this.#outlineId = parent.drawLayer.drawOutline({
+      rootClass: {
+        highlightOutline: true,
+        free: this.#isFreeHighlight
+      },
+      bbox: this.#focusOutlines.box,
+      path: {
+        d: this.#focusOutlines.toSVGPath()
+      }
+    }, this.#isFreeHighlight);
     if (this.#highlightDiv) {
       this.#highlightDiv.style.clipPath = this.#clipPathId;
     }
   }
-  static #rotateBbox({
-    x,
-    y,
-    width,
-    height
-  }, angle) {
+  static #rotateBbox([x, y, width, height], angle) {
     switch (angle) {
       case 90:
-        return {
-          x: 1 - y - height,
-          y: x,
-          width: height,
-          height: width
-        };
+        return [1 - y - height, x, height, width];
       case 180:
-        return {
-          x: 1 - x - width,
-          y: 1 - y - height,
-          width,
-          height
-        };
+        return [1 - x - width, 1 - y - height, width, height];
       case 270:
-        return {
-          x: y,
-          y: 1 - x - width,
-          width: height,
-          height: width
-        };
+        return [y, 1 - x - width, height, width];
     }
-    return {
-      x,
-      y,
-      width,
-      height
-    };
+    return [x, y, width, height];
   }
   rotate(angle) {
     const {
@@ -17720,12 +17713,20 @@ class HighlightEditor extends AnnotationEditor {
       angle = (angle - this.rotation + 360) % 360;
       box = HighlightEditor.#rotateBbox(this.#highlightOutlines.box, angle);
     } else {
-      box = HighlightEditor.#rotateBbox(this, angle);
+      box = HighlightEditor.#rotateBbox([this.x, this.y, this.width, this.height], angle);
     }
-    drawLayer.rotate(this.#id, angle);
-    drawLayer.rotate(this.#outlineId, angle);
-    drawLayer.updateBox(this.#id, box);
-    drawLayer.updateBox(this.#outlineId, HighlightEditor.#rotateBbox(this.#focusOutlines.box, angle));
+    drawLayer.updateProperties(this.#id, {
+      bbox: box,
+      root: {
+        "data-main-rotation": angle
+      }
+    });
+    drawLayer.updateProperties(this.#outlineId, {
+      bbox: HighlightEditor.#rotateBbox(this.#focusOutlines.box, angle),
+      root: {
+        "data-main-rotation": angle
+      }
+    });
   }
   render() {
     if (this.div) {
@@ -17756,12 +17757,20 @@ class HighlightEditor extends AnnotationEditor {
   }
   pointerover() {
     if (!this.isSelected) {
-      this.parent.drawLayer.addClass(this.#outlineId, "hovered");
+      this.parent?.drawLayer.updateProperties(this.#outlineId, {
+        rootClass: {
+          hovered: true
+        }
+      });
     }
   }
   pointerleave() {
     if (!this.isSelected) {
-      this.parent.drawLayer.removeClass(this.#outlineId, "hovered");
+      this.parent?.drawLayer.updateProperties(this.#outlineId, {
+        rootClass: {
+          hovered: false
+        }
+      });
     }
   }
   #keydown(event) {
@@ -17796,15 +17805,23 @@ class HighlightEditor extends AnnotationEditor {
     if (!this.#outlineId) {
       return;
     }
-    this.parent?.drawLayer.removeClass(this.#outlineId, "hovered");
-    this.parent?.drawLayer.addClass(this.#outlineId, "selected");
+    this.parent?.drawLayer.updateProperties(this.#outlineId, {
+      rootClass: {
+        hovered: false,
+        selected: true
+      }
+    });
   }
   unselect() {
     super.unselect();
     if (!this.#outlineId) {
       return;
     }
-    this.parent?.drawLayer.removeClass(this.#outlineId, "selected");
+    this.parent?.drawLayer.updateProperties(this.#outlineId, {
+      rootClass: {
+        selected: false
+      }
+    });
     if (!this.#isFreeHighlight) {
       this.#setCaret(false);
     }
@@ -17815,8 +17832,16 @@ class HighlightEditor extends AnnotationEditor {
   show(visible = this._isVisible) {
     super.show(visible);
     if (this.parent) {
-      this.parent.drawLayer.show(this.#id, visible);
-      this.parent.drawLayer.show(this.#outlineId, visible);
+      this.parent.drawLayer.updateProperties(this.#id, {
+        rootClass: {
+          hidden: !visible
+        }
+      });
+      this.parent.drawLayer.updateProperties(this.#outlineId, {
+        rootClass: {
+          hidden: !visible
+        }
+      });
     }
   }
   #getRotation() {
@@ -17895,11 +17920,29 @@ class HighlightEditor extends AnnotationEditor {
     ({
       id: this._freeHighlightId,
       clipPathId: this._freeHighlightClipId
-    } = parent.drawLayer.draw(this._freeHighlight, this._defaultColor, this._defaultOpacity, true));
+    } = parent.drawLayer.draw({
+      bbox: [0, 0, 1, 1],
+      root: {
+        viewBox: "0 0 1 1",
+        fill: this._defaultColor,
+        "fill-opacity": this._defaultOpacity
+      },
+      rootClass: {
+        highlight: true,
+        free: true
+      },
+      path: {
+        d: this._freeHighlight.toSVGPath()
+      }
+    }, true, true));
   }
   static #highlightMove(parent, event) {
     if (this._freeHighlight.add(event)) {
-      parent.drawLayer.updatePath(this._freeHighlightId, this._freeHighlight);
+      parent.drawLayer.updateProperties(this._freeHighlightId, {
+        path: {
+          d: this._freeHighlight.toSVGPath()
+        }
+      });
     }
   }
   static #endHighlight(parent, event) {
@@ -18027,7 +18070,21 @@ class HighlightEditor extends AnnotationEditor {
       const {
         id,
         clipPathId
-      } = parent.drawLayer.draw(outliner, editor.color, editor._defaultOpacity, true);
+      } = parent.drawLayer.draw({
+        bbox: [0, 0, 1, 1],
+        root: {
+          viewBox: "0 0 1 1",
+          fill: editor.color,
+          "fill-opacity": editor._defaultOpacity
+        },
+        rootClass: {
+          highlight: true,
+          free: true
+        },
+        path: {
+          d: outliner.toSVGPath()
+        }
+      }, true, true);
       editor.#createFreeOutlines({
         highlightOutlines: outliner.getOutlines(),
         highlightId: id,
@@ -20210,12 +20267,7 @@ class DrawLayer {
   static get _svgFactory() {
     return shadow(this, "_svgFactory", new DOMSVGFactory());
   }
-  static #setBox(element, {
-    x = 0,
-    y = 0,
-    width = 1,
-    height = 1
-  } = {}) {
+  static #setBox(element, [x, y, width, height]) {
     const {
       style
     } = element;
@@ -20224,11 +20276,10 @@ class DrawLayer {
     style.width = `${100 * width}%`;
     style.height = `${100 * height}%`;
   }
-  #createSVG(box) {
+  #createSVG() {
     const svg = DrawLayer._svgFactory.create(1, 1, true);
     this.#parent.append(svg);
     svg.setAttribute("aria-hidden", true);
-    DrawLayer.#setBox(svg, box);
     return svg;
   }
   #createClipPath(defs, pathId) {
@@ -20243,46 +20294,51 @@ class DrawLayer {
     clipPathUse.classList.add("clip");
     return clipPathId;
   }
-  draw(outlines, color, opacity, isPathUpdatable = false) {
+  #updateProperties(element, properties) {
+    for (const [key, value] of Object.entries(properties)) {
+      if (value === null) {
+        element.removeAttribute(key);
+      } else {
+        element.setAttribute(key, value);
+      }
+    }
+  }
+  draw(properties, isPathUpdatable = false, hasClip = false) {
     const id = this.#id++;
-    const root = this.#createSVG(outlines.box);
-    root.classList.add(...outlines.classNamesForDrawing);
+    const root = this.#createSVG();
     const defs = DrawLayer._svgFactory.createElement("defs");
     root.append(defs);
     const path = DrawLayer._svgFactory.createElement("path");
     defs.append(path);
     const pathId = `path_p${this.pageIndex}_${id}`;
     path.setAttribute("id", pathId);
-    path.setAttribute("d", outlines.toSVGPath());
+    path.setAttribute("vector-effect", "non-scaling-stroke");
     if (isPathUpdatable) {
       this.#toUpdate.set(id, path);
     }
-    const clipPathId = this.#createClipPath(defs, pathId);
+    const clipPathId = hasClip ? this.#createClipPath(defs, pathId) : null;
     const use = DrawLayer._svgFactory.createElement("use");
     root.append(use);
-    root.setAttribute("fill", color);
-    root.setAttribute("fill-opacity", opacity);
     use.setAttribute("href", `#${pathId}`);
+    this.updateProperties(root, properties);
     this.#mapping.set(id, root);
     return {
       id,
       clipPathId: `url(#${clipPathId})`
     };
   }
-  drawOutline(outlines) {
+  drawOutline(properties, mustRemoveSelfIntersections) {
     const id = this.#id++;
-    const root = this.#createSVG(outlines.box);
-    root.classList.add(...outlines.classNamesForOutlining);
+    const root = this.#createSVG();
     const defs = DrawLayer._svgFactory.createElement("defs");
     root.append(defs);
     const path = DrawLayer._svgFactory.createElement("path");
     defs.append(path);
     const pathId = `path_p${this.pageIndex}_${id}`;
     path.setAttribute("id", pathId);
-    path.setAttribute("d", outlines.toSVGPath());
     path.setAttribute("vector-effect", "non-scaling-stroke");
     let maskId;
-    if (outlines.mustRemoveSelfIntersections) {
+    if (mustRemoveSelfIntersections) {
       const mask = DrawLayer._svgFactory.createElement("mask");
       defs.append(mask);
       maskId = `mask_p${this.pageIndex}_${id}`;
@@ -20311,47 +20367,40 @@ class DrawLayer {
     root.append(use2);
     use1.classList.add("mainOutline");
     use2.classList.add("secondaryOutline");
+    this.updateProperties(root, properties);
     this.#mapping.set(id, root);
     return id;
   }
-  finalizeLine(id, line) {
-    const path = this.#toUpdate.get(id);
+  finalizeDraw(id, properties) {
     this.#toUpdate.delete(id);
-    this.updateBox(id, line.box);
-    path.setAttribute("d", line.toSVGPath());
+    this.updateProperties(id, properties);
   }
-  updateLine(id, line) {
-    const root = this.#mapping.get(id);
-    const defs = root.firstChild;
-    const path = defs.firstChild;
-    path.setAttribute("d", line.toSVGPath());
-  }
-  updatePath(id, line) {
-    this.#toUpdate.get(id).setAttribute("d", line.toSVGPath());
-  }
-  updateBox(id, box) {
-    DrawLayer.#setBox(this.#mapping.get(id), box);
-  }
-  show(id, visible) {
-    this.#mapping.get(id).classList.toggle("hidden", !visible);
-  }
-  rotate(id, angle) {
-    this.#mapping.get(id).setAttribute("data-main-rotation", angle);
-  }
-  changeColor(id, color) {
-    this.#mapping.get(id).setAttribute("fill", color);
-  }
-  changeOpacity(id, opacity) {
-    this.#mapping.get(id).setAttribute("fill-opacity", opacity);
-  }
-  addClass(id, className) {
-    this.#mapping.get(id).classList.add(className);
-  }
-  removeClass(id, className) {
-    this.#mapping.get(id).classList.remove(className);
-  }
-  getSVGRoot(id) {
-    return this.#mapping.get(id);
+  updateProperties(elementOrId, {
+    root,
+    bbox,
+    rootClass,
+    path
+  }) {
+    const element = typeof elementOrId === "number" ? this.#mapping.get(elementOrId) : elementOrId;
+    if (root) {
+      this.#updateProperties(element, root);
+    }
+    if (bbox) {
+      DrawLayer.#setBox(element, bbox);
+    }
+    if (rootClass) {
+      const {
+        classList
+      } = element;
+      for (const [className, value] of Object.entries(rootClass)) {
+        classList.toggle(className, value);
+      }
+    }
+    if (path) {
+      const defs = element.firstChild;
+      const pathElement = defs.firstChild;
+      this.#updateProperties(pathElement, path);
+    }
   }
   remove(id) {
     this.#toUpdate.delete(id);
@@ -20386,7 +20435,12 @@ class DrawLayer {
 
 
 const pdfjsVersion = "4.9.0";
-const pdfjsBuild = "9bf9bbd";
+const pdfjsBuild = "1f6cc85";
+{
+  globalThis.pdfjsTestingUtils = {
+    HighlightOutliner: HighlightOutliner
+  };
+}
 
 var __webpack_exports__AbortException = __webpack_exports__.AbortException;
 var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;

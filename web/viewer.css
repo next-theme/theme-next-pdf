@@ -1287,17 +1287,17 @@
     transform:none;
   }
 
-[data-main-rotation="90"]:is(.canvasWrapper svg) mask,[data-main-rotation="90"]:is(.canvasWrapper svg) use:not(.clip,.mask){
-        transform:matrix(0, 1, -1, 0, 1, 0);
-      }
+[data-main-rotation="90"]:is(.highlight:is(.canvasWrapper svg),.highlightOutline:is(.canvasWrapper svg)) mask,[data-main-rotation="90"]:is(.highlight:is(.canvasWrapper svg),.highlightOutline:is(.canvasWrapper svg)) use:not(.clip,.mask){
+          transform:matrix(0, 1, -1, 0, 1, 0);
+        }
 
-[data-main-rotation="180"]:is(.canvasWrapper svg) mask,[data-main-rotation="180"]:is(.canvasWrapper svg) use:not(.clip,.mask){
-        transform:matrix(-1, 0, 0, -1, 1, 1);
-      }
+[data-main-rotation="180"]:is(.highlight:is(.canvasWrapper svg),.highlightOutline:is(.canvasWrapper svg)) mask,[data-main-rotation="180"]:is(.highlight:is(.canvasWrapper svg),.highlightOutline:is(.canvasWrapper svg)) use:not(.clip,.mask){
+          transform:matrix(-1, 0, 0, -1, 1, 1);
+        }
 
-[data-main-rotation="270"]:is(.canvasWrapper svg) mask,[data-main-rotation="270"]:is(.canvasWrapper svg) use:not(.clip,.mask){
-        transform:matrix(0, -1, 1, 0, 0, 1);
-      }
+[data-main-rotation="270"]:is(.highlight:is(.canvasWrapper svg),.highlightOutline:is(.canvasWrapper svg)) mask,[data-main-rotation="270"]:is(.highlight:is(.canvasWrapper svg),.highlightOutline:is(.canvasWrapper svg)) use:not(.clip,.mask){
+          transform:matrix(0, -1, 1, 0, 0, 1);
+        }
 
 .highlight:is(.canvasWrapper svg){
       --blend-mode:multiply;
