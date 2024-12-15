@@ -1313,6 +1313,7 @@ const {
   shadow,
   stopEvent,
   TextLayer,
+  TouchManager,
   UnexpectedResponseException,
   Util,
   VerbosityLevel,
@@ -9105,6 +9106,7 @@ class AnnotationEditorLayerBuilder {
     if (!this.div) {
       return;
     }
+    this.annotationEditorLayer.pause(true);
     this.div.hidden = true;
   }
   show() {
@@ -9112,6 +9114,7 @@ class AnnotationEditorLayerBuilder {
       return;
     }
     this.div.hidden = false;
+    this.annotationEditorLayer.pause(false);
   }
 }
 
@@ -10712,7 +10715,7 @@ class PDFPageView {
     this.#originalViewport = viewport;
     let showCanvas = isLastShow => {
       if (updateOnFirstShow) {
-        canvasWrapper.append(canvas);
+        canvasWrapper.prepend(canvas);
         showCanvas = null;
         return;
       }
@@ -10723,7 +10726,7 @@ class PDFPageView {
         prevCanvas.replaceWith(canvas);
         prevCanvas.width = prevCanvas.height = 0;
       } else {
-        canvasWrapper.append(canvas);
+        canvasWrapper.prepend(canvas);
       }
       showCanvas = null;
     };
@@ -10950,6 +10953,7 @@ class PDFViewer {
   #resizeObserver = new ResizeObserver(this.#resizeObserverCallback.bind(this));
   #scrollModePageState = null;
   #scaleTimeoutId = null;
+  #supportsPinchToZoom = true;
   #textLayerMode = TextLayerMode.ENABLE;
   constructor(options) {
     const viewerVersion = "4.9.0";
@@ -10992,6 +10996,7 @@ class PDFViewer {
     this.pageColors = options.pageColors || null;
     this.#mlManager = options.mlManager || null;
     this.#enableHWA = options.enableHWA || false;
+    this.#supportsPinchToZoom = options.supportsPinchToZoom !== false;
     this.defaultRenderingQueue = !options.renderingQueue;
     if (this.defaultRenderingQueue) {
       this.renderingQueue = new PDFRenderingQueue();
@@ -11383,7 +11388,7 @@ class PDFViewer {
         if (pdfDocument.isPureXfa) {
           console.warn("Warning: XFA-editing is not implemented.");
         } else if (isValidAnnotationEditorMode(mode)) {
-          this.#annotationEditorUIManager = new AnnotationEditorUIManager(this.container, viewer, this.#altTextManager, eventBus, pdfDocument, pageColors, this.#annotationEditorHighlightColors, this.#enableHighlightFloatingButton, this.#enableUpdatedAddImage, this.#enableNewAltTextWhenAddingImage, this.#mlManager, this.#editorUndoBar);
+          this.#annotationEditorUIManager = new AnnotationEditorUIManager(this.container, viewer, this.#altTextManager, eventBus, pdfDocument, pageColors, this.#annotationEditorHighlightColors, this.#enableHighlightFloatingButton, this.#enableUpdatedAddImage, this.#enableNewAltTextWhenAddingImage, this.#mlManager, this.#editorUndoBar, this.#supportsPinchToZoom);
           eventBus.dispatch("annotationeditoruimanager", {
             source: this,
             uiManager: this.#annotationEditorUIManager
@@ -13144,7 +13149,6 @@ class ViewHistory {
 
 
 const FORCE_PAGES_LOADED_TIMEOUT = 10000;
-const MIN_TOUCH_DISTANCE_TO_PINCH = 35 / (window.devicePixelRatio || 1);
 const ViewOnLoad = {
   UNKNOWN: -1,
   PREVIOUS: 0,
@@ -13199,14 +13203,13 @@ const PDFViewerApplication = {
   _saveInProgress: false,
   _wheelUnusedTicks: 0,
   _wheelUnusedFactor: 1,
+  _touchManager: null,
   _touchUnusedTicks: 0,
   _touchUnusedFactor: 1,
   _PDFBug: null,
   _hasAnnotationEditors: false,
   _title: document.title,
   _printAnnotationStoragePromise: null,
-  _touchInfo: null,
-  _isPinching: false,
   _isCtrlKeyDown: false,
   _caretBrowsing: null,
   _isScrolling: false,
@@ -13400,7 +13403,8 @@ const PDFViewerApplication = {
       pageColors,
       mlManager: this.mlManager,
       abortSignal: this._globalAbortController.signal,
-      enableHWA
+      enableHWA,
+      supportsPinchToZoom: this.supportsPinchToZoom
     });
     this.pdfViewer = pdfViewer;
     pdfRenderingQueue.setViewer(pdfViewer);
@@ -13614,6 +13618,20 @@ const PDFViewerApplication = {
       return;
     }
     this.pdfViewer.currentScaleValue = DEFAULT_SCALE_VALUE;
+  },
+  touchPinchCallback(origin, prevDistance, distance) {
+    if (this.supportsPinchToZoom) {
+      const newScaleFactor = this._accumulateFactor(this.pdfViewer.currentScale, distance / prevDistance, "_touchUnusedFactor");
+      this.updateZoom(null, newScaleFactor, origin);
+    } else {
+      const PIXELS_PER_LINE_SCALE = 30;
+      const ticks = this._accumulateTicks((distance - prevDistance) / PIXELS_PER_LINE_SCALE, "_touchUnusedTicks");
+      this.updateZoom(ticks, null, origin);
+    }
+  },
+  touchPinchEndCallback() {
+    this._touchUnusedTicks = 0;
+    this._touchUnusedFactor = 1;
   },
   get pagesCount() {
     return this.pdfDocument ? this.pdfDocument.numPages : 0;
@@ -14384,6 +14402,14 @@ const PDFViewerApplication = {
         signal
       }
     } = this;
+    this._touchManager = new TouchManager({
+      container: window,
+      isPinchingDisabled: () => this.pdfViewer.isInPresentationMode,
+      isPinchingStopped: () => this.overlayManager?.active,
+      onPinching: this.touchPinchCallback.bind(this),
+      onPinchEnd: this.touchPinchEndCallback.bind(this),
+      signal
+    });
     function addWindowResolutionChange(evt = null) {
       if (evt) {
         pdfViewer.refresh();
@@ -14396,18 +14422,6 @@ const PDFViewerApplication = {
     }
     addWindowResolutionChange();
     window.addEventListener("wheel", onWheel.bind(this), {
-      passive: false,
-      signal
-    });
-    window.addEventListener("touchstart", onTouchStart.bind(this), {
-      passive: false,
-      signal
-    });
-    window.addEventListener("touchmove", onTouchMove.bind(this), {
-      passive: false,
-      signal
-    });
-    window.addEventListener("touchend", onTouchEnd.bind(this), {
       passive: false,
       signal
     });
@@ -14499,6 +14513,7 @@ const PDFViewerApplication = {
   unbindWindowEvents() {
     this._windowAbortController?.abort();
     this._windowAbortController = null;
+    this._touchManager = null;
   },
   async testingClose() {
     this.unbindEvents();
@@ -14820,91 +14835,6 @@ function onWheel(evt) {
     }
   }
 }
-function onTouchStart(evt) {
-  if (this.pdfViewer.isInPresentationMode || evt.touches.length < 2) {
-    return;
-  }
-  evt.preventDefault();
-  if (evt.touches.length !== 2 || this.overlayManager.active) {
-    this._touchInfo = null;
-    return;
-  }
-  let [touch0, touch1] = evt.touches;
-  if (touch0.identifier > touch1.identifier) {
-    [touch0, touch1] = [touch1, touch0];
-  }
-  this._touchInfo = {
-    touch0X: touch0.screenX,
-    touch0Y: touch0.screenY,
-    touch1X: touch1.screenX,
-    touch1Y: touch1.screenY
-  };
-}
-function onTouchMove(evt) {
-  if (!this._touchInfo || evt.touches.length !== 2) {
-    return;
-  }
-  const {
-    pdfViewer,
-    _touchInfo,
-    supportsPinchToZoom
-  } = this;
-  let [touch0, touch1] = evt.touches;
-  if (touch0.identifier > touch1.identifier) {
-    [touch0, touch1] = [touch1, touch0];
-  }
-  const {
-    screenX: screen0X,
-    screenY: screen0Y
-  } = touch0;
-  const {
-    screenX: screen1X,
-    screenY: screen1Y
-  } = touch1;
-  const {
-    touch0X: pTouch0X,
-    touch0Y: pTouch0Y,
-    touch1X: pTouch1X,
-    touch1Y: pTouch1Y
-  } = _touchInfo;
-  const prevGapX = pTouch1X - pTouch0X;
-  const prevGapY = pTouch1Y - pTouch0Y;
-  const currGapX = screen1X - screen0X;
-  const currGapY = screen1Y - screen0Y;
-  const distance = Math.hypot(currGapX, currGapY) || 1;
-  const pDistance = Math.hypot(prevGapX, prevGapY) || 1;
-  if (!this._isPinching && Math.abs(pDistance - distance) <= MIN_TOUCH_DISTANCE_TO_PINCH) {
-    return;
-  }
-  _touchInfo.touch0X = screen0X;
-  _touchInfo.touch0Y = screen0Y;
-  _touchInfo.touch1X = screen1X;
-  _touchInfo.touch1Y = screen1Y;
-  evt.preventDefault();
-  if (!this._isPinching) {
-    this._isPinching = true;
-    return;
-  }
-  const origin = [(screen0X + screen1X) / 2, (screen0Y + screen1Y) / 2];
-  if (supportsPinchToZoom) {
-    const newScaleFactor = this._accumulateFactor(pdfViewer.currentScale, distance / pDistance, "_touchUnusedFactor");
-    this.updateZoom(null, newScaleFactor, origin);
-  } else {
-    const PIXELS_PER_LINE_SCALE = 30;
-    const ticks = this._accumulateTicks((distance - pDistance) / PIXELS_PER_LINE_SCALE, "_touchUnusedTicks");
-    this.updateZoom(ticks, null, origin);
-  }
-}
-function onTouchEnd(evt) {
-  if (!this._touchInfo) {
-    return;
-  }
-  evt.preventDefault();
-  this._touchInfo = null;
-  this._touchUnusedTicks = 0;
-  this._touchUnusedFactor = 1;
-  this._isPinching = false;
-}
 function closeSecondaryToolbar(evt) {
   if (!this.secondaryToolbar?.isOpen) {
     return;
@@ -15220,7 +15150,7 @@ function beforeUnload(evt) {
 
 
 const pdfjsVersion = "4.9.0";
-const pdfjsBuild = "3f1d07a";
+const pdfjsBuild = "a8c35a9";
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,
