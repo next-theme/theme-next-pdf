@@ -9769,7 +9769,14 @@ class TextHighlighter {
         span.className = `${className} appended`;
         span.append(node);
         div.append(span);
-        return className.includes("selected") ? span.offsetLeft : 0;
+        if (className.includes("selected")) {
+          const {
+            left
+          } = span.getClientRects()[0];
+          const parentLeft = div.getBoundingClientRect().left;
+          return left - parentLeft;
+        }
+        return 0;
       }
       div.append(node);
       return 0;
@@ -10956,7 +10963,7 @@ class PDFViewer {
   #supportsPinchToZoom = true;
   #textLayerMode = TextLayerMode.ENABLE;
   constructor(options) {
-    const viewerVersion = "4.9.0";
+    const viewerVersion = "4.10.0";
     if (version !== viewerVersion) {
       throw new Error(`The API version "${version}" does not match the Viewer version "${viewerVersion}".`);
     }
@@ -14402,14 +14409,16 @@ const PDFViewerApplication = {
         signal
       }
     } = this;
-    this._touchManager = new TouchManager({
-      container: window,
-      isPinchingDisabled: () => this.pdfViewer.isInPresentationMode,
-      isPinchingStopped: () => this.overlayManager?.active,
-      onPinching: this.touchPinchCallback.bind(this),
-      onPinchEnd: this.touchPinchEndCallback.bind(this),
-      signal
-    });
+    if (typeof AbortSignal.any === "function") {
+      this._touchManager = new TouchManager({
+        container: window,
+        isPinchingDisabled: () => pdfViewer.isInPresentationMode,
+        isPinchingStopped: () => this.overlayManager?.active,
+        onPinching: this.touchPinchCallback.bind(this),
+        onPinchEnd: this.touchPinchEndCallback.bind(this),
+        signal
+      });
+    }
     function addWindowResolutionChange(evt = null) {
       if (evt) {
         pdfViewer.refresh();
@@ -15149,8 +15158,8 @@ function beforeUnload(evt) {
 
 
 
-const pdfjsVersion = "4.9.0";
-const pdfjsBuild = "a8c35a9";
+const pdfjsVersion = "4.10.0";
+const pdfjsBuild = "94f425d";
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,

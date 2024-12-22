@@ -10453,7 +10453,7 @@ class PDFNetworkStreamFullRequestReader {
     const fullRequestXhr = this._manager.getRequestXhr(fullRequestXhrId);
     this._manager._responseOrigin = getResponseOrigin(fullRequestXhr.responseURL);
     const rawResponseHeaders = fullRequestXhr.getAllResponseHeaders();
-    const responseHeaders = new Headers(rawResponseHeaders ? rawResponseHeaders.trim().split(/[\r\n]+/).map(x => {
+    const responseHeaders = new Headers(rawResponseHeaders ? rawResponseHeaders.trimStart().replace(/[^\S ]+$/, "").split(/[\r\n]+/).map(x => {
       const [key, ...val] = x.split(": ");
       return [key, val.join(": ")];
     }) : []);
@@ -11398,12 +11398,6 @@ function getDocument(src = {}) {
   const length = rangeTransport ? rangeTransport.length : src.length ?? NaN;
   const useSystemFonts = typeof src.useSystemFonts === "boolean" ? src.useSystemFonts : !isNodeJS && !disableFontFace;
   const useWorkerFetch = typeof src.useWorkerFetch === "boolean" ? src.useWorkerFetch : CMapReaderFactory === DOMCMapReaderFactory && StandardFontDataFactory === DOMStandardFontDataFactory && cMapUrl && standardFontDataUrl && isValidFetchUrl(cMapUrl, document.baseURI) && isValidFetchUrl(standardFontDataUrl, document.baseURI);
-  if (src.canvasFactory) {
-    deprecated("`canvasFactory`-instance option, please use `CanvasFactory` instead.");
-  }
-  if (src.filterFactory) {
-    deprecated("`filterFactory`-instance option, please use `FilterFactory` instead.");
-  }
   const styleElement = null;
   setVerbosityLevel(verbosity);
   const transportFactory = {
@@ -11433,7 +11427,7 @@ function getDocument(src = {}) {
   }
   const docParams = {
     docId,
-    apiVersion: "4.9.0",
+    apiVersion: "4.10.0",
     data,
     password,
     disableAutoFetch,
@@ -13240,8 +13234,8 @@ class InternalRenderTask {
     }
   }
 }
-const version = "4.9.0";
-const build = "a8c35a9";
+const version = "4.10.0";
+const build = "94f425d";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -21556,8 +21550,8 @@ class DrawLayer {
 
 
 
-const pdfjsVersion = "4.9.0";
-const pdfjsBuild = "a8c35a9";
+const pdfjsVersion = "4.10.0";
+const pdfjsBuild = "94f425d";
 {
   globalThis.pdfjsTestingUtils = {
     HighlightOutliner: HighlightOutliner
