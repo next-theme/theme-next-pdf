@@ -15159,7 +15159,7 @@ function beforeUnload(evt) {
 
 
 const pdfjsVersion = "4.10.0";
-const pdfjsBuild = "4547f23";
+const pdfjsBuild = "4d4e1be";
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,
