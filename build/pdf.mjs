@@ -1863,6 +1863,7 @@ class AnnotationEditorUIManager {
   #keyboardManagerAC = null;
   #lastActiveElement = null;
   #mainHighlightColorPicker = null;
+  #missingCanvases = null;
   #mlManager = null;
   #mode = AnnotationEditorType.NONE;
   #selectedEditors = new Set();
@@ -1997,6 +1998,7 @@ class AnnotationEditorUIManager {
     this.#allLayers.clear();
     this.#allEditors.clear();
     this.#editorsToRescale.clear();
+    this.#missingCanvases?.clear();
     this.#activeEditor = null;
     this.#selectedEditors.clear();
     this.#commandManager.destroy();
@@ -2637,6 +2639,9 @@ class AnnotationEditorUIManager {
     }
     this.#updateModeCapability.resolve();
   }
+  isInEditingMode() {
+    return this.#mode !== AnnotationEditorType.NONE;
+  }
   addNewEditorFromKeyboard() {
     if (this.currentLayer.canCreateNewEmptyEditor()) {
       this.currentLayer.addNewEditor();
@@ -2760,6 +2765,9 @@ class AnnotationEditorUIManager {
       }, 0);
     }
     this.#allEditors.delete(editor.id);
+    if (editor.annotationElementId) {
+      this.#missingCanvases?.delete(editor.annotationElementId);
+    }
     this.unselect(editor);
     if (!editor.annotationElementId || !this.#deletedAnnotationsElementIds.has(editor.annotationElementId)) {
       this.#annotationStorage?.remove(editor.id);
@@ -3218,6 +3226,17 @@ class AnnotationEditorUIManager {
     }
     editor.renderAnnotationElement(annotation);
   }
+  setMissingCanvas(annotationId, annotationElementId, canvas) {
+    const editor = this.#missingCanvases?.get(annotationId);
+    if (!editor) {
+      return;
+    }
+    editor.setCanvas(annotationElementId, canvas);
+    this.#missingCanvases.delete(annotationId);
+  }
+  addMissingCanvas(annotationId, editor) {
+    (this.#missingCanvases ||= new Map()).set(annotationId, editor);
+  }
 }
 
 ;// ./src/display/editor/alt_text.js
@@ -3496,6 +3515,7 @@ class TouchManager {
   #onPinchStart;
   #onPinching;
   #onPinchEnd;
+  #pointerDownAC = null;
   #signal;
   #touchInfo = null;
   #touchManagerAC;
@@ -3526,7 +3546,35 @@ class TouchManager {
     return shadow(this, "MIN_TOUCH_DISTANCE_TO_PINCH", 35 / (window.devicePixelRatio || 1));
   }
   #onTouchStart(evt) {
-    if (this.#isPinchingDisabled?.() || evt.touches.length < 2) {
+    if (this.#isPinchingDisabled?.()) {
+      return;
+    }
+    if (evt.touches.length === 1) {
+      if (this.#pointerDownAC) {
+        return;
+      }
+      const pointerDownAC = this.#pointerDownAC = new AbortController();
+      const signal = AbortSignal.any([this.#signal, pointerDownAC.signal]);
+      const container = this.#container;
+      const opts = {
+        capture: true,
+        signal,
+        passive: false
+      };
+      const cancelPointerDown = e => {
+        if (e.pointerType === "touch") {
+          this.#pointerDownAC?.abort();
+          this.#pointerDownAC = null;
+        }
+      };
+      container.addEventListener("pointerdown", e => {
+        if (e.pointerType === "touch") {
+          stopEvent(e);
+          cancelPointerDown(e);
+        }
+      }, opts);
+      container.addEventListener("pointerup", cancelPointerDown, opts);
+      container.addEventListener("pointercancel", cancelPointerDown, opts);
       return;
     }
     if (!this.#touchMoveAC) {
@@ -3535,11 +3583,18 @@ class TouchManager {
       const container = this.#container;
       const opt = {
         signal,
+        capture: false,
         passive: false
       };
       container.addEventListener("touchmove", this.#onTouchMove.bind(this), opt);
-      container.addEventListener("touchend", this.#onTouchEnd.bind(this), opt);
-      container.addEventListener("touchcancel", this.#onTouchEnd.bind(this), opt);
+      const onTouchEnd = this.#onTouchEnd.bind(this);
+      container.addEventListener("touchend", onTouchEnd, opt);
+      container.addEventListener("touchcancel", onTouchEnd, opt);
+      opt.capture = true;
+      container.addEventListener("pointerdown", stopEvent, opt);
+      container.addEventListener("pointermove", stopEvent, opt);
+      container.addEventListener("pointercancel", stopEvent, opt);
+      container.addEventListener("pointerup", stopEvent, opt);
       this.#onPinchStart?.();
     }
     stopEvent(evt);
@@ -3562,6 +3617,7 @@ class TouchManager {
     if (!this.#touchInfo || evt.touches.length !== 2) {
       return;
     }
+    stopEvent(evt);
     let [touch0, touch1] = evt.touches;
     if (touch0.identifier > touch1.identifier) {
       [touch0, touch1] = [touch1, touch0];
@@ -3594,7 +3650,6 @@ class TouchManager {
     touchInfo.touch0Y = screen0Y;
     touchInfo.touch1X = screen1X;
     touchInfo.touch1Y = screen1Y;
-    evt.preventDefault();
     if (!this.#isPinching) {
       this.#isPinching = true;
       return;
@@ -3603,19 +3658,24 @@ class TouchManager {
     this.#onPinching?.(origin, pDistance, distance);
   }
   #onTouchEnd(evt) {
+    if (evt.touches.length >= 2) {
+      return;
+    }
     this.#touchMoveAC.abort();
     this.#touchMoveAC = null;
     this.#onPinchEnd?.();
     if (!this.#touchInfo) {
       return;
     }
-    evt.preventDefault();
+    stopEvent(evt);
     this.#touchInfo = null;
     this.#isPinching = false;
   }
   destroy() {
     this.#touchManagerAC?.abort();
     this.#touchManagerAC = null;
+    this.#pointerDownAC?.abort();
+    this.#pointerDownAC = null;
   }
 }
 
@@ -6680,8 +6740,8 @@ class MeshShadingPattern extends BaseShadingPattern {
     this._colors = IR[3];
     this._figures = IR[4];
     this._bounds = IR[5];
-    this._bbox = IR[7];
-    this._background = IR[8];
+    this._bbox = IR[6];
+    this._background = IR[7];
     this.matrix = null;
   }
   _createMeshCanvas(combinedScale, backgroundColor, cachedCanvases) {
@@ -13203,7 +13263,7 @@ class InternalRenderTask {
   }
 }
 const version = "4.10.0";
-const build = "4d4e1be";
+const build = "b521885";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -16125,6 +16185,16 @@ class AnnotationLayer {
         firstChild.before(canvas);
       } else {
         firstChild.after(canvas);
+      }
+      const editableAnnotation = this.#editableAnnotations.get(id);
+      if (!editableAnnotation) {
+        continue;
+      }
+      if (editableAnnotation._hasNoCanvas) {
+        this._annotationEditorUIManager?.setMissingCanvas(id, element.id, canvas);
+        editableAnnotation._hasNoCanvas = false;
+      } else {
+        editableAnnotation.canvas = canvas;
       }
     }
     this.#annotationCanvasMap.clear();
@@ -19993,6 +20063,7 @@ class StampEditor extends AnnotationEditor {
   #bitmapFile = null;
   #bitmapFileName = "";
   #canvas = null;
+  #missingCanvas = false;
   #resizeTimeoutId = null;
   #isSvg = false;
   #hasBeenAddedInUndoStack = false;
@@ -20222,7 +20293,7 @@ class StampEditor extends AnnotationEditor {
     }
   }
   isEmpty() {
-    return !(this.#bitmapPromise || this.#bitmap || this.#bitmapUrl || this.#bitmapFile || this.#bitmapId);
+    return !(this.#bitmapPromise || this.#bitmap || this.#bitmapUrl || this.#bitmapFile || this.#bitmapId || this.#missingCanvas);
   }
   get isResizable() {
     return true;
@@ -20240,10 +20311,12 @@ class StampEditor extends AnnotationEditor {
     this.div.hidden = true;
     this.div.setAttribute("role", "figure");
     this.addAltTextButton();
-    if (this.#bitmap) {
-      this.#createCanvas();
-    } else {
-      this.#getBitmap();
+    if (!this.#missingCanvas) {
+      if (this.#bitmap) {
+        this.#createCanvas();
+      } else {
+        this.#getBitmap();
+      }
     }
     if (this.width && !this.annotationElementId) {
       const [parentWidth, parentHeight] = this.parentDimensions;
@@ -20251,6 +20324,21 @@ class StampEditor extends AnnotationEditor {
     }
     this._uiManager.addShouldRescale(this);
     return this.div;
+  }
+  setCanvas(annotationElementId, canvas) {
+    const {
+      id: bitmapId,
+      bitmap
+    } = this._uiManager.imageManager.getFromCanvas(annotationElementId, canvas);
+    canvas.remove();
+    if (bitmapId && this._uiManager.imageManager.isValidId(bitmapId)) {
+      this.#bitmapId = bitmapId;
+      if (bitmap) {
+        this.#bitmap = bitmap;
+      }
+      this.#missingCanvas = false;
+      this.#createCanvas();
+    }
   }
   _onResized() {
     this.onScaleChanging();
@@ -20476,6 +20564,7 @@ class StampEditor extends AnnotationEditor {
   }
   static async deserialize(data, parent, uiManager) {
     let initialData = null;
+    let missingCanvas = false;
     if (data instanceof StampAnnotationElement) {
       const {
         data: {
@@ -20490,16 +20579,26 @@ class StampEditor extends AnnotationEditor {
           page: {
             pageNumber
           }
-        }
+        },
+        canvas
       } = data;
-      const canvas = container.querySelector("canvas");
-      const imageData = uiManager.imageManager.getFromCanvas(container.id, canvas);
-      canvas.remove();
+      let bitmapId, bitmap;
+      if (canvas) {
+        delete data.canvas;
+        ({
+          id: bitmapId,
+          bitmap
+        } = uiManager.imageManager.getFromCanvas(container.id, canvas));
+        canvas.remove();
+      } else {
+        missingCanvas = true;
+        data._hasNoCanvas = true;
+      }
       const altText = (await parent._structTree.getAriaAttributes(`${AnnotationPrefix}${id}`))?.get("aria-label") || "";
       initialData = data = {
         annotationType: AnnotationEditorType.STAMP,
-        bitmapId: imageData.id,
-        bitmap: imageData.bitmap,
+        bitmapId,
+        bitmap,
         pageIndex: pageNumber - 1,
         rect: rect.slice(0),
         rotation,
@@ -20523,7 +20622,10 @@ class StampEditor extends AnnotationEditor {
       isSvg,
       accessibilityData
     } = data;
-    if (bitmapId && uiManager.imageManager.isValidId(bitmapId)) {
+    if (missingCanvas) {
+      uiManager.addMissingCanvas(data.id, editor);
+      editor.#missingCanvas = true;
+    } else if (bitmapId && uiManager.imageManager.isValidId(bitmapId)) {
       editor.#bitmapId = bitmapId;
       if (bitmap) {
         editor.#bitmap = bitmap;
@@ -21305,9 +21407,9 @@ class AnnotationEditorLayer {
 
 class DrawLayer {
   #parent = null;
-  #id = 0;
   #mapping = new Map();
   #toUpdate = new Map();
+  static #id = 0;
   constructor({
     pageIndex
   }) {
@@ -21368,7 +21470,7 @@ class DrawLayer {
     }
   }
   draw(properties, isPathUpdatable = false, hasClip = false) {
-    const id = this.#id++;
+    const id = DrawLayer.#id++;
     const root = this.#createSVG();
     const defs = DrawLayer._svgFactory.createElement("defs");
     root.append(defs);
@@ -21392,7 +21494,7 @@ class DrawLayer {
     };
   }
   drawOutline(properties, mustRemoveSelfIntersections) {
-    const id = this.#id++;
+    const id = DrawLayer.#id++;
     const root = this.#createSVG();
     const defs = DrawLayer._svgFactory.createElement("defs");
     root.append(defs);
@@ -21519,7 +21621,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "4.10.0";
-const pdfjsBuild = "4d4e1be";
+const pdfjsBuild = "b521885";
 {
   globalThis.pdfjsTestingUtils = {
     HighlightOutliner: HighlightOutliner

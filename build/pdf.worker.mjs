@@ -56974,7 +56974,7 @@ class WorkerMessageHandler {
 ;// ./src/pdf.worker.js
 
 const pdfjsVersion = "4.10.0";
-const pdfjsBuild = "4d4e1be";
+const pdfjsBuild = "b521885";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };
