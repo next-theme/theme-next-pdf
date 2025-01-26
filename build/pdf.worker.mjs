@@ -7222,6 +7222,18 @@ class JpegImage {
     offset += 2;
     markerLoop: while (fileMarker !== 0xffd9) {
       switch (fileMarker) {
+        case 0xffe1:
+          const {
+            appData,
+            newOffset
+          } = readDataBlock(data, offset);
+          offset = newOffset;
+          if (appData[0] === 0x45 && appData[1] === 0x78 && appData[2] === 0x69 && appData[3] === 0x66 && appData[4] === 0 && appData[5] === 0) {
+            appData.fill(0x00, 6);
+          }
+          fileMarker = readUint16(data, offset);
+          offset += 2;
+          continue;
         case 0xffc0:
         case 0xffc1:
         case 0xffc2:
@@ -17845,6 +17857,10 @@ function lookupCmap(ranges, unicode) {
 }
 function compileGlyf(code, cmds, font) {
   function moveTo(x, y) {
+    if (firstPoint) {
+      cmds.add("L", firstPoint);
+    }
+    firstPoint = [x, y];
     cmds.add("M", [x, y]);
   }
   function lineTo(x, y) {
@@ -17856,6 +17872,7 @@ function compileGlyf(code, cmds, font) {
   let i = 0;
   const numberOfContours = getInt16(code, i);
   let flags;
+  let firstPoint = null;
   let x = 0,
     y = 0;
   i += 10;
@@ -18002,6 +18019,10 @@ function compileGlyf(code, cmds, font) {
 }
 function compileCharString(charStringCode, cmds, font, glyphId) {
   function moveTo(x, y) {
+    if (firstPoint) {
+      cmds.add("L", firstPoint);
+    }
+    firstPoint = [x, y];
     cmds.add("M", [x, y]);
   }
   function lineTo(x, y) {
@@ -18014,6 +18035,7 @@ function compileCharString(charStringCode, cmds, font, glyphId) {
   let x = 0,
     y = 0;
   let stems = 0;
+  let firstPoint = null;
   function parse(code) {
     let i = 0;
     while (i < code.length) {
@@ -57034,7 +57056,7 @@ class WorkerMessageHandler {
 ;// ./src/pdf.worker.js
 
 const pdfjsVersion = "5.0.0";
-const pdfjsBuild = "50b7922";
+const pdfjsBuild = "3880071";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };
