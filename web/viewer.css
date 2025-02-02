@@ -1890,7 +1890,8 @@
   box-sizing:border-box;
 }
 
-.annotationEditorLayer :is(.freeTextEditor, .inkEditor, .stampEditor){
+.annotationEditorLayer
+  :is(.freeTextEditor, .inkEditor, .stampEditor, .signatureEditor){
   position:absolute;
   background:transparent;
   z-index:1;
@@ -1901,16 +1902,16 @@
   border:var(--unfocus-outline);
 }
 
-.draggable.selectedEditor:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor)){
+.draggable.selectedEditor:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor)){
     cursor:move;
   }
 
-.selectedEditor:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor)){
+.selectedEditor:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor)){
     border:var(--focus-outline);
     outline:var(--focus-outline-around);
   }
 
-.selectedEditor:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor))::before{
+.selectedEditor:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor))::before{
       content:"";
       position:absolute;
       inset:0;
@@ -1918,19 +1919,19 @@
       pointer-events:none;
     }
 
-:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor)):hover:not(.selectedEditor){
+:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor)):hover:not(.selectedEditor){
     border:var(--hover-outline);
     outline:var(--hover-outline-around);
   }
 
-:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor)):hover:not(.selectedEditor)::before{
+:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor)):hover:not(.selectedEditor)::before{
       content:"";
       position:absolute;
       inset:0;
       border:var(--focus-outline-around);
     }
 
-:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar{
+:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar{
     --editor-toolbar-delete-image:url(images/editor-toolbar-delete.svg);
     --editor-toolbar-bg-color:#f0f0f4;
     --editor-toolbar-highlight-image:url(images/toolbarButton-editorHighlight.svg);
@@ -1953,7 +1954,7 @@
 
 @media (prefers-color-scheme: dark){
 
-:where(html:not(.is-light)) :is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar{
+:where(html:not(.is-light)) :is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar{
       --editor-toolbar-bg-color:#2b2a33;
       --editor-toolbar-fg-color:#fbfbfe;
       --editor-toolbar-hover-bg-color:#52525e;
@@ -1963,7 +1964,7 @@
   }
     }
 
-:where(html.is-dark) :is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar{
+:where(html.is-dark) :is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar{
       --editor-toolbar-bg-color:#2b2a33;
       --editor-toolbar-fg-color:#fbfbfe;
       --editor-toolbar-hover-bg-color:#52525e;
@@ -1974,7 +1975,7 @@
 
 @media screen and (forced-colors: active){
 
-:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar{
+:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar{
       --editor-toolbar-bg-color:ButtonFace;
       --editor-toolbar-fg-color:ButtonText;
       --editor-toolbar-border-color:ButtonText;
@@ -1991,7 +1992,7 @@
   }
     }
 
-:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar{
+:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar{
 
     display:flex;
     width:-moz-fit-content;
@@ -2015,23 +2016,23 @@
     box-shadow:var(--editor-toolbar-shadow);
   }
 
-.hidden:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar){
+.hidden:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar){
       display:none;
     }
 
-:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar):has(:focus-visible){
+:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar):has(:focus-visible){
       border-color:transparent;
     }
 
-[dir="ltr"] :is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar){
+[dir="ltr"] :is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar){
       transform-origin:100% 0;
     }
 
-[dir="rtl"] :is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar){
+[dir="rtl"] :is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar){
       transform-origin:0 0;
     }
 
-:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons{
+:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons{
       display:flex;
       justify-content:center;
       align-items:center;
@@ -2039,11 +2040,11 @@
       height:100%;
     }
 
-:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) button{
+:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) button{
         padding:0;
       }
 
-:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .divider{
+:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .divider{
         width:0;
         height:calc(
           2 * var(--editor-toolbar-padding) + var(--editor-toolbar-height)
@@ -2054,11 +2055,11 @@
         margin-inline:2px;
       }
 
-:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .highlightButton{
+:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .highlightButton{
         width:var(--editor-toolbar-height);
       }
 
-:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .highlightButton)::before{
+:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .highlightButton)::before{
           content:"";
           -webkit-mask-image:var(--editor-toolbar-highlight-image);
                   mask-image:var(--editor-toolbar-highlight-image);
@@ -2072,15 +2073,15 @@
           height:100%;
         }
 
-:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .highlightButton):hover::before{
+:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .highlightButton):hover::before{
           background-color:var(--editor-toolbar-hover-fg-color);
         }
 
-:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .delete{
+:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .delete{
         width:var(--editor-toolbar-height);
       }
 
-:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .delete)::before{
+:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .delete)::before{
           content:"";
           -webkit-mask-image:var(--editor-toolbar-delete-image);
                   mask-image:var(--editor-toolbar-delete-image);
@@ -2094,21 +2095,21 @@
           height:100%;
         }
 
-:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .delete):hover::before{
+:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .delete):hover::before{
           background-color:var(--editor-toolbar-hover-fg-color);
         }
 
-:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons)  > *{
+:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons)  > *{
         height:var(--editor-toolbar-height);
       }
 
-:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons)  > :not(.divider){
+:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons)  > :not(.divider){
         border:none;
         background-color:transparent;
         cursor:pointer;
       }
 
-:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) > :not(.divider)):hover{
+:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) > :not(.divider)):hover{
           border-radius:2px;
           background-color:var(--editor-toolbar-hover-bg-color);
           color:var(--editor-toolbar-hover-fg-color);
@@ -2116,16 +2117,16 @@
           outline-offset:1px;
         }
 
-:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) > :not(.divider)):hover:active{
+:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) > :not(.divider)):hover:active{
             outline:none;
           }
 
-:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) > :not(.divider)):focus-visible{
+:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) > :not(.divider)):focus-visible{
           border-radius:2px;
           outline:2px solid var(--editor-toolbar-focus-outline-color);
         }
 
-:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .altText{
+:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText{
         --alt-text-add-image:url(images/altText_add.svg);
         --alt-text-done-image:url(images/altText_done.svg);
 
@@ -2142,11 +2143,11 @@
         color:var(--editor-toolbar-fg-color);
       }
 
-:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .altText):disabled{
+:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText):disabled{
           pointer-events:none;
         }
 
-:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .altText)::before{
+:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText)::before{
           content:"";
           -webkit-mask-image:var(--alt-text-add-image);
                   mask-image:var(--alt-text-add-image);
@@ -2161,16 +2162,16 @@
           margin-inline-end:4px;
         }
 
-:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .altText):hover::before{
+:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText):hover::before{
           background-color:var(--editor-toolbar-hover-fg-color);
         }
 
-.done:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .altText)::before{
+.done:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText)::before{
           -webkit-mask-image:var(--alt-text-done-image);
                   mask-image:var(--alt-text-done-image);
         }
 
-.new:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .altText)::before{
+.new:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText)::before{
             width:16px;
             height:16px;
             -webkit-mask-image:var(--new-alt-text-warning-image);
@@ -2180,26 +2181,26 @@
                     mask-size:cover;
           }
 
-.new:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .altText):hover::before{
+.new:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText):hover::before{
             background-color:var(--alt-text-hover-warning-color);
           }
 
-.new.done:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .altText)::before{
+.new.done:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText)::before{
               -webkit-mask-image:var(--alt-text-done-image);
                       mask-image:var(--alt-text-done-image);
               background-color:var(--alt-text-done-color);
             }
 
-.new.done:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .altText):hover::before{
+.new.done:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText):hover::before{
               background-color:var(--alt-text-hover-done-color);
             }
 
-:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .altText) .tooltip{
+:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText) .tooltip{
           display:none;
           word-wrap:anywhere;
         }
 
-.show:is(:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .altText) .tooltip){
+.show:is(:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText) .tooltip){
             --alt-text-tooltip-bg:#f0f0f4;
             --alt-text-tooltip-fg:#15141a;
             --alt-text-tooltip-border:#8f8f9d;
@@ -2208,14 +2209,14 @@
 
 @media (prefers-color-scheme: dark){
 
-:where(html:not(.is-light)) .show:is(:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .altText) .tooltip){
+:where(html:not(.is-light)) .show:is(:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText) .tooltip){
               --alt-text-tooltip-bg:#1c1b22;
               --alt-text-tooltip-fg:#fbfbfe;
               --alt-text-tooltip-shadow:0px 2px 6px 0px #15141a;
           }
             }
 
-:where(html.is-dark) .show:is(:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .altText) .tooltip){
+:where(html.is-dark) .show:is(:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText) .tooltip){
               --alt-text-tooltip-bg:#1c1b22;
               --alt-text-tooltip-fg:#fbfbfe;
               --alt-text-tooltip-shadow:0px 2px 6px 0px #15141a;
@@ -2223,7 +2224,7 @@
 
 @media screen and (forced-colors: active){
 
-.show:is(:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .altText) .tooltip){
+.show:is(:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText) .tooltip){
               --alt-text-tooltip-bg:Canvas;
               --alt-text-tooltip-fg:CanvasText;
               --alt-text-tooltip-border:CanvasText;
@@ -2231,7 +2232,7 @@
           }
             }
 
-.show:is(:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor),.textLayer) .editToolbar) .buttons) .altText) .tooltip){
+.show:is(:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText) .tooltip){
 
             display:inline-flex;
             flex-direction:column;
@@ -2393,16 +2394,16 @@
       background-color:var(--no-alt-text-badge-fg-color);
     }
 
-:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor)) > .resizers{
+:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor)) > .resizers{
       position:absolute;
       inset:0;
     }
 
-.hidden:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor)) > .resizers){
+.hidden:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor)) > .resizers){
         display:none;
       }
 
-:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor)) > .resizers) > .resizer{
+:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor)) > .resizers) > .resizer{
         width:var(--resizer-size);
         height:var(--resizer-size);
         background:content-box var(--resizer-bg-color);
@@ -2411,42 +2412,42 @@
         position:absolute;
       }
 
-.topLeft:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor)) > .resizers) > .resizer){
+.topLeft:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor)) > .resizers) > .resizer){
           top:var(--resizer-shift);
           left:var(--resizer-shift);
         }
 
-.topMiddle:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor)) > .resizers) > .resizer){
+.topMiddle:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor)) > .resizers) > .resizer){
           top:var(--resizer-shift);
           left:calc(50% + var(--resizer-shift));
         }
 
-.topRight:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor)) > .resizers) > .resizer){
+.topRight:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor)) > .resizers) > .resizer){
           top:var(--resizer-shift);
           right:var(--resizer-shift);
         }
 
-.middleRight:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor)) > .resizers) > .resizer){
+.middleRight:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor)) > .resizers) > .resizer){
           top:calc(50% + var(--resizer-shift));
           right:var(--resizer-shift);
         }
 
-.bottomRight:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor)) > .resizers) > .resizer){
+.bottomRight:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor)) > .resizers) > .resizer){
           bottom:var(--resizer-shift);
           right:var(--resizer-shift);
         }
 
-.bottomMiddle:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor)) > .resizers) > .resizer){
+.bottomMiddle:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor)) > .resizers) > .resizer){
           bottom:var(--resizer-shift);
           left:calc(50% + var(--resizer-shift));
         }
 
-.bottomLeft:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor)) > .resizers) > .resizer){
+.bottomLeft:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor)) > .resizers) > .resizer){
           bottom:var(--resizer-shift);
           left:var(--resizer-shift);
         }
 
-.middleLeft:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor)) > .resizers) > .resizer){
+.middleLeft:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.signatureEditor)) > .resizers) > .resizer){
           top:calc(50% + var(--resizer-shift));
           left:var(--resizer-shift);
         }
@@ -3428,6 +3429,7 @@
   --toolbarButton-editorHighlight-icon:url(images/toolbarButton-editorHighlight.svg);
   --toolbarButton-editorInk-icon:url(images/toolbarButton-editorInk.svg);
   --toolbarButton-editorStamp-icon:url(images/toolbarButton-editorStamp.svg);
+  --toolbarButton-editorSignature-icon:url(images/toolbarButton-editorSignature.svg);
   --toolbarButton-menuArrow-icon:url(images/toolbarButton-menuArrow.svg);
   --toolbarButton-sidebarToggle-icon:url(images/toolbarButton-sidebarToggle.svg);
   --toolbarButton-secondaryToolbarToggle-icon:url(images/toolbarButton-secondaryToolbarToggle.svg);
@@ -3958,6 +3960,11 @@ body.wait::before{
 #editorStampButton::before{
   -webkit-mask-image:var(--toolbarButton-editorStamp-icon);
           mask-image:var(--toolbarButton-editorStamp-icon);
+}
+
+#editorSignatureButton::before{
+  -webkit-mask-image:var(--toolbarButton-editorSignature-icon);
+          mask-image:var(--toolbarButton-editorSignature-icon);
 }
 
 #printButton::before{
@@ -4518,7 +4525,7 @@ dialog :link{
     cursor:default;
   }
 
-:is(.toolbarButtonWithContainer .editorParamsToolbar) #editorStampAddImage::before{
+:is(.toolbarButtonWithContainer .editorParamsToolbar) :is(#editorStampAddImage,#editorSignatureAddSignature)::before{
       -webkit-mask-image:var(--editorParams-stampAddImage-icon);
               mask-image:var(--editorParams-stampAddImage-icon);
     }
