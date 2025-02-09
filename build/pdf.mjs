@@ -47,12 +47,14 @@ var __webpack_exports__ = globalThis.pdfjsLib = {};
 // EXPORTS
 __webpack_require__.d(__webpack_exports__, {
   AbortException: () => (/* reexport */ AbortException),
+  AnnotationBorderStyleType: () => (/* reexport */ AnnotationBorderStyleType),
   AnnotationEditorLayer: () => (/* reexport */ AnnotationEditorLayer),
   AnnotationEditorParamsType: () => (/* reexport */ AnnotationEditorParamsType),
   AnnotationEditorType: () => (/* reexport */ AnnotationEditorType),
   AnnotationEditorUIManager: () => (/* reexport */ AnnotationEditorUIManager),
   AnnotationLayer: () => (/* reexport */ AnnotationLayer),
   AnnotationMode: () => (/* reexport */ AnnotationMode),
+  AnnotationType: () => (/* reexport */ AnnotationType),
   ColorPicker: () => (/* reexport */ ColorPicker),
   DOMSVGFactory: () => (/* reexport */ DOMSVGFactory),
   DrawLayer: () => (/* reexport */ DrawLayer),
@@ -555,14 +557,22 @@ class util_FeatureTest {
     return shadow(this, "isImageDecoderSupported", typeof ImageDecoder !== "undefined");
   }
   static get platform() {
-    if (typeof navigator !== "undefined" && typeof navigator?.platform === "string") {
+    if (typeof navigator !== "undefined" && typeof navigator?.platform === "string" && typeof navigator?.userAgent === "string") {
+      const {
+        platform,
+        userAgent
+      } = navigator;
       return shadow(this, "platform", {
-        isMac: navigator.platform.includes("Mac"),
-        isWindows: navigator.platform.includes("Win"),
-        isFirefox: typeof navigator?.userAgent === "string" && navigator.userAgent.includes("Firefox")
+        isAndroid: userAgent.includes("Android"),
+        isLinux: platform.includes("Linux"),
+        isMac: platform.includes("Mac"),
+        isWindows: platform.includes("Win"),
+        isFirefox: userAgent.includes("Firefox")
       });
     }
     return shadow(this, "platform", {
+      isAndroid: false,
+      isLinux: false,
       isMac: false,
       isWindows: false,
       isFirefox: false
@@ -1866,6 +1876,7 @@ class AnnotationEditorUIManager {
   #mode = AnnotationEditorType.NONE;
   #selectedEditors = new Set();
   #selectedTextNode = null;
+  #signatureManager = null;
   #pageColors = null;
   #showAllStates = null;
   #previousStates = {
@@ -1941,11 +1952,12 @@ class AnnotationEditorUIManager {
       checker: arrowChecker
     }]]));
   }
-  constructor(container, viewer, altTextManager, eventBus, pdfDocument, pageColors, highlightColors, enableHighlightFloatingButton, enableUpdatedAddImage, enableNewAltTextWhenAddingImage, mlManager, editorUndoBar, supportsPinchToZoom) {
+  constructor(container, viewer, altTextManager, signatureManager, eventBus, pdfDocument, pageColors, highlightColors, enableHighlightFloatingButton, enableUpdatedAddImage, enableNewAltTextWhenAddingImage, mlManager, editorUndoBar, supportsPinchToZoom) {
     const signal = this._signal = this.#abortController.signal;
     this.#container = container;
     this.#viewer = viewer;
     this.#altTextManager = altTextManager;
+    this.#signatureManager = signatureManager;
     this._eventBus = eventBus;
     eventBus._on("editingaction", this.onEditingAction.bind(this), {
       signal
@@ -2001,6 +2013,7 @@ class AnnotationEditorUIManager {
     this.#selectedEditors.clear();
     this.#commandManager.destroy();
     this.#altTextManager?.destroy();
+    this.#signatureManager?.destroy();
     this.#highlightToolbar?.hide();
     this.#highlightToolbar = null;
     this.#mainHighlightColorPicker?.destroy();
@@ -2053,6 +2066,12 @@ class AnnotationEditorUIManager {
   }
   editAltText(editor, firstTime = false) {
     this.#altTextManager?.editAltText(this, editor, firstTime);
+  }
+  getSignature(editor) {
+    this.#signatureManager?.getSignature({
+      uiManager: this,
+      editor
+    });
   }
   switchToMode(mode, callback) {
     this._eventBus.on("annotationeditormodechanged", callback, {
@@ -5449,13 +5468,7 @@ class FontLoader {
     return shadow(this, "isFontLoadingAPISupported", hasFonts);
   }
   get isSyncFontLoadingSupported() {
-    let supported = false;
-    if (isNodeJS) {
-      supported = true;
-    } else if (typeof navigator !== "undefined" && typeof navigator?.userAgent === "string" && /Mozilla\/5.0.*?rv:\d+.*? Gecko/.test(navigator.userAgent)) {
-      supported = true;
-    }
-    return shadow(this, "isSyncFontLoadingSupported", supported);
+    return shadow(this, "isSyncFontLoadingSupported", isNodeJS || util_FeatureTest.platform.isFirefox);
   }
   _queueLoadingCallback(callback) {
     function completeRequest() {
@@ -10995,7 +11008,6 @@ class PDFNodeStreamFsRangeReader {
 
 const MAX_TEXT_DIVS_TO_RENDER = 100000;
 const DEFAULT_FONT_SIZE = 30;
-const DEFAULT_FONT_ASCENT = 0.8;
 class TextLayer {
   #capability = Promise.withResolvers();
   #container = null;
@@ -11180,7 +11192,7 @@ class TextLayer {
     let fontFamily = this.#fontInspectorEnabled && style.fontSubstitution || style.fontFamily;
     fontFamily = TextLayer.fontFamilyMap.get(fontFamily) || fontFamily;
     const fontHeight = Math.hypot(tx[2], tx[3]);
-    const fontAscent = fontHeight * TextLayer.#getAscent(fontFamily, this.#lang);
+    const fontAscent = fontHeight * TextLayer.#getAscent(fontFamily, style, this.#lang);
     let left, top;
     if (angle === 0) {
       left = tx[4];
@@ -11326,7 +11338,7 @@ class TextLayer {
     this.#minFontSize = div.getBoundingClientRect().height;
     div.remove();
   }
-  static #getAscent(fontFamily, lang) {
+  static #getAscent(fontFamily, style, lang) {
     const cachedAscent = this.#ascentCache.get(fontFamily);
     if (cachedAscent) {
       return cachedAscent;
@@ -11335,37 +11347,22 @@ class TextLayer {
     ctx.canvas.width = ctx.canvas.height = DEFAULT_FONT_SIZE;
     this.#ensureCtxFont(ctx, DEFAULT_FONT_SIZE, fontFamily);
     const metrics = ctx.measureText("");
-    let ascent = metrics.fontBoundingBoxAscent;
-    let descent = Math.abs(metrics.fontBoundingBoxDescent);
-    if (ascent) {
-      const ratio = ascent / (ascent + descent);
-      this.#ascentCache.set(fontFamily, ratio);
-      ctx.canvas.width = ctx.canvas.height = 0;
-      return ratio;
-    }
-    ctx.strokeStyle = "red";
-    ctx.clearRect(0, 0, DEFAULT_FONT_SIZE, DEFAULT_FONT_SIZE);
-    ctx.strokeText("g", 0, 0);
-    let pixels = ctx.getImageData(0, 0, DEFAULT_FONT_SIZE, DEFAULT_FONT_SIZE).data;
-    descent = 0;
-    for (let i = pixels.length - 1 - 3; i >= 0; i -= 4) {
-      if (pixels[i] > 0) {
-        descent = Math.ceil(i / 4 / DEFAULT_FONT_SIZE);
-        break;
-      }
-    }
-    ctx.clearRect(0, 0, DEFAULT_FONT_SIZE, DEFAULT_FONT_SIZE);
-    ctx.strokeText("A", 0, DEFAULT_FONT_SIZE);
-    pixels = ctx.getImageData(0, 0, DEFAULT_FONT_SIZE, DEFAULT_FONT_SIZE).data;
-    ascent = 0;
-    for (let i = 0, ii = pixels.length; i < ii; i += 4) {
-      if (pixels[i] > 0) {
-        ascent = DEFAULT_FONT_SIZE - Math.floor(i / 4 / DEFAULT_FONT_SIZE);
-        break;
-      }
-    }
+    const ascent = metrics.fontBoundingBoxAscent;
+    const descent = Math.abs(metrics.fontBoundingBoxDescent);
     ctx.canvas.width = ctx.canvas.height = 0;
-    const ratio = ascent ? ascent / (ascent + descent) : DEFAULT_FONT_ASCENT;
+    let ratio = 0.8;
+    if (ascent) {
+      ratio = ascent / (ascent + descent);
+    } else {
+      if (util_FeatureTest.platform.isFirefox) {
+        warn("Enable the `dom.textMetrics.fontBoundingBox.enabled` preference " + "in `about:config` to improve TextLayer rendering.");
+      }
+      if (style.ascent) {
+        ratio = style.ascent;
+      } else if (style.descent) {
+        ratio = 1 + style.descent;
+      }
+    }
     this.#ascentCache.set(fontFamily, ratio);
     return ratio;
   }
@@ -11462,12 +11459,12 @@ function getDocument(src = {}) {
   let worker = src.worker instanceof PDFWorker ? src.worker : null;
   const verbosity = src.verbosity;
   const docBaseUrl = typeof src.docBaseUrl === "string" && !isDataScheme(src.docBaseUrl) ? src.docBaseUrl : null;
-  const cMapUrl = typeof src.cMapUrl === "string" ? src.cMapUrl : null;
+  const cMapUrl = getFactoryUrlProp(src.cMapUrl);
   const cMapPacked = src.cMapPacked !== false;
   const CMapReaderFactory = src.CMapReaderFactory || (isNodeJS ? NodeCMapReaderFactory : DOMCMapReaderFactory);
-  const standardFontDataUrl = typeof src.standardFontDataUrl === "string" ? src.standardFontDataUrl : null;
+  const standardFontDataUrl = getFactoryUrlProp(src.standardFontDataUrl);
   const StandardFontDataFactory = src.StandardFontDataFactory || (isNodeJS ? NodeStandardFontDataFactory : DOMStandardFontDataFactory);
-  const wasmUrl = typeof src.wasmUrl === "string" ? src.wasmUrl : null;
+  const wasmUrl = getFactoryUrlProp(src.wasmUrl);
   const WasmFactory = src.WasmFactory || (isNodeJS ? NodeWasmFactory : DOMWasmFactory);
   const ignoreErrors = src.stopAtErrors !== true;
   const maxImageSize = Number.isInteger(src.maxImageSize) && src.maxImageSize > -1 ? src.maxImageSize : -1;
@@ -11638,6 +11635,15 @@ function getDataProp(val) {
     return new Uint8Array(val);
   }
   throw new Error("Invalid PDF binary data: either TypedArray, " + "string, or array-like object is expected in the data property.");
+}
+function getFactoryUrlProp(val) {
+  if (typeof val !== "string") {
+    return null;
+  }
+  if (val.endsWith("/")) {
+    return val;
+  }
+  throw new Error(`Invalid factory url: "${val}" must include trailing slash.`);
 }
 function isRefProxy(ref) {
   return typeof ref === "object" && Number.isInteger(ref?.num) && ref.num >= 0 && Number.isInteger(ref?.gen) && ref.gen >= 0;
@@ -12878,32 +12884,15 @@ class WorkerTransport {
         total: data.total
       });
     });
-    messageHandler.on("FetchBuiltInCMap", async data => {
+    messageHandler.on("FetchBinaryData", async data => {
       if (this.destroyed) {
         throw new Error("Worker was destroyed.");
       }
-      if (!this.cMapReaderFactory) {
-        throw new Error("CMapReaderFactory not initialized, see the `useWorkerFetch` parameter.");
+      const factory = this[data.type];
+      if (!factory) {
+        throw new Error(`${data.type} not initialized, see the \`useWorkerFetch\` parameter.`);
       }
-      return this.cMapReaderFactory.fetch(data);
-    });
-    messageHandler.on("FetchStandardFontData", async data => {
-      if (this.destroyed) {
-        throw new Error("Worker was destroyed.");
-      }
-      if (!this.standardFontDataFactory) {
-        throw new Error("StandardFontDataFactory not initialized, see the `useWorkerFetch` parameter.");
-      }
-      return this.standardFontDataFactory.fetch(data);
-    });
-    messageHandler.on("FetchWasm", async data => {
-      if (this.destroyed) {
-        throw new Error("Worker was destroyed.");
-      }
-      if (!this.wasmFactory) {
-        throw new Error("WasmFactory not initialized, see the `useWorkerFetch` parameter.");
-      }
-      return this.wasmFactory.fetch(data);
+      return factory.fetch(data);
     });
   }
   getData() {
@@ -13296,7 +13285,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.0.0";
-const build = "de191d2";
+const build = "72339dc";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -15362,12 +15351,7 @@ class PopupElement {
     popup.className = "popup";
     if (this.#color) {
       const baseColor = popup.style.outlineColor = Util.makeHexColor(...this.#color);
-      if (CSS.supports("background-color", "color-mix(in srgb, red 30%, white)")) {
-        popup.style.backgroundColor = `color-mix(in srgb, ${baseColor} 30%, white)`;
-      } else {
-        const BACKGROUND_ENLIGHT = 0.7;
-        popup.style.backgroundColor = Util.makeHexColor(...this.#color.map(c => Math.floor(BACKGROUND_ENLIGHT * (255 - c) + c)));
-      }
+      popup.style.backgroundColor = `color-mix(in srgb, ${baseColor} 30%, white)`;
     }
     const header = document.createElement("span");
     header.className = "header";
@@ -16169,6 +16153,24 @@ class AnnotationLayer {
       }
     }
     this.#setAnnotationCanvasMap();
+  }
+  async addLinkAnnotations(annotations, linkService) {
+    const elementParams = {
+      data: null,
+      layer: this.div,
+      linkService,
+      svgFactory: new DOMSVGFactory(),
+      parent: this
+    };
+    for (const data of annotations) {
+      elementParams.data = data;
+      const element = AnnotationElementFactory.create(elementParams);
+      if (!element.isRenderable) {
+        continue;
+      }
+      const rendered = element.render();
+      await this.#appendElement(rendered, data.id);
+    }
   }
   update({
     viewport
@@ -19423,6 +19425,9 @@ class InkDrawOutline extends Outline {
     this.#lines = lines;
     this.#computeBbox();
   }
+  get thickness() {
+    return this.#thickness;
+  }
   setLastElement(element) {
     this.#lines.push(element);
     return {
@@ -19870,10 +19875,9 @@ class InkDrawOutline extends Outline {
 
 
 class InkDrawingOptions extends DrawingOptions {
-  #viewParameters;
   constructor(viewerParameters) {
     super();
-    this.#viewParameters = viewerParameters;
+    this._viewParameters = viewerParameters;
     super.updateProperties({
       fill: "none",
       stroke: AnnotationEditor._defaultLineColor,
@@ -19887,12 +19891,12 @@ class InkDrawingOptions extends DrawingOptions {
   updateSVGProperty(name, value) {
     if (name === "stroke-width") {
       value ??= this["stroke-width"];
-      value *= this.#viewParameters.realScale;
+      value *= this._viewParameters.realScale;
     }
     super.updateSVGProperty(name, value);
   }
   clone() {
-    const clone = new InkDrawingOptions(this.#viewParameters);
+    const clone = new InkDrawingOptions(this._viewParameters);
     clone.updateAll(this);
     return clone;
   }
@@ -20579,23 +20583,37 @@ class SignatureExtractor {
 
 
 
+
 class SignatureOptions extends DrawingOptions {
-  #viewParameters;
-  constructor(viewerParameters) {
+  constructor() {
     super();
-    this.#viewParameters = viewerParameters;
     super.updateProperties({
       fill: "black",
       "stroke-width": 0
     });
   }
   clone() {
-    const clone = new SignatureOptions(this.#viewParameters);
+    const clone = new SignatureOptions();
+    clone.updateAll(this);
+    return clone;
+  }
+}
+class DrawnSignatureOptions extends InkDrawingOptions {
+  constructor(viewerParameters) {
+    super(viewerParameters);
+    super.updateProperties({
+      stroke: "black",
+      "stroke-width": 1
+    });
+  }
+  clone() {
+    const clone = new DrawnSignatureOptions(this._viewParameters);
     clone.updateAll(this);
     return clone;
   }
 }
 class SignatureEditor extends DrawingEditor {
+  #isExtracted = false;
   static _type = "signature";
   static _editorType = AnnotationEditorType.SIGNATURE;
   static _defaultDrawingOptions = null;
@@ -20605,11 +20623,12 @@ class SignatureEditor extends DrawingEditor {
       mustBeCommitted: true,
       name: "signatureEditor"
     });
-    this._willKeepAspectRatio = false;
+    this._willKeepAspectRatio = true;
   }
   static initialize(l10n, uiManager) {
     AnnotationEditor.initialize(l10n, uiManager);
-    this._defaultDrawingOptions = new SignatureOptions(uiManager.viewParameters);
+    this._defaultDrawingOptions = new SignatureOptions();
+    this._defaultDrawnSignatureOptions = new DrawnSignatureOptions(uiManager.viewParameters);
   }
   static getDefaultDrawingOptions(options) {
     const clone = this._defaultDrawingOptions.clone();
@@ -20628,6 +20647,12 @@ class SignatureEditor extends DrawingEditor {
   get isResizable() {
     return true;
   }
+  onScaleChanging() {
+    if (this._drawId === null) {
+      return;
+    }
+    super.onScaleChanging();
+  }
   render() {
     if (this.div) {
       return this.div;
@@ -20635,36 +20660,45 @@ class SignatureEditor extends DrawingEditor {
     super.render();
     this.div.hidden = true;
     this.div.setAttribute("role", "figure");
-    this.#extractSignature();
+    this._uiManager.getSignature(this);
     return this.div;
   }
-  async #extractSignature() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = SupportedImageMimeTypes.join(",");
-    const signal = this._uiManager._signal;
+  addSignature(outline, heightInPage) {
     const {
-      promise,
-      resolve
-    } = Promise.withResolvers();
-    input.addEventListener("change", async () => {
-      if (!input.files || input.files.length === 0) {
-        resolve();
-      } else {
-        this._uiManager.enableWaiting(true);
-        const data = await this._uiManager.imageManager.getFromFile(input.files[0]);
-        this._uiManager.enableWaiting(false);
-        resolve(data);
-      }
-      resolve();
-    }, {
-      signal
+      x: savedX,
+      y: savedY
+    } = this;
+    this.#isExtracted = outline instanceof ContourDrawOutline;
+    let drawingOptions;
+    if (this.#isExtracted) {
+      drawingOptions = SignatureEditor.getDefaultDrawingOptions();
+    } else {
+      drawingOptions = SignatureEditor._defaultDrawnSignatureOptions.clone();
+      drawingOptions.updateProperties({
+        "stroke-width": outline.thickness
+      });
+    }
+    this._addOutlines({
+      drawOutlines: outline,
+      drawingOptions
     });
-    input.addEventListener("cancel", resolve, {
-      signal
-    });
-    input.click();
-    const bitmap = await promise;
+    const [parentWidth, parentHeight] = this.parentDimensions;
+    const [, pageHeight] = this.pageDimensions;
+    let newHeight = heightInPage / pageHeight;
+    newHeight = newHeight >= 1 ? 0.5 : newHeight;
+    this.width *= newHeight / this.height;
+    this.height = newHeight;
+    this.setDims(parentWidth * this.width, parentHeight * this.height);
+    this.x = savedX;
+    this.y = savedY;
+    this.center();
+    this._onResized();
+    this.onScaleChanging();
+    this.rotate();
+    this._uiManager.addToAnnotationStorage(this);
+    this.div.hidden = false;
+  }
+  getFromImage(bitmap) {
     const {
       rawDims: {
         pageWidth,
@@ -20672,23 +20706,35 @@ class SignatureEditor extends DrawingEditor {
       },
       rotation
     } = this.parent.viewport;
-    let drawOutlines;
-    if (bitmap?.bitmap) {
-      drawOutlines = SignatureExtractor.process(bitmap.bitmap, pageWidth, pageHeight, rotation, SignatureEditor._INNER_MARGIN);
-    } else {
-      drawOutlines = SignatureExtractor.extractContoursFromText("Hello PDF.js' World !!", {
-        fontStyle: "italic",
-        fontWeight: "400",
-        fontFamily: "cursive"
-      }, pageWidth, pageHeight, rotation, SignatureEditor._INNER_MARGIN);
-    }
-    this._addOutlines({
-      drawOutlines,
-      drawingOptions: SignatureEditor.getDefaultDrawingOptions()
+    return SignatureExtractor.process(bitmap, pageWidth, pageHeight, rotation, SignatureEditor._INNER_MARGIN);
+  }
+  getFromText(text, fontInfo) {
+    const {
+      rawDims: {
+        pageWidth,
+        pageHeight
+      },
+      rotation
+    } = this.parent.viewport;
+    return SignatureExtractor.extractContoursFromText(text, fontInfo, pageWidth, pageHeight, rotation, SignatureEditor._INNER_MARGIN);
+  }
+  getDrawnSignature(curves) {
+    const {
+      rawDims: {
+        pageWidth,
+        pageHeight
+      },
+      rotation
+    } = this.parent.viewport;
+    return SignatureExtractor.processDrawnLines({
+      lines: curves,
+      pageWidth,
+      pageHeight,
+      rotation,
+      innerMargin: SignatureEditor._INNER_MARGIN,
+      mustSmooth: false,
+      areContours: false
     });
-    this.onScaleChanging();
-    this.rotate();
-    this.div.hidden = false;
   }
 }
 
@@ -22260,7 +22306,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "5.0.0";
-const pdfjsBuild = "de191d2";
+const pdfjsBuild = "72339dc";
 {
   globalThis.pdfjsTestingUtils = {
     HighlightOutliner: HighlightOutliner
@@ -22268,12 +22314,14 @@ const pdfjsBuild = "de191d2";
 }
 
 var __webpack_exports__AbortException = __webpack_exports__.AbortException;
+var __webpack_exports__AnnotationBorderStyleType = __webpack_exports__.AnnotationBorderStyleType;
 var __webpack_exports__AnnotationEditorLayer = __webpack_exports__.AnnotationEditorLayer;
 var __webpack_exports__AnnotationEditorParamsType = __webpack_exports__.AnnotationEditorParamsType;
 var __webpack_exports__AnnotationEditorType = __webpack_exports__.AnnotationEditorType;
 var __webpack_exports__AnnotationEditorUIManager = __webpack_exports__.AnnotationEditorUIManager;
 var __webpack_exports__AnnotationLayer = __webpack_exports__.AnnotationLayer;
 var __webpack_exports__AnnotationMode = __webpack_exports__.AnnotationMode;
+var __webpack_exports__AnnotationType = __webpack_exports__.AnnotationType;
 var __webpack_exports__ColorPicker = __webpack_exports__.ColorPicker;
 var __webpack_exports__DOMSVGFactory = __webpack_exports__.DOMSVGFactory;
 var __webpack_exports__DrawLayer = __webpack_exports__.DrawLayer;
@@ -22312,6 +22360,6 @@ var __webpack_exports__setLayerDimensions = __webpack_exports__.setLayerDimensio
 var __webpack_exports__shadow = __webpack_exports__.shadow;
 var __webpack_exports__stopEvent = __webpack_exports__.stopEvent;
 var __webpack_exports__version = __webpack_exports__.version;
-export { __webpack_exports__AbortException as AbortException, __webpack_exports__AnnotationEditorLayer as AnnotationEditorLayer, __webpack_exports__AnnotationEditorParamsType as AnnotationEditorParamsType, __webpack_exports__AnnotationEditorType as AnnotationEditorType, __webpack_exports__AnnotationEditorUIManager as AnnotationEditorUIManager, __webpack_exports__AnnotationLayer as AnnotationLayer, __webpack_exports__AnnotationMode as AnnotationMode, __webpack_exports__ColorPicker as ColorPicker, __webpack_exports__DOMSVGFactory as DOMSVGFactory, __webpack_exports__DrawLayer as DrawLayer, __webpack_exports__FeatureTest as FeatureTest, __webpack_exports__GlobalWorkerOptions as GlobalWorkerOptions, __webpack_exports__ImageKind as ImageKind, __webpack_exports__InvalidPDFException as InvalidPDFException, __webpack_exports__OPS as OPS, __webpack_exports__OutputScale as OutputScale, __webpack_exports__PDFDataRangeTransport as PDFDataRangeTransport, __webpack_exports__PDFDateString as PDFDateString, __webpack_exports__PDFWorker as PDFWorker, __webpack_exports__PasswordResponses as PasswordResponses, __webpack_exports__PermissionFlag as PermissionFlag, __webpack_exports__PixelsPerInch as PixelsPerInch, __webpack_exports__RenderingCancelledException as RenderingCancelledException, __webpack_exports__ResponseException as ResponseException, __webpack_exports__SupportedImageMimeTypes as SupportedImageMimeTypes, __webpack_exports__TextLayer as TextLayer, __webpack_exports__TouchManager as TouchManager, __webpack_exports__Util as Util, __webpack_exports__VerbosityLevel as VerbosityLevel, __webpack_exports__XfaLayer as XfaLayer, __webpack_exports__build as build, __webpack_exports__createValidAbsoluteUrl as createValidAbsoluteUrl, __webpack_exports__fetchData as fetchData, __webpack_exports__getDocument as getDocument, __webpack_exports__getFilenameFromUrl as getFilenameFromUrl, __webpack_exports__getPdfFilenameFromUrl as getPdfFilenameFromUrl, __webpack_exports__getXfaPageViewport as getXfaPageViewport, __webpack_exports__isDataScheme as isDataScheme, __webpack_exports__isPdfFile as isPdfFile, __webpack_exports__noContextMenu as noContextMenu, __webpack_exports__normalizeUnicode as normalizeUnicode, __webpack_exports__setLayerDimensions as setLayerDimensions, __webpack_exports__shadow as shadow, __webpack_exports__stopEvent as stopEvent, __webpack_exports__version as version };
+export { __webpack_exports__AbortException as AbortException, __webpack_exports__AnnotationBorderStyleType as AnnotationBorderStyleType, __webpack_exports__AnnotationEditorLayer as AnnotationEditorLayer, __webpack_exports__AnnotationEditorParamsType as AnnotationEditorParamsType, __webpack_exports__AnnotationEditorType as AnnotationEditorType, __webpack_exports__AnnotationEditorUIManager as AnnotationEditorUIManager, __webpack_exports__AnnotationLayer as AnnotationLayer, __webpack_exports__AnnotationMode as AnnotationMode, __webpack_exports__AnnotationType as AnnotationType, __webpack_exports__ColorPicker as ColorPicker, __webpack_exports__DOMSVGFactory as DOMSVGFactory, __webpack_exports__DrawLayer as DrawLayer, __webpack_exports__FeatureTest as FeatureTest, __webpack_exports__GlobalWorkerOptions as GlobalWorkerOptions, __webpack_exports__ImageKind as ImageKind, __webpack_exports__InvalidPDFException as InvalidPDFException, __webpack_exports__OPS as OPS, __webpack_exports__OutputScale as OutputScale, __webpack_exports__PDFDataRangeTransport as PDFDataRangeTransport, __webpack_exports__PDFDateString as PDFDateString, __webpack_exports__PDFWorker as PDFWorker, __webpack_exports__PasswordResponses as PasswordResponses, __webpack_exports__PermissionFlag as PermissionFlag, __webpack_exports__PixelsPerInch as PixelsPerInch, __webpack_exports__RenderingCancelledException as RenderingCancelledException, __webpack_exports__ResponseException as ResponseException, __webpack_exports__SupportedImageMimeTypes as SupportedImageMimeTypes, __webpack_exports__TextLayer as TextLayer, __webpack_exports__TouchManager as TouchManager, __webpack_exports__Util as Util, __webpack_exports__VerbosityLevel as VerbosityLevel, __webpack_exports__XfaLayer as XfaLayer, __webpack_exports__build as build, __webpack_exports__createValidAbsoluteUrl as createValidAbsoluteUrl, __webpack_exports__fetchData as fetchData, __webpack_exports__getDocument as getDocument, __webpack_exports__getFilenameFromUrl as getFilenameFromUrl, __webpack_exports__getPdfFilenameFromUrl as getPdfFilenameFromUrl, __webpack_exports__getXfaPageViewport as getXfaPageViewport, __webpack_exports__isDataScheme as isDataScheme, __webpack_exports__isPdfFile as isPdfFile, __webpack_exports__noContextMenu as noContextMenu, __webpack_exports__normalizeUnicode as normalizeUnicode, __webpack_exports__setLayerDimensions as setLayerDimensions, __webpack_exports__shadow as shadow, __webpack_exports__stopEvent as stopEvent, __webpack_exports__version as version };
 
 //# sourceMappingURL=pdf.mjs.map
