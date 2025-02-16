@@ -163,9 +163,6 @@
   --undo-button-fg-color:var(--message-bar-fg-color);
   --undo-button-fg-color-hover:var(--undo-button-fg-color);
   --undo-button-fg-color-active:var(--undo-button-fg-color);
-
-  --focus-ring-color:#0060df;
-  --focus-ring-outline:2px solid var(--focus-ring-color);
 }
 
 @media (prefers-color-scheme: dark){
@@ -211,8 +208,6 @@
     --undo-button-fg-color:ButtonFace;
     --undo-button-fg-color-hover:SelectedItemText;
     --undo-button-fg-color-active:SelectedItemText;
-
-    --focus-ring-color:CanvasText;
 }
   }
 
@@ -271,8 +266,6 @@
   --text-primary-color:#15141a;
   --text-secondary-color:#5b5b66;
   --hover-filter:brightness(0.9);
-  --focus-ring-color:#0060df;
-  --focus-ring-outline:2px solid var(--focus-ring-color);
   --link-fg-color:#0060df;
   --link-hover-fg-color:#0250bb;
   --separator-color:#f0f0f4;
@@ -312,7 +305,6 @@
     --dialog-shadow:0 2px 14px 0 #15141a;
     --text-primary-color:#fbfbfe;
     --text-secondary-color:#cfcfd8;
-    --focus-ring-color:#0df;
     --hover-filter:brightness(1.4);
     --link-fg-color:#0df;
     --link-hover-fg-color:#80ebff;
@@ -336,7 +328,6 @@
     --dialog-shadow:0 2px 14px 0 #15141a;
     --text-primary-color:#fbfbfe;
     --text-secondary-color:#cfcfd8;
-    --focus-ring-color:#0df;
     --hover-filter:brightness(1.4);
     --link-fg-color:#0df;
     --link-hover-fg-color:#80ebff;
@@ -362,7 +353,6 @@
     --text-primary-color:CanvasText;
     --text-secondary-color:CanvasText;
     --hover-filter:none;
-    --focus-ring-color:ButtonBorder;
     --link-fg-color:LinkText;
     --link-hover-fg-color:LinkText;
     --separator-color:CanvasText;
@@ -490,7 +480,7 @@
           color:var(--text-secondary-color);
         }
 
-:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton)){
+:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton,.clearInputButton)){
       border-radius:4px;
       border:1px solid;
       font:menu;
@@ -500,41 +490,41 @@
       height:32px;
     }
 
-:is(:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton))):hover{
+:is(:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton,.clearInputButton))):hover{
         cursor:pointer;
         filter:var(--hover-filter);
       }
 
-:is(:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton)))  > span{
+:is(:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton,.clearInputButton)))  > span{
         color:inherit;
       }
 
-.secondaryButton:is(:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton))){
+.secondaryButton:is(:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton,.clearInputButton))){
         color:var(--button-secondary-fg-color);
         background-color:var(--button-secondary-bg-color);
         border-color:var(--button-secondary-border-color);
       }
 
-.secondaryButton:is(:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton))):hover{
+.secondaryButton:is(:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton,.clearInputButton))):hover{
           color:var(--button-secondary-hover-fg-color);
           background-color:var(--button-secondary-hover-bg-color);
           border-color:var(--button-secondary-hover-border-color);
         }
 
-.primaryButton:is(:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton))){
+.primaryButton:is(:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton,.clearInputButton))){
         color:var(--button-primary-fg-color);
         background-color:var(--button-primary-bg-color);
         border-color:var(--button-primary-border-color);
         opacity:1;
       }
 
-.primaryButton:is(:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton))):hover{
+.primaryButton:is(:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton,.clearInputButton))):hover{
           color:var(--button-primary-hover-fg-color);
           background-color:var(--button-primary-hover-bg-color);
           border-color:var(--button-primary-hover-border-color);
         }
 
-:is(:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton))):disabled{
+:is(:is(.dialog .mainContainer) button:not(:is(.toggle-button,.closeButton,.clearInputButton))):disabled{
         color:var(--button-disabled-fg-color) !important;
         background-color:var(--button-disabled-bg-color);
         border-color:var(--button-disabled-bg-color);
@@ -813,7 +803,7 @@
       }
 
     .annotationLayer .popupAnnotation .popup{
-      outline:calc(1.5px * var(--scale-factor)) solid CanvasText !important;
+      outline:calc(1.5px * var(--total-scale-factor)) solid CanvasText !important;
       background-color:ButtonFace !important;
       color:ButtonText !important;
     }
@@ -831,7 +821,7 @@
     }
 
     .annotationLayer .popupAnnotation.focused .popup{
-      outline:calc(3px * var(--scale-factor)) solid Highlight !important;
+      outline:calc(3px * var(--total-scale-factor)) solid Highlight !important;
     }
   }
 
@@ -932,7 +922,7 @@
     background-image:var(--annotation-unfocused-field-background);
     border:2px solid var(--input-unfocused-border-color);
     box-sizing:border-box;
-    font:calc(9px * var(--scale-factor)) sans-serif;
+    font:calc(9px * var(--total-scale-factor)) sans-serif;
     height:100%;
     margin:0;
     vertical-align:top;
@@ -1044,7 +1034,7 @@
 
 .annotationLayer .popupAnnotation{
     position:absolute;
-    font-size:calc(9px * var(--scale-factor));
+    font-size:calc(9px * var(--total-scale-factor));
     pointer-events:none;
     width:-moz-max-content;
     width:max-content;
@@ -1054,10 +1044,10 @@
 
 .annotationLayer .popup{
     background-color:rgb(255 255 153);
-    box-shadow:0 calc(2px * var(--scale-factor)) calc(5px * var(--scale-factor)) rgb(136 136 136);
-    border-radius:calc(2px * var(--scale-factor));
+    box-shadow:0 calc(2px * var(--total-scale-factor)) calc(5px * var(--total-scale-factor)) rgb(136 136 136);
+    border-radius:calc(2px * var(--total-scale-factor));
     outline:1.5px solid rgb(255 255 74);
-    padding:calc(6px * var(--scale-factor));
+    padding:calc(6px * var(--total-scale-factor));
     cursor:pointer;
     font:message-box;
     white-space:normal;
@@ -1073,7 +1063,7 @@
   }
 
 .annotationLayer .popup *{
-    font-size:calc(9px * var(--scale-factor));
+    font-size:calc(9px * var(--total-scale-factor));
   }
 
 .annotationLayer .popup > .header{
@@ -1086,20 +1076,20 @@
 
 .annotationLayer .popup > .header .popupDate{
     display:inline-block;
-    margin-left:calc(5px * var(--scale-factor));
+    margin-left:calc(5px * var(--total-scale-factor));
     width:-moz-fit-content;
     width:fit-content;
   }
 
 .annotationLayer .popupContent{
     border-top:1px solid rgb(51 51 51);
-    margin-top:calc(2px * var(--scale-factor));
-    padding-top:calc(2px * var(--scale-factor));
+    margin-top:calc(2px * var(--total-scale-factor));
+    padding-top:calc(2px * var(--total-scale-factor));
   }
 
 .annotationLayer .richText > *{
     white-space:pre-wrap;
-    font-size:calc(9px * var(--scale-factor));
+    font-size:calc(9px * var(--total-scale-factor));
   }
 
 .annotationLayer .popupTriggerArea{
@@ -1776,9 +1766,134 @@
   }
 }
 
-#addSignatureDialog{
-  --border-color:#8f8f9d;
+:root{
+  --clear-signature-button-icon:url(images/editor-toolbar-delete.svg);
+  --signature-bg:#f9f9fb;
+  --signature-hover-bg:#f0f0f4;
+  --button-signature-bg:transparent;
+  --button-signature-color:var(--main-color);
+  --button-signature-active-bg:#cfcfd8;
+  --button-signature-active-border:none;
+  --button-signature-active-color:var(--button-signature-color);
+  --button-signature-border:none;
+  --button-signature-hover-bg:#e0e0e6;
+  --button-signature-hover-color:var(--button-signature-color);
+}
+
+@media (prefers-color-scheme: dark){
+
+:root:where(:not(.is-light)){
+    --signature-bg:#2b2a33;
+    --signature-hover-bg:var(--signature-bg);
+    --button-signature-active-bg:#5b5b66;
+    --button-signature-hover-bg:#52525e;
+}
+  }
+
+:root:where(.is-dark){
+    --signature-bg:#2b2a33;
+    --signature-hover-bg:var(--signature-bg);
+    --button-signature-active-bg:#5b5b66;
+    --button-signature-hover-bg:#52525e;
+}
+
+@media screen and (forced-colors: active){
+
+:root{
+    --signature-bg:HighlightText;
+    --signature-hover-bg:var(--signature-bg);
+    --button-signature-bg:HighlightText;
+    --button-signature-color:ButtonText;
+    --button-signature-active-bg:ButtonText;
+    --button-signature-active-color:HighlightText;
+    --button-signature-border:1px solid ButtonText;
+    --button-signature-hover-bg:Highlight;
+    --button-signature-hover-color:HighlightText;
+}
+  }
+
+.signatureDialog{
   --primary-color:var(--text-primary-color);
+  --description-input-color:var(--primary-color);
+  --border-color:#8f8f9d;
+}
+
+@media screen and (forced-colors: active){
+
+.signatureDialog{
+    --primary-color:ButtonText;
+    --border-color:ButtonText;
+}
+  }
+
+.signatureDialog{
+
+  width:570px;
+  max-width:100%;
+  min-width:300px;
+  padding:16px 0;
+}
+
+.signatureDialog .mainContainer{
+    width:100%;
+    display:flex;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:12px;
+  }
+
+:is(.signatureDialog .mainContainer) span:not([role="sectionhead"]){
+      font-size:13px;
+      font-style:normal;
+      font-weight:400;
+      line-height:normal;
+    }
+
+:is(.signatureDialog .mainContainer) .title{
+      margin-inline-start:16px;
+    }
+
+.signatureDialog .inputWithClearButton{
+    --button-dimension:24px;
+
+    --closing-button-icon:url(images/messageBar_closingButton.svg);
+    --closing-button-color:var(--primary-color);
+
+    width:100%;
+    position:relative;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+:is(.signatureDialog .inputWithClearButton)  > input{
+      width:100%;
+      height:32px;
+      padding-inline:8px calc(4px + var(--button-dimension));
+      box-sizing:border-box;
+      background-color:transparent;
+      border-radius:4px;
+      border:1px solid var(--border-color);
+      color:var(--description-input-color);
+    }
+
+:is(.signatureDialog .inputWithClearButton) .clearInputButton{
+      position:absolute;
+      inset-block-start:4px;
+      inset-inline-end:4px;
+      display:inline-block;
+      width:var(--button-dimension);
+      height:var(--button-dimension);
+      background-color:var(--closing-button-color);
+      -webkit-mask-size:cover;
+              mask-size:cover;
+      -webkit-mask-image:var(--closing-button-icon);
+              mask-image:var(--closing-button-icon);
+      padding:0;
+      border:0;
+    }
+
+#addSignatureDialog{
   --secondary-color:var(--text-secondary-color);
   --bg-hover:#e0e0e6;
   --tab-top-line-active-color:#0060df;
@@ -1794,19 +1909,15 @@
   --tab-bg-hover:var(--bg-hover);
   --tab-text-color:var(--primary-color);
   --tab-text-active-color:var(--tab-top-line-active-color);
+  --tab-text-active-hover-color:var(--tab-text-hover-color);
   --tab-text-hover-color:var(--tab-text-color);
-  --signature-bg:#f9f9fb;
   --signature-placeholder-color:var(--secondary-color);
   --signature-draw-placeholder-color:var(--primary-color);
   --signature-color:var(--primary-color);
-  --closing-button-icon:url(images/messageBar_closingButton.svg);
-  --closing-button-color:var(--primary-color);
-  --description-input-color:var(--primary-color);
   --clear-signature-button-border-width:0;
   --clear-signature-button-border-style:solid;
   --clear-signature-button-border-color:transparent;
   --clear-signature-button-border-disabled-color:transparent;
-  --clear-signature-button-icon:url(images/editor-toolbar-delete.svg);
   --clear-signature-button-color:var(--primary-color);
   --clear-signature-button-hover-color:var(--clear-signature-button-color);
   --clear-signature-button-active-color:var(--clear-signature-button-color);
@@ -1837,7 +1948,6 @@
     --secondary-color:#cfcfd8;
     --tab-top-line-active-color:#0df;
     --tab-top-line-inactive-color:#8f8f9d;
-    --signature-bg:#2b2a33;
     --clear-signature-button-bg-active:#5b5b66;
     --clear-signature-button-bg-focus:#2b2a33;
     --clear-signature-button-bg-disabled:color-mix(
@@ -1855,7 +1965,6 @@
     --secondary-color:#cfcfd8;
     --tab-top-line-active-color:#0df;
     --tab-top-line-inactive-color:#8f8f9d;
-    --signature-bg:#2b2a33;
     --clear-signature-button-bg-active:#5b5b66;
     --clear-signature-button-bg-focus:#2b2a33;
     --clear-signature-button-bg-disabled:color-mix(
@@ -1868,11 +1977,9 @@
 @media screen and (forced-colors: active){
 
 #addSignatureDialog{
-    --primary-color:ButtonText;
     --secondary-color:ButtonText;
     --bg:HighlightText;
     --bg-hover:var(--bg);
-    --border-color:ButtonText;
     --tab-top-line-active-color:ButtonText;
     --tab-top-line-active-hover-color:HighlightText;
     --tab-top-line-hover-color:SelectedItem;
@@ -1884,8 +1991,8 @@
     --tab-bg-active-hover-color:SelectedItem;
     --tab-text-color:ButtonText;
     --tab-text-active-color:HighlightText;
+    --tab-text-active-hover-color:HighlightText;
     --tab-text-hover-color:SelectedItem;
-    --signature-bg:var(--bg);
     --signature-color:ButtonText;
     --clear-signature-button-border-width:1px;
     --clear-signature-button-border-style:solid;
@@ -1907,14 +2014,6 @@
 }
   }
 
-#addSignatureDialog{
-
-  width:570px;
-  max-width:100%;
-  min-width:300px;
-  padding:16px 0;
-}
-
 #addSignatureDialog #addSignatureDialogLabel{
     overflow:hidden;
     position:absolute;
@@ -1931,27 +2030,6 @@
     width:100%;
     height:100%;
   }
-
-#addSignatureDialog span{
-    font:menu;
-    font-size:13px;
-    font-style:normal;
-    font-weight:400;
-    line-height:normal;
-  }
-
-#addSignatureDialog .mainContainer{
-    width:100%;
-    display:flex;
-    flex-direction:column;
-    align-items:flex-start;
-    gap:12px;
-  }
-
-:is(#addSignatureDialog .mainContainer) .title{
-      margin-inline-start:16px;
-      font-weight:590;
-    }
 
 :is(#addSignatureDialog .mainContainer) [role="tablist"]{
       width:100%;
@@ -2007,7 +2085,7 @@
 [aria-selected="true"]:is(:is(:is(#addSignatureDialog .mainContainer) [role="tablist"]) > [role="tab"]):hover{
             border-block-start-color:var(--tab-top-line-active-hover-color);
             background-color:var(--tab-bg-active-hover-color);
-            color:var(--tab-text-hover-color);
+            color:var(--tab-text-active-hover-color);
           }
 
 :is(#addSignatureDialog .mainContainer) #addSignatureActionContainer{
@@ -2232,45 +2310,6 @@
             flex:1 0 0;
           }
 
-:is(:is(:is(:is(:is(#addSignatureDialog .mainContainer) #addSignatureActionContainer) #addSignatureControls) #horizontalContainer) #addSignatureDescriptionContainer)  > #inputWithClearButton{
-              --button-dimension:24px;
-
-              width:100%;
-              position:relative;
-              display:flex;
-              align-items:center;
-              justify-content:center;
-            }
-
-:is(:is(:is(:is(:is(:is(#addSignatureDialog .mainContainer) #addSignatureActionContainer) #addSignatureControls) #horizontalContainer) #addSignatureDescriptionContainer) > #inputWithClearButton)  > input{
-                width:100%;
-                height:32px;
-                padding:8px 4px 8px 8px;
-                padding-block:8px;
-                padding-inline:8px calc(4px + var(--button-dimension));
-                box-sizing:border-box;
-                background-color:transparent;
-                border-radius:4px;
-                border:1px solid var(--border-color);
-                color:var(--description-input-color);
-              }
-
-:is(:is(:is(:is(:is(:is(#addSignatureDialog .mainContainer) #addSignatureActionContainer) #addSignatureControls) #horizontalContainer) #addSignatureDescriptionContainer) > #inputWithClearButton) #addSignatureDescriptionClearButton{
-                position:absolute;
-                inset-block-start:4px;
-                inset-inline-end:4px;
-                display:inline-block;
-                width:var(--button-dimension);
-                height:var(--button-dimension);
-                background-color:var(--closing-button-color);
-                -webkit-mask-size:cover;
-                        mask-size:cover;
-                -webkit-mask-image:var(--closing-button-icon);
-                        mask-image:var(--closing-button-icon);
-                padding:0;
-                border:0;
-              }
-
 :is(:is(:is(:is(:is(#addSignatureDialog .mainContainer) #addSignatureActionContainer) #addSignatureControls) #horizontalContainer) #addSignatureDescriptionContainer)  > label{
               width:auto;
             }
@@ -2378,15 +2417,213 @@
                     user-select:none;
           }
 
-:is(:is(:is(:is(#addSignatureDialog .mainContainer) #addSignatureActionContainer) #addSignatureControls) #addSignatureSaveContainer) #addSignatureSaveWarning{
+:is(:is(:is(:is(#addSignatureDialog .mainContainer) #addSignatureActionContainer) #addSignatureControls) #addSignatureSaveContainer):not(.fullStorage) #addSignatureSaveWarning{
+            display:none;
+          }
+
+.fullStorage:is(:is(:is(:is(#addSignatureDialog .mainContainer) #addSignatureActionContainer) #addSignatureControls) #addSignatureSaveContainer) #addSignatureSaveWarning{
+            display:block;
+            opacity:1;
             color:var(--save-warning-color);
             font-size:11px;
           }
 
-[disabled]:is(:is(:is(:is(#addSignatureDialog .mainContainer) #addSignatureActionContainer) #addSignatureControls) #addSignatureSaveContainer){
+:is(:is(:is(:is(#addSignatureDialog .mainContainer) #addSignatureActionContainer) #addSignatureControls) #addSignatureSaveContainer):is([disabled],.fullStorage){
             pointer-events:none;
-            opacity:0.4;
           }
+
+:is(:is(:is(:is(#addSignatureDialog .mainContainer) #addSignatureActionContainer) #addSignatureControls) #addSignatureSaveContainer):is([disabled],.fullStorage)  > :not(#addSignatureSaveWarning){
+              opacity:0.4;
+            }
+
+#editSignatureDescriptionDialog .mainContainer{
+    padding-inline:16px;
+    box-sizing:border-box;
+  }
+
+:is(#editSignatureDescriptionDialog .mainContainer) .title{
+      margin-inline-start:0;
+    }
+
+:is(#editSignatureDescriptionDialog .mainContainer) #editSignatureDescriptionAndView{
+      width:auto;
+      display:flex;
+      justify-content:flex-end;
+      align-items:flex-start;
+      gap:12px;
+      align-self:stretch;
+    }
+
+:is(:is(#editSignatureDescriptionDialog .mainContainer) #editSignatureDescriptionAndView) #editSignatureDescriptionContainer{
+        display:flex;
+        flex-direction:column;
+        align-items:flex-start;
+        gap:4px;
+        flex:1 1 auto;
+      }
+
+:is(:is(#editSignatureDescriptionDialog .mainContainer) #editSignatureDescriptionAndView)  > svg{
+        width:210px;
+        height:180px;
+        padding:8px;
+        background-color:var(--signature-bg);
+      }
+
+:is(:is(:is(#editSignatureDescriptionDialog .mainContainer) #editSignatureDescriptionAndView) > svg)  > path{
+          stroke:var(--button-signature-color);
+          stroke-width:1px;
+          stroke-linecap:round;
+          stroke-linejoin:round;
+          stroke-miterlimit:10;
+          vector-effect:non-scaling-stroke;
+          fill:none;
+        }
+
+.contours:is(:is(:is(:is(#editSignatureDescriptionDialog .mainContainer) #editSignatureDescriptionAndView) > svg) > path){
+            fill:var(--button-signature-color);
+            stroke-width:0.5px;
+          }
+
+#editorSignatureParamsToolbar{
+  padding:10px;
+}
+
+#editorSignatureParamsToolbar #addSignatureDoorHanger{
+    gap:8px;
+    overflow-y:unset;
+  }
+
+:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer{
+      height:32px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      align-self:stretch;
+      gap:8px;
+    }
+
+:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) button{
+        border:var(--button-signature-border);
+        border-radius:4px;
+        background-color:var(--button-signature-bg);
+        color:var(--button-signature-color);
+      }
+
+:is(:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) button):hover{
+          background-color:var(--button-signature-hover-bg);
+        }
+
+:is(:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) button):active{
+          border:var(--button-signature-active-border);
+          background-color:var(--button-signature-active-bg);
+          color:var(--button-signature-active-color);
+        }
+
+:is(:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) button):active::before{
+            background-color:var(--button-signature-active-color);
+          }
+
+:is(:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) button):focus-visible{
+          outline:var(--focus-ring-outline);
+        }
+
+:is(:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) button):focus-visible::before{
+            background-color:var(--button-signature-color);
+          }
+
+:is(:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) .deleteButton)::before{
+          -webkit-mask-image:var(--clear-signature-button-icon);
+                  mask-image:var(--clear-signature-button-icon);
+        }
+
+:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) .toolbarAddSignatureButton{
+        width:auto;
+        height:100%;
+        min-height:var(--menuitem-height);
+        aspect-ratio:unset;
+        display:flex;
+        align-items:center;
+        justify-content:flex-start;
+        outline:none;
+        border-radius:4px;
+        box-sizing:border-box;
+        font:message-box;
+        position:relative;
+        flex:1 1 auto;
+        padding:0;
+        gap:8px;
+        text-align:start;
+        white-space:normal;
+        cursor:default;
+        overflow:hidden;
+      }
+
+:is(:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) .toolbarAddSignatureButton)  > svg{
+          display:inline-block;
+          height:100%;
+          aspect-ratio:1;
+          background-color:var(--signature-bg);
+          flex:none;
+          padding:4px;
+          box-sizing:border-box;
+          border:none;
+          border-radius:4px;
+        }
+
+:is(:is(:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) .toolbarAddSignatureButton) > svg)  > path{
+            stroke:var(--button-signature-color);
+            stroke-width:1px;
+            stroke-linecap:round;
+            stroke-linejoin:round;
+            stroke-miterlimit:10;
+            vector-effect:non-scaling-stroke;
+            fill:none;
+          }
+
+.contours:is(:is(:is(:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) .toolbarAddSignatureButton) > svg) > path){
+              fill:var(--button-signature-color);
+              stroke-width:0.5px;
+            }
+
+:is(:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) .toolbarAddSignatureButton):is(:hover,:active) > svg{
+          border-radius:4px 0 0 4px;
+          background-color:var(--signature-hover-bg);
+        }
+
+:is(:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) .toolbarAddSignatureButton):hover  > span{
+            color:var(--button-signature-hover-color);
+          }
+
+:is(:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) .toolbarAddSignatureButton):active{
+          background-color:var(--button-signature-active-bg);
+        }
+
+:is(:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) .toolbarAddSignatureButton):is([disabled="disabled"],[disabled]){
+          opacity:0.5;
+          pointer-events:none;
+        }
+
+:is(:is(:is(#editorSignatureParamsToolbar #addSignatureDoorHanger) .toolbarAddSignatureButtonContainer) .toolbarAddSignatureButton)  > span{
+          height:auto;
+          text-overflow:ellipsis;
+          white-space:nowrap;
+          flex:1 1 auto;
+          font:menu;
+          font-size:13px;
+          font-style:normal;
+          font-weight:400;
+          line-height:normal;
+          overflow:hidden;
+        }
+
+.editDescription.altText{
+  --alt-text-add-image:url(images/editor-toolbar-edit.svg) !important;
+}
+
+.editDescription.altText::before{
+    width:16px !important;
+    height:16px !important;
+  }
 
 :root{
   --outline-width:2px;
@@ -2481,7 +2718,7 @@
   background:transparent;
   position:absolute;
   inset:0;
-  font-size:calc(100px * var(--scale-factor));
+  font-size:calc(100px * var(--total-scale-factor));
   transform-origin:0 0;
   cursor:auto;
 }
@@ -2887,7 +3124,7 @@
           }
 
 .annotationEditorLayer .freeTextEditor{
-  padding:calc(var(--freetext-padding) * var(--scale-factor));
+  padding:calc(var(--freetext-padding) * var(--total-scale-factor));
   width:auto;
   height:auto;
   touch-action:none;
@@ -3814,16 +4051,31 @@
   --page-border:9px solid transparent;
   --spreadHorizontalWrapped-margin-LR:-3.5px;
   --loading-icon-delay:400ms;
+  --focus-ring-color:#0060df;
+  --focus-ring-outline:2px solid var(--focus-ring-color);
+}
+
+@media (prefers-color-scheme: dark){
+
+:root:where(:not(.is-light)){
+    --focus-ring-color:#0df;
+}
+  }
+
+:root:where(.is-dark){
+    --focus-ring-color:#0df;
 }
 
 @media screen and (forced-colors: active){
-  :root{
+
+:root{
     --pdfViewer-padding-bottom:9px;
     --page-margin:8px auto -1px;
     --page-border:1px solid CanvasText;
     --spreadHorizontalWrapped-margin-LR:3.5px;
-  }
+    --focus-ring-color:CanvasText;
 }
+  }
 
 [data-main-rotation="90"]{
   transform:rotate(90deg) translateY(-100%);
@@ -3888,6 +4140,8 @@
       }
 
 .pdfViewer .page{
+  --user-unit:1;
+  --total-scale-factor:calc(var(--scale-factor) * var(--user-unit));
   --scale-round-x:1px;
   --scale-round-y:1px;
 
@@ -4024,7 +4278,7 @@
   --toolbar-border-bottom:none;
   --toolbarSidebar-box-shadow:inset calc(-1px * var(--dir-factor)) 0 0 rgb(0 0 0 / 0.25), 0 1px 0 rgb(0 0 0 / 0.15), 0 0 1px rgb(0 0 0 / 0.1);
   --toolbarSidebar-border-bottom:none;
-  --button-hover-color:rgb(221 222 223);
+  --button-hover-color:color-mix(in srgb, currentColor 17%, transparent);
   --toggled-btn-color:rgb(0 0 0);
   --toggled-btn-bg-color:rgb(0 0 0 / 0.3);
   --toggled-hover-active-btn-color:rgb(0 0 0 / 0.4);
@@ -4045,7 +4299,6 @@
   --doorhanger-bg-color:rgb(255 255 255);
   --doorhanger-border-color:rgb(12 12 13 / 0.2);
   --doorhanger-hover-color:rgb(12 12 13);
-  --doorhanger-hover-bg-color:rgb(237 237 237);
   --doorhanger-separator-color:rgb(222 222 222);
   --dialog-button-border:none;
   --dialog-button-bg-color:rgb(12 12 13 / 0.1);
@@ -4121,7 +4374,6 @@
     --sidebar-toolbar-bg-color:rgb(50 50 52);
     --toolbar-bg-color:rgb(56 56 61);
     --toolbar-border-color:rgb(12 12 13);
-    --button-hover-color:rgb(102 102 103);
     --toggled-btn-color:rgb(255 255 255);
     --toggled-btn-bg-color:rgb(0 0 0 / 0.3);
     --toggled-hover-active-btn-color:rgb(0 0 0 / 0.4);
@@ -4137,10 +4389,9 @@
     --treeitem-selected-bg-color:rgb(255 255 255 / 0.25);
     --thumbnail-hover-color:rgb(255 255 255 / 0.1);
     --thumbnail-selected-color:rgb(255 255 255 / 0.2);
-    --doorhanger-bg-color:rgb(74 74 79);
+    --doorhanger-bg-color:#42414d;
     --doorhanger-border-color:rgb(39 39 43);
     --doorhanger-hover-color:rgb(249 249 250);
-    --doorhanger-hover-bg-color:rgb(93 94 98);
     --doorhanger-separator-color:rgb(92 92 97);
     --dialog-button-bg-color:rgb(92 92 97);
     --dialog-button-hover-bg-color:rgb(115 115 115);
@@ -4162,7 +4413,6 @@
     --sidebar-toolbar-bg-color:rgb(50 50 52);
     --toolbar-bg-color:rgb(56 56 61);
     --toolbar-border-color:rgb(12 12 13);
-    --button-hover-color:rgb(102 102 103);
     --toggled-btn-color:rgb(255 255 255);
     --toggled-btn-bg-color:rgb(0 0 0 / 0.3);
     --toggled-hover-active-btn-color:rgb(0 0 0 / 0.4);
@@ -4178,10 +4428,9 @@
     --treeitem-selected-bg-color:rgb(255 255 255 / 0.25);
     --thumbnail-hover-color:rgb(255 255 255 / 0.1);
     --thumbnail-selected-color:rgb(255 255 255 / 0.2);
-    --doorhanger-bg-color:rgb(74 74 79);
+    --doorhanger-bg-color:#42414d;
     --doorhanger-border-color:rgb(39 39 43);
     --doorhanger-hover-color:rgb(249 249 250);
-    --doorhanger-hover-bg-color:rgb(93 94 98);
     --doorhanger-separator-color:rgb(92 92 97);
     --dialog-button-bg-color:rgb(92 92 97);
     --dialog-button-hover-bg-color:rgb(115 115 115);
@@ -4190,7 +4439,6 @@
 @media screen and (forced-colors: active){
   :root{
     --button-hover-color:Highlight;
-    --doorhanger-hover-bg-color:Highlight;
     --toolbar-icon-opacity:1;
     --toolbar-icon-bg-color:ButtonText;
     --toolbar-icon-hover-bg-color:ButtonFace;
@@ -5105,7 +5353,6 @@ dialog :link{
     }
 
 .toolbarButton.labeled:is(:hover,:focus-visible){
-      background-color:var(--doorhanger-hover-bg-color);
       color:var(--doorhanger-hover-color);
     }
 
