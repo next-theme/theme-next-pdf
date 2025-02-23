@@ -369,26 +369,21 @@ function createValidAbsoluteUrl(url, baseUrl = null, options = null) {
   if (!url) {
     return null;
   }
-  try {
-    if (options && typeof url === "string") {
-      if (options.addDefaultProtocol && url.startsWith("www.")) {
-        const dots = url.match(/\./g);
-        if (dots?.length >= 2) {
-          url = `http://${url}`;
-        }
-      }
-      if (options.tryConvertEncoding) {
-        try {
-          url = stringToUTF8String(url);
-        } catch {}
+  if (options && typeof url === "string") {
+    if (options.addDefaultProtocol && url.startsWith("www.")) {
+      const dots = url.match(/\./g);
+      if (dots?.length >= 2) {
+        url = `http://${url}`;
       }
     }
-    const absoluteUrl = baseUrl ? new URL(url, baseUrl) : new URL(url);
-    if (_isValidProtocol(absoluteUrl)) {
-      return absoluteUrl;
+    if (options.tryConvertEncoding) {
+      try {
+        url = stringToUTF8String(url);
+      } catch {}
     }
-  } catch {}
-  return null;
+  }
+  const absoluteUrl = baseUrl ? URL.parse(url, baseUrl) : URL.parse(url);
+  return _isValidProtocol(absoluteUrl) ? absoluteUrl : null;
 }
 function shadow(obj, prop, value, nonSerializable = false) {
   Object.defineProperty(obj, prop, {
@@ -3324,10 +3319,10 @@ function readDataBlock(data, offset) {
     endOffset = fileMarker.offset;
   }
   const array = data.subarray(offset, endOffset);
-  offset += array.length;
   return {
     appData: array,
-    newOffset: offset
+    oldOffset: offset,
+    newOffset: offset + array.length
   };
 }
 function skipData(data, offset) {
@@ -3349,6 +3344,7 @@ class JpegImage {
     this._colorTransform = colorTransform;
   }
   static canUseImageDecoder(data, colorTransform = -1) {
+    let exifOffsets = null;
     let offset = 0;
     let numComponents = null;
     let fileMarker = readUint16(data, offset);
@@ -3363,11 +3359,18 @@ class JpegImage {
         case 0xffe1:
           const {
             appData,
+            oldOffset,
             newOffset
           } = readDataBlock(data, offset);
           offset = newOffset;
           if (appData[0] === 0x45 && appData[1] === 0x78 && appData[2] === 0x69 && appData[3] === 0x66 && appData[4] === 0 && appData[5] === 0) {
-            appData.fill(0x00, 6);
+            if (exifOffsets) {
+              throw new JpegError("Duplicate EXIF-blocks found.");
+            }
+            exifOffsets = {
+              exifStart: oldOffset + 6,
+              exifEnd: newOffset
+            };
           }
           fileMarker = readUint16(data, offset);
           offset += 2;
@@ -3388,12 +3391,12 @@ class JpegImage {
       offset += 2;
     }
     if (numComponents === 4) {
-      return false;
+      return null;
     }
     if (numComponents === 3 && colorTransform === 0) {
-      return false;
+      return null;
     }
-    return true;
+    return exifOffsets || {};
   }
   parse(data, {
     dnlScanLines = null
@@ -3955,9 +3958,14 @@ class JpegStream extends DecodeStream {
       if (!bytes) {
         return null;
       }
-      const data = this.#skipUselessBytes(bytes);
-      if (!JpegImage.canUseImageDecoder(data, jpegOptions.colorTransform)) {
+      let data = this.#skipUselessBytes(bytes);
+      const useImageDecoder = JpegImage.canUseImageDecoder(data, jpegOptions.colorTransform);
+      if (!useImageDecoder) {
         return null;
+      }
+      if (useImageDecoder.exifStart) {
+        data = data.slice();
+        data.fill(0x00, useImageDecoder.exifStart, useImageDecoder.exifEnd);
       }
       decoder = new ImageDecoder({
         data,
@@ -4013,7 +4021,7 @@ var OpenJPEG = (() => {
       if (scriptDirectory.startsWith("blob:")) {
         scriptDirectory = "";
       } else {
-        scriptDirectory = scriptDirectory.substr(0, scriptDirectory.replace(/[?#].*/, "").lastIndexOf("/") + 1);
+        scriptDirectory = scriptDirectory.slice(0, scriptDirectory.replace(/[?#].*/, "").lastIndexOf("/") + 1);
       }
       readAsync = async url => {
         var response = await fetch(url, {
@@ -4037,8 +4045,6 @@ var OpenJPEG = (() => {
     var EXITSTATUS;
     var HEAP8, HEAPU8, HEAP16, HEAPU16, HEAP32, HEAPU32, HEAPF32, HEAP64, HEAPU64, HEAPF64;
     var runtimeInitialized = false;
-    var dataURIPrefix = "data:application/octet-stream;base64,";
-    var isDataURI = filename => filename.startsWith(dataURIPrefix);
     function updateMemoryViews() {
       var b = wasmMemory.buffer;
       Module["HEAP8"] = HEAP8 = new Int8Array(b);
@@ -4052,9 +4058,6 @@ var OpenJPEG = (() => {
       Module["HEAP64"] = HEAP64 = new BigInt64Array(b);
       Module["HEAPU64"] = HEAPU64 = new BigUint64Array(b);
     }
-    var __ATPRERUN__ = [];
-    var __ATINIT__ = [];
-    var __ATPOSTRUN__ = [];
     function preRun() {
       if (Module["preRun"]) {
         if (typeof Module["preRun"] == "function") Module["preRun"] = [Module["preRun"]];
@@ -4062,11 +4065,11 @@ var OpenJPEG = (() => {
           addOnPreRun(Module["preRun"].shift());
         }
       }
-      callRuntimeCallbacks(__ATPRERUN__);
+      callRuntimeCallbacks(onPreRuns);
     }
     function initRuntime() {
       runtimeInitialized = true;
-      callRuntimeCallbacks(__ATINIT__);
+      wasmExports["t"]();
     }
     function postRun() {
       if (Module["postRun"]) {
@@ -4075,16 +4078,7 @@ var OpenJPEG = (() => {
           addOnPostRun(Module["postRun"].shift());
         }
       }
-      callRuntimeCallbacks(__ATPOSTRUN__);
-    }
-    function addOnPreRun(cb) {
-      __ATPRERUN__.unshift(cb);
-    }
-    function addOnInit(cb) {
-      __ATINIT__.unshift(cb);
-    }
-    function addOnPostRun(cb) {
-      __ATPOSTRUN__.unshift(cb);
+      callRuntimeCallbacks(onPostRuns);
     }
     var runDependencies = 0;
     var dependenciesFulfilled = null;
@@ -4115,11 +4109,7 @@ var OpenJPEG = (() => {
     }
     var wasmBinaryFile;
     function findWasmBinary() {
-      var f = "openjpeg.wasm";
-      if (!isDataURI(f)) {
-        return locateFile(f);
-      }
-      return f;
+      return locateFile("openjpeg.wasm");
     }
     function getBinarySync(file) {
       if (file == wasmBinaryFile && wasmBinary) {
@@ -4150,7 +4140,7 @@ var OpenJPEG = (() => {
       }
     }
     async function instantiateAsync(binary, binaryFile, imports) {
-      if (!binary && typeof WebAssembly.instantiateStreaming == "function" && !isDataURI(binaryFile)) {
+      if (!binary && typeof WebAssembly.instantiateStreaming == "function") {
         try {
           var response = fetch(binaryFile, {
             credentials: "same-origin"
@@ -4174,7 +4164,6 @@ var OpenJPEG = (() => {
         wasmExports = instance.exports;
         wasmMemory = wasmExports["s"];
         updateMemoryViews();
-        addOnInit(wasmExports["t"]);
         removeRunDependency("wasm-instantiate");
         return wasmExports;
       }
@@ -4184,12 +4173,12 @@ var OpenJPEG = (() => {
       }
       var info = getWasmImports();
       if (Module["instantiateWasm"]) {
-        try {
-          return Module["instantiateWasm"](info, receiveInstance);
-        } catch (e) {
-          err(`Module.instantiateWasm callback failed with error: ${e}`);
-          readyPromiseReject(e);
-        }
+        return new Promise((resolve, reject) => {
+          Module["instantiateWasm"](info, (mod, inst) => {
+            receiveInstance(mod, inst);
+            resolve(mod.exports);
+          });
+        });
       }
       wasmBinaryFile ??= findWasmBinary();
       try {
@@ -4213,6 +4202,10 @@ var OpenJPEG = (() => {
         callbacks.shift()(Module);
       }
     };
+    var onPostRuns = [];
+    var addOnPostRun = cb => onPostRuns.unshift(cb);
+    var onPreRuns = [];
+    var addOnPreRun = cb => onPreRuns.unshift(cb);
     var noExitRuntime = Module["noExitRuntime"] || true;
     var __abort_js = () => abort("");
     var runtimeKeepaliveCounter = 0;
@@ -4281,7 +4274,7 @@ var OpenJPEG = (() => {
     function _copy_pixels_1(compG_ptr, nb_pixels) {
       compG_ptr >>= 2;
       const imageData = Module.imageData = new Uint8ClampedArray(nb_pixels);
-      const compG = Module.HEAP32.subarray(compG_ptr, compG_ptr + nb_pixels);
+      const compG = HEAP32.subarray(compG_ptr, compG_ptr + nb_pixels);
       imageData.set(compG);
     }
     function _copy_pixels_3(compR_ptr, compG_ptr, compB_ptr, nb_pixels) {
@@ -4289,9 +4282,9 @@ var OpenJPEG = (() => {
       compG_ptr >>= 2;
       compB_ptr >>= 2;
       const imageData = Module.imageData = new Uint8ClampedArray(nb_pixels * 3);
-      const compR = Module.HEAP32.subarray(compR_ptr, compR_ptr + nb_pixels);
-      const compG = Module.HEAP32.subarray(compG_ptr, compG_ptr + nb_pixels);
-      const compB = Module.HEAP32.subarray(compB_ptr, compB_ptr + nb_pixels);
+      const compR = HEAP32.subarray(compR_ptr, compR_ptr + nb_pixels);
+      const compG = HEAP32.subarray(compG_ptr, compG_ptr + nb_pixels);
+      const compB = HEAP32.subarray(compB_ptr, compB_ptr + nb_pixels);
       for (let i = 0; i < nb_pixels; i++) {
         imageData[3 * i] = compR[i];
         imageData[3 * i + 1] = compG[i];
@@ -4304,10 +4297,10 @@ var OpenJPEG = (() => {
       compB_ptr >>= 2;
       compA_ptr >>= 2;
       const imageData = Module.imageData = new Uint8ClampedArray(nb_pixels * 4);
-      const compR = Module.HEAP32.subarray(compR_ptr, compR_ptr + nb_pixels);
-      const compG = Module.HEAP32.subarray(compG_ptr, compG_ptr + nb_pixels);
-      const compB = Module.HEAP32.subarray(compB_ptr, compB_ptr + nb_pixels);
-      const compA = Module.HEAP32.subarray(compA_ptr, compA_ptr + nb_pixels);
+      const compR = HEAP32.subarray(compR_ptr, compR_ptr + nb_pixels);
+      const compG = HEAP32.subarray(compG_ptr, compG_ptr + nb_pixels);
+      const compB = HEAP32.subarray(compB_ptr, compB_ptr + nb_pixels);
+      const compA = HEAP32.subarray(compA_ptr, compA_ptr + nb_pixels);
       for (let i = 0; i < nb_pixels; i++) {
         imageData[4 * i] = compR[i];
         imageData[4 * i + 1] = compG[i];
@@ -4464,7 +4457,7 @@ var OpenJPEG = (() => {
     function _gray_to_rgba(compG_ptr, nb_pixels) {
       compG_ptr >>= 2;
       const imageData = Module.imageData = new Uint8ClampedArray(nb_pixels * 4);
-      const compG = Module.HEAP32.subarray(compG_ptr, compG_ptr + nb_pixels);
+      const compG = HEAP32.subarray(compG_ptr, compG_ptr + nb_pixels);
       for (let i = 0; i < nb_pixels; i++) {
         imageData[4 * i] = imageData[4 * i + 1] = imageData[4 * i + 2] = compG[i];
         imageData[4 * i + 3] = 255;
@@ -4474,8 +4467,8 @@ var OpenJPEG = (() => {
       compG_ptr >>= 2;
       compA_ptr >>= 2;
       const imageData = Module.imageData = new Uint8ClampedArray(nb_pixels * 4);
-      const compG = Module.HEAP32.subarray(compG_ptr, compG_ptr + nb_pixels);
-      const compA = Module.HEAP32.subarray(compA_ptr, compA_ptr + nb_pixels);
+      const compG = HEAP32.subarray(compG_ptr, compG_ptr + nb_pixels);
+      const compA = HEAP32.subarray(compA_ptr, compA_ptr + nb_pixels);
       for (let i = 0; i < nb_pixels; i++) {
         imageData[4 * i] = imageData[4 * i + 1] = imageData[4 * i + 2] = compG[i];
         imageData[4 * i + 3] = compA[i];
@@ -4490,9 +4483,9 @@ var OpenJPEG = (() => {
       compG_ptr >>= 2;
       compB_ptr >>= 2;
       const imageData = Module.imageData = new Uint8ClampedArray(nb_pixels * 4);
-      const compR = Module.HEAP32.subarray(compR_ptr, compR_ptr + nb_pixels);
-      const compG = Module.HEAP32.subarray(compG_ptr, compG_ptr + nb_pixels);
-      const compB = Module.HEAP32.subarray(compB_ptr, compB_ptr + nb_pixels);
+      const compR = HEAP32.subarray(compR_ptr, compR_ptr + nb_pixels);
+      const compG = HEAP32.subarray(compG_ptr, compG_ptr + nb_pixels);
+      const compB = HEAP32.subarray(compB_ptr, compB_ptr + nb_pixels);
       for (let i = 0; i < nb_pixels; i++) {
         imageData[4 * i] = compR[i];
         imageData[4 * i + 1] = compG[i];
@@ -4588,23 +4581,38 @@ class JpxImage {
   static #buffer = null;
   static #handler = null;
   static #modulePromise = null;
+  static #useWasm = true;
+  static #useWorkerFetch = true;
   static #wasmUrl = null;
   static setOptions({
     handler,
+    useWasm,
+    useWorkerFetch,
     wasmUrl
   }) {
-    if (!this.#buffer) {
-      this.#wasmUrl = wasmUrl || null;
-      if (wasmUrl === null) {
-        this.#handler = handler;
-      }
+    this.#useWasm = useWasm;
+    this.#useWorkerFetch = useWorkerFetch;
+    this.#wasmUrl = wasmUrl;
+    if (!useWorkerFetch) {
+      this.#handler = handler;
     }
   }
-  static async #instantiateWasm(imports, successCallback) {
+  static async #getJsModule(fallbackCallback) {
+    const path = `${this.#wasmUrl}openjpeg_nowasm_fallback.js`;
+    let instance = null;
+    try {
+      const mod = await import(/*webpackIgnore: true*/path);
+      instance = mod.default();
+    } catch (e) {
+      warn(`JpxImage#getJsModule: ${e}`);
+    }
+    fallbackCallback(instance);
+  }
+  static async #instantiateWasm(fallbackCallback, imports, successCallback) {
     const filename = "openjpeg.wasm";
     try {
       if (!this.#buffer) {
-        if (this.#wasmUrl !== null) {
+        if (this.#useWorkerFetch) {
           this.#buffer = await fetchBinaryData(`${this.#wasmUrl}${filename}`);
         } else {
           this.#buffer = await this.#handler.sendWithPromise("FetchBinaryData", {
@@ -4615,9 +4623,12 @@ class JpxImage {
       }
       const results = await WebAssembly.instantiate(this.#buffer, imports);
       return successCallback(results.instance);
+    } catch (reason) {
+      warn(`JpxImage#instantiateWasm: ${reason}`);
+      this.#getJsModule(fallbackCallback);
+      return null;
     } finally {
       this.#handler = null;
-      this.#wasmUrl = null;
     }
   }
   static async decode(bytes, {
@@ -4625,11 +4636,26 @@ class JpxImage {
     isIndexedColormap = false,
     smaskInData = false
   } = {}) {
-    this.#modulePromise ||= openjpeg({
-      warn: warn,
-      instantiateWasm: this.#instantiateWasm.bind(this)
-    });
+    if (!this.#modulePromise) {
+      const {
+        promise,
+        resolve
+      } = Promise.withResolvers();
+      const promises = [promise];
+      if (!this.#useWasm) {
+        this.#getJsModule(resolve);
+      } else {
+        promises.push(openjpeg({
+          warn: warn,
+          instantiateWasm: this.#instantiateWasm.bind(this, resolve)
+        }));
+      }
+      this.#modulePromise = Promise.race(promises);
+    }
     const module = await this.#modulePromise;
+    if (!module) {
+      throw new JpxError("OpenJPEG failed to initialize");
+    }
     let ptr;
     try {
       const size = bytes.length;
@@ -30367,6 +30393,8 @@ const DefaultPartialEvaluatorOptions = Object.freeze({
   canvasMaxAreaInBytes: -1,
   fontExtraProperties: false,
   useSystemFonts: true,
+  useWasm: true,
+  useWorkerFetch: true,
   cMapUrl: null,
   standardFontDataUrl: null,
   wasmUrl: null
@@ -30603,7 +30631,7 @@ class PartialEvaluator {
       return cachedData;
     }
     let data;
-    if (this.options.cMapUrl !== null) {
+    if (this.options.useWorkerFetch) {
       data = {
         cMapData: await fetchBinaryData(`${this.options.cMapUrl}${name}.bcmap`),
         isCompressed: true
@@ -30629,7 +30657,7 @@ class PartialEvaluator {
       filename = standardFontNameToFileName[name];
     let data;
     try {
-      if (this.options.standardFontDataUrl !== null) {
+      if (this.options.useWorkerFetch) {
         data = await fetchBinaryData(`${this.options.standardFontDataUrl}${filename}`);
       } else {
         data = await this.handler.sendWithPromise("FetchBinaryData", {
@@ -31160,14 +31188,12 @@ class PartialEvaluator {
     }
   }
   loadFont(fontName, font, resources, fallbackFontDict = null, cssFontInfo = null) {
-    const errorFont = async () => {
-      return new TranslatedFont({
-        loadedName: "g_font_error",
-        font: new ErrorFont(`Font "${fontName}" is not available.`),
-        dict: font,
-        evaluatorOptions: this.options
-      });
-    };
+    const errorFont = async () => new TranslatedFont({
+      loadedName: "g_font_error",
+      font: new ErrorFont(`Font "${fontName}" is not available.`),
+      dict: font,
+      evaluatorOptions: this.options
+    });
     let fontRef;
     if (font) {
       if (font instanceof Ref) {
@@ -48500,16 +48526,14 @@ class XFAFactory {
 
 class AnnotationFactory {
   static createGlobals(pdfManager) {
-    return Promise.all([pdfManager.ensureCatalog("acroForm"), pdfManager.ensureDoc("xfaDatasets"), pdfManager.ensureCatalog("structTreeRoot"), pdfManager.ensureCatalog("baseUrl"), pdfManager.ensureCatalog("attachments")]).then(([acroForm, xfaDatasets, structTreeRoot, baseUrl, attachments]) => {
-      return {
-        pdfManager,
-        acroForm: acroForm instanceof Dict ? acroForm : Dict.empty,
-        xfaDatasets,
-        structTreeRoot,
-        baseUrl,
-        attachments
-      };
-    }, reason => {
+    return Promise.all([pdfManager.ensureCatalog("acroForm"), pdfManager.ensureDoc("xfaDatasets"), pdfManager.ensureCatalog("structTreeRoot"), pdfManager.ensureCatalog("baseUrl"), pdfManager.ensureCatalog("attachments")]).then(([acroForm, xfaDatasets, structTreeRoot, baseUrl, attachments]) => ({
+      pdfManager,
+      acroForm: acroForm instanceof Dict ? acroForm : Dict.empty,
+      xfaDatasets,
+      structTreeRoot,
+      baseUrl,
+      attachments
+    }), reason => {
       warn(`createGlobals: "${reason}".`);
       return null;
     });
@@ -53936,7 +53960,6 @@ class XRef {
     }
     let xrefEntry = this.getEntry(num);
     if (xrefEntry === null) {
-      this._cacheMap.set(num, xrefEntry);
       return xrefEntry;
     }
     if (this._pendingRefs.has(ref)) {
@@ -55215,23 +55238,21 @@ class PDFDocument {
     } else {
       promise = catalog.getPageDict(pageIndex);
     }
-    promise = promise.then(([pageDict, ref]) => {
-      return new Page({
-        pdfManager: this.pdfManager,
-        xref: this.xref,
-        pageIndex,
-        pageDict,
-        ref,
-        globalIdFactory: this._globalIdFactory,
-        fontCache: catalog.fontCache,
-        builtInCMapCache: catalog.builtInCMapCache,
-        standardFontDataCache: catalog.standardFontDataCache,
-        globalImageCache: catalog.globalImageCache,
-        systemFontCache: catalog.systemFontCache,
-        nonBlendModesSet: catalog.nonBlendModesSet,
-        xfaFactory
-      });
-    });
+    promise = promise.then(([pageDict, ref]) => new Page({
+      pdfManager: this.pdfManager,
+      xref: this.xref,
+      pageIndex,
+      pageDict,
+      ref,
+      globalIdFactory: this._globalIdFactory,
+      fontCache: catalog.fontCache,
+      builtInCMapCache: catalog.builtInCMapCache,
+      standardFontDataCache: catalog.standardFontDataCache,
+      globalImageCache: catalog.globalImageCache,
+      systemFontCache: catalog.systemFontCache,
+      nonBlendModesSet: catalog.nonBlendModesSet,
+      xfaFactory
+    }));
     this._pagePromises.set(pageIndex, promise);
     return promise;
   }
@@ -57134,7 +57155,7 @@ class WorkerMessageHandler {
 ;// ./src/pdf.worker.js
 
 const pdfjsVersion = "5.0.0";
-const pdfjsBuild = "3f15e0c";
+const pdfjsBuild = "878d206";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };
