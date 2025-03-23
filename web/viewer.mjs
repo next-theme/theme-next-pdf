@@ -11554,7 +11554,7 @@ class PDFViewer {
   #supportsPinchToZoom = true;
   #textLayerMode = TextLayerMode.ENABLE;
   constructor(options) {
-    const viewerVersion = "5.0.0";
+    const viewerVersion = "5.1.0";
     if (version !== viewerVersion) {
       throw new Error(`The API version "${version}" does not match the Viewer version "${viewerVersion}".`);
     }
@@ -11838,7 +11838,7 @@ class PDFViewer {
         hiddenCapability.resolve();
       }
     }, {
-      signal: typeof AbortSignal.any === "function" ? AbortSignal.any([signal, ac.signal]) : signal
+      signal: AbortSignal.any([signal, ac.signal])
     });
     await Promise.race([this._onePageRenderedCapability.promise, hiddenCapability.promise]);
     ac.abort();
@@ -11985,7 +11985,7 @@ class PDFViewer {
         element.id = "hiddenCopyElement";
         viewer.before(element);
       }
-      if (typeof AbortSignal.any === "function" && annotationEditorMode !== AnnotationEditorType.DISABLE) {
+      if (annotationEditorMode !== AnnotationEditorType.DISABLE) {
         const mode = annotationEditorMode;
         if (pdfDocument.isPureXfa) {
           console.warn("Warning: XFA-editing is not implemented.");
@@ -13511,8 +13511,8 @@ class SignatureManager {
     }, {
       passive: true
     });
-    description.addEventListener("input", () => {
-      this.#clearDescription.disabled = description.value === "";
+    this.#description.addEventListener("input", () => {
+      this.#clearDescription.disabled = this.#description.value === "";
     }, {
       passive: true
     });
@@ -14973,7 +14973,7 @@ const PDFViewerApplication = {
       this.findBar = new PDFFindBar(appConfig.findBar, appConfig.principalContainer, eventBus);
     }
     if (appConfig.annotationEditorParams) {
-      if (typeof AbortSignal.any === "function" && annotationEditorMode !== AnnotationEditorType.DISABLE) {
+      if (annotationEditorMode !== AnnotationEditorType.DISABLE) {
         const editorSignatureButton = appConfig.toolbar?.editorSignatureButton;
         if (editorSignatureButton && AppOptions.get("enableSignatureEditor")) {
           editorSignatureButton.parentElement.hidden = false;
@@ -15350,7 +15350,7 @@ const PDFViewerApplication = {
   async download() {
     let data;
     try {
-      data = await this.pdfDocument.getData();
+      data = await (this.pdfDocument ? this.pdfDocument.getData() : this.pdfLoadingTask.getData());
     } catch {}
     this.downloadManager.download(data, this._downloadUrl, this._docFilename);
   },
@@ -15944,16 +15944,14 @@ const PDFViewerApplication = {
         signal
       }
     } = this;
-    if (typeof AbortSignal.any === "function") {
-      this._touchManager = new TouchManager({
-        container: window,
-        isPinchingDisabled: () => pdfViewer.isInPresentationMode,
-        isPinchingStopped: () => this.overlayManager?.active,
-        onPinching: this.touchPinchCallback.bind(this),
-        onPinchEnd: this.touchPinchEndCallback.bind(this),
-        signal
-      });
-    }
+    this._touchManager = new TouchManager({
+      container: window,
+      isPinchingDisabled: () => pdfViewer.isInPresentationMode,
+      isPinchingStopped: () => this.overlayManager?.active,
+      onPinching: this.touchPinchCallback.bind(this),
+      onPinchEnd: this.touchPinchEndCallback.bind(this),
+      signal
+    });
     function addWindowResolutionChange(evt = null) {
       if (evt) {
         pdfViewer.refresh();
@@ -16697,8 +16695,8 @@ function beforeUnload(evt) {
 
 
 
-const pdfjsVersion = "5.0.0";
-const pdfjsBuild = "d1d88cc";
+const pdfjsVersion = "5.1.0";
+const pdfjsBuild = "d009e4b";
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,
