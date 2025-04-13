@@ -100,7 +100,6 @@ __webpack_require__.d(__webpack_exports__, {
 
 ;// ./src/shared/util.js
 const isNodeJS = typeof process === "object" && process + "" === "[object process]" && !process.versions.nw && !(process.versions.electron && process.type && process.type !== "browser");
-const IDENTITY_MATRIX = (/* unused pure expression or super */ null && ([1, 0, 0, 1, 0, 0]));
 const FONT_IDENTITY_MATRIX = [0.001, 0, 0, 0.001, 0, 0];
 const LINE_FACTOR = 1.35;
 const LINE_DESCENT_FACTOR = 0.35;
@@ -526,13 +525,6 @@ function string32(value) {
 }
 function objectSize(obj) {
   return Object.keys(obj).length;
-}
-function objectFromMap(map) {
-  const obj = Object.create(null);
-  for (const [key, value] of map) {
-    obj[key] = value;
-  }
-  return obj;
 }
 function isLittleEndian() {
   const buffer8 = new Uint8Array(4);
@@ -2773,6 +2765,7 @@ class AnnotationEditorUIManager {
       }
     }
     this.#updateModeCapability = Promise.withResolvers();
+    this.#currentDrawingSession?.commitOrRemove();
     this.#mode = mode;
     if (mode === AnnotationEditorType.NONE) {
       this.setEditingState(false);
@@ -3828,9 +3821,11 @@ class TouchManager {
     if (evt.touches.length >= 2) {
       return;
     }
-    this.#touchMoveAC.abort();
-    this.#touchMoveAC = null;
-    this.#onPinchEnd?.();
+    if (this.#touchMoveAC) {
+      this.#touchMoveAC.abort();
+      this.#touchMoveAC = null;
+      this.#onPinchEnd?.();
+    }
     if (!this.#touchInfo) {
       return;
     }
@@ -5374,14 +5369,6 @@ class AnnotationStorage {
   has(key) {
     return this.#storage.has(key);
   }
-  getAll() {
-    return this.#storage.size > 0 ? objectFromMap(this.#storage) : null;
-  }
-  setAll(obj) {
-    for (const [key, val] of Object.entries(obj)) {
-      this.setValue(key, val);
-    }
-  }
   get size() {
     return this.#storage.size;
   }
@@ -5489,6 +5476,9 @@ class AnnotationStorage {
       ids: new Set(ids),
       hash: ids.join(",")
     };
+  }
+  [Symbol.iterator]() {
+    return this.#storage.entries();
   }
 }
 class PrintAnnotationStorage extends AnnotationStorage {
@@ -9374,28 +9364,24 @@ class GlobalWorkerOptions {
 }
 
 ;// ./src/display/metadata.js
-
 class Metadata {
-  #metadataMap;
+  #map;
   #data;
   constructor({
     parsedData,
     rawData
   }) {
-    this.#metadataMap = parsedData;
+    this.#map = parsedData;
     this.#data = rawData;
   }
   getRaw() {
     return this.#data;
   }
   get(name) {
-    return this.#metadataMap.get(name) ?? null;
+    return this.#map.get(name) ?? null;
   }
-  getAll() {
-    return objectFromMap(this.#metadataMap);
-  }
-  has(name) {
-    return this.#metadataMap.has(name);
+  [Symbol.iterator]() {
+    return this.#map.entries();
   }
 }
 
@@ -9644,9 +9630,6 @@ class OptionalContentConfig {
     }
     return [...this.#groups.keys()];
   }
-  getGroups() {
-    return this.#groups.size > 0 ? objectFromMap(this.#groups) : null;
-  }
   getGroup(id) {
     return this.#groups.get(id) || null;
   }
@@ -9659,6 +9642,9 @@ class OptionalContentConfig {
       hash.update(`${id}:${group.visible}`);
     }
     return this.#cachedGetHash = hash.hexdigest();
+  }
+  [Symbol.iterator]() {
+    return this.#groups.entries();
   }
 }
 
@@ -13247,7 +13233,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.2.0";
-const build = "6cc37c8";
+const build = "e06b32c";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -22628,7 +22614,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "5.2.0";
-const pdfjsBuild = "6cc37c8";
+const pdfjsBuild = "e06b32c";
 {
   globalThis.pdfjsTestingUtils = {
     HighlightOutliner: HighlightOutliner

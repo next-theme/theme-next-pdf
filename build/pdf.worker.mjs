@@ -51,7 +51,6 @@ __webpack_require__.d(__webpack_exports__, {
 
 ;// ./src/shared/util.js
 const isNodeJS = typeof process === "object" && process + "" === "[object process]" && !process.versions.nw && !(process.versions.electron && process.type && process.type !== "browser");
-const IDENTITY_MATRIX = [1, 0, 0, 1, 0, 0];
 const FONT_IDENTITY_MATRIX = [0.001, 0, 0, 0.001, 0, 0];
 const LINE_FACTOR = 1.35;
 const LINE_DESCENT_FACTOR = 0.35;
@@ -477,13 +476,6 @@ function string32(value) {
 }
 function objectSize(obj) {
   return Object.keys(obj).length;
-}
-function objectFromMap(map) {
-  const obj = Object.create(null);
-  for (const [key, value] of map) {
-    obj[key] = value;
-  }
-  return obj;
 }
 function isLittleEndian() {
   const buffer8 = new Uint8Array(4);
@@ -1272,6 +1264,9 @@ class BaseStream {
 const PDF_VERSION_REGEXP = /^[1-9]\.\d$/;
 const MAX_INT_32 = 2 ** 31 - 1;
 const MIN_INT_32 = -(2 ** 31);
+const IDENTITY_MATRIX = [1, 0, 0, 1, 0, 0];
+const RESOURCES_KEYS_OPERATOR_LIST = ["ColorSpace", "ExtGState", "Font", "Pattern", "Properties", "Shading", "XObject"];
+const RESOURCES_KEYS_TEXT_CONTENT = ["ExtGState", "Font", "Properties", "XObject"];
 function getLookupTableFactory(initializer) {
   let lookup;
   return function () {
@@ -2177,6 +2172,7 @@ class IndexedCS extends ColorSpace {
   constructor(base, highVal, lookup) {
     super("Indexed", 1);
     this.base = base;
+    this.highVal = highVal;
     const length = base.numComps * (highVal + 1);
     this.lookup = new Uint8Array(length);
     if (lookup instanceof BaseStream) {
@@ -2191,17 +2187,26 @@ class IndexedCS extends ColorSpace {
     }
   }
   getRgbItem(src, srcOffset, dest, destOffset) {
-    const numComps = this.base.numComps;
-    const start = src[srcOffset] * numComps;
-    this.base.getRgbBuffer(this.lookup, start, 1, dest, destOffset, 8, 0);
+    const {
+      base,
+      highVal,
+      lookup
+    } = this;
+    const start = MathClamp(Math.round(src[srcOffset]), 0, highVal) * base.numComps;
+    base.getRgbBuffer(lookup, start, 1, dest, destOffset, 8, 0);
   }
   getRgbBuffer(src, srcOffset, count, dest, destOffset, bits, alpha01) {
-    const base = this.base;
-    const numComps = base.numComps;
+    const {
+      base,
+      highVal,
+      lookup
+    } = this;
+    const {
+      numComps
+    } = base;
     const outputDelta = base.getOutputLength(numComps, alpha01);
-    const lookup = this.lookup;
     for (let i = 0; i < count; ++i) {
-      const lookupPos = src[srcOffset++] * numComps;
+      const lookupPos = MathClamp(Math.round(src[srcOffset++]), 0, highVal) * numComps;
       base.getRgbBuffer(lookup, lookupPos, 1, dest, destOffset, 8, alpha01);
       destOffset += outputDelta;
     }
@@ -25340,8 +25345,8 @@ class Font {
         case "CIDFontType2":
           this.mimetype = "font/opentype";
           data = this.checkAndRepair(name, file, properties);
+          adjustWidths(properties);
           if (this.isOpenType) {
-            adjustWidths(properties);
             type = "OpenType";
           }
           break;
@@ -26503,7 +26508,6 @@ class Font {
       if (header.version === "OTTO" && !isComposite || !tables.head || !tables.hhea || !tables.maxp || !tables.post) {
         cffFile = new Stream(tables["CFF "].data);
         cff = new CFFFont(cffFile, properties);
-        adjustWidths(properties);
         return this.convert(name, cff, properties);
       }
       delete tables.glyf;
@@ -30450,48 +30454,20 @@ class PDFImage {
       localColorSpaceCache
     });
   }
-  static createRawMask({
-    imgArray,
-    width,
-    height,
-    imageIsFromDecodeStream,
-    inverseDecode,
-    interpolate
-  }) {
-    const computedLength = (width + 7 >> 3) * height;
-    const actualLength = imgArray.byteLength;
-    const haveFullData = computedLength === actualLength;
-    let data, i;
-    if (imageIsFromDecodeStream && (!inverseDecode || haveFullData)) {
-      data = imgArray;
-    } else if (!inverseDecode) {
-      data = new Uint8Array(imgArray);
-    } else {
-      data = new Uint8Array(computedLength);
-      data.set(imgArray);
-      data.fill(0xff, actualLength);
-    }
-    if (inverseDecode) {
-      for (i = 0; i < actualLength; i++) {
-        data[i] ^= 0xff;
-      }
-    }
-    return {
-      data,
-      width,
-      height,
-      interpolate
-    };
-  }
   static async createMask({
-    imgArray,
-    width,
-    height,
-    imageIsFromDecodeStream,
-    inverseDecode,
-    interpolate,
+    image,
     isOffscreenCanvasSupported = false
   }) {
+    const {
+      dict
+    } = image;
+    const width = dict.get("W", "Width");
+    const height = dict.get("H", "Height");
+    const interpolate = dict.get("I", "Interpolate");
+    const decode = dict.getArray("D", "Decode");
+    const inverseDecode = decode?.[0] > 0;
+    const computedLength = (width + 7 >> 3) * height;
+    const imgArray = image.getBytes(computedLength);
     const isSingleOpaquePixel = width === 1 && height === 1 && inverseDecode === (imgArray.length === 0 || !!(imgArray[0] & 128));
     if (isSingleOpaquePixel) {
       return {
@@ -30538,14 +30514,29 @@ class PDFImage {
         bitmap
       };
     }
-    return this.createRawMask({
-      imgArray,
+    const actualLength = imgArray.byteLength;
+    const haveFullData = computedLength === actualLength;
+    let data;
+    if (image instanceof DecodeStream && (!inverseDecode || haveFullData)) {
+      data = imgArray;
+    } else if (!inverseDecode) {
+      data = new Uint8Array(imgArray);
+    } else {
+      data = new Uint8Array(computedLength);
+      data.set(imgArray);
+      data.fill(0xff, actualLength);
+    }
+    if (inverseDecode) {
+      for (let i = 0; i < actualLength; i++) {
+        data[i] ^= 0xff;
+      }
+    }
+    return {
+      data,
       width,
       height,
-      inverseDecode,
-      imageIsFromDecodeStream,
       interpolate
-    });
+    };
   }
   get drawWidth() {
     return Math.max(this.width, this.smask?.width || 0, this.mask?.width || 0);
@@ -31021,7 +31012,6 @@ class PDFImage {
 
 
 
-
 const DefaultPartialEvaluatorOptions = Object.freeze({
   maxImageSize: -1,
   disableFontFace: false,
@@ -31320,7 +31310,7 @@ class PartialEvaluator {
     this.standardFontDataCache.set(name, data);
     return new Stream(data);
   }
-  async buildFormXObject(resources, xobj, smask, operatorList, task, initialState, localColorSpaceCache) {
+  async buildFormXObject(resources, xobj, smask, operatorList, task, initialState, localColorSpaceCache, seenRefs) {
     const dict = xobj.dict;
     const matrix = lookupMatrix(dict.getArray("Matrix"), null);
     const bbox = lookupNormalRect(dict.getArray("BBox"), null);
@@ -31365,7 +31355,8 @@ class PartialEvaluator {
       task,
       resources: dict.get("Resources") || resources,
       operatorList,
-      initialState
+      initialState,
+      prevRefs: seenRefs
     });
     operatorList.addOp(OPS.paintFormXObjectEnd, []);
     if (group) {
@@ -31391,7 +31382,14 @@ class PartialEvaluator {
     localImageCache,
     localColorSpaceCache
   }) {
-    const dict = image.dict;
+    const {
+      maxImageSize,
+      ignoreErrors,
+      isOffscreenCanvasSupported
+    } = this.options;
+    const {
+      dict
+    } = image;
     const imageRef = dict.objId;
     const w = dict.get("W", "Width");
     const h = dict.get("H", "Height");
@@ -31399,14 +31397,13 @@ class PartialEvaluator {
       warn("Image dimensions are missing, or not numbers.");
       return;
     }
-    const maxImageSize = this.options.maxImageSize;
     if (maxImageSize !== -1 && w * h > maxImageSize) {
       const msg = "Image exceeded maximum allowed size and was removed.";
-      if (this.options.ignoreErrors) {
-        warn(msg);
-        return;
+      if (!ignoreErrors) {
+        throw new Error(msg);
       }
-      throw new Error(msg);
+      warn(msg);
+      return;
     }
     let optionalContent;
     if (dict.has("OC")) {
@@ -31415,36 +31412,9 @@ class PartialEvaluator {
     const imageMask = dict.get("IM", "ImageMask") || false;
     let imgData, fn, args;
     if (imageMask) {
-      const interpolate = dict.get("I", "Interpolate");
-      const bitStrideLength = w + 7 >> 3;
-      const imgArray = image.getBytes(bitStrideLength * h);
-      const decode = dict.getArray("D", "Decode");
-      if (this.parsingType3Font) {
-        imgData = PDFImage.createRawMask({
-          imgArray,
-          width: w,
-          height: h,
-          imageIsFromDecodeStream: image instanceof DecodeStream,
-          inverseDecode: decode?.[0] > 0,
-          interpolate
-        });
-        args = compileType3Glyph(imgData);
-        if (args) {
-          operatorList.addImageOps(OPS.constructPath, args, optionalContent);
-          return;
-        }
-        warn("Cannot compile Type3 glyph.");
-        operatorList.addImageOps(OPS.paintImageMaskXObject, [imgData], optionalContent);
-        return;
-      }
       imgData = await PDFImage.createMask({
-        imgArray,
-        width: w,
-        height: h,
-        imageIsFromDecodeStream: image instanceof DecodeStream,
-        inverseDecode: decode?.[0] > 0,
-        interpolate,
-        isOffscreenCanvasSupported: this.options.isOffscreenCanvasSupported
+        image,
+        isOffscreenCanvasSupported: isOffscreenCanvasSupported && !this.parsingType3Font
       });
       if (imgData.isSingleOpaquePixel) {
         fn = OPS.paintSolidColorImageMask;
@@ -31461,6 +31431,16 @@ class PartialEvaluator {
             this._regionalImageCache.set(null, imageRef, cacheData);
           }
         }
+        return;
+      }
+      if (this.parsingType3Font) {
+        args = compileType3Glyph(imgData);
+        if (args) {
+          operatorList.addImageOps(OPS.constructPath, args, optionalContent);
+          return;
+        }
+        warn("Cannot compile Type3 glyph.");
+        operatorList.addImageOps(OPS.paintImageMaskXObject, [imgData], optionalContent);
         return;
       }
       const objId = `mask_${this.idFactory.createObjId()}`;
@@ -31507,7 +31487,7 @@ class PartialEvaluator {
         operatorList.addImageOps(OPS.paintInlineImageXObject, [imgData], optionalContent);
       } catch (reason) {
         const msg = `Unable to decode inline image: "${reason}".`;
-        if (!this.options.ignoreErrors) {
+        if (!ignoreErrors) {
           throw new Error(msg);
         }
         warn(msg);
@@ -31564,7 +31544,7 @@ class PartialEvaluator {
       globalColorSpaceCache: this.globalColorSpaceCache,
       localColorSpaceCache
     }).then(async imageObj => {
-      imgData = await imageObj.createImageData(false, this.options.isOffscreenCanvasSupported);
+      imgData = await imageObj.createImageData(false, isOffscreenCanvasSupported);
       imgData.dataLen = imgData.bitmap ? imgData.width * imgData.height * 4 : imgData.data.length;
       imgData.ref = imageRef;
       if (cacheGlobally) {
@@ -31596,7 +31576,7 @@ class PartialEvaluator {
       }
     }
   }
-  handleSMask(smask, resources, operatorList, task, stateManager, localColorSpaceCache) {
+  handleSMask(smask, resources, operatorList, task, stateManager, localColorSpaceCache, seenRefs) {
     const smaskContent = smask.get("G");
     const smaskOptions = {
       subtype: smask.get("S").name,
@@ -31616,7 +31596,7 @@ class PartialEvaluator {
     }
     return this.buildFormXObject(resources, smaskContent, smaskOptions, operatorList, task, stateManager.state.clone({
       newPath: true
-    }), localColorSpaceCache);
+    }), localColorSpaceCache, seenRefs);
   }
   handleTransferFunction(tr) {
     let transferArray;
@@ -31731,7 +31711,8 @@ class PartialEvaluator {
     task,
     stateManager,
     localGStateCache,
-    localColorSpaceCache
+    localColorSpaceCache,
+    seenRefs
   }) {
     const gStateRef = gState.objId;
     let isSimpleGState = true;
@@ -31775,7 +31756,7 @@ class PartialEvaluator {
           }
           if (value instanceof Dict) {
             isSimpleGState = false;
-            promise = promise.then(() => this.handleSMask(value, resources, operatorList, task, stateManager, localColorSpaceCache));
+            promise = promise.then(() => this.handleSMask(value, resources, operatorList, task, stateManager, localColorSpaceCache, seenRefs));
             gStateObj.push([key, true]);
           } else {
             warn("Unsupported SMask type");
@@ -32194,8 +32175,17 @@ class PartialEvaluator {
     resources,
     operatorList,
     initialState = null,
-    fallbackFontDict = null
+    fallbackFontDict = null,
+    prevRefs = null
   }) {
+    const objId = stream.dict?.objId;
+    const seenRefs = new RefSet(prevRefs);
+    if (objId) {
+      if (prevRefs?.has(objId)) {
+        throw new Error(`getOperatorList - ignoring circular reference: ${objId}`);
+      }
+      seenRefs.put(objId);
+    }
     resources ||= Dict.empty;
     initialState ||= new EvalState();
     if (!operatorList) {
@@ -32276,7 +32266,7 @@ class PartialEvaluator {
                 stateManager.save();
                 self.buildFormXObject(resources, xobj, null, operatorList, task, stateManager.state.clone({
                   newPath: true
-                }), localColorSpaceCache).then(function () {
+                }), localColorSpaceCache, seenRefs).then(function () {
                   stateManager.restore();
                   resolveXObject();
                 }, rejectXObject);
@@ -32548,7 +32538,8 @@ class PartialEvaluator {
                 task,
                 stateManager,
                 localGStateCache,
-                localColorSpaceCache
+                localColorSpaceCache,
+                seenRefs
               }).then(resolveGState, rejectGState);
             }).catch(function (reason) {
               if (reason instanceof AbortException) {
@@ -32687,8 +32678,17 @@ class PartialEvaluator {
     lang = null,
     markedContentData = null,
     disableNormalization = false,
-    keepWhiteSpace = false
+    keepWhiteSpace = false,
+    prevRefs = null
   }) {
+    const objId = stream.dict?.objId;
+    const seenRefs = new RefSet(prevRefs);
+    if (objId) {
+      if (prevRefs?.has(objId)) {
+        throw new Error(`getTextContent - ignoring circular reference: ${objId}`);
+      }
+      seenRefs.put(objId);
+    }
     resources ||= Dict.empty;
     stateManager ||= new StateManager(new TextState());
     if (includeMarkedContent) {
@@ -33361,7 +33361,8 @@ class PartialEvaluator {
                 lang,
                 markedContentData,
                 disableNormalization,
-                keepWhiteSpace
+                keepWhiteSpace,
+                prevRefs: seenRefs
               }).then(function () {
                 if (!sinkWrapper.enqueueInvoked) {
                   emptyXObjectCache.set(name, xobj.dict.objId, true);
@@ -37764,9 +37765,7 @@ class Catalog {
         warn(`Bad value, for key "${key}", in ViewerPreferences: ${value}.`);
         continue;
       }
-      if (!prefs) {
-        prefs = Object.create(null);
-      }
+      prefs ??= Object.create(null);
       prefs[key] = prefValue;
     }
     return shadow(this, "viewerPreferences", prefs);
@@ -37803,9 +37802,7 @@ class Catalog {
       const nameTree = new NameTree(obj.getRaw("EmbeddedFiles"), this.xref);
       for (const [key, value] of nameTree.getAll()) {
         const fs = new FileSpec(value, this.xref);
-        if (!attachments) {
-          attachments = Object.create(null);
-        }
+        attachments ??= Object.create(null);
         attachments[stringToPDFString(key)] = fs.serializable;
       }
     }
@@ -37817,9 +37814,7 @@ class Catalog {
     if (obj instanceof Dict && obj.has("XFAImages")) {
       const nameTree = new NameTree(obj.getRaw("XFAImages"), this.xref);
       for (const [key, value] of nameTree.getAll()) {
-        if (!xfaImages) {
-          xfaImages = new Dict(this.xref);
-        }
+        xfaImages ??= new Dict(this.xref);
         xfaImages.set(stringToPDFString(key), value);
       }
     }
@@ -42689,9 +42684,7 @@ class ExclGroup extends XFAObject {
       class: []
     };
     setAccess(this, attributes.class);
-    if (!this[$extra]) {
-      this[$extra] = Object.create(null);
-    }
+    this[$extra] ||= Object.create(null);
     Object.assign(this[$extra], {
       children,
       attributes,
@@ -43036,9 +43029,7 @@ class Field extends XFAObject {
         ui.attributes.tabindex = this[$tabIndex];
       }
     }
-    if (!ui.attributes.style) {
-      ui.attributes.style = Object.create(null);
-    }
+    ui.attributes.style ||= Object.create(null);
     let aElement = null;
     if (this.ui.button) {
       if (ui.children.length === 1) {
@@ -43117,9 +43108,7 @@ class Field extends XFAObject {
     } else if (this.ui.checkButton) {
       caption.attributes.class[0] = "xfaCaptionForCheckButton";
     }
-    if (!ui.attributes.class) {
-      ui.attributes.class = [];
-    }
+    ui.attributes.class ||= [];
     ui.children.splice(0, 0, caption);
     switch (this.caption.placement) {
       case "left":
@@ -43920,11 +43909,9 @@ class PageArea extends XFAObject {
     delete this[$extra];
   }
   [$getNextPage]() {
-    if (!this[$extra]) {
-      this[$extra] = {
-        numberOfUse: 0
-      };
-    }
+    this[$extra] ||= {
+      numberOfUse: 0
+    };
     const parent = this[$getParent]();
     if (parent.relation === "orderedOccurrence") {
       if (this[$isUsable]()) {
@@ -43941,11 +43928,9 @@ class PageArea extends XFAObject {
     };
   }
   [$toHTML]() {
-    if (!this[$extra]) {
-      this[$extra] = {
-        numberOfUse: 1
-      };
-    }
+    this[$extra] ||= {
+      numberOfUse: 1
+    };
     const children = [];
     this[$extra].children = children;
     const style = Object.create(null);
@@ -44015,13 +44000,11 @@ class PageSet extends XFAObject {
     return !this.occur || this.occur.max === -1 || this[$extra].numberOfUse < this.occur.max;
   }
   [$getNextPage]() {
-    if (!this[$extra]) {
-      this[$extra] = {
-        numberOfUse: 1,
-        pageIndex: -1,
-        pageSetIndex: -1
-      };
-    }
+    this[$extra] ||= {
+      numberOfUse: 1,
+      pageIndex: -1,
+      pageSetIndex: -1
+    };
     if (this.relation === "orderedOccurrence") {
       if (this[$extra].pageIndex + 1 < this.pageArea.children.length) {
         this[$extra].pageIndex += 1;
@@ -44679,9 +44662,7 @@ class Subform extends XFAObject {
       class: []
     };
     setAccess(this, attributes.class);
-    if (!this[$extra]) {
-      this[$extra] = Object.create(null);
-    }
+    this[$extra] ||= Object.create(null);
     Object.assign(this[$extra], {
       children,
       line: null,
@@ -44971,9 +44952,7 @@ class Template extends XFAObject {
         breakBefore[$extra] = {};
       }
     }
-    if (!pageArea) {
-      pageArea = pageAreas[0];
-    }
+    pageArea ||= pageAreas[0];
     pageArea[$extra] = {
       numberOfUse: 1
     };
@@ -48924,9 +48903,7 @@ class XFAParser extends XMLParserBase {
         }
       } else if (name.startsWith("xmlns:")) {
         const prefix = name.substring("xmlns:".length);
-        if (!prefixes) {
-          prefixes = [];
-        }
+        prefixes ??= [];
         prefixes.push({
           prefix,
           value
@@ -48936,10 +48913,7 @@ class XFAParser extends XMLParserBase {
         if (i === -1) {
           attributeObj[name] = value;
         } else {
-          let nsAttrs = attributeObj[$nsAttributes];
-          if (!nsAttrs) {
-            nsAttrs = attributeObj[$nsAttributes] = Object.create(null);
-          }
+          const nsAttrs = attributeObj[$nsAttributes] ??= Object.create(null);
           const [ns, attrName] = [name.slice(0, i), name.slice(i + 1)];
           const attrs = nsAttrs[ns] ||= Object.create(null);
           attrs[attrName] = value;
@@ -49846,7 +49820,7 @@ class Annotation {
       appearance.dict = new Dict();
     }
     const appearanceDict = appearance.dict;
-    const resources = await this.loadResources(["ExtGState", "ColorSpace", "Pattern", "Shading", "XObject", "Font"], appearance);
+    const resources = await this.loadResources(RESOURCES_KEYS_OPERATOR_LIST, appearance);
     const bbox = lookupRect(appearanceDict.getArray("BBox"), [0, 0, 1, 1]);
     const matrix = lookupMatrix(appearanceDict.getArray("Matrix"), IDENTITY_MATRIX);
     const transform = getTransformMatrix(rect, bbox, matrix);
@@ -49887,7 +49861,7 @@ class Annotation {
     if (!this.appearance) {
       return;
     }
-    const resources = await this.loadResources(["ExtGState", "Font", "Properties", "XObject"], this.appearance);
+    const resources = await this.loadResources(RESOURCES_KEYS_TEXT_CONTENT, this.appearance);
     const text = [];
     const buffer = [];
     let firstPosition = null;
@@ -51340,8 +51314,8 @@ class ChoiceWidgetAnnotation extends WidgetAnnotation {
     if (!this.hasIndices) {
       if (typeof this.data.fieldValue === "string") {
         this.data.fieldValue = [this.data.fieldValue];
-      } else if (!this.data.fieldValue) {
-        this.data.fieldValue = [];
+      } else {
+        this.data.fieldValue ||= [];
       }
     } else {
       this.data.fieldValue = [];
@@ -54952,6 +54926,19 @@ class Page {
     const objectLoader = new ObjectLoader(this.resources, keys, this.xref);
     await objectLoader.load();
   }
+  async #getMergedResources(streamDict, keys) {
+    const localResources = streamDict?.get("Resources");
+    if (!(localResources instanceof Dict)) {
+      return this.resources;
+    }
+    const objectLoader = new ObjectLoader(localResources, keys, this.xref);
+    await objectLoader.load();
+    return Dict.merge({
+      xref: this.xref,
+      dictArray: [localResources, this.resources],
+      mergeSubDicts: true
+    });
+  }
   async getOperatorList({
     handler,
     sink,
@@ -54962,7 +54949,7 @@ class Page {
     modifiedIds = null
   }) {
     const contentStreamPromise = this.getContentStream();
-    const resourcesPromise = this.loadResources(["ColorSpace", "ExtGState", "Font", "Pattern", "Properties", "Shading", "XObject"]);
+    const resourcesPromise = this.loadResources(RESOURCES_KEYS_OPERATOR_LIST);
     const partialEvaluator = new PartialEvaluator({
       xref: this.xref,
       handler,
@@ -55018,16 +55005,17 @@ class Page {
       });
     }
     const pageListPromise = Promise.all([contentStreamPromise, resourcesPromise]).then(async ([contentStream]) => {
+      const resources = await this.#getMergedResources(contentStream.dict, RESOURCES_KEYS_OPERATOR_LIST);
       const opList = new OperatorList(intent, sink);
       handler.send("StartRenderPage", {
-        transparency: partialEvaluator.hasBlendModes(this.resources, this.nonBlendModesSet),
+        transparency: partialEvaluator.hasBlendModes(resources, this.nonBlendModesSet),
         pageIndex: this.pageIndex,
         cacheKey
       });
       await partialEvaluator.getOperatorList({
         stream: contentStream,
         task,
-        resources: this.resources,
+        resources,
         operatorList: opList
       });
       return opList;
@@ -55100,9 +55088,10 @@ class Page {
     sink
   }) {
     const contentStreamPromise = this.getContentStream();
-    const resourcesPromise = this.loadResources(["ExtGState", "Font", "Properties", "XObject"]);
+    const resourcesPromise = this.loadResources(RESOURCES_KEYS_TEXT_CONTENT);
     const langPromise = this.pdfManager.ensureCatalog("lang");
     const [contentStream,, lang] = await Promise.all([contentStreamPromise, resourcesPromise, langPromise]);
+    const resources = await this.#getMergedResources(contentStream.dict, RESOURCES_KEYS_TEXT_CONTENT);
     const partialEvaluator = new PartialEvaluator({
       xref: this.xref,
       handler,
@@ -55119,7 +55108,7 @@ class Page {
     return partialEvaluator.getTextContent({
       stream: contentStream,
       task,
-      resources: this.resources,
+      resources,
       includeMarkedContent,
       disableNormalization,
       sink,
@@ -55420,23 +55409,16 @@ class PDFDocument {
     });
   }
   get _xfaStreams() {
-    const acroForm = this.catalog.acroForm;
+    const {
+      acroForm
+    } = this.catalog;
     if (!acroForm) {
       return null;
     }
     const xfa = acroForm.get("XFA");
-    const entries = {
-      "xdp:xdp": "",
-      template: "",
-      datasets: "",
-      config: "",
-      connectionSet: "",
-      localeSet: "",
-      stylesheet: "",
-      "/xdp:xdp": ""
-    };
+    const entries = new Map(["xdp:xdp", "template", "datasets", "config", "connectionSet", "localeSet", "stylesheet", "/xdp:xdp"].map(e => [e, null]));
     if (xfa instanceof BaseStream && !xfa.isEmpty) {
-      entries["xdp:xdp"] = xfa;
+      entries.set("xdp:xdp", xfa);
       return entries;
     }
     if (!Array.isArray(xfa) || xfa.length === 0) {
@@ -55451,14 +55433,14 @@ class PDFDocument {
       } else {
         name = xfa[i];
       }
-      if (!entries.hasOwnProperty(name)) {
+      if (!entries.has(name)) {
         continue;
       }
       const data = this.xref.fetchIfRef(xfa[i + 1]);
       if (!(data instanceof BaseStream) || data.isEmpty) {
         continue;
       }
-      entries[name] = data;
+      entries.set(name, data);
     }
     return entries;
   }
@@ -55468,7 +55450,7 @@ class PDFDocument {
       return shadow(this, "xfaDatasets", null);
     }
     for (const key of ["datasets", "xdp:xdp"]) {
-      const stream = streams[key];
+      const stream = streams.get(key);
       if (!stream) {
         continue;
       }
@@ -55491,7 +55473,7 @@ class PDFDocument {
       return null;
     }
     const data = Object.create(null);
-    for (const [key, stream] of Object.entries(streams)) {
+    for (const [key, stream] of streams) {
       if (!stream) {
         continue;
       }
@@ -55750,9 +55732,7 @@ class PDFDocument {
             warn(`Bad value, for custom key "${key}", in Info: ${value}.`);
             continue;
           }
-          if (!docInfo.Custom) {
-            docInfo.Custom = Object.create(null);
-          }
+          docInfo.Custom ??= Object.create(null);
           docInfo.Custom[key] = customValue;
           continue;
       }
@@ -57749,7 +57729,7 @@ class WorkerMessageHandler {
 ;// ./src/pdf.worker.js
 
 const pdfjsVersion = "5.2.0";
-const pdfjsBuild = "6cc37c8";
+const pdfjsBuild = "e06b32c";
 
 var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
 export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };

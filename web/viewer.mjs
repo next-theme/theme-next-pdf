@@ -3154,7 +3154,7 @@ class SignatureStorage {
     this.#signal = signal;
   }
   #save() {
-    localStorage.setItem(KEY_STORAGE, JSON.stringify(Object.fromEntries(this.#signatures.entries())));
+    localStorage.setItem(KEY_STORAGE, JSON.stringify(Object.fromEntries(this.#signatures)));
   }
   async getAll() {
     if (this.#signal) {
@@ -10704,6 +10704,14 @@ class TextLayerBuilder {
       if (anchor.nodeType === Node.TEXT_NODE) {
         anchor = anchor.parentNode;
       }
+      if (!modifyStart && range.endOffset === 0) {
+        do {
+          while (!anchor.previousSibling) {
+            anchor = anchor.parentNode;
+          }
+          anchor = anchor.previousSibling;
+        } while (!anchor.childNodes.length);
+      }
       const parentTextLayer = anchor.parentElement?.closest(".textLayer");
       const endDiv = this.#textLayers.get(parentTextLayer);
       if (endDiv) {
@@ -16731,7 +16739,7 @@ function beforeUnload(evt) {
 
 
 const pdfjsVersion = "5.2.0";
-const pdfjsBuild = "6cc37c8";
+const pdfjsBuild = "e06b32c";
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,
