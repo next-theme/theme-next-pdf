@@ -20,34 +20,6 @@
  * JavaScript code in this page
  */
 
-/******/ // The require scope
-/******/ var __webpack_require__ = {};
-/******/ 
-/************************************************************************/
-/******/ /* webpack/runtime/define property getters */
-/******/ (() => {
-/******/ 	// define getter functions for harmony exports
-/******/ 	__webpack_require__.d = (exports, definition) => {
-/******/ 		for(var key in definition) {
-/******/ 			if(__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) {
-/******/ 				Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
-/******/ 			}
-/******/ 		}
-/******/ 	};
-/******/ })();
-/******/ 
-/******/ /* webpack/runtime/hasOwnProperty shorthand */
-/******/ (() => {
-/******/ 	__webpack_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
-/******/ })();
-/******/ 
-/************************************************************************/
-var __webpack_exports__ = globalThis.pdfjsWorker = {};
-
-// EXPORTS
-__webpack_require__.d(__webpack_exports__, {
-  WorkerMessageHandler: () => (/* reexport */ WorkerMessageHandler)
-});
 
 ;// ./src/shared/util.js
 const isNodeJS = typeof process === "object" && process + "" === "[object process]" && !process.versions.nw && !(process.versions.electron && process.type && process.type !== "browser");
@@ -582,13 +554,13 @@ class Util {
   static transform(m1, m2) {
     return [m1[0] * m2[0] + m1[2] * m2[1], m1[1] * m2[0] + m1[3] * m2[1], m1[0] * m2[2] + m1[2] * m2[3], m1[1] * m2[2] + m1[3] * m2[3], m1[0] * m2[4] + m1[2] * m2[5] + m1[4], m1[1] * m2[4] + m1[3] * m2[5] + m1[5]];
   }
-  static applyTransform(p, m) {
-    const p0 = p[0];
-    const p1 = p[1];
-    p[0] = p0 * m[0] + p1 * m[2] + m[4];
-    p[1] = p0 * m[1] + p1 * m[3] + m[5];
+  static applyTransform(p, m, pos = 0) {
+    const p0 = p[pos];
+    const p1 = p[pos + 1];
+    p[pos] = p0 * m[0] + p1 * m[2] + m[4];
+    p[pos + 1] = p0 * m[1] + p1 * m[3] + m[5];
   }
-  static applyTransformToBezier(p, transform) {
+  static applyTransformToBezier(p, transform, pos = 0) {
     const m0 = transform[0];
     const m1 = transform[1];
     const m2 = transform[2];
@@ -596,10 +568,10 @@ class Util {
     const m4 = transform[4];
     const m5 = transform[5];
     for (let i = 0; i < 6; i += 2) {
-      const pI = p[i];
-      const pI1 = p[i + 1];
-      p[i] = pI * m0 + pI1 * m2 + m4;
-      p[i + 1] = pI * m1 + pI1 * m3 + m5;
+      const pI = p[pos + i];
+      const pI1 = p[pos + i + 1];
+      p[pos + i] = pI * m0 + pI1 * m2 + m4;
+      p[pos + i + 1] = pI * m1 + pI1 * m3 + m5;
     }
   }
   static applyInverseTransform(p, m) {
@@ -6415,11 +6387,11 @@ addState(InitialState, [OPS.save, OPS.transform, OPS.constructPath, OPS.restore]
     switch (buffer[k++]) {
       case DrawOPS.moveTo:
       case DrawOPS.lineTo:
-        Util.applyTransform(buffer.subarray(k), transform);
+        Util.applyTransform(buffer, transform, k);
         k += 2;
         break;
       case DrawOPS.curveTo:
-        Util.applyTransformToBezier(buffer.subarray(k), transform);
+        Util.applyTransformToBezier(buffer, transform, k);
         k += 6;
         break;
     }
@@ -20000,12 +19972,11 @@ class Commands {
   currentTransform = [1, 0, 0, 1, 0, 0];
   add(cmd, args) {
     if (args) {
-      const [a, b, c, d, e, f] = this.currentTransform;
+      const {
+        currentTransform
+      } = this;
       for (let i = 0, ii = args.length; i < ii; i += 2) {
-        const x = args[i];
-        const y = args[i + 1];
-        args[i] = a * x + c * y + e;
-        args[i + 1] = b * x + d * y + f;
+        Util.applyTransform(args, currentTransform, i);
       }
       this.cmds.push(`${cmd}${args.join(" ")}`);
     } else {
@@ -36840,7 +36811,7 @@ class StructTreePage {
     const element = new StructElementNode(this, dict);
     map.set(dict, element);
     const parent = dict.get("P");
-    if (!parent || isName(parent.get("Type"), "StructTreeRoot")) {
+    if (!(parent instanceof Dict) || isName(parent.get("Type"), "StructTreeRoot")) {
       if (!this.addTopLevelNode(dict, element)) {
         map.delete(dict);
       }
@@ -55122,8 +55093,14 @@ class Page {
       return null;
     }
     await this._parsedAnnotations;
-    const structTree = await this.pdfManager.ensure(this, "_parseStructTree", [structTreeRoot]);
-    return this.pdfManager.ensure(structTree, "serializable");
+    try {
+      const structTree = await this.pdfManager.ensure(this, "_parseStructTree", [structTreeRoot]);
+      const data = await this.pdfManager.ensure(structTree, "serializable");
+      return data;
+    } catch (ex) {
+      warn(`getStructTree: "${ex}".`);
+      return null;
+    }
   }
   _parseStructTree(structTreeRoot) {
     const tree = new StructTreePage(structTreeRoot, this.pageDict);
@@ -57200,12 +57177,12 @@ class WorkerMessageHandler {
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }
-    const enumerableProperties = [];
-    for (const property in []) {
-      enumerableProperties.push(property);
+    const buildMsg = (type, prop) => `The \`${type}.prototype\` contains unexpected enumerable property ` + `"${prop}", thus breaking e.g. \`for...in\` iteration of ${type}s.`;
+    for (const prop in {}) {
+      throw new Error(buildMsg("Object", prop));
     }
-    if (enumerableProperties.length) {
-      throw new Error("The `Array.prototype` contains unexpected enumerable properties: " + enumerableProperties.join(", ") + "; thus breaking e.g. `for...in` iteration of `Array`s.");
+    for (const prop in []) {
+      throw new Error(buildMsg("Array", prop));
     }
     const workerHandlerName = docId + "_worker";
     let handler = new MessageHandler(workerHandlerName, docId, port);
@@ -57729,9 +57706,11 @@ class WorkerMessageHandler {
 ;// ./src/pdf.worker.js
 
 const pdfjsVersion = "5.2.0";
-const pdfjsBuild = "e06b32c";
+const pdfjsBuild = "d8d3e0a";
+globalThis.pdfjsWorker = {
+  WorkerMessageHandler: WorkerMessageHandler
+};
 
-var __webpack_exports__WorkerMessageHandler = __webpack_exports__.WorkerMessageHandler;
-export { __webpack_exports__WorkerMessageHandler as WorkerMessageHandler };
+export { WorkerMessageHandler };
 
 //# sourceMappingURL=pdf.worker.mjs.map
