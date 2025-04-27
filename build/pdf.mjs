@@ -363,6 +363,17 @@ function createValidAbsoluteUrl(url, baseUrl = null, options = null) {
   const absoluteUrl = baseUrl ? URL.parse(url, baseUrl) : URL.parse(url);
   return _isValidProtocol(absoluteUrl) ? absoluteUrl : null;
 }
+function updateUrlHash(url, hash, allowRel = false) {
+  const res = URL.parse(url);
+  if (res) {
+    res.hash = hash;
+    return res.href;
+  }
+  if (allowRel && createValidAbsoluteUrl(url, "http://example.com")) {
+    return url.split("#", 1)[0] + `${hash ? `#${hash}` : ""}`;
+  }
+  return "";
+}
 function shadow(obj, prop, value, nonSerializable = false) {
   Object.defineProperty(obj, prop, {
     value,
@@ -1207,6 +1218,7 @@ function getRGB(color) {
 function getColorValues(colors) {
   const span = document.createElement("span");
   span.style.visibility = "hidden";
+  span.style.colorScheme = "only light";
   document.body.append(span);
   for (const name of colors.keys()) {
     span.style.color = name;
@@ -6299,7 +6311,7 @@ class DOMFilterFactory extends BaseFilterFactory {
         if (isDataScheme(url)) {
           warn('#createUrl: ignore "data:"-URL for performance reasons.');
         } else {
-          this.#baseUrl = url.split("#", 1)[0];
+          this.#baseUrl = updateUrlHash(url, "");
         }
       }
     }
@@ -13156,7 +13168,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.2.0";
-const build = "d8d3e0a";
+const build = "48b7d9f";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -20612,7 +20624,7 @@ class SignatureOptions extends DrawingOptions {
   constructor() {
     super();
     super.updateProperties({
-      fill: "CanvasText",
+      fill: AnnotationEditor._defaultLineColor,
       "stroke-width": 0
     });
   }
@@ -20626,7 +20638,7 @@ class DrawnSignatureOptions extends InkDrawingOptions {
   constructor(viewerParameters) {
     super(viewerParameters);
     super.updateProperties({
-      stroke: "CanvasText",
+      stroke: AnnotationEditor._defaultLineColor,
       "stroke-width": 1
     });
   }
@@ -22537,7 +22549,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "5.2.0";
-const pdfjsBuild = "d8d3e0a";
+const pdfjsBuild = "48b7d9f";
 {
   globalThis.pdfjsTestingUtils = {
     HighlightOutliner: HighlightOutliner
@@ -22590,12 +22602,13 @@ globalThis.pdfjsLib = {
   SupportedImageMimeTypes: SupportedImageMimeTypes,
   TextLayer: TextLayer,
   TouchManager: TouchManager,
+  updateUrlHash: updateUrlHash,
   Util: Util,
   VerbosityLevel: VerbosityLevel,
   version: version,
   XfaLayer: XfaLayer
 };
 
-export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, ColorPicker, DOMSVGFactory, DrawLayer, util_FeatureTest as FeatureTest, GlobalWorkerOptions, util_ImageKind as ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TouchManager, Util, VerbosityLevel, XfaLayer, build, createValidAbsoluteUrl, fetchData, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getUuid, getXfaPageViewport, isDataScheme, isPdfFile, isValidExplicitDest, noContextMenu, normalizeUnicode, setLayerDimensions, shadow, stopEvent, version };
+export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, ColorPicker, DOMSVGFactory, DrawLayer, util_FeatureTest as FeatureTest, GlobalWorkerOptions, util_ImageKind as ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TouchManager, Util, VerbosityLevel, XfaLayer, build, createValidAbsoluteUrl, fetchData, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getUuid, getXfaPageViewport, isDataScheme, isPdfFile, isValidExplicitDest, noContextMenu, normalizeUnicode, setLayerDimensions, shadow, stopEvent, updateUrlHash, version };
 
 //# sourceMappingURL=pdf.mjs.map
