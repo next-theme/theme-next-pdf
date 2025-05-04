@@ -488,25 +488,16 @@ class util_FeatureTest {
     return shadow(this, "isImageDecoderSupported", typeof ImageDecoder !== "undefined");
   }
   static get platform() {
-    if (typeof navigator !== "undefined" && typeof navigator?.platform === "string" && typeof navigator?.userAgent === "string") {
-      const {
-        platform,
-        userAgent
-      } = navigator;
-      return shadow(this, "platform", {
-        isAndroid: userAgent.includes("Android"),
-        isLinux: platform.includes("Linux"),
-        isMac: platform.includes("Mac"),
-        isWindows: platform.includes("Win"),
-        isFirefox: userAgent.includes("Firefox")
-      });
-    }
+    const {
+      platform,
+      userAgent
+    } = navigator;
     return shadow(this, "platform", {
-      isAndroid: false,
-      isLinux: false,
-      isMac: false,
-      isWindows: false,
-      isFirefox: false
+      isAndroid: userAgent.includes("Android"),
+      isLinux: platform.includes("Linux"),
+      isMac: platform.includes("Mac"),
+      isWindows: platform.includes("Win"),
+      isFirefox: userAgent.includes("Firefox")
     });
   }
   static get isCSSRoundSupported() {
@@ -724,7 +715,7 @@ class Util {
   }
 }
 const PDFStringTranslateTable = (/* unused pure expression or super */ null && ([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2d8, 0x2c7, 0x2c6, 0x2d9, 0x2dd, 0x2db, 0x2da, 0x2dc, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x2022, 0x2020, 0x2021, 0x2026, 0x2014, 0x2013, 0x192, 0x2044, 0x2039, 0x203a, 0x2212, 0x2030, 0x201e, 0x201c, 0x201d, 0x2018, 0x2019, 0x201a, 0x2122, 0xfb01, 0xfb02, 0x141, 0x152, 0x160, 0x178, 0x17d, 0x131, 0x142, 0x153, 0x161, 0x17e, 0, 0x20ac]));
-function stringToPDFString(str) {
+function stringToPDFString(str, keepEscapeSequence = false) {
   if (str[0] >= "\xEF") {
     let encoding;
     if (str[0] === "\xFE" && str[1] === "\xFF") {
@@ -747,7 +738,7 @@ function stringToPDFString(str) {
         });
         const buffer = stringToBytes(str);
         const decoded = decoder.decode(buffer);
-        if (!decoded.includes("\x1b")) {
+        if (keepEscapeSequence || !decoded.includes("\x1b")) {
           return decoded;
         }
         return decoded.replaceAll(/\x1b[^\x1b]*(?:\x1b|$)/g, "");
@@ -759,7 +750,7 @@ function stringToPDFString(str) {
   const strBuf = [];
   for (let i = 0, ii = str.length; i < ii; i++) {
     const charCode = str.charCodeAt(i);
-    if (charCode === 0x1b) {
+    if (!keepEscapeSequence && charCode === 0x1b) {
       while (++i < ii && str.charCodeAt(i) !== 0x1b) {}
       continue;
     }
@@ -13168,7 +13159,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.2.0";
-const build = "48b7d9f";
+const build = "91bfe12";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -22549,7 +22540,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "5.2.0";
-const pdfjsBuild = "48b7d9f";
+const pdfjsBuild = "91bfe12";
 {
   globalThis.pdfjsTestingUtils = {
     HighlightOutliner: HighlightOutliner

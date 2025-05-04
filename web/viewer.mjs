@@ -562,9 +562,11 @@ const calcRound = function () {
 ;// ./web/app_options.js
 {
   var compatParams = new Map();
-  const userAgent = navigator.userAgent || "";
-  const platform = navigator.platform || "";
-  const maxTouchPoints = navigator.maxTouchPoints || 1;
+  const {
+    maxTouchPoints,
+    platform,
+    userAgent
+  } = navigator;
   const isAndroid = /Android/.test(userAgent);
   const isIOS = /\b(iPad|iPhone|iPod)(?=;)/.test(userAgent) || platform === "MacIntel" && maxTouchPoints > 1;
   (function () {
@@ -762,6 +764,10 @@ const defaultOptions = {
   },
   maxCanvasPixels: {
     value: 2 ** 25,
+    kind: OptionKind.VIEWER
+  },
+  minDurationToUpdateCanvas: {
+    value: 500,
     kind: OptionKind.VIEWER
   },
   forcePageColors: {
@@ -9572,9 +9578,12 @@ class Autolinker {
 class BasePDFPageView {
   #enableHWA = false;
   #loadingId = null;
+  #minDurationToUpdateCanvas = 0;
   #renderError = null;
   #renderingState = RenderingStates.INITIAL;
   #showCanvas = null;
+  #startTime = 0;
+  #tempCanvas = null;
   canvas = null;
   div = null;
   eventBus = null;
@@ -9589,6 +9598,7 @@ class BasePDFPageView {
     this.id = options.id;
     this.pageColors = options.pageColors || null;
     this.renderingQueue = options.renderingQueue;
+    this.#minDurationToUpdateCanvas = options.minDurationToUpdateCanvas ?? 500;
   }
   get renderingState() {
     return this.#renderingState;
@@ -9605,6 +9615,8 @@ class BasePDFPageView {
     switch (state) {
       case RenderingStates.PAUSED:
         this.div.classList.remove("loading");
+        this.#startTime = 0;
+        this.#showCanvas?.(false);
         break;
       case RenderingStates.RUNNING:
         this.div.classList.add("loadingIcon");
@@ -9612,10 +9624,12 @@ class BasePDFPageView {
           this.div.classList.add("loading");
           this.#loadingId = null;
         }, 0);
+        this.#startTime = Date.now();
         break;
       case RenderingStates.INITIAL:
       case RenderingStates.FINISHED:
         this.div.classList.remove("loadingIcon", "loading");
+        this.#startTime = 0;
         break;
     }
   }
@@ -9626,9 +9640,32 @@ class BasePDFPageView {
     const hasHCM = !!(pageColors?.background && pageColors?.foreground);
     const prevCanvas = this.canvas;
     const updateOnFirstShow = !prevCanvas && !hasHCM && !hideUntilComplete;
-    const canvas = this.canvas = document.createElement("canvas");
+    let canvas = this.canvas = document.createElement("canvas");
     this.#showCanvas = isLastShow => {
       if (updateOnFirstShow) {
+        let tempCanvas = this.#tempCanvas;
+        if (!isLastShow && this.#minDurationToUpdateCanvas > 0) {
+          if (Date.now() - this.#startTime < this.#minDurationToUpdateCanvas) {
+            return;
+          }
+          if (!tempCanvas) {
+            tempCanvas = this.#tempCanvas = canvas;
+            canvas = this.canvas = canvas.cloneNode(false);
+            onShow(canvas);
+          }
+        }
+        if (tempCanvas) {
+          const ctx = canvas.getContext("2d", {
+            alpha: false
+          });
+          ctx.drawImage(tempCanvas, 0, 0);
+          if (isLastShow) {
+            this.#resetTempCanvas();
+          } else {
+            this.#startTime = Date.now();
+          }
+          return;
+        }
         onShow(canvas);
         this.#showCanvas = null;
         return;
@@ -9675,6 +9712,13 @@ class BasePDFPageView {
     canvas.remove();
     canvas.width = canvas.height = 0;
     this.canvas = null;
+    this.#resetTempCanvas();
+  }
+  #resetTempCanvas() {
+    if (this.#tempCanvas) {
+      this.#tempCanvas.width = this.#tempCanvas.height = 0;
+      this.#tempCanvas = null;
+    }
   }
   async _drawCanvas(options, onCancel, onFinish) {
     const renderTask = this.renderTask = this.pdfPage.render(options);
@@ -11580,6 +11624,7 @@ class PDFViewer {
   #enableNewAltTextWhenAddingImage = false;
   #enableAutoLinking = true;
   #eventAbortController = null;
+  #minDurationToUpdateCanvas = 0;
   #mlManager = null;
   #scrollTimeoutId = null;
   #switchAnnotationEditorModeAC = null;
@@ -11640,6 +11685,7 @@ class PDFViewer {
     this.#enableHWA = options.enableHWA || false;
     this.#supportsPinchToZoom = options.supportsPinchToZoom !== false;
     this.#enableAutoLinking = options.enableAutoLinking !== false;
+    this.#minDurationToUpdateCanvas = options.minDurationToUpdateCanvas ?? 500;
     this.defaultRenderingQueue = !options.renderingQueue;
     if (this.defaultRenderingQueue) {
       this.renderingQueue = new PDFRenderingQueue();
@@ -12076,7 +12122,8 @@ class PDFViewer {
           l10n: this.l10n,
           layerProperties: this._layerProperties,
           enableHWA: this.#enableHWA,
-          enableAutoLinking: this.#enableAutoLinking
+          enableAutoLinking: this.#enableAutoLinking,
+          minDurationToUpdateCanvas: this.#minDurationToUpdateCanvas
         });
         this._pages.push(pageView);
       }
@@ -14870,10 +14917,6 @@ const PDFViewerApplication = {
       }
     }
     if (params.has("pdfbug")) {
-      AppOptions.setAll({
-        pdfBug: true,
-        fontExtraProperties: true
-      });
       const enabled = params.get("pdfbug").split(",");
       try {
         await loadPDFBug();
@@ -14881,6 +14924,14 @@ const PDFViewerApplication = {
       } catch (ex) {
         console.error("_parseHashParams:", ex);
       }
+      const debugOpts = {
+        pdfBug: true,
+        fontExtraProperties: true
+      };
+      if (globalThis.StepperManager?.enabled) {
+        debugOpts.minDurationToUpdateCanvas = 0;
+      }
+      AppOptions.setAll(debugOpts);
     }
     if (params.has("locale")) {
       AppOptions.set("localeProperties", {
@@ -14985,7 +15036,8 @@ const PDFViewerApplication = {
       abortSignal,
       enableHWA,
       supportsPinchToZoom: this.supportsPinchToZoom,
-      enableAutoLinking: AppOptions.get("enableAutoLinking")
+      enableAutoLinking: AppOptions.get("enableAutoLinking"),
+      minDurationToUpdateCanvas: AppOptions.get("minDurationToUpdateCanvas")
     });
     renderingQueue.setViewer(pdfViewer);
     linkService.setViewer(pdfViewer);
@@ -16738,7 +16790,7 @@ function beforeUnload(evt) {
 
 
 const pdfjsVersion = "5.2.0";
-const pdfjsBuild = "48b7d9f";
+const pdfjsBuild = "91bfe12";
 const AppConstants = {
   LinkTarget: LinkTarget,
   RenderingStates: RenderingStates,
