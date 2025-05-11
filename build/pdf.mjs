@@ -1280,10 +1280,11 @@ class OutputScale {
   get symmetric() {
     return this.sx === this.sy;
   }
-  limitCanvas(width, height, maxPixels, maxDim) {
+  limitCanvas(width, height, maxPixels, maxDim, capAreaFactor = -1) {
     let maxAreaScale = Infinity,
       maxWidthScale = Infinity,
       maxHeightScale = Infinity;
+    maxPixels = OutputScale.capPixels(maxPixels, capAreaFactor);
     if (maxPixels > 0) {
       maxAreaScale = Math.sqrt(maxPixels / (width * height));
     }
@@ -1301,6 +1302,13 @@ class OutputScale {
   }
   static get pixelRatio() {
     return globalThis.devicePixelRatio || 1;
+  }
+  static capPixels(maxPixels, capAreaFactor) {
+    if (capAreaFactor >= 0) {
+      const winPixels = Math.ceil(window.screen.availWidth * window.screen.availHeight * this.pixelRatio ** 2 * (1 + capAreaFactor / 100));
+      return maxPixels > 0 ? Math.min(maxPixels, winPixels) : winPixels;
+    }
+    return maxPixels;
   }
 }
 const SupportedImageMimeTypes = ["image/apng", "image/avif", "image/bmp", "image/gif", "image/jpeg", "image/png", "image/svg+xml", "image/webp", "image/x-icon"];
@@ -13159,7 +13167,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.2.0";
-const build = "91bfe12";
+const build = "3f1ecc1";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -22540,7 +22548,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "5.2.0";
-const pdfjsBuild = "91bfe12";
+const pdfjsBuild = "3f1ecc1";
 {
   globalThis.pdfjsTestingUtils = {
     HighlightOutliner: HighlightOutliner
