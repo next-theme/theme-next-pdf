@@ -1891,12 +1891,6 @@ async function __wbg_init(module_or_path) {
       console.warn('using deprecated parameters for the initialization function; pass a single object instead');
     }
   }
-  if (typeof module_or_path === 'undefined') {
-    module_or_path = new URL(
-    /*webpackIgnore: true*/
-    /*@vite-ignore*/
-    'qcms_bg.wasm', import.meta.url);
-  }
   const imports = __wbg_get_imports();
   if (typeof module_or_path === 'string' || typeof Request === 'function' && module_or_path instanceof Request || typeof URL === 'function' && module_or_path instanceof URL) {
     module_or_path = fetch(module_or_path);
@@ -5338,12 +5332,6 @@ var OpenJPEG = (() => {
     };
     var _scriptName = import.meta.url;
     var scriptDirectory = "";
-    function locateFile(path) {
-      if (Module["locateFile"]) {
-        return Module["locateFile"](path, scriptDirectory);
-      }
-      return scriptDirectory + path;
-    }
     var readAsync, readBinary;
     if (ENVIRONMENT_IS_WEB || ENVIRONMENT_IS_WORKER) {
       try {
@@ -5430,58 +5418,6 @@ var OpenJPEG = (() => {
       throw e;
     }
     var wasmBinaryFile;
-    function findWasmBinary() {
-      if (Module["locateFile"]) {
-        return locateFile("openjpeg.wasm");
-      }
-      return new URL(
-      /*webpackIgnore: true*/
-      /*@vite-ignore*/
-      "openjpeg.wasm", import.meta.url).href;
-    }
-    function getBinarySync(file) {
-      if (file == wasmBinaryFile && wasmBinary) {
-        return new Uint8Array(wasmBinary);
-      }
-      if (readBinary) {
-        return readBinary(file);
-      }
-      throw "both async and sync fetching of the wasm failed";
-    }
-    async function getWasmBinary(binaryFile) {
-      if (!wasmBinary) {
-        try {
-          var response = await readAsync(binaryFile);
-          return new Uint8Array(response);
-        } catch {}
-      }
-      return getBinarySync(binaryFile);
-    }
-    async function instantiateArrayBuffer(binaryFile, imports) {
-      try {
-        var binary = await getWasmBinary(binaryFile);
-        var instance = await WebAssembly.instantiate(binary, imports);
-        return instance;
-      } catch (reason) {
-        err(`failed to asynchronously prepare wasm: ${reason}`);
-        abort(reason);
-      }
-    }
-    async function instantiateAsync(binary, binaryFile, imports) {
-      if (!binary && typeof WebAssembly.instantiateStreaming == "function") {
-        try {
-          var response = fetch(binaryFile, {
-            credentials: "same-origin"
-          });
-          var instantiationResult = await WebAssembly.instantiateStreaming(response, imports);
-          return instantiationResult;
-        } catch (reason) {
-          err(`wasm streaming compile failed: ${reason}`);
-          err("falling back to ArrayBuffer instantiation");
-        }
-      }
-      return instantiateArrayBuffer(binaryFile, imports);
-    }
     function getWasmImports() {
       return {
         a: wasmImports
@@ -5496,26 +5432,12 @@ var OpenJPEG = (() => {
         return wasmExports;
       }
       addRunDependency("wasm-instantiate");
-      function receiveInstantiationResult(result) {
-        return receiveInstance(result["instance"]);
-      }
       var info = getWasmImports();
-      if (Module["instantiateWasm"]) {
-        return new Promise((resolve, reject) => {
-          Module["instantiateWasm"](info, (mod, inst) => {
-            resolve(receiveInstance(mod, inst));
-          });
+      return new Promise((resolve, reject) => {
+        Module["instantiateWasm"](info, (mod, inst) => {
+          resolve(receiveInstance(mod, inst));
         });
-      }
-      wasmBinaryFile ??= findWasmBinary();
-      try {
-        var result = await instantiateAsync(wasmBinary, wasmBinaryFile, info);
-        var exports = receiveInstantiationResult(result);
-        return exports;
-      } catch (e) {
-        readyPromiseReject(e);
-        return Promise.reject(e);
-      }
+      });
     }
     class ExitStatus {
       name = "ExitStatus";
@@ -9395,9 +9317,6 @@ function parseJbig2Chunks(chunks) {
     processSegments(segments, visitor);
   }
   return visitor.buffer;
-}
-function parseJbig2(data) {
-  throw new Error("Not implemented: parseJbig2");
 }
 class SimpleSegmentVisitor {
   onPageInformation(info) {
@@ -57734,7 +57653,7 @@ class WorkerMessageHandler {
 ;// ./src/pdf.worker.js
 
 const pdfjsVersion = "5.2.0";
-const pdfjsBuild = "3f1ecc1";
+const pdfjsBuild = "23f269b";
 globalThis.pdfjsWorker = {
   WorkerMessageHandler: WorkerMessageHandler
 };

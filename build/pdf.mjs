@@ -11395,11 +11395,10 @@ function getDocument(src = {}) {
     })
   };
   if (!worker) {
-    const workerParams = {
+    worker = PDFWorker.create({
       verbosity,
       port: GlobalWorkerOptions.workerPort
-    };
-    worker = workerParams.port ? PDFWorker.fromPort(workerParams) : new PDFWorker(workerParams);
+    });
     task._worker = worker;
   }
   const docParams = {
@@ -12211,9 +12210,13 @@ class LoopbackPort {
   }
 }
 class PDFWorker {
+  #capability = Promise.withResolvers();
+  #messageHandler = null;
+  #port = null;
+  #webWorker = null;
   static #fakeWorkerId = 0;
   static #isWorkerDisabled = false;
-  static #workerPorts;
+  static #workerPorts = new WeakMap();
   static {
     if (isNodeJS) {
       this.#isWorkerDisabled = true;
@@ -12233,6 +12236,13 @@ class PDFWorker {
         type: "text/javascript"
       }));
     };
+    this.fromPort = params => {
+      deprecated("`PDFWorker.fromPort` - please use `PDFWorker.create` instead.");
+      if (!params?.port) {
+        throw new Error("PDFWorker.fromPort - invalid method signature.");
+      }
+      return this.create(params);
+    };
   }
   constructor({
     name = null,
@@ -12242,44 +12252,40 @@ class PDFWorker {
     this.name = name;
     this.destroyed = false;
     this.verbosity = verbosity;
-    this._readyCapability = Promise.withResolvers();
-    this._port = null;
-    this._webWorker = null;
-    this._messageHandler = null;
     if (port) {
-      if (PDFWorker.#workerPorts?.has(port)) {
+      if (PDFWorker.#workerPorts.has(port)) {
         throw new Error("Cannot use more than one PDFWorker per port.");
       }
-      (PDFWorker.#workerPorts ||= new WeakMap()).set(port, this);
-      this._initializeFromPort(port);
-      return;
+      PDFWorker.#workerPorts.set(port, this);
+      this.#initializeFromPort(port);
+    } else {
+      this.#initialize();
     }
-    this._initialize();
   }
   get promise() {
-    return this._readyCapability.promise;
+    return this.#capability.promise;
   }
   #resolve() {
-    this._readyCapability.resolve();
-    this._messageHandler.send("configure", {
+    this.#capability.resolve();
+    this.#messageHandler.send("configure", {
       verbosity: this.verbosity
     });
   }
   get port() {
-    return this._port;
+    return this.#port;
   }
   get messageHandler() {
-    return this._messageHandler;
+    return this.#messageHandler;
   }
-  _initializeFromPort(port) {
-    this._port = port;
-    this._messageHandler = new MessageHandler("main", "worker", port);
-    this._messageHandler.on("ready", function () {});
+  #initializeFromPort(port) {
+    this.#port = port;
+    this.#messageHandler = new MessageHandler("main", "worker", port);
+    this.#messageHandler.on("ready", () => {});
     this.#resolve();
   }
-  _initialize() {
+  #initialize() {
     if (PDFWorker.#isWorkerDisabled || PDFWorker.#mainThreadWorkerMessageHandler) {
-      this._setupFakeWorker();
+      this.#setupFakeWorker();
       return;
     }
     let {
@@ -12298,14 +12304,14 @@ class PDFWorker {
         messageHandler.destroy();
         worker.terminate();
         if (this.destroyed) {
-          this._readyCapability.reject(new Error("Worker was destroyed"));
+          this.#capability.reject(new Error("Worker was destroyed"));
         } else {
-          this._setupFakeWorker();
+          this.#setupFakeWorker();
         }
       };
       const ac = new AbortController();
       worker.addEventListener("error", () => {
-        if (!this._webWorker) {
+        if (!this.#webWorker) {
           terminateEarly();
         }
       }, {
@@ -12317,9 +12323,9 @@ class PDFWorker {
           terminateEarly();
           return;
         }
-        this._messageHandler = messageHandler;
-        this._port = worker;
-        this._webWorker = worker;
+        this.#messageHandler = messageHandler;
+        this.#port = worker;
+        this.#webWorker = worker;
         this.#resolve();
       });
       messageHandler.on("ready", data => {
@@ -12331,7 +12337,7 @@ class PDFWorker {
         try {
           sendTest();
         } catch {
-          this._setupFakeWorker();
+          this.#setupFakeWorker();
         }
       });
       const sendTest = () => {
@@ -12343,46 +12349,43 @@ class PDFWorker {
     } catch {
       info("The worker has been disabled.");
     }
-    this._setupFakeWorker();
+    this.#setupFakeWorker();
   }
-  _setupFakeWorker() {
+  #setupFakeWorker() {
     if (!PDFWorker.#isWorkerDisabled) {
       warn("Setting up fake worker.");
       PDFWorker.#isWorkerDisabled = true;
     }
     PDFWorker._setupFakeWorkerGlobal.then(WorkerMessageHandler => {
       if (this.destroyed) {
-        this._readyCapability.reject(new Error("Worker was destroyed"));
+        this.#capability.reject(new Error("Worker was destroyed"));
         return;
       }
       const port = new LoopbackPort();
-      this._port = port;
+      this.#port = port;
       const id = `fake${PDFWorker.#fakeWorkerId++}`;
       const workerHandler = new MessageHandler(id + "_worker", id, port);
       WorkerMessageHandler.setup(workerHandler, port);
-      this._messageHandler = new MessageHandler(id, id + "_worker", port);
+      this.#messageHandler = new MessageHandler(id, id + "_worker", port);
       this.#resolve();
     }).catch(reason => {
-      this._readyCapability.reject(new Error(`Setting up fake worker failed: "${reason.message}".`));
+      this.#capability.reject(new Error(`Setting up fake worker failed: "${reason.message}".`));
     });
   }
   destroy() {
     this.destroyed = true;
-    this._webWorker?.terminate();
-    this._webWorker = null;
-    PDFWorker.#workerPorts?.delete(this._port);
-    this._port = null;
-    this._messageHandler?.destroy();
-    this._messageHandler = null;
+    this.#webWorker?.terminate();
+    this.#webWorker = null;
+    PDFWorker.#workerPorts.delete(this.#port);
+    this.#port = null;
+    this.#messageHandler?.destroy();
+    this.#messageHandler = null;
   }
-  static fromPort(params) {
-    if (!params?.port) {
-      throw new Error("PDFWorker.fromPort - invalid method signature.");
-    }
-    const cachedPort = this.#workerPorts?.get(params.port);
+  static create(params) {
+    const cachedPort = this.#workerPorts.get(params?.port);
     if (cachedPort) {
       if (cachedPort._pendingDestroy) {
-        throw new Error("PDFWorker.fromPort - the worker is being destroyed.\n" + "Please remember to await `PDFDocumentLoadingTask.destroy()`-calls.");
+        throw new Error("PDFWorker.create - the worker is being destroyed.\n" + "Please remember to await `PDFDocumentLoadingTask.destroy()`-calls.");
       }
       return cachedPort;
     }
@@ -13167,7 +13170,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.2.0";
-const build = "3f1ecc1";
+const build = "23f269b";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -20305,14 +20308,8 @@ class SignatureExtractor {
       const isteps = Math.floor(steps);
       steps = steps === isteps ? isteps - 1 : isteps;
       for (let i = 0; i < steps; i++) {
-        newWidth = prevWidth;
-        newHeight = prevHeight;
-        if (newWidth > maxDim) {
-          newWidth = Math.ceil(newWidth / 2);
-        }
-        if (newHeight > maxDim) {
-          newHeight = Math.ceil(newHeight / 2);
-        }
+        newWidth = Math.ceil(prevWidth / 2);
+        newHeight = Math.ceil(prevHeight / 2);
         const offscreen = new OffscreenCanvas(newWidth, newHeight);
         const ctx = offscreen.getContext("2d");
         ctx.drawImage(bitmap, 0, 0, prevWidth, prevHeight, 0, 0, newWidth, newHeight);
@@ -22548,7 +22545,7 @@ class DrawLayer {
 
 
 const pdfjsVersion = "5.2.0";
-const pdfjsBuild = "3f1ecc1";
+const pdfjsBuild = "23f269b";
 {
   globalThis.pdfjsTestingUtils = {
     HighlightOutliner: HighlightOutliner
