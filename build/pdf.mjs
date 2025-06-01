@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.3.0
- * pdfjsBuild = 21ef454
+ * pdfjsBuild = d63aabd
  */
 
 ;// ./src/shared/util.js
@@ -2729,7 +2729,7 @@ class AnnotationEditorUIManager {
       return;
     }
     for (const editor of this.#allEditors.values()) {
-      if (editor.annotationElementId === editId) {
+      if (editor.annotationElementId === editId || editor.id === editId) {
         this.setSelected(editor);
         editor.enterInEditMode();
       } else {
@@ -2743,13 +2743,13 @@ class AnnotationEditorUIManager {
       this.currentLayer.addNewEditor();
     }
   }
-  updateToolbar(mode) {
-    if (mode === this.#mode) {
+  updateToolbar(options) {
+    if (options.mode === this.#mode) {
       return;
     }
     this._eventBus.dispatch("switchannotationeditormode", {
       source: this,
-      mode
+      ...options
     });
   }
   updateParams(type, value) {
@@ -3809,6 +3809,7 @@ class AnnotationEditor {
   #prevDragY = 0;
   #telemetryTimeouts = null;
   #touchManager = null;
+  isSelected = false;
   _isCopy = false;
   _editToolbar = null;
   _initialOptions = Object.create(null);
@@ -4551,7 +4552,7 @@ class AnnotationEditor {
     }
     const [tx, ty] = this.getInitialTranslation();
     this.translate(tx, ty);
-    bindEvents(this, div, ["keydown", "pointerdown"]);
+    bindEvents(this, div, ["keydown", "pointerdown", "dblclick"]);
     if (this.isResizable && this._uiManager._supportsPinchToZoom) {
       this.#touchManager ||= new TouchManager({
         container: div,
@@ -4628,9 +4629,6 @@ class AnnotationEditor {
       return;
     }
     this.#selectOnPointerEvent(event);
-  }
-  get isSelected() {
-    return this._uiManager.isSelected(this);
   }
   #selectOnPointerEvent(event) {
     const {
@@ -4777,10 +4775,20 @@ class AnnotationEditor {
     return false;
   }
   enableEditMode() {
+    if (this.isInEditMode()) {
+      return false;
+    }
+    this.parent.setEditingState(false);
     this.#isInEditMode = true;
+    return true;
   }
   disableEditMode() {
+    if (!this.isInEditMode()) {
+      return false;
+    }
+    this.parent.setEditingState(true);
     this.#isInEditMode = false;
+    return true;
   }
   isInEditMode() {
     return this.#isInEditMode;
@@ -4997,6 +5005,10 @@ class AnnotationEditor {
     this.div.focus();
   }
   select() {
+    if (this.isSelected && this._editToolbar) {
+      return;
+    }
+    this.isSelected = true;
     this.makeResizable();
     this.div?.classList.add("selectedEditor");
     if (!this._editToolbar) {
@@ -5011,6 +5023,10 @@ class AnnotationEditor {
     this.#altText?.toggleAltTextBadge(false);
   }
   unselect() {
+    if (!this.isSelected) {
+      return;
+    }
+    this.isSelected = false;
     this.#resizersDiv?.classList.add("hidden");
     this.div?.classList.remove("selectedEditor");
     if (this.div?.contains(document.activeElement)) {
@@ -5024,7 +5040,23 @@ class AnnotationEditor {
   updateParams(type, value) {}
   disableEditing() {}
   enableEditing() {}
-  enterInEditMode() {}
+  get canChangeContent() {
+    return false;
+  }
+  enterInEditMode() {
+    if (!this.canChangeContent) {
+      return;
+    }
+    this.enableEditMode();
+    this.div.focus();
+  }
+  dblclick(event) {
+    this.enterInEditMode();
+    this.parent.updateToolbar({
+      mode: this.constructor._editorType,
+      editId: this.id
+    });
+  }
   getElementForAltText() {
     return this.div;
   }
@@ -13165,7 +13197,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.3.0";
-const build = "21ef454";
+const build = "d63aabd";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -16261,12 +16293,9 @@ class FreeTextEditor extends AnnotationEditor {
     }
   }
   enableEditMode() {
-    if (this.isInEditMode()) {
-      return;
+    if (!super.enableEditMode()) {
+      return false;
     }
-    this.parent.setEditingState(false);
-    this.parent.updateToolbar(AnnotationEditorType.FREETEXT);
-    super.enableEditMode();
     this.overlayDiv.classList.remove("enabled");
     this.editorDiv.contentEditable = true;
     this._isDraggable = false;
@@ -16288,13 +16317,12 @@ class FreeTextEditor extends AnnotationEditor {
     this.editorDiv.addEventListener("paste", this.editorDivPaste.bind(this), {
       signal
     });
+    return true;
   }
   disableEditMode() {
-    if (!this.isInEditMode()) {
-      return;
+    if (!super.disableEditMode()) {
+      return false;
     }
-    this.parent.setEditingState(true);
-    super.disableEditMode();
     this.overlayDiv.classList.add("enabled");
     this.editorDiv.contentEditable = false;
     this.div.setAttribute("aria-activedescendant", this.#editorDivId);
@@ -16306,6 +16334,7 @@ class FreeTextEditor extends AnnotationEditor {
     });
     this.isEditing = false;
     this.parent.div.classList.add("freetextEditing");
+    return true;
   }
   focusin(event) {
     if (!this._focusEventsAllowed) {
@@ -16421,9 +16450,6 @@ class FreeTextEditor extends AnnotationEditor {
     this.enableEditMode();
     this.editorDiv.focus();
   }
-  dblclick(event) {
-    this.enterInEditMode();
-  }
   keydown(event) {
     if (event.target === this.div && event.key === "Enter") {
       this.enterInEditMode();
@@ -16449,6 +16475,9 @@ class FreeTextEditor extends AnnotationEditor {
   enableEditing() {
     this.editorDiv.setAttribute("role", "textbox");
     this.editorDiv.setAttribute("aria-multiline", true);
+  }
+  get canChangeContent() {
+    return true;
   }
   render() {
     if (this.div) {
@@ -16476,7 +16505,6 @@ class FreeTextEditor extends AnnotationEditor {
     this.overlayDiv = document.createElement("div");
     this.overlayDiv.classList.add("overlay", "enabled");
     this.div.append(this.overlayDiv);
-    bindEvents(this, this.div, ["dblclick", "keydown"]);
     if (this._isCopy || this.annotationElementId) {
       const [parentWidth, parentHeight] = this.parentDimensions;
       if (this.annotationElementId) {
@@ -21009,7 +21037,9 @@ class StampEditor extends AnnotationEditor {
     return SupportedImageMimeTypes.includes(mime);
   }
   static paste(item, parent) {
-    parent.pasteEditor(AnnotationEditorType.STAMP, {
+    parent.pasteEditor({
+      mode: AnnotationEditorType.STAMP
+    }, {
       bitmapFile: item.getAsFile()
     });
   }
@@ -21708,8 +21738,8 @@ class AnnotationEditorLayer {
   get isInvisible() {
     return this.isEmpty && this.#uiManager.getMode() === AnnotationEditorType.NONE;
   }
-  updateToolbar(mode) {
-    this.#uiManager.updateToolbar(mode);
+  updateToolbar(options) {
+    this.#uiManager.updateToolbar(options);
   }
   updateMode(mode = this.#uiManager.getMode()) {
     this.#cleanup();
@@ -22058,9 +22088,9 @@ class AnnotationEditorLayer {
   canCreateNewEmptyEditor() {
     return this.#currentEditorType?.canCreateNewEmptyEditor();
   }
-  async pasteEditor(mode, params) {
-    this.#uiManager.updateToolbar(mode);
-    await this.#uiManager.updateMode(mode);
+  async pasteEditor(options, params) {
+    this.updateToolbar(options);
+    await this.#uiManager.updateMode(options.mode);
     const {
       offsetX,
       offsetY
