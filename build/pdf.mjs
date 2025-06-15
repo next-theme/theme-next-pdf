@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.3.0
- * pdfjsBuild = 18d7aaf
+ * pdfjsBuild = 250cc7d
  */
 
 ;// ./src/shared/util.js
@@ -13197,7 +13197,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.3.0";
-const build = "18d7aaf";
+const build = "250cc7d";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
