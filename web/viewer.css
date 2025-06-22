@@ -3011,6 +3011,14 @@
     pointer-events:none !important;
   }
 
+.annotationEditorLayer.getElements{
+    pointer-events:auto !important;
+  }
+
+.annotationEditorLayer.getElements  > div{
+      pointer-events:auto !important;
+    }
+
 .annotationEditorLayer.waiting{
   content:"";
   cursor:wait;
@@ -3449,6 +3457,7 @@
   white-space:nowrap;
   font:10px sans-serif;
   line-height:var(--freetext-line-height);
+  text-align:start;
   -webkit-user-select:none;
      -moz-user-select:none;
           user-select:none;

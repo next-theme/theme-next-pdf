@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.3.0
- * pdfjsBuild = 250cc7d
+ * pdfjsBuild = ac399e7
  */
 
 ;// ./src/shared/util.js
@@ -1077,19 +1077,71 @@ function getPdfFilenameFromUrl(url, defaultFilename = "document.pdf") {
     warn('getPdfFilenameFromUrl: ignore "data:"-URL for performance reasons.');
     return defaultFilename;
   }
-  const reURI = /^(?:(?:[^:]+:)?\/\/[^/]+)?([^?#]*)(\?[^#]*)?(#.*)?$/;
-  const reFilename = /[^/?#=]+\.pdf\b(?!.*\.pdf\b)/i;
-  const splitURI = reURI.exec(url);
-  let suggestedFilename = reFilename.exec(splitURI[1]) || reFilename.exec(splitURI[2]) || reFilename.exec(splitURI[3]);
-  if (suggestedFilename) {
-    suggestedFilename = suggestedFilename[0];
-    if (suggestedFilename.includes("%")) {
+  const getURL = urlString => {
+    try {
+      return new URL(urlString);
+    } catch {
       try {
-        suggestedFilename = reFilename.exec(decodeURIComponent(suggestedFilename))[0];
-      } catch {}
+        return new URL(decodeURIComponent(urlString));
+      } catch {
+        try {
+          return new URL(urlString, "https://foo.bar");
+        } catch {
+          try {
+            return new URL(decodeURIComponent(urlString), "https://foo.bar");
+          } catch {
+            return null;
+          }
+        }
+      }
+    }
+  };
+  const newURL = getURL(url);
+  if (!newURL) {
+    return defaultFilename;
+  }
+  const decode = name => {
+    try {
+      let decoded = decodeURIComponent(name);
+      if (decoded.includes("/")) {
+        decoded = decoded.split("/").at(-1);
+        if (decoded.test(/^\.pdf$/i)) {
+          return decoded;
+        }
+        return name;
+      }
+      return decoded;
+    } catch {
+      return name;
+    }
+  };
+  const pdfRegex = /\.pdf$/i;
+  const filename = newURL.pathname.split("/").at(-1);
+  if (pdfRegex.test(filename)) {
+    return decode(filename);
+  }
+  if (newURL.searchParams.size > 0) {
+    const values = Array.from(newURL.searchParams.values()).reverse();
+    for (const value of values) {
+      if (pdfRegex.test(value)) {
+        return decode(value);
+      }
+    }
+    const keys = Array.from(newURL.searchParams.keys()).reverse();
+    for (const key of keys) {
+      if (pdfRegex.test(key)) {
+        return decode(key);
+      }
     }
   }
-  return suggestedFilename || defaultFilename;
+  if (newURL.hash) {
+    const reFilename = /[^/?#=]+\.pdf\b(?!.*\.pdf\b)/i;
+    const hashFilename = reFilename.exec(newURL.hash);
+    if (hashFilename) {
+      return decode(hashFilename[0]);
+    }
+  }
+  return defaultFilename;
 }
 class StatTimer {
   started = Object.create(null);
@@ -1360,7 +1412,6 @@ class EditorToolbar {
       style.insetInlineEnd = `${100 * x}%`;
       style.top = `calc(${100 * position[1]}% + var(--editor-toolbar-vert-offset))`;
     }
-    this.#addDeleteButton();
     return editToolbar;
   }
   get div() {
@@ -1399,7 +1450,7 @@ class EditorToolbar {
     this.#toolbar.classList.remove("hidden");
     this.#altText?.shown();
   }
-  #addDeleteButton() {
+  addDeleteButton() {
     const {
       editorType,
       _uiManager
@@ -1424,19 +1475,35 @@ class EditorToolbar {
   async addAltText(altText) {
     const button = await altText.render();
     this.#addListenersToElement(button);
-    this.#buttons.prepend(button, this.#divider);
+    this.#buttons.append(button, this.#divider);
     this.#altText = altText;
   }
   addColorPicker(colorPicker) {
     this.#colorPicker = colorPicker;
     const button = colorPicker.renderButton();
     this.#addListenersToElement(button);
-    this.#buttons.prepend(button, this.#divider);
+    this.#buttons.append(button, this.#divider);
   }
   async addEditSignatureButton(signatureManager) {
     const button = this.#signatureDescriptionButton = await signatureManager.renderEditButton(this.#editor);
     this.#addListenersToElement(button);
-    this.#buttons.prepend(button, this.#divider);
+    this.#buttons.append(button, this.#divider);
+  }
+  async addButton(name, tool) {
+    switch (name) {
+      case "colorPicker":
+        this.addColorPicker(tool);
+        break;
+      case "altText":
+        await this.addAltText(tool);
+        break;
+      case "editSignature":
+        await this.addEditSignatureButton(tool);
+        break;
+      case "delete":
+        this.addDeleteButton();
+        break;
+    }
   }
   updateEditSignatureButton(description) {
     if (this.#signatureDescriptionButton) {
@@ -4464,15 +4531,24 @@ class AnnotationEditor {
   altTextFinish() {
     this.#altText?.finish();
   }
+  get toolbarButtons() {
+    return null;
+  }
   async addEditToolbar() {
     if (this._editToolbar || this.#isInEditMode) {
       return this._editToolbar;
     }
     this._editToolbar = new EditorToolbar(this);
     this.div.append(this._editToolbar.render());
-    if (this.#altText) {
-      await this._editToolbar.addAltText(this.#altText);
+    const {
+      toolbarButtons
+    } = this;
+    if (toolbarButtons) {
+      for (const [name, tool] of toolbarButtons) {
+        await this._editToolbar.addButton(name, tool);
+      }
     }
+    this._editToolbar.addButton("delete");
     return this._editToolbar;
   }
   removeEditToolbar() {
@@ -4494,17 +4570,16 @@ class AnnotationEditor {
   getClientDimensions() {
     return this.div.getBoundingClientRect();
   }
-  async addAltTextButton() {
-    if (this.#altText) {
-      return;
+  createAltText() {
+    if (!this.#altText) {
+      AltText.initialize(AnnotationEditor._l10n);
+      this.#altText = new AltText(this);
+      if (this.#accessibilityData) {
+        this.#altText.data = this.#accessibilityData;
+        this.#accessibilityData = null;
+      }
     }
-    AltText.initialize(AnnotationEditor._l10n);
-    this.#altText = new AltText(this);
-    if (this.#accessibilityData) {
-      this.#altText.data = this.#accessibilityData;
-      this.#accessibilityData = null;
-    }
-    await this.addEditToolbar();
+    return this.#altText;
   }
   get altTextData() {
     return this.#altText?.data;
@@ -13197,7 +13272,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.3.0";
-const build = "250cc7d";
+const build = "ac399e7";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -13257,6 +13332,8 @@ class ColorConverters {
     return ["CMYK", c, m, y, k];
   }
 }
+const DateFormats = (/* unused pure expression or super */ null && (["m/d", "m/d/yy", "mm/dd/yy", "mm/yy", "d-mmm", "d-mmm-yy", "dd-mmm-yy", "yy-mm-dd", "mmm-yy", "mmmm-yy", "mmm d, yyyy", "mmmm d, yyyy", "m/d/yy h:MM tt", "m/d/yy HH:MM"]));
+const TimeFormats = (/* unused pure expression or super */ null && (["HH:MM", "h:MM tt", "HH:MM:ss", "h:MM:ss tt"]));
 
 ;// ./src/display/svg_factory.js
 
@@ -13510,7 +13587,6 @@ class XfaLayer {
 
 
 
-const DEFAULT_TAB_INDEX = 1000;
 const annotation_layer_DEFAULT_FONT_SIZE = 9;
 const GetElementsByNameSet = new WeakSet();
 class AnnotationElementFactory {
@@ -13604,11 +13680,10 @@ class AnnotationElement {
     }
   }
   static _hasPopupData({
-    titleObj,
     contentsObj,
     richText
   }) {
-    return !!(titleObj?.str || contentsObj?.str || richText?.str);
+    return !!(contentsObj?.str || richText?.str);
   }
   get _isEditable() {
     return this.data.isEditable;
@@ -13680,7 +13755,7 @@ class AnnotationElement {
     const container = document.createElement("section");
     container.setAttribute("data-annotation-id", data.id);
     if (!(this instanceof WidgetAnnotationElement)) {
-      container.tabIndex = DEFAULT_TAB_INDEX;
+      container.tabIndex = 0;
     }
     const {
       style
@@ -14502,7 +14577,11 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
       element.setAttribute("data-element-id", id);
       element.disabled = this.data.readOnly;
       element.name = this.data.fieldName;
-      element.tabIndex = DEFAULT_TAB_INDEX;
+      element.tabIndex = 0;
+      const format = this.data.dateFormat || this.data.timeFormat;
+      if (format) {
+        element.title = format;
+      }
       this._setRequired(element, this.data.required);
       if (maxLen) {
         element.maxLength = maxLen;
@@ -14792,7 +14871,7 @@ class CheckboxWidgetAnnotationElement extends WidgetAnnotationElement {
       element.setAttribute("checked", true);
     }
     element.setAttribute("exportValue", data.exportValue);
-    element.tabIndex = DEFAULT_TAB_INDEX;
+    element.tabIndex = 0;
     element.addEventListener("change", event => {
       const {
         name,
@@ -14872,7 +14951,7 @@ class RadioButtonWidgetAnnotationElement extends WidgetAnnotationElement {
     if (value) {
       element.setAttribute("checked", true);
     }
-    element.tabIndex = DEFAULT_TAB_INDEX;
+    element.tabIndex = 0;
     element.addEventListener("change", event => {
       const {
         name,
@@ -14956,7 +15035,7 @@ class ChoiceWidgetAnnotationElement extends WidgetAnnotationElement {
     selectElement.disabled = this.data.readOnly;
     this._setRequired(selectElement, this.data.required);
     selectElement.name = this.data.fieldName;
-    selectElement.tabIndex = DEFAULT_TAB_INDEX;
+    selectElement.tabIndex = 0;
     let addAnEmptyEntry = this.data.combo && this.data.options.length > 0;
     if (!this.data.combo) {
       selectElement.size = this.data.options.length;
@@ -15172,7 +15251,11 @@ class PopupAnnotationElement extends AnnotationElement {
     this.popup = null;
   }
   render() {
-    this.container.classList.add("popupAnnotation");
+    const {
+      container
+    } = this;
+    container.classList.add("popupAnnotation");
+    container.role = "comment";
     const popup = this.popup = new PopupElement({
       container: this.container,
       color: this.data.color,
@@ -15275,12 +15358,13 @@ class PopupElement {
     } = this.#titleObj);
     popup.append(header);
     if (this.#dateObj) {
-      const modificationDate = document.createElement("span");
+      const modificationDate = document.createElement("time");
       modificationDate.classList.add("popupDate");
       modificationDate.setAttribute("data-l10n-id", "pdfjs-annotation-date-time-string");
       modificationDate.setAttribute("data-l10n-args", JSON.stringify({
         dateObj: this.#dateObj.valueOf()
       }));
+      modificationDate.dateTime = this.#dateObj.toISOString();
       header.append(modificationDate);
     }
     const html = this.#html;
@@ -15991,7 +16075,7 @@ class AnnotationLayer {
   hasEditableAnnotations() {
     return this.#editableAnnotations.size > 0;
   }
-  async #appendElement(element, id) {
+  async #appendElement(element, id, popupElements) {
     const contentElement = element.firstChild || element;
     const annotationId = contentElement.id = `${AnnotationPrefix}${id}`;
     const ariaAttributes = await this.#structTreeLayer?.getAriaAttributes(annotationId);
@@ -16000,8 +16084,12 @@ class AnnotationLayer {
         contentElement.setAttribute(key, value);
       }
     }
-    this.div.append(element);
-    this.#accessibilityManager?.moveElementInDOM(this.div, element, contentElement, false);
+    if (popupElements) {
+      popupElements.at(-1).container.after(element);
+    } else {
+      this.div.append(element);
+      this.#accessibilityManager?.moveElementInDOM(this.div, element, contentElement, false);
+    }
   }
   async render(params) {
     const {
@@ -16058,7 +16146,7 @@ class AnnotationLayer {
       if (data.hidden) {
         rendered.style.visibility = "hidden";
       }
-      await this.#appendElement(rendered, data.id);
+      await this.#appendElement(rendered, data.id, elementParams.elements);
       if (element._isEditable) {
         this.#editableAnnotations.set(element.data.id, element);
         this._annotationEditorUIManager?.renderAnnotationElement(element);
@@ -16082,7 +16170,7 @@ class AnnotationLayer {
         continue;
       }
       const rendered = element.render();
-      await this.#appendElement(rendered, data.id);
+      await this.#appendElement(rendered, data.id, null);
     }
   }
   update({
@@ -17919,18 +18007,14 @@ class HighlightEditor extends AnnotationEditor {
       thickness
     }, true);
   }
-  async addEditToolbar() {
-    const toolbar = await super.addEditToolbar();
-    if (!toolbar) {
-      return null;
-    }
+  get toolbarButtons() {
     if (this._uiManager.highlightColors) {
-      this.#colorPicker = new ColorPicker({
+      const colorPicker = this.#colorPicker = new ColorPicker({
         editor: this
       });
-      toolbar.addColorPicker(this.#colorPicker);
+      return [["colorPicker", colorPicker]];
     }
-    return toolbar;
+    return super.toolbarButtons;
   }
   disableEditing() {
     super.disableEditing();
@@ -20828,16 +20912,11 @@ class SignatureEditor extends DrawingEditor {
       outline: outlineData.outline
     };
   }
-  async addEditToolbar() {
-    const toolbar = await super.addEditToolbar();
-    if (!toolbar) {
-      return null;
+  get toolbarButtons() {
+    if (this._uiManager.signatureManager) {
+      return [["editSignature", this._uiManager.signatureManager]];
     }
-    if (this._uiManager.signatureManager && this.#description !== null) {
-      await toolbar.addEditSignatureButton(this._uiManager.signatureManager, this.#signatureUUID, this.#description);
-      toolbar.show();
-    }
-    return toolbar;
+    return super.toolbarButtons;
   }
   addSignature(data, heightInPage, description, uuid) {
     const {
@@ -20848,7 +20927,7 @@ class SignatureEditor extends DrawingEditor {
       outline
     } = this.#signatureData = data;
     this.#isExtracted = outline instanceof ContourDrawOutline;
-    this.#description = description;
+    this.description = description;
     this.div.setAttribute("data-l10n-args", JSON.stringify({
       description
     }));
@@ -21084,8 +21163,10 @@ class StampEditor extends AnnotationEditor {
       return;
     }
     if (this._uiManager.useNewAltTextWhenAddingImage && this._uiManager.useNewAltTextFlow && this.#bitmap) {
-      this._editToolbar.hide();
-      this._uiManager.editAltText(this, true);
+      this.addEditToolbar().then(() => {
+        this._editToolbar.hide();
+        this._uiManager.editAltText(this, true);
+      });
       return;
     }
     if (!this._uiManager.useNewAltTextWhenAddingImage && this._uiManager.useNewAltTextFlow && this.#bitmap) {
@@ -21243,6 +21324,9 @@ class StampEditor extends AnnotationEditor {
   isEmpty() {
     return !(this.#bitmapPromise || this.#bitmap || this.#bitmapUrl || this.#bitmapFile || this.#bitmapId || this.#missingCanvas);
   }
+  get toolbarButtons() {
+    return [["altText", this.createAltText()]];
+  }
   get isResizable() {
     return true;
   }
@@ -21257,7 +21341,7 @@ class StampEditor extends AnnotationEditor {
     }
     super.render();
     this.div.hidden = true;
-    this.addAltTextButton();
+    this.createAltText();
     if (!this.#missingCanvas) {
       if (this.#bitmap) {
         this.#createCanvas();
@@ -21698,6 +21782,8 @@ class AnnotationEditorLayer {
   #focusedElement = null;
   #textLayer = null;
   #textSelectionAC = null;
+  #textLayerDblClickAC = null;
+  #lastPointerDownTimestamp = -1;
   #uiManager;
   static _initialized = false;
   static #editorTypes = new Map([FreeTextEditor, InkEditor, StampEditor, HighlightEditor, SignatureEditor].map(type => [type._editorType, type]));
@@ -21799,6 +21885,8 @@ class AnnotationEditorLayer {
     this.#isEnabling = true;
     this.div.tabIndex = 0;
     this.togglePointerEvents(true);
+    this.#textLayerDblClickAC?.abort();
+    this.#textLayerDblClickAC = null;
     const annotationElementIds = new Set();
     for (const editor of this.#editors.values()) {
       editor.enableEditing();
@@ -21834,6 +21922,53 @@ class AnnotationEditorLayer {
     this.#isDisabling = true;
     this.div.tabIndex = -1;
     this.togglePointerEvents(false);
+    if (this.#textLayer && !this.#textLayerDblClickAC) {
+      this.#textLayerDblClickAC = new AbortController();
+      const signal = this.#uiManager.combinedSignal(this.#textLayerDblClickAC);
+      this.#textLayer.div.addEventListener("pointerdown", e => {
+        const DBL_CLICK_THRESHOLD = 500;
+        const {
+          clientX,
+          clientY,
+          timeStamp
+        } = e;
+        const lastPointerDownTimestamp = this.#lastPointerDownTimestamp;
+        if (timeStamp - lastPointerDownTimestamp > DBL_CLICK_THRESHOLD) {
+          this.#lastPointerDownTimestamp = timeStamp;
+          return;
+        }
+        this.#lastPointerDownTimestamp = -1;
+        const {
+          classList
+        } = this.div;
+        classList.toggle("getElements", true);
+        const elements = document.elementsFromPoint(clientX, clientY);
+        classList.toggle("getElements", false);
+        if (!this.div.contains(elements[0])) {
+          return;
+        }
+        let id;
+        const regex = new RegExp(`^${AnnotationEditorPrefix}[0-9]+$`);
+        for (const element of elements) {
+          if (regex.test(element.id)) {
+            id = element.id;
+            break;
+          }
+        }
+        if (!id) {
+          return;
+        }
+        const editor = this.#editors.get(id);
+        if (editor?.annotationElementId === null) {
+          e.stopPropagation();
+          e.preventDefault();
+          editor.dblclick();
+        }
+      }, {
+        signal,
+        capture: true
+      });
+    }
     const changedAnnotations = new Map();
     const resetAnnotations = new Map();
     for (const editor of this.#editors.values()) {
