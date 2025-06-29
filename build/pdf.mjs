@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.3.0
- * pdfjsBuild = ac399e7
+ * pdfjsBuild = 85b67f1
  */
 
 ;// ./src/shared/util.js
@@ -2187,7 +2187,11 @@ class AnnotationEditorUIManager {
     return shadow(this, "direction", getComputedStyle(this.#container).direction);
   }
   get highlightColors() {
-    return shadow(this, "highlightColors", this.#highlightColors ? new Map(this.#highlightColors.split(",").map(pair => pair.split("=").map(x => x.trim()))) : null);
+    return shadow(this, "highlightColors", this.#highlightColors ? new Map(this.#highlightColors.split(",").map(pair => {
+      pair = pair.split("=").map(x => x.trim());
+      pair[1] = pair[1].toUpperCase();
+      return pair;
+    })) : null);
   }
   get highlightColorNames() {
     return shadow(this, "highlightColorNames", this.highlightColors ? new Map(Array.from(this.highlightColors, e => e.reverse())) : null);
@@ -13272,7 +13276,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.3.0";
-const build = "ac399e7";
+const build = "85b67f1";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -14004,6 +14008,7 @@ class AnnotationElement {
     svg.classList.add("quadrilateralsContainer");
     svg.setAttribute("width", 0);
     svg.setAttribute("height", 0);
+    svg.role = "none";
     const defs = svgFactory.createElement("defs");
     svg.append(defs);
     const clipPath = svgFactory.createElement("clipPath");
@@ -15915,11 +15920,23 @@ class HighlightAnnotationElement extends AnnotationElement {
     this.annotationEditorType = AnnotationEditorType.HIGHLIGHT;
   }
   render() {
-    if (!this.data.popupRef && this.hasPopupData) {
+    const {
+      data: {
+        overlaidText,
+        popupRef
+      }
+    } = this;
+    if (!popupRef && this.hasPopupData) {
       this._createPopup();
     }
     this.container.classList.add("highlightAnnotation");
     this._editOnDoubleClick();
+    if (overlaidText) {
+      const mark = document.createElement("mark");
+      mark.classList.add("overlaidText");
+      mark.textContent = overlaidText;
+      this.container.append(mark);
+    }
     return this.container;
   }
 }
@@ -15932,10 +15949,22 @@ class UnderlineAnnotationElement extends AnnotationElement {
     });
   }
   render() {
-    if (!this.data.popupRef && this.hasPopupData) {
+    const {
+      data: {
+        overlaidText,
+        popupRef
+      }
+    } = this;
+    if (!popupRef && this.hasPopupData) {
       this._createPopup();
     }
     this.container.classList.add("underlineAnnotation");
+    if (overlaidText) {
+      const underline = document.createElement("u");
+      underline.classList.add("overlaidText");
+      underline.textContent = overlaidText;
+      this.container.append(underline);
+    }
     return this.container;
   }
 }
@@ -15948,10 +15977,22 @@ class SquigglyAnnotationElement extends AnnotationElement {
     });
   }
   render() {
-    if (!this.data.popupRef && this.hasPopupData) {
+    const {
+      data: {
+        overlaidText,
+        popupRef
+      }
+    } = this;
+    if (!popupRef && this.hasPopupData) {
       this._createPopup();
     }
     this.container.classList.add("squigglyAnnotation");
+    if (overlaidText) {
+      const underline = document.createElement("u");
+      underline.classList.add("overlaidText");
+      underline.textContent = overlaidText;
+      this.container.append(underline);
+    }
     return this.container;
   }
 }
@@ -15964,10 +16005,22 @@ class StrikeOutAnnotationElement extends AnnotationElement {
     });
   }
   render() {
-    if (!this.data.popupRef && this.hasPopupData) {
+    const {
+      data: {
+        overlaidText,
+        popupRef
+      }
+    } = this;
+    if (!popupRef && this.hasPopupData) {
       this._createPopup();
     }
     this.container.classList.add("strikeoutAnnotation");
+    if (overlaidText) {
+      const strikeout = document.createElement("s");
+      strikeout.classList.add("overlaidText");
+      strikeout.textContent = overlaidText;
+      this.container.append(strikeout);
+    }
     return this.container;
   }
 }
@@ -17545,7 +17598,7 @@ class ColorPicker {
     }
     this.#uiManager = editor?._uiManager || uiManager;
     this.#eventBus = this.#uiManager._eventBus;
-    this.#defaultColor = editor?.color || this.#uiManager?.highlightColors.values().next().value || "#FFFF98";
+    this.#defaultColor = editor?.color?.toUpperCase() || this.#uiManager?.highlightColors.values().next().value || "#FFFF98";
     ColorPicker.#l10nColor ||= Object.freeze({
       blue: "pdfjs-editor-colorpicker-blue",
       green: "pdfjs-editor-colorpicker-green",
@@ -17559,7 +17612,10 @@ class ColorPicker {
     button.className = "colorPicker";
     button.tabIndex = "0";
     button.setAttribute("data-l10n-id", "pdfjs-editor-colorpicker-button");
-    button.setAttribute("aria-haspopup", true);
+    button.ariaHasPopup = "true";
+    if (this.#editor) {
+      button.ariaControls = `${this.#editor.id}_colorpicker_dropdown`;
+    }
     const signal = this.#uiManager._signal;
     button.addEventListener("click", this.#openDropdown.bind(this), {
       signal
@@ -17569,15 +17625,15 @@ class ColorPicker {
     });
     const swatch = this.#buttonSwatch = document.createElement("span");
     swatch.className = "swatch";
-    swatch.setAttribute("aria-hidden", true);
+    swatch.ariaHidden = "true";
     swatch.style.backgroundColor = this.#defaultColor;
     button.append(swatch);
     return button;
   }
   renderMainDropdown() {
     const dropdown = this.#dropdown = this.#getDropdownRoot();
-    dropdown.setAttribute("aria-orientation", "horizontal");
-    dropdown.setAttribute("aria-labelledby", "highlightColorPickerLabel");
+    dropdown.ariaOrientation = "horizontal";
+    dropdown.ariaLabelledBy = "highlightColorPickerLabel";
     return dropdown;
   }
   #getDropdownRoot() {
@@ -17588,9 +17644,12 @@ class ColorPicker {
     });
     div.className = "dropdown";
     div.role = "listbox";
-    div.setAttribute("aria-multiselectable", false);
-    div.setAttribute("aria-orientation", "vertical");
+    div.ariaMultiSelectable = "false";
+    div.ariaOrientation = "vertical";
     div.setAttribute("data-l10n-id", "pdfjs-editor-colorpicker-dropdown");
+    if (this.#editor) {
+      div.id = `${this.#editor.id}_colorpicker_dropdown`;
+    }
     for (const [name, color] of this.#uiManager.highlightColors) {
       const button = document.createElement("button");
       button.tabIndex = "0";
@@ -17602,7 +17661,7 @@ class ColorPicker {
       button.append(swatch);
       swatch.className = "swatch";
       swatch.style.backgroundColor = color;
-      button.setAttribute("aria-selected", color === this.#defaultColor);
+      button.ariaSelected = color === this.#defaultColor;
       button.addEventListener("click", this.#colorSelect.bind(this, color), {
         signal
       });
@@ -17684,6 +17743,7 @@ class ColorPicker {
         signal: this.#uiManager.combinedSignal(this.#openDropdownAC)
       });
     }
+    this.#button.ariaExpanded = "true";
     if (this.#dropdown) {
       this.#dropdown.classList.remove("hidden");
       return;
@@ -17699,6 +17759,7 @@ class ColorPicker {
   }
   hideDropdown() {
     this.#dropdown?.classList.add("hidden");
+    this.#button.ariaExpanded = "false";
     this.#openDropdownAC?.abort();
     this.#openDropdownAC = null;
   }
@@ -17728,7 +17789,7 @@ class ColorPicker {
     }
     const i = this.#uiManager.highlightColors.values();
     for (const child of this.#dropdown.children) {
-      child.setAttribute("aria-selected", i.next().value === color);
+      child.ariaSelected = i.next().value === color.toUpperCase();
     }
   }
   destroy() {

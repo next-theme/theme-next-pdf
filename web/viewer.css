@@ -1132,6 +1132,16 @@
         display:none;
       }
 
+:is(.annotationLayer section) .overlaidText{
+      position:absolute;
+      top:0;
+      left:0;
+      width:0;
+      height:0;
+      display:inline-block;
+      overflow:hidden;
+    }
+
 .textLayer.selecting ~ .annotationLayer section{
     pointer-events:none;
   }

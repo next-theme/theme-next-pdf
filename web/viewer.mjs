@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.3.0
- * pdfjsBuild = ac399e7
+ * pdfjsBuild = 85b67f1
  */
 
 ;// ./web/pdfjs.js
@@ -15780,6 +15780,12 @@ const PDFViewerApplication = {
     } = await pdfDocument.getMetadata();
     if (pdfDocument !== this.pdfDocument) {
       return;
+    }
+    if (info.collectedSignatureCertificates) {
+      this.externalServices.reportTelemetry({
+        type: "signatureCertificates",
+        data: info.collectedSignatureCertificates
+      });
     }
     this.documentInfo = info;
     this.metadata = metadata;
