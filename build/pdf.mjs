@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.3.0
- * pdfjsBuild = 85b67f1
+ * pdfjsBuild = 2d0ba7d
  */
 
 ;// ./src/shared/util.js
@@ -2031,6 +2031,7 @@ class AnnotationEditorUIManager {
   #translationTimeoutId = null;
   #container = null;
   #viewer = null;
+  #viewerAlert = null;
   #updateModeCapability = null;
   static TRANSLATE_SMALL = 1;
   static TRANSLATE_BIG = 10;
@@ -2092,10 +2093,11 @@ class AnnotationEditorUIManager {
       checker: arrowChecker
     }]]));
   }
-  constructor(container, viewer, altTextManager, signatureManager, eventBus, pdfDocument, pageColors, highlightColors, enableHighlightFloatingButton, enableUpdatedAddImage, enableNewAltTextWhenAddingImage, mlManager, editorUndoBar, supportsPinchToZoom) {
+  constructor(container, viewer, viewerAlert, altTextManager, signatureManager, eventBus, pdfDocument, pageColors, highlightColors, enableHighlightFloatingButton, enableUpdatedAddImage, enableNewAltTextWhenAddingImage, mlManager, editorUndoBar, supportsPinchToZoom) {
     const signal = this._signal = this.#abortController.signal;
     this.#container = container;
     this.#viewer = viewer;
+    this.#viewerAlert = viewerAlert;
     this.#altTextManager = altTextManager;
     this.#signatureManager = signatureManager;
     this._eventBus = eventBus;
@@ -2374,6 +2376,18 @@ class AnnotationEditorUIManager {
   addToAnnotationStorage(editor) {
     if (!editor.isEmpty() && this.#annotationStorage && !this.#annotationStorage.has(editor.id)) {
       this.#annotationStorage.setValue(editor.id, editor);
+    }
+  }
+  a11yAlert(messageId, args = null) {
+    const viewerAlert = this.#viewerAlert;
+    if (!viewerAlert) {
+      return;
+    }
+    viewerAlert.setAttribute("data-l10n-id", messageId);
+    if (args) {
+      viewerAlert.setAttribute("data-l10n-args", JSON.stringify(args));
+    } else {
+      viewerAlert.removeAttribute("data-l10n-args");
     }
   }
   #selectionChange() {
@@ -3930,6 +3944,7 @@ class AnnotationEditor {
     this._willKeepAspectRatio = false;
     this._initialOptions.isCentered = parameters.isCentered;
     this._structTreeParentId = null;
+    this.annotationElementId = parameters.annotationElementId || null;
     const {
       rotation,
       rawDims: {
@@ -4086,6 +4101,9 @@ class AnnotationEditor {
     }
   }
   commit() {
+    if (!this.isInEditMode()) {
+      return;
+    }
     this.addToAnnotationStorage();
   }
   addToAnnotationStorage() {
@@ -4924,7 +4942,8 @@ class AnnotationEditor {
     const editor = new this.prototype.constructor({
       parent,
       id: parent.getNextId(),
-      uiManager
+      uiManager,
+      annotationElementId: data.annotationElementId
     });
     editor.rotation = data.rotation;
     editor.#accessibilityData = data.accessibilityData;
@@ -13276,7 +13295,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.3.0";
-const build = "85b67f1";
+const build = "2d0ba7d";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -14054,7 +14073,8 @@ class AnnotationElement {
         parentRect: data.rect,
         borderStyle: 0,
         id: `popup_${data.id}`,
-        rotation: data.rotation
+        rotation: data.rotation,
+        noRotate: true
       },
       parent: this.parent,
       elements: [this]
@@ -16349,6 +16369,9 @@ class FreeTextEditor extends AnnotationEditor {
     });
     this.#color = params.color || FreeTextEditor._defaultColor || AnnotationEditor._defaultLineColor;
     this.#fontSize = params.fontSize || FreeTextEditor._defaultFontSize;
+    if (!this.annotationElementId) {
+      this._uiManager.a11yAlert("pdfjs-editor-freetext-added-alert");
+    }
   }
   static initialize(l10n, uiManager) {
     AnnotationEditor.initialize(l10n, uiManager);
@@ -16824,6 +16847,7 @@ class FreeTextEditor extends AnnotationEditor {
         pageIndex: pageNumber - 1,
         rect: rect.slice(0),
         rotation,
+        annotationElementId: id,
         id,
         deleted: false,
         popupRef
@@ -16833,7 +16857,6 @@ class FreeTextEditor extends AnnotationEditor {
     editor.#fontSize = data.fontSize;
     editor.#color = Util.makeHexColor(...data.color);
     editor.#content = FreeTextEditor.#deserializeContent(data.value);
-    editor.annotationElementId = data.id || null;
     editor._initialData = initialData;
     return editor;
   }
@@ -17874,6 +17897,9 @@ class HighlightEditor extends AnnotationEditor {
       this.#addToDrawLayer();
       this.rotate(this.rotation);
     }
+    if (!this.annotationElementId) {
+      this._uiManager.a11yAlert("pdfjs-editor-highlight-added-alert");
+    }
   }
   get telemetryInitialData() {
     return {
@@ -18483,6 +18509,7 @@ class HighlightEditor extends AnnotationEditor {
         pageIndex: pageNumber - 1,
         rect: rect.slice(0),
         rotation,
+        annotationElementId: id,
         id,
         deleted: false,
         popupRef
@@ -18515,6 +18542,7 @@ class HighlightEditor extends AnnotationEditor {
         pageIndex: pageNumber - 1,
         rect: rect.slice(0),
         rotation,
+        annotationElementId: id,
         id,
         deleted: false,
         popupRef
@@ -18532,7 +18560,6 @@ class HighlightEditor extends AnnotationEditor {
     if (inkLists) {
       editor.#thickness = data.thickness;
     }
-    editor.annotationElementId = data.id || null;
     editor._initialData = initialData;
     const [pageWidth, pageHeight] = editor.pageDimensions;
     const [pageX, pageY] = editor.pageTranslation;
@@ -18706,6 +18733,9 @@ class DrawingEditor extends AnnotationEditor {
   }) {
     this.#drawOutlines = drawOutlines;
     this._drawingOptions ||= drawingOptions;
+    if (!this.annotationElementId) {
+      this._uiManager.a11yAlert(`pdfjs-editor-${this.editorType}-added-alert`);
+    }
     if (drawId >= 0) {
       this._drawId = drawId;
       this.parent.drawLayer.finalizeDraw(drawId, drawOutlines.defaultProperties);
@@ -20030,13 +20060,13 @@ class InkEditor extends DrawingEditor {
         pageIndex: pageNumber - 1,
         rect: rect.slice(0),
         rotation,
+        annotationElementId: id,
         id,
         deleted: false,
         popupRef
       };
     }
     const editor = await super.deserialize(data, parent, uiManager);
-    editor.annotationElementId = data.id || null;
     editor._initialData = initialData;
     return editor;
   }
@@ -21493,6 +21523,9 @@ class StampEditor extends AnnotationEditor {
     if (this.#bitmapFileName) {
       this.div.setAttribute("aria-description", this.#bitmapFileName);
     }
+    if (!this.annotationElementId) {
+      this._uiManager.a11yAlert("pdfjs-editor-stamp-added-alert");
+    }
   }
   copyCanvas(maxDataDimension, maxPreviewDimension, createImageData = false) {
     if (!maxDataDimension) {
@@ -21690,6 +21723,7 @@ class StampEditor extends AnnotationEditor {
         pageIndex: pageNumber - 1,
         rect: rect.slice(0),
         rotation,
+        annotationElementId: id,
         id,
         deleted: false,
         accessibilityData: {
@@ -21725,7 +21759,6 @@ class StampEditor extends AnnotationEditor {
     const [parentWidth, parentHeight] = editor.pageDimensions;
     editor.width = (rect[2] - rect[0]) / parentWidth;
     editor.height = (rect[3] - rect[1]) / parentHeight;
-    editor.annotationElementId = data.id || null;
     if (accessibilityData) {
       editor.altTextData = accessibilityData;
     }
