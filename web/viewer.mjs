@@ -21,8 +21,8 @@
  */
 
 /**
- * pdfjsVersion = 5.3.0
- * pdfjsBuild = 2d0ba7d
+ * pdfjsVersion = 5.4.0
+ * pdfjsBuild = b7a0f01
  */
 
 ;// ./web/pdfjs.js
@@ -156,10 +156,7 @@ function scrollIntoView(element, spot, scrollMatches = false) {
       offsetY += spot.top;
     }
     if (spot.left !== undefined) {
-      const elementWidth = element.getBoundingClientRect().width;
-      const padding = MathClamp((parent.clientWidth - elementWidth) / 2, 20, 400);
-      const left = spot.left - padding;
-      offsetX += left;
+      offsetX += spot.left;
       parent.scrollLeft = offsetX;
     }
   }
@@ -5338,6 +5335,7 @@ const FindState = {
 };
 const FIND_TIMEOUT = 250;
 const MATCH_SCROLL_OFFSET_TOP = -50;
+const MATCH_SCROLL_OFFSET_LEFT = -400;
 const CHARACTERS_TO_NORMALIZE = {
   "\u2010": "-",
   "\u2018": "'",
@@ -5655,7 +5653,7 @@ class PDFFindController {
     this._scrollMatches = false;
     const spot = {
       top: MATCH_SCROLL_OFFSET_TOP,
-      left: selectedLeft
+      left: selectedLeft + MATCH_SCROLL_OFFSET_LEFT
     };
     scrollIntoView(element, spot, true);
   }
@@ -7571,7 +7569,7 @@ function renderPage(activeServiceOnEntry, pdfDocument, pageNumber, size, printRe
   ctx.restore();
   return Promise.all([pdfDocument.getPage(pageNumber), printAnnotationStoragePromise]).then(function ([pdfPage, printAnnotationStorage]) {
     const renderContext = {
-      canvasContext: ctx,
+      canvas: scratchCanvas,
       transform: [PRINT_UNITS, 0, 0, PRINT_UNITS, 0, 0],
       viewport: pdfPage.getViewport({
         scale: 1,
@@ -8658,8 +8656,7 @@ class PDFThumbnailView {
     renderingQueue,
     maxCanvasPixels,
     maxCanvasDim,
-    pageColors,
-    enableHWA
+    pageColors
   }) {
     this.id = id;
     this.renderingId = "thumbnail" + id;
@@ -8672,7 +8669,6 @@ class PDFThumbnailView {
     this.maxCanvasPixels = maxCanvasPixels ?? AppOptions.get("maxCanvasPixels");
     this.maxCanvasDim = maxCanvasDim || AppOptions.get("maxCanvasDim");
     this.pageColors = pageColors || null;
-    this.enableHWA = enableHWA || false;
     this.eventBus = eventBus;
     this.linkService = linkService;
     this.renderingQueue = renderingQueue;
@@ -8756,12 +8752,8 @@ class PDFThumbnailView {
     }
     this.resume = null;
   }
-  #getPageDrawContext(upscaleFactor = 1, enableHWA = this.enableHWA) {
+  #getPageDrawContext(upscaleFactor = 1) {
     const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d", {
-      alpha: false,
-      willReadFrequently: !enableHWA
-    });
     const outputScale = new OutputScale();
     const width = upscaleFactor * this.canvasWidth,
       height = upscaleFactor * this.canvasHeight;
@@ -8770,7 +8762,6 @@ class PDFThumbnailView {
     canvas.height = height * outputScale.sy | 0;
     const transform = outputScale.scaled ? [outputScale.sx, 0, 0, outputScale.sy, 0, 0] : null;
     return {
-      ctx,
       canvas,
       transform
     };
@@ -8805,7 +8796,6 @@ class PDFThumbnailView {
     }
     this.renderingState = RenderingStates.RUNNING;
     const {
-      ctx,
       canvas,
       transform
     } = this.#getPageDrawContext(DRAW_UPSCALE_FACTOR);
@@ -8824,7 +8814,7 @@ class PDFThumbnailView {
       cont();
     };
     const renderContext = {
-      canvasContext: ctx,
+      canvas,
       transform,
       viewport: drawViewport,
       optionalContentConfigPromise: this._optionalContentConfigPromise,
@@ -8889,9 +8879,12 @@ class PDFThumbnailView {
   }
   #reduceImage(img) {
     const {
-      ctx,
       canvas
-    } = this.#getPageDrawContext(1, true);
+    } = this.#getPageDrawContext(1);
+    const ctx = canvas.getContext("2d", {
+      alpha: false,
+      willReadFrequently: false
+    });
     if (img.width <= 2 * canvas.width) {
       ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, canvas.width, canvas.height);
       return canvas;
@@ -9597,7 +9590,6 @@ class Autolinker {
 
 
 class BasePDFPageView {
-  #enableHWA = false;
   #loadingId = null;
   #minDurationToUpdateCanvas = 0;
   #renderError = null;
@@ -9614,7 +9606,6 @@ class BasePDFPageView {
   renderTask = null;
   resume = null;
   constructor(options) {
-    this.#enableHWA = #enableHWA in options ? options.#enableHWA : options.enableHWA || false;
     this.eventBus = options.eventBus;
     this.id = options.id;
     this.pageColors = options.pageColors || null;
@@ -9701,14 +9692,9 @@ class BasePDFPageView {
         onShow(canvas);
       }
     };
-    const ctx = canvas.getContext("2d", {
-      alpha: false,
-      willReadFrequently: !this.#enableHWA
-    });
     return {
       canvas,
-      prevCanvas,
-      ctx
+      prevCanvas
     };
   }
   #renderContinueCallback = cont => {
@@ -9968,8 +9954,7 @@ class PDFPageDetailView extends BasePDFPageView {
     const canvasWrapper = this.pageView._ensureCanvasWrapper();
     const {
       canvas,
-      prevCanvas,
-      ctx
+      prevCanvas
     } = this._createCanvas(newCanvas => {
       if (canvasWrapper.firstElementChild?.tagName === "CANVAS") {
         canvasWrapper.firstElementChild.after(newCanvas);
@@ -9996,7 +9981,7 @@ class PDFPageDetailView extends BasePDFPageView {
     style.height = `${area.height * 100 / height}%`;
     style.top = `${area.minY * 100 / height}%`;
     style.left = `${area.minX * 100 / width}%`;
-    const renderingPromise = this._drawCanvas(this.pageView._getRenderingContext(ctx, transform), () => {
+    const renderingPromise = this._drawCanvas(this.pageView._getRenderingContext(canvas, transform), () => {
       this.canvas?.remove();
       this.canvas = prevCanvas;
     }, () => {
@@ -11378,9 +11363,9 @@ class PDFPageView extends BasePDFPageView {
     }
     return canvasWrapper;
   }
-  _getRenderingContext(canvasContext, transform) {
+  _getRenderingContext(canvas, transform) {
     return {
-      canvasContext,
+      canvas,
       transform,
       viewport: this.viewport,
       annotationMode: this.#annotationMode,
@@ -11457,8 +11442,7 @@ class PDFPageView extends BasePDFPageView {
     this.#originalViewport = viewport;
     const {
       canvas,
-      prevCanvas,
-      ctx
+      prevCanvas
     } = this._createCanvas(newCanvas => {
       canvasWrapper.prepend(newCanvas);
     });
@@ -11487,7 +11471,7 @@ class PDFPageView extends BasePDFPageView {
       this.#scaleRoundY = sfy[1];
     }
     const transform = outputScale.scaled ? [outputScale.sx, 0, 0, outputScale.sy, 0, 0] : null;
-    const resultPromise = this._drawCanvas(this._getRenderingContext(ctx, transform), () => {
+    const resultPromise = this._drawCanvas(this._getRenderingContext(canvas, transform), () => {
       prevCanvas?.remove();
       this._resetCanvas();
     }, renderTask => {
@@ -11664,7 +11648,7 @@ class PDFViewer {
   #textLayerMode = TextLayerMode.ENABLE;
   #viewerAlert = null;
   constructor(options) {
-    const viewerVersion = "5.3.0";
+    const viewerVersion = "5.4.0";
     if (version !== viewerVersion) {
       throw new Error(`The API version "${version}" does not match the Viewer version "${viewerVersion}".`);
     }
@@ -13158,7 +13142,8 @@ class PDFViewer {
   set annotationEditorMode({
     mode,
     editId = null,
-    isFromKeyboard = false
+    isFromKeyboard = false,
+    mustEnterInEditMode = false
   }) {
     if (!this.#annotationEditorUIManager) {
       throw new Error(`The AnnotationEditor is not enabled.`);
@@ -13180,7 +13165,7 @@ class PDFViewer {
     const updater = async () => {
       this.#cleanupSwitchAnnotationEditorMode();
       this.#annotationEditorMode = mode;
-      await this.#annotationEditorUIManager.updateMode(mode, editId, isFromKeyboard);
+      await this.#annotationEditorUIManager.updateMode(mode, editId, isFromKeyboard, mustEnterInEditMode);
       if (mode !== this.#annotationEditorMode || pdfDocument !== this.pdfDocument) {
         return;
       }

@@ -21,8 +21,8 @@
  */
 
 /**
- * pdfjsVersion = 5.3.0
- * pdfjsBuild = 2d0ba7d
+ * pdfjsVersion = 5.4.0
+ * pdfjsBuild = b7a0f01
  */
 
 ;// ./src/shared/util.js
@@ -781,6 +781,9 @@ function isArrayEqual(arr1, arr2) {
   return true;
 }
 function getModificationDate(date = new Date()) {
+  if (!(date instanceof Date)) {
+    date = new Date(date);
+  }
   const buffer = [date.getUTCFullYear().toString(), (date.getUTCMonth() + 1).toString().padStart(2, "0"), date.getUTCDate().toString().padStart(2, "0"), date.getUTCHours().toString().padStart(2, "0"), date.getUTCMinutes().toString().padStart(2, "0"), date.getUTCSeconds().toString().padStart(2, "0")];
   return buffer.join("");
 }
@@ -2777,7 +2780,7 @@ class AnnotationEditorUIManager {
   removeLayer(layer) {
     this.#allLayers.delete(layer.pageIndex);
   }
-  async updateMode(mode, editId = null, isFromKeyboard = false) {
+  async updateMode(mode, editId = null, isFromKeyboard = false, mustEnterInEditMode = false) {
     if (this.#mode === mode) {
       return;
     }
@@ -2816,7 +2819,9 @@ class AnnotationEditorUIManager {
     for (const editor of this.#allEditors.values()) {
       if (editor.annotationElementId === editId || editor.id === editId) {
         this.setSelected(editor);
-        editor.enterInEditMode();
+        if (mustEnterInEditMode) {
+          editor.enterInEditMode();
+        }
       } else {
         editor.unselect();
       }
@@ -3015,6 +3020,10 @@ class AnnotationEditorUIManager {
     });
   }
   setSelected(editor) {
+    this.updateToolbar({
+      mode: editor.mode,
+      editId: editor.id
+    });
     this.#currentDrawingSession?.commitOrRemove();
     for (const ed of this.#selectedEditors) {
       if (ed !== editor) {
@@ -3966,6 +3975,9 @@ class AnnotationEditor {
   }
   get editorType() {
     return Object.getPrototypeOf(this).constructor._type;
+  }
+  get mode() {
+    return Object.getPrototypeOf(this).constructor._editorType;
   }
   static get isDrawer() {
     return false;
@@ -11684,7 +11696,7 @@ function getDocument(src = {}) {
   }
   const docParams = {
     docId,
-    apiVersion: "5.3.0",
+    apiVersion: "5.4.0",
     data,
     password,
     disableAutoFetch,
@@ -11756,7 +11768,7 @@ function getDocument(src = {}) {
         throw new Error("Worker was destroyed");
       }
       const messageHandler = new MessageHandler(docId, workerId, worker.port);
-      const transport = new WorkerTransport(messageHandler, task, networkStream, transportParams, transportFactory);
+      const transport = new WorkerTransport(messageHandler, task, networkStream, transportParams, transportFactory, enableHWA);
       task._transport = transport;
       messageHandler.send("Ready", null);
     });
@@ -12034,6 +12046,7 @@ class PDFPageProxy {
   }
   render({
     canvasContext,
+    canvas = canvasContext.canvas,
     viewport,
     intent = "display",
     annotationMode = AnnotationMode.ENABLE,
@@ -12100,6 +12113,7 @@ class PDFPageProxy {
     const internalRenderTask = new InternalRenderTask({
       callback: complete,
       params: {
+        canvas,
         canvasContext,
         viewport,
         transform,
@@ -12114,7 +12128,8 @@ class PDFPageProxy {
       filterFactory: this._transport.filterFactory,
       useRequestAnimationFrame: !intentPrint,
       pdfBug: this._pdfBug,
-      pageColors
+      pageColors,
+      enableHWA: this._transport.enableHWA
     });
     (intentState.renderTasks ||= new Set()).add(internalRenderTask);
     const renderTask = internalRenderTask.task;
@@ -12608,7 +12623,7 @@ class WorkerTransport {
   #pagePromises = new Map();
   #pageRefCache = new Map();
   #passwordCapability = null;
-  constructor(messageHandler, loadingTask, networkStream, params, factory) {
+  constructor(messageHandler, loadingTask, networkStream, params, factory, enableHWA) {
     this.messageHandler = messageHandler;
     this.loadingTask = loadingTask;
     this.commonObjs = new PDFObjects();
@@ -12629,6 +12644,7 @@ class WorkerTransport {
     this._fullReader = null;
     this._lastProgress = null;
     this.downloadInfoCapability = Promise.withResolvers();
+    this.enableHWA = enableHWA;
     this.setupMessageHandler();
   }
   #cacheSimpleMethod(name, data = null) {
@@ -13167,7 +13183,8 @@ class InternalRenderTask {
     filterFactory,
     useRequestAnimationFrame = false,
     pdfBug = false,
-    pageColors = null
+    pageColors = null,
+    enableHWA = false
   }) {
     this.callback = callback;
     this.params = params;
@@ -13192,7 +13209,9 @@ class InternalRenderTask {
     this._continueBound = this._continue.bind(this);
     this._scheduleNextBound = this._scheduleNext.bind(this);
     this._nextBound = this._next.bind(this);
-    this._canvas = params.canvasContext.canvas;
+    this._canvas = params.canvas;
+    this._canvasContext = params.canvas ? null : params.canvasContext;
+    this._enableHWA = enableHWA;
   }
   get completed() {
     return this.capability.promise.catch(function () {});
@@ -13216,11 +13235,14 @@ class InternalRenderTask {
       this.stepper.nextBreakPoint = this.stepper.getNextBreakPoint();
     }
     const {
-      canvasContext,
       viewport,
       transform,
       background
     } = this.params;
+    const canvasContext = this._canvasContext || this._canvas.getContext("2d", {
+      alpha: false,
+      willReadFrequently: !this._enableHWA
+    });
     this.gfx = new CanvasGraphics(canvasContext, this.commonObjs, this.objs, this.canvasFactory, this.filterFactory, {
       optionalContentConfig
     }, this.annotationCanvasMap, this.pageColors);
@@ -13294,8 +13316,8 @@ class InternalRenderTask {
     }
   }
 }
-const version = "5.3.0";
-const build = "2d0ba7d";
+const version = "5.4.0";
+const build = "b7a0f01";
 
 ;// ./src/shared/scripting_utils.js
 function makeColorComp(n) {
@@ -14173,7 +14195,8 @@ class AnnotationElement {
       this.linkService.eventBus?.dispatch("switchannotationeditormode", {
         source: this,
         mode,
-        editId
+        editId,
+        mustEnterInEditMode: true
       });
     });
   }
@@ -15285,7 +15308,7 @@ class PopupAnnotationElement extends AnnotationElement {
       container: this.container,
       color: this.data.color,
       titleObj: this.data.titleObj,
-      modificationDate: this.data.modificationDate,
+      modificationDate: this.data.modificationDate || this.data.creationDate,
       contentsObj: this.data.contentsObj,
       richText: this.data.richText,
       rect: this.data.rect,
@@ -15319,6 +15342,7 @@ class PopupElement {
   #parentRect = null;
   #pinned = false;
   #popup = null;
+  #popupAbortController = null;
   #position = null;
   #rect = null;
   #richText = null;
@@ -15349,18 +15373,36 @@ class PopupElement {
     this.#elements = elements;
     this.#dateObj = PDFDateString.toDateObject(modificationDate);
     this.trigger = elements.flatMap(e => e.getElementsToTriggerPopup());
-    for (const element of this.trigger) {
-      element.addEventListener("click", this.#boundToggle);
-      element.addEventListener("mouseenter", this.#boundShow);
-      element.addEventListener("mouseleave", this.#boundHide);
-      element.classList.add("popupTriggerArea");
-    }
-    for (const element of elements) {
-      element.container?.addEventListener("keydown", this.#boundKeyDown);
-    }
+    this.#addEventListeners();
     this.#container.hidden = true;
     if (open) {
       this.#toggle();
+    }
+  }
+  #addEventListeners() {
+    if (this.#popupAbortController) {
+      return;
+    }
+    this.#popupAbortController = new AbortController();
+    const {
+      signal
+    } = this.#popupAbortController;
+    for (const element of this.trigger) {
+      element.addEventListener("click", this.#boundToggle, {
+        signal
+      });
+      element.addEventListener("mouseenter", this.#boundShow, {
+        signal
+      });
+      element.addEventListener("mouseleave", this.#boundHide, {
+        signal
+      });
+      element.classList.add("popupTriggerArea");
+    }
+    for (const element of this.#elements) {
+      element.container?.addEventListener("keydown", this.#boundKeyDown, {
+        signal
+      });
     }
   }
   render() {
@@ -15375,16 +15417,19 @@ class PopupElement {
     }
     const header = document.createElement("span");
     header.className = "header";
-    const title = document.createElement("h1");
-    header.append(title);
-    ({
-      dir: title.dir,
-      str: title.textContent
-    } = this.#titleObj);
+    if (this.#titleObj?.str) {
+      const title = document.createElement("span");
+      title.className = "title";
+      header.append(title);
+      ({
+        dir: title.dir,
+        str: title.textContent
+      } = this.#titleObj);
+    }
     popup.append(header);
     if (this.#dateObj) {
       const modificationDate = document.createElement("time");
-      modificationDate.classList.add("popupDate");
+      modificationDate.className = "popupDate";
       modificationDate.setAttribute("data-l10n-id", "pdfjs-annotation-date-time-string");
       modificationDate.setAttribute("data-l10n-args", JSON.stringify({
         dateObj: this.#dateObj.valueOf()
@@ -15477,8 +15522,14 @@ class PopupElement {
   }
   updateEdited({
     rect,
-    popupContent
+    popupContent,
+    deleted
   }) {
+    if (deleted) {
+      this.remove();
+      return;
+    }
+    this.#addEventListeners();
     this.#updates ||= {
       contentsObj: this.#contentsObj,
       richText: this.#richText
@@ -15505,6 +15556,17 @@ class PopupElement {
     this.#popup?.remove();
     this.#popup = null;
     this.#position = null;
+  }
+  remove() {
+    this.#popupAbortController?.abort();
+    this.#popupAbortController = null;
+    this.#popup?.remove();
+    this.#popup = null;
+    this.#wasVisible = false;
+    this.#pinned = false;
+    for (const element of this.trigger) {
+      element.classList.remove("popupTriggerArea");
+    }
   }
   #setPosition() {
     if (this.#position !== null) {
@@ -15584,6 +15646,7 @@ class PopupElement {
     this.#container.hidden = true;
   }
   maybeShow() {
+    this.#addEventListeners();
     if (!this.#wasVisible) {
       return;
     }
@@ -16901,9 +16964,6 @@ class FreeTextEditor extends AnnotationEditor {
   }
   renderAnnotationElement(annotation) {
     const content = super.renderAnnotationElement(annotation);
-    if (this.deleted) {
-      return content;
-    }
     const {
       style
     } = content;
@@ -20950,6 +21010,10 @@ class SignatureEditor extends DrawingEditor {
         this.div.hidden = true;
         this._uiManager.getSignature(this);
       }
+    } else {
+      this.div.setAttribute("data-l10n-args", JSON.stringify({
+        description: this.#description || ""
+      }));
     }
     if (_isCopy) {
       this._isCopy = true;
@@ -20969,6 +21033,12 @@ class SignatureEditor extends DrawingEditor {
   }
   set description(description) {
     this.#description = description;
+    if (!this.div) {
+      return;
+    }
+    this.div.setAttribute("data-l10n-args", JSON.stringify({
+      description
+    }));
     super.addEditToolbar().then(toolbar => {
       toolbar?.updateEditSignatureButton(description);
     });
@@ -21019,9 +21089,6 @@ class SignatureEditor extends DrawingEditor {
     } = this.#signatureData = data;
     this.#isExtracted = outline instanceof ContourDrawOutline;
     this.description = description;
-    this.div.setAttribute("data-l10n-args", JSON.stringify({
-      description
-    }));
     let drawingOptions;
     if (this.#isExtracted) {
       drawingOptions = SignatureEditor.getDefaultDrawingOptions();
@@ -21166,7 +21233,7 @@ class SignatureEditor extends DrawingEditor {
   static async deserialize(data, parent, uiManager) {
     const editor = await super.deserialize(data, parent, uiManager);
     editor.#isExtracted = data.areContours;
-    editor.#description = data.accessibilityData?.alt || "";
+    editor.description = data.accessibilityData?.alt || "";
     editor.#signatureUUID = data.uuid;
     return editor;
   }
@@ -22086,6 +22153,9 @@ class AnnotationEditorLayer {
           id
         } = editable.data;
         if (this.#uiManager.isDeletedAnnotationElement(id)) {
+          editable.updateEdited({
+            deleted: true
+          });
           continue;
         }
         let editor = resetAnnotations.get(id);
