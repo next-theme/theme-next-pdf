@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = b7a0f01
+ * pdfjsBuild = bfc2025
  */
 
 ;// ./src/shared/util.js
@@ -56,7 +56,8 @@ const AnnotationEditorType = {
   HIGHLIGHT: 9,
   STAMP: 13,
   INK: 15,
-  SIGNATURE: 101
+  SIGNATURE: 101,
+  COMMENT: 102
 };
 const AnnotationEditorParamsType = {
   RESIZE: 1,
@@ -68,10 +69,9 @@ const AnnotationEditorParamsType = {
   INK_THICKNESS: 22,
   INK_OPACITY: 23,
   HIGHLIGHT_COLOR: 31,
-  HIGHLIGHT_DEFAULT_COLOR: 32,
-  HIGHLIGHT_THICKNESS: 33,
-  HIGHLIGHT_FREE: 34,
-  HIGHLIGHT_SHOW_ALL: 35,
+  HIGHLIGHT_THICKNESS: 32,
+  HIGHLIGHT_FREE: 33,
+  HIGHLIGHT_SHOW_ALL: 34,
   DRAW_STEP: 41
 };
 const PermissionFlag = {
@@ -51713,6 +51713,9 @@ class LinkAnnotation extends Annotation {
       docAttachments: annotationGlobals.attachments
     });
   }
+  get overlaysTextContent() {
+    return true;
+  }
 }
 class PopupAnnotation extends Annotation {
   constructor(params) {
@@ -52961,19 +52964,26 @@ class SingleIntersector {
   #minY = Infinity;
   #maxX = -Infinity;
   #maxY = -Infinity;
-  #quadPoints;
+  #quadPoints = null;
   #text = [];
   #extraChars = [];
   #lastIntersectingQuadIndex = -1;
   #canTakeExtraChars = false;
   constructor(annotation) {
     this.#annotation = annotation;
-    const quadPoints = this.#quadPoints = annotation.data.quadPoints;
+    const quadPoints = annotation.data.quadPoints;
+    if (!quadPoints) {
+      [this.#minX, this.#minY, this.#maxX, this.#maxY] = annotation.data.rect;
+      return;
+    }
     for (let i = 0, ii = quadPoints.length; i < ii; i += 8) {
       this.#minX = Math.min(this.#minX, quadPoints[i]);
       this.#maxX = Math.max(this.#maxX, quadPoints[i + 2]);
       this.#minY = Math.min(this.#minY, quadPoints[i + 5]);
       this.#maxY = Math.max(this.#maxY, quadPoints[i + 1]);
+    }
+    if (quadPoints.length > 8) {
+      this.#quadPoints = quadPoints;
     }
   }
   overlaps(other) {
@@ -52984,7 +52994,7 @@ class SingleIntersector {
       return false;
     }
     const quadPoints = this.#quadPoints;
-    if (quadPoints.length === 8) {
+    if (!quadPoints) {
       return true;
     }
     if (this.#lastIntersectingQuadIndex >= 0) {
@@ -53035,7 +53045,7 @@ class Intersector {
   #intersectors = new Map();
   constructor(annotations) {
     for (const annotation of annotations) {
-      if (!annotation.data.quadPoints) {
+      if (!annotation.data.quadPoints && !annotation.data.rect) {
         continue;
       }
       const intersector = new SingleIntersector(annotation);
