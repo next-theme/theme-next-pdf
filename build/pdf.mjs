@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 542514e
+ * pdfjsBuild = e5922f2
  */
 
 ;// ./src/shared/util.js
@@ -1464,7 +1464,7 @@ class EditorToolbar {
       _uiManager
     } = this.#editor;
     const button = document.createElement("button");
-    button.className = "delete";
+    button.classList.add("basic", "deleteButton");
     button.tabIndex = 0;
     button.setAttribute("data-l10n-id", EditorToolbar.#l10nRemove[editorType]);
     this.#addListenersToElement(button);
@@ -1543,7 +1543,7 @@ class EditorToolbar {
     this.#colorPicker = null;
   }
 }
-class HighlightToolbar {
+class FloatingToolbar {
   #buttons = null;
   #toolbar = null;
   #uiManager;
@@ -1560,7 +1560,14 @@ class HighlightToolbar {
     const buttons = this.#buttons = document.createElement("div");
     buttons.className = "buttons";
     editToolbar.append(buttons);
-    this.#addHighlightButton();
+    if (this.#uiManager.hasCommentManager()) {
+      this.#makeButton("commentButton", `pdfjs-comment-floating-button`, "pdfjs-comment-floating-button-label", () => {
+        this.#uiManager.commentSelection("floating_button");
+      });
+    }
+    this.#makeButton("highlightButton", `pdfjs-highlight-floating-button1`, "pdfjs-highlight-floating-button-label", () => {
+      this.#uiManager.highlightSelection("floating_button");
+    });
     return editToolbar;
   }
   #getLastPoint(boxes, isLTR) {
@@ -1599,22 +1606,20 @@ class HighlightToolbar {
   hide() {
     this.#toolbar.remove();
   }
-  #addHighlightButton() {
+  #makeButton(buttonClass, l10nId, labelL10nId, clickHandler) {
     const button = document.createElement("button");
-    button.className = "highlightButton";
+    button.classList.add("basic", buttonClass);
     button.tabIndex = 0;
-    button.setAttribute("data-l10n-id", `pdfjs-highlight-floating-button1`);
+    button.setAttribute("data-l10n-id", l10nId);
     const span = document.createElement("span");
     button.append(span);
     span.className = "visuallyHidden";
-    span.setAttribute("data-l10n-id", "pdfjs-highlight-floating-button-label");
+    span.setAttribute("data-l10n-id", labelL10nId);
     const signal = this.#uiManager._signal;
     button.addEventListener("contextmenu", noContextMenu, {
       signal
     });
-    button.addEventListener("click", () => {
-      this.#uiManager.highlightSelection("floating_button");
-    }, {
+    button.addEventListener("click", clickHandler, {
       signal
     });
     this.#buttons.append(button);
@@ -2032,7 +2037,7 @@ class AnnotationEditorUIManager {
   #focusManagerAC = null;
   #highlightColors = null;
   #highlightWhenShiftUp = false;
-  #highlightToolbar = null;
+  #floatingToolbar = null;
   #idManager = new IdManager();
   #isEnabled = false;
   #isWaiting = false;
@@ -2186,8 +2191,8 @@ class AnnotationEditorUIManager {
     this.#altTextManager?.destroy();
     this.#commentManager?.destroy();
     this.#signatureManager?.destroy();
-    this.#highlightToolbar?.hide();
-    this.#highlightToolbar = null;
+    this.#floatingToolbar?.hide();
+    this.#floatingToolbar = null;
     this.#mainHighlightColorPicker?.destroy();
     this.#mainHighlightColorPicker = null;
     if (this.#focusMainContainerTimeoutId) {
@@ -2382,7 +2387,7 @@ class AnnotationEditorUIManager {
     }
     return null;
   }
-  highlightSelection(methodOfCreation = "") {
+  highlightSelection(methodOfCreation = "", comment = false) {
     const selection = document.getSelection();
     if (!selection || selection.isCollapsed) {
       return;
@@ -2404,7 +2409,7 @@ class AnnotationEditorUIManager {
     const layer = this.#getLayerForTextLayer(textLayer);
     const isNoneMode = this.#mode === AnnotationEditorType.NONE;
     const callback = () => {
-      layer?.createAndAddNewEditor({
+      const editor = layer?.createAndAddNewEditor({
         x: 0,
         y: 0
       }, false, {
@@ -2419,6 +2424,9 @@ class AnnotationEditorUIManager {
       if (isNoneMode) {
         this.showAllEditors("highlight", true, true);
       }
+      if (comment) {
+        editor?.editComment();
+      }
     };
     if (isNoneMode) {
       this.switchToMode(AnnotationEditorType.HIGHLIGHT, callback);
@@ -2426,7 +2434,10 @@ class AnnotationEditorUIManager {
     }
     callback();
   }
-  #displayHighlightToolbar() {
+  commentSelection(methodOfCreation = "") {
+    this.highlightSelection(methodOfCreation, true);
+  }
+  #displayFloatingToolbar() {
     const selection = document.getSelection();
     if (!selection || selection.isCollapsed) {
       return;
@@ -2437,8 +2448,8 @@ class AnnotationEditorUIManager {
     if (!boxes) {
       return;
     }
-    this.#highlightToolbar ||= new HighlightToolbar(this);
-    this.#highlightToolbar.show(textLayer, boxes, this.direction === "ltr");
+    this.#floatingToolbar ||= new FloatingToolbar(this);
+    this.#floatingToolbar.show(textLayer, boxes, this.direction === "ltr");
   }
   addToAnnotationStorage(editor) {
     if (!editor.isEmpty() && this.#annotationStorage && !this.#annotationStorage.has(editor.id)) {
@@ -2461,7 +2472,7 @@ class AnnotationEditorUIManager {
     const selection = document.getSelection();
     if (!selection || selection.isCollapsed) {
       if (this.#selectedTextNode) {
-        this.#highlightToolbar?.hide();
+        this.#floatingToolbar?.hide();
         this.#selectedTextNode = null;
         this.#dispatchUpdateStates({
           hasSelectedText: false
@@ -2479,7 +2490,7 @@ class AnnotationEditorUIManager {
     const textLayer = anchorElement.closest(".textLayer");
     if (!textLayer) {
       if (this.#selectedTextNode) {
-        this.#highlightToolbar?.hide();
+        this.#floatingToolbar?.hide();
         this.#selectedTextNode = null;
         this.#dispatchUpdateStates({
           hasSelectedText: false
@@ -2487,7 +2498,7 @@ class AnnotationEditorUIManager {
       }
       return;
     }
-    this.#highlightToolbar?.hide();
+    this.#floatingToolbar?.hide();
     this.#selectedTextNode = anchorNode;
     this.#dispatchUpdateStates({
       hasSelectedText: true
@@ -2526,7 +2537,7 @@ class AnnotationEditorUIManager {
     if (this.#mode === AnnotationEditorType.HIGHLIGHT) {
       this.highlightSelection(methodOfCreation);
     } else if (this.#enableHighlightFloatingButton) {
-      this.#displayHighlightToolbar();
+      this.#displayFloatingToolbar();
     }
   }
   #addSelectionListener() {
@@ -2771,6 +2782,9 @@ class AnnotationEditorUIManager {
         break;
       case "highlightSelection":
         this.highlightSelection("context_menu");
+        break;
+      case "commentSelection":
+        this.commentSelection("context_menu");
         break;
     }
   }
@@ -13556,7 +13570,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "542514e";
+const build = "e5922f2";
 
 ;// ./src/display/editor/color_picker.js
 

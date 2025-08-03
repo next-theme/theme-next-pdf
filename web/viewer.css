@@ -1015,7 +1015,6 @@
   color-scheme:only light;
 
   --annotation-unfocused-field-background:url("data:image/svg+xml;charset=UTF-8,<svg width='1px' height='1px' xmlns='http://www.w3.org/2000/svg'><rect width='100%' height='100%' style='fill:rgba(0, 54, 255, 0.13);'/></svg>");
-  --comment-edit-image:url(images/comment_editButton.svg);
   --input-focus-border-color:Highlight;
   --input-focus-outline:1px solid Canvas;
   --input-unfocused-border-color:transparent;
@@ -3085,7 +3084,7 @@
       }
 
 :is(:is(:is(#commentManagerDialog .mainContainer) #commentManagerToolbar) menu) button{
-          background-color:var(--menu-bg-color);
+          background-color:var(--menuitem-bg-color);
           width:100%;
           height:24px;
           padding:0;
@@ -3167,45 +3166,6 @@
         );
         opacity:1;
       }
-
-.annotationLayer{
-  --comment-inline-button-bg:#e0e0e6;
-  --comment-inline-button-fg:black;
-  --comment-inline-button-border-color:#8f8f9d;
-  --comment-button-dim:24px;
-  --comment-button-offset:calc(var(--comment-button-dim) / 2);
-}
-
-.annotationLayer .annotationCommentButton{
-    position:absolute;
-    width:var(--comment-button-dim);
-    height:var(--comment-button-dim);
-    background-color:var(--comment-inline-button-bg);
-    cursor:auto;
-    z-index:1;
-    border:1px solid var(--comment-inline-button-border-color);
-    border-radius:4px;
-    padding:2px;
-    margin:0;
-    box-sizing:border-box;
-    pointer-events:auto;
-  }
-
-:is(.annotationLayer .annotationCommentButton)::before{
-      content:"";
-      display:inline-block;
-      width:100%;
-      height:100%;
-      -webkit-mask-repeat:no-repeat;
-              mask-repeat:no-repeat;
-      -webkit-mask-size:cover;
-              mask-size:cover;
-      -webkit-mask-image:var(--comment-edit-image);
-              mask-image:var(--comment-edit-image);
-      background-color:var(--comment-inline-button-fg);
-      margin:0;
-      padding:0;
-    }
 
 :root{
   --editor-toolbar-vert-offset:6px;
@@ -3517,48 +3477,39 @@
         margin-inline:2px;
       }
 
-:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .highlightButton{
+:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .basic{
         width:var(--editor-toolbar-height);
       }
 
-:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .highlightButton)::before{
+:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .basic)::before{
           content:"";
+          -webkit-mask-repeat:no-repeat;
+                  mask-repeat:no-repeat;
+          -webkit-mask-position:center;
+                  mask-position:center;
+          display:inline-block;
+          background-color:var(--editor-toolbar-fg-color);
+          width:100%;
+          height:100%;
+        }
+
+:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .basic):hover::before{
+          background-color:var(--editor-toolbar-hover-fg-color);
+        }
+
+.highlightButton:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .basic)::before{
           -webkit-mask-image:var(--editor-toolbar-highlight-image);
                   mask-image:var(--editor-toolbar-highlight-image);
-          -webkit-mask-repeat:no-repeat;
-                  mask-repeat:no-repeat;
-          -webkit-mask-position:center;
-                  mask-position:center;
-          display:inline-block;
-          background-color:var(--editor-toolbar-fg-color);
-          width:100%;
-          height:100%;
         }
 
-:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .highlightButton):hover::before{
-          background-color:var(--editor-toolbar-hover-fg-color);
+.commentButton:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .basic)::before{
+          -webkit-mask-image:var(--editor-toolbar-comment-edit-image);
+                  mask-image:var(--editor-toolbar-comment-edit-image);
         }
 
-:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .delete{
-        width:var(--editor-toolbar-height);
-      }
-
-:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .delete)::before{
-          content:"";
+.deleteButton:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .basic)::before{
           -webkit-mask-image:var(--editor-toolbar-delete-image);
                   mask-image:var(--editor-toolbar-delete-image);
-          -webkit-mask-repeat:no-repeat;
-                  mask-repeat:no-repeat;
-          -webkit-mask-position:center;
-                  mask-position:center;
-          display:inline-block;
-          background-color:var(--editor-toolbar-fg-color);
-          width:100%;
-          height:100%;
-        }
-
-:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .delete):hover::before{
-          background-color:var(--editor-toolbar-hover-fg-color);
         }
 
 :is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons)  > *{
