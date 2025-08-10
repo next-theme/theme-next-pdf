@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = e5922f2
+ * pdfjsBuild = 41ca92b
  */
 
 ;// ./web/pdfjs.js
@@ -157,7 +157,13 @@ function scrollIntoView(element, spot, scrollMatches = false) {
       offsetY += spot.top;
     }
     if (spot.left !== undefined) {
-      offsetX += spot.left;
+      if (scrollMatches) {
+        const elementWidth = element.getBoundingClientRect().width;
+        const padding = MathClamp((parent.clientWidth - elementWidth) / 2, 20, 400);
+        offsetX += spot.left - padding;
+      } else {
+        offsetX += spot.left;
+      }
       parent.scrollLeft = offsetX;
     }
   }
@@ -5682,7 +5688,6 @@ const FindState = {
 };
 const FIND_TIMEOUT = 250;
 const MATCH_SCROLL_OFFSET_TOP = -50;
-const MATCH_SCROLL_OFFSET_LEFT = -400;
 const CHARACTERS_TO_NORMALIZE = {
   "\u2010": "-",
   "\u2018": "'",
@@ -6000,7 +6005,7 @@ class PDFFindController {
     this._scrollMatches = false;
     const spot = {
       top: MATCH_SCROLL_OFFSET_TOP,
-      left: selectedLeft + MATCH_SCROLL_OFFSET_LEFT
+      left: selectedLeft
     };
     scrollIntoView(element, spot, true);
   }
@@ -16547,18 +16552,18 @@ const PDFViewerApplication = {
       scrollTop: this._lastScrollTop,
       scrollLeft: this._lastScrollLeft
     } = mainContainer);
+    let scrollendTimeoutID, scrollAbortController;
     const scrollend = () => {
       ({
         scrollTop: this._lastScrollTop,
         scrollLeft: this._lastScrollLeft
       } = mainContainer);
-      this._isScrolling = false;
-      mainContainer.addEventListener("scroll", scroll, {
-        passive: true,
-        signal
-      });
-      mainContainer.removeEventListener("scrollend", scrollend);
-      mainContainer.removeEventListener("blur", scrollend);
+      clearTimeout(scrollendTimeoutID);
+      if (this._isScrolling) {
+        scrollAbortController.abort();
+        scrollAbortController = null;
+        this._isScrolling = false;
+      }
     };
     const scroll = () => {
       if (this._isCtrlKeyDown) {
@@ -16567,14 +16572,19 @@ const PDFViewerApplication = {
       if (this._lastScrollTop === mainContainer.scrollTop && this._lastScrollLeft === mainContainer.scrollLeft) {
         return;
       }
-      mainContainer.removeEventListener("scroll", scroll);
-      this._isScrolling = true;
-      mainContainer.addEventListener("scrollend", scrollend, {
-        signal
-      });
-      mainContainer.addEventListener("blur", scrollend, {
-        signal
-      });
+      if (!this._isScrolling) {
+        scrollAbortController = new AbortController();
+        const abortSignal = AbortSignal.any([scrollAbortController.signal, signal]);
+        mainContainer.addEventListener("scrollend", scrollend, {
+          signal: abortSignal
+        });
+        mainContainer.addEventListener("blur", scrollend, {
+          signal: abortSignal
+        });
+        this._isScrolling = true;
+      }
+      clearTimeout(scrollendTimeoutID);
+      scrollendTimeoutID = setTimeout(scrollend, 100);
     };
     mainContainer.addEventListener("scroll", scroll, {
       passive: true,

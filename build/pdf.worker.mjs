@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = e5922f2
+ * pdfjsBuild = 41ca92b
  */
 
 ;// ./src/shared/util.js
@@ -2678,9 +2678,7 @@ class IccColorSpace extends ColorSpace {
   #convertPixel;
   static #useWasm = true;
   static #wasmUrl = null;
-  static #finalizer = new FinalizationRegistry(transformer => {
-    qcms_drop_transformer(transformer);
-  });
+  static #finalizer = null;
   constructor(iccProfile, name, numComps) {
     if (!IccColorSpace.isUsable) {
       throw new Error("No ICC color space support");
@@ -2707,6 +2705,9 @@ class IccColorSpace extends ColorSpace {
     if (!this.#transformer) {
       throw new Error("Failed to create ICC color space");
     }
+    IccColorSpace.#finalizer ||= new FinalizationRegistry(transformer => {
+      qcms_drop_transformer(transformer);
+    });
     IccColorSpace.#finalizer.register(this, this.#transformer);
   }
   getRgbHex(src, srcOffset) {

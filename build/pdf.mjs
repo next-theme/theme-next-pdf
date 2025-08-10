@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = e5922f2
+ * pdfjsBuild = 41ca92b
  */
 
 ;// ./src/shared/util.js
@@ -2040,6 +2040,7 @@ class AnnotationEditorUIManager {
   #floatingToolbar = null;
   #idManager = new IdManager();
   #isEnabled = false;
+  #isPointerDown = false;
   #isWaiting = false;
   #keyboardManagerAC = null;
   #lastActiveElement = null;
@@ -2151,6 +2152,18 @@ class AnnotationEditorUIManager {
       signal
     });
     eventBus._on("switchannotationeditorparams", evt => this.updateParams(evt.type, evt.value), {
+      signal
+    });
+    window.addEventListener("pointerdown", () => {
+      this.#isPointerDown = true;
+    }, {
+      capture: true,
+      signal
+    });
+    window.addEventListener("pointerup", () => {
+      this.#isPointerDown = false;
+    }, {
+      capture: true,
       signal
     });
     this.#addSelectionListener();
@@ -2513,24 +2526,29 @@ class AnnotationEditorUIManager {
     if (!this.isShiftKeyDown) {
       const activeLayer = this.#mode === AnnotationEditorType.HIGHLIGHT ? this.#getLayerForTextLayer(textLayer) : null;
       activeLayer?.toggleDrawing();
-      const ac = new AbortController();
-      const signal = this.combinedSignal(ac);
-      const pointerup = e => {
-        if (e.type === "pointerup" && e.button !== 0) {
-          return;
-        }
-        ac.abort();
+      if (this.#isPointerDown) {
+        const ac = new AbortController();
+        const signal = this.combinedSignal(ac);
+        const pointerup = e => {
+          if (e.type === "pointerup" && e.button !== 0) {
+            return;
+          }
+          ac.abort();
+          activeLayer?.toggleDrawing(true);
+          if (e.type === "pointerup") {
+            this.#onSelectEnd("main_toolbar");
+          }
+        };
+        window.addEventListener("pointerup", pointerup, {
+          signal
+        });
+        window.addEventListener("blur", pointerup, {
+          signal
+        });
+      } else {
         activeLayer?.toggleDrawing(true);
-        if (e.type === "pointerup") {
-          this.#onSelectEnd("main_toolbar");
-        }
-      };
-      window.addEventListener("pointerup", pointerup, {
-        signal
-      });
-      window.addEventListener("blur", pointerup, {
-        signal
-      });
+        this.#onSelectEnd("main_toolbar");
+      }
     }
   }
   #onSelectEnd(methodOfCreation = "") {
@@ -13570,7 +13588,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "e5922f2";
+const build = "41ca92b";
 
 ;// ./src/display/editor/color_picker.js
 
