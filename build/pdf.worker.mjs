@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 41ca92b
+ * pdfjsBuild = 5adff6a
  */
 
 ;// ./src/shared/util.js
@@ -32621,6 +32621,23 @@ class PartialEvaluator {
                 continue;
               }
               args[0] = Math.abs(thickness);
+              break;
+            }
+          case OPS.setDash:
+            {
+              const dashPhase = args[1];
+              if (typeof dashPhase !== "number") {
+                warn(`Invalid setDash: ${dashPhase}`);
+                continue;
+              }
+              const dashArray = args[0];
+              if (!Array.isArray(dashArray)) {
+                warn(`Invalid setDash: ${dashArray}`);
+                continue;
+              }
+              if (dashArray.some(x => typeof x !== "number")) {
+                args[0] = dashArray.filter(x => typeof x === "number");
+              }
               break;
             }
           case OPS.moveTo:

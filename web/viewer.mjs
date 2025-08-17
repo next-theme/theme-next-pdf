@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 41ca92b
+ * pdfjsBuild = 5adff6a
  */
 
 ;// ./web/pdfjs.js

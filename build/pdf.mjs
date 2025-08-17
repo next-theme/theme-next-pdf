@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 41ca92b
+ * pdfjsBuild = 5adff6a
  */
 
 ;// ./src/shared/util.js
@@ -1401,12 +1401,14 @@ class EditorToolbar {
     editToolbar.classList.add("editToolbar", "hidden");
     editToolbar.setAttribute("role", "toolbar");
     const signal = this.#editor._uiManager._signal;
-    editToolbar.addEventListener("contextmenu", noContextMenu, {
-      signal
-    });
-    editToolbar.addEventListener("pointerdown", EditorToolbar.#pointerDown, {
-      signal
-    });
+    if (signal instanceof AbortSignal && !signal.aborted) {
+      editToolbar.addEventListener("contextmenu", noContextMenu, {
+        signal
+      });
+      editToolbar.addEventListener("pointerdown", EditorToolbar.#pointerDown, {
+        signal
+      });
+    }
     const buttons = this.#buttons = document.createElement("div");
     buttons.className = "buttons";
     editToolbar.append(buttons);
@@ -1437,6 +1439,9 @@ class EditorToolbar {
   }
   #addListenersToElement(element) {
     const signal = this.#editor._uiManager._signal;
+    if (!(signal instanceof AbortSignal) || signal.aborted) {
+      return false;
+    }
     element.addEventListener("focusin", this.#focusIn.bind(this), {
       capture: true,
       signal
@@ -1448,6 +1453,7 @@ class EditorToolbar {
     element.addEventListener("contextmenu", noContextMenu, {
       signal
     });
+    return true;
   }
   hide() {
     this.#toolbar.classList.add("hidden");
@@ -1467,12 +1473,13 @@ class EditorToolbar {
     button.classList.add("basic", "deleteButton");
     button.tabIndex = 0;
     button.setAttribute("data-l10n-id", EditorToolbar.#l10nRemove[editorType]);
-    this.#addListenersToElement(button);
-    button.addEventListener("click", e => {
-      _uiManager.delete();
-    }, {
-      signal: _uiManager._signal
-    });
+    if (this.#addListenersToElement(button)) {
+      button.addEventListener("click", e => {
+        _uiManager.delete();
+      }, {
+        signal: _uiManager._signal
+      });
+    }
     this.#buttons.append(button);
   }
   get #divider() {
@@ -1554,9 +1561,12 @@ class FloatingToolbar {
     const editToolbar = this.#toolbar = document.createElement("div");
     editToolbar.className = "editToolbar";
     editToolbar.setAttribute("role", "toolbar");
-    editToolbar.addEventListener("contextmenu", noContextMenu, {
-      signal: this.#uiManager._signal
-    });
+    const signal = this.#uiManager._signal;
+    if (signal instanceof AbortSignal && !signal.aborted) {
+      editToolbar.addEventListener("contextmenu", noContextMenu, {
+        signal
+      });
+    }
     const buttons = this.#buttons = document.createElement("div");
     buttons.className = "buttons";
     editToolbar.append(buttons);
@@ -1616,12 +1626,14 @@ class FloatingToolbar {
     span.className = "visuallyHidden";
     span.setAttribute("data-l10n-id", labelL10nId);
     const signal = this.#uiManager._signal;
-    button.addEventListener("contextmenu", noContextMenu, {
-      signal
-    });
-    button.addEventListener("click", clickHandler, {
-      signal
-    });
+    if (signal instanceof AbortSignal && !signal.aborted) {
+      button.addEventListener("contextmenu", noContextMenu, {
+        signal
+      });
+      button.addEventListener("click", clickHandler, {
+        signal
+      });
+    }
     this.#buttons.append(button);
   }
 }
@@ -5525,6 +5537,10 @@ class AnnotationEditor {
     this.#disabled = true;
   }
   renderAnnotationElement(annotation) {
+    if (this.deleted) {
+      annotation.hide();
+      return null;
+    }
     let content = annotation.container.querySelector(".annotationContent");
     if (!content) {
       content = document.createElement("div");
@@ -13588,7 +13604,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "41ca92b";
+const build = "5adff6a";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -17623,6 +17639,9 @@ class FreeTextEditor extends AnnotationEditor {
   }
   renderAnnotationElement(annotation) {
     const content = super.renderAnnotationElement(annotation);
+    if (!content) {
+      return null;
+    }
     const {
       style
     } = content;
@@ -19147,6 +19166,10 @@ class HighlightEditor extends AnnotationEditor {
     return this.hasEditedComment || serialized.color.some((c, i) => c !== color[i]);
   }
   renderAnnotationElement(annotation) {
+    if (this.deleted) {
+      annotation.hide();
+      return null;
+    }
     const params = {
       rect: this.getRect(0, 0)
     };
@@ -20677,6 +20700,10 @@ class InkEditor extends DrawingEditor {
     return this.hasEditedComment || this._hasBeenMoved || this._hasBeenResized || serialized.color.some((c, i) => c !== color[i]) || serialized.thickness !== thickness || serialized.opacity !== opacity || serialized.pageIndex !== pageIndex;
   }
   renderAnnotationElement(annotation) {
+    if (this.deleted) {
+      annotation.hide();
+      return null;
+    }
     const {
       points,
       rect
@@ -22378,6 +22405,10 @@ class StampEditor extends AnnotationEditor {
     };
   }
   renderAnnotationElement(annotation) {
+    if (this.deleted) {
+      annotation.hide();
+      return null;
+    }
     const params = {
       rect: this.getRect(0, 0)
     };
