@@ -22,8 +22,31 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 5adff6a
+ * pdfjsBuild = 8be2171
  */
+/******/ // The require scope
+/******/ var __webpack_require__ = {};
+/******/ 
+/************************************************************************/
+/******/ /* webpack/runtime/define property getters */
+/******/ (() => {
+/******/ 	// define getter functions for harmony exports
+/******/ 	__webpack_require__.d = (exports, definition) => {
+/******/ 		for(var key in definition) {
+/******/ 			if(__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) {
+/******/ 				Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 			}
+/******/ 		}
+/******/ 	};
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/hasOwnProperty shorthand */
+/******/ (() => {
+/******/ 	__webpack_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ })();
+/******/ 
+/************************************************************************/
+var __webpack_exports__ = {};
 
 ;// ./src/shared/util.js
 const isNodeJS = typeof process === "object" && process + "" === "[object process]" && !process.versions.nw && !(process.versions.electron && process.type && process.type !== "browser");
@@ -513,6 +536,9 @@ class Util {
   static makeHexColor(r, g, b) {
     return `#${hexNumbers[r]}${hexNumbers[g]}${hexNumbers[b]}`;
   }
+  static domMatrixToTransform(dm) {
+    return [dm.a, dm.b, dm.c, dm.d, dm.e, dm.f];
+  }
   static scaleMinMax(transform, minMax) {
     let temp;
     if (transform[0]) {
@@ -559,6 +585,9 @@ class Util {
   }
   static transform(m1, m2) {
     return [m1[0] * m2[0] + m1[2] * m2[1], m1[1] * m2[0] + m1[3] * m2[1], m1[0] * m2[2] + m1[2] * m2[3], m1[1] * m2[2] + m1[3] * m2[3], m1[0] * m2[4] + m1[2] * m2[5] + m1[4], m1[1] * m2[4] + m1[3] * m2[5] + m1[5]];
+  }
+  static multiplyByDOMMatrix(m, md) {
+    return [m[0] * md.a + m[2] * md.b, m[1] * md.a + m[3] * md.b, m[0] * md.c + m[2] * md.d, m[1] * md.c + m[3] * md.d, m[0] * md.e + m[2] * md.f + m[4], m[1] * md.e + m[3] * md.f + m[5]];
   }
   static applyTransform(p, m, pos = 0) {
     const p0 = p[pos];
@@ -7177,6 +7206,475 @@ class NodeWasmFactory extends BaseWasmFactory {
   }
 }
 
+;// ./src/display/canvas_dependency_tracker.js
+
+const FORCED_DEPENDENCY_LABEL = "__forcedDependency";
+class CanvasDependencyTracker {
+  #simple = {
+    __proto__: null
+  };
+  #incremental = {
+    __proto__: null,
+    transform: [],
+    moveText: [],
+    sameLineText: [],
+    [FORCED_DEPENDENCY_LABEL]: []
+  };
+  #namedDependencies = new Map();
+  #savesStack = [];
+  #markedContentStack = [];
+  #baseTransformStack = [[1, 0, 0, 1, 0, 0]];
+  #clipBox = [-Infinity, -Infinity, Infinity, Infinity];
+  #pendingBBox = new Float64Array([Infinity, Infinity, -Infinity, -Infinity]);
+  #pendingBBoxIdx = -1;
+  #pendingDependencies = new Set();
+  #operations = new Map();
+  #fontBBoxTrustworthy = new Map();
+  #canvasWidth;
+  #canvasHeight;
+  constructor(canvas) {
+    this.#canvasWidth = canvas.width;
+    this.#canvasHeight = canvas.height;
+  }
+  save(opIdx) {
+    this.#simple = {
+      __proto__: this.#simple
+    };
+    this.#incremental = {
+      __proto__: this.#incremental,
+      transform: {
+        __proto__: this.#incremental.transform
+      },
+      moveText: {
+        __proto__: this.#incremental.moveText
+      },
+      sameLineText: {
+        __proto__: this.#incremental.sameLineText
+      },
+      [FORCED_DEPENDENCY_LABEL]: {
+        __proto__: this.#incremental[FORCED_DEPENDENCY_LABEL]
+      }
+    };
+    this.#clipBox = {
+      __proto__: this.#clipBox
+    };
+    this.#savesStack.push([opIdx, null]);
+    return this;
+  }
+  restore(opIdx) {
+    const previous = Object.getPrototypeOf(this.#simple);
+    if (previous === null) {
+      return this;
+    }
+    this.#simple = previous;
+    this.#incremental = Object.getPrototypeOf(this.#incremental);
+    this.#clipBox = Object.getPrototypeOf(this.#clipBox);
+    const lastPair = this.#savesStack.pop();
+    if (lastPair !== undefined) {
+      lastPair[1] = opIdx;
+    }
+    return this;
+  }
+  recordOpenMarker(idx) {
+    this.#savesStack.push([idx, null]);
+    return this;
+  }
+  getOpenMarker() {
+    if (this.#savesStack.length === 0) {
+      return null;
+    }
+    return this.#savesStack.at(-1)[0];
+  }
+  recordCloseMarker(idx) {
+    const lastPair = this.#savesStack.pop();
+    if (lastPair !== undefined) {
+      lastPair[1] = idx;
+    }
+    return this;
+  }
+  beginMarkedContent(opIdx) {
+    this.#markedContentStack.push([opIdx, null]);
+    return this;
+  }
+  endMarkedContent(opIdx) {
+    const lastPair = this.#markedContentStack.pop();
+    if (lastPair !== undefined) {
+      lastPair[1] = opIdx;
+    }
+    return this;
+  }
+  pushBaseTransform(ctx) {
+    this.#baseTransformStack.push(Util.multiplyByDOMMatrix(this.#baseTransformStack.at(-1), ctx.getTransform()));
+    return this;
+  }
+  popBaseTransform() {
+    if (this.#baseTransformStack.length > 1) {
+      this.#baseTransformStack.pop();
+    }
+    return this;
+  }
+  recordSimpleData(name, idx) {
+    this.#simple[name] = idx;
+    return this;
+  }
+  recordIncrementalData(name, idx) {
+    this.#incremental[name].push(idx);
+    return this;
+  }
+  resetIncrementalData(name, idx) {
+    this.#incremental[name].length = 0;
+    return this;
+  }
+  recordNamedData(name, idx) {
+    this.#namedDependencies.set(name, idx);
+    return this;
+  }
+  recordFutureForcedDependency(name, idx) {
+    this.recordIncrementalData(FORCED_DEPENDENCY_LABEL, idx);
+    return this;
+  }
+  inheritSimpleDataAsFutureForcedDependencies(names) {
+    for (const name of names) {
+      if (name in this.#simple) {
+        this.recordFutureForcedDependency(name, this.#simple[name]);
+      }
+    }
+    return this;
+  }
+  inheritPendingDependenciesAsFutureForcedDependencies() {
+    for (const dep of this.#pendingDependencies) {
+      this.recordFutureForcedDependency(FORCED_DEPENDENCY_LABEL, dep);
+    }
+    return this;
+  }
+  resetBBox(idx) {
+    this.#pendingBBoxIdx = idx;
+    this.#pendingBBox[0] = Infinity;
+    this.#pendingBBox[1] = Infinity;
+    this.#pendingBBox[2] = -Infinity;
+    this.#pendingBBox[3] = -Infinity;
+    return this;
+  }
+  get hasPendingBBox() {
+    return this.#pendingBBoxIdx !== -1;
+  }
+  recordClipBox(idx, ctx, minX, maxX, minY, maxY) {
+    const transform = Util.multiplyByDOMMatrix(this.#baseTransformStack.at(-1), ctx.getTransform());
+    const clipBox = [Infinity, Infinity, -Infinity, -Infinity];
+    Util.axialAlignedBoundingBox([minX, minY, maxX, maxY], transform, clipBox);
+    const intersection = Util.intersect(this.#clipBox, clipBox);
+    if (intersection) {
+      this.#clipBox[0] = intersection[0];
+      this.#clipBox[1] = intersection[1];
+      this.#clipBox[2] = intersection[2];
+      this.#clipBox[3] = intersection[3];
+    } else {
+      this.#clipBox[0] = this.#clipBox[1] = Infinity;
+      this.#clipBox[2] = this.#clipBox[3] = -Infinity;
+    }
+    return this;
+  }
+  recordBBox(idx, ctx, minX, maxX, minY, maxY) {
+    const clipBox = this.#clipBox;
+    if (clipBox[0] === Infinity) {
+      return this;
+    }
+    const transform = Util.multiplyByDOMMatrix(this.#baseTransformStack.at(-1), ctx.getTransform());
+    if (clipBox[0] === -Infinity) {
+      Util.axialAlignedBoundingBox([minX, minY, maxX, maxY], transform, this.#pendingBBox);
+      return this;
+    }
+    const bbox = [Infinity, Infinity, -Infinity, -Infinity];
+    Util.axialAlignedBoundingBox([minX, minY, maxX, maxY], transform, bbox);
+    this.#pendingBBox[0] = Math.min(this.#pendingBBox[0], Math.max(bbox[0], clipBox[0]));
+    this.#pendingBBox[1] = Math.min(this.#pendingBBox[1], Math.max(bbox[1], clipBox[1]));
+    this.#pendingBBox[2] = Math.max(this.#pendingBBox[2], Math.min(bbox[2], clipBox[2]));
+    this.#pendingBBox[3] = Math.max(this.#pendingBBox[3], Math.min(bbox[3], clipBox[3]));
+    return this;
+  }
+  recordCharacterBBox(idx, ctx, font, scale = 1, x = 0, y = 0, getMeasure) {
+    const fontBBox = font.bbox;
+    let isBBoxTrustworthy;
+    let computedBBox;
+    if (fontBBox) {
+      isBBoxTrustworthy = fontBBox[2] !== fontBBox[0] && fontBBox[3] !== fontBBox[1] && this.#fontBBoxTrustworthy.get(font);
+      if (isBBoxTrustworthy !== false) {
+        computedBBox = [0, 0, 0, 0];
+        Util.axialAlignedBoundingBox(fontBBox, font.fontMatrix, computedBBox);
+        if (scale !== 1 || x !== 0 || y !== 0) {
+          Util.scaleMinMax([scale, 0, 0, -scale, x, y], computedBBox);
+        }
+        if (isBBoxTrustworthy) {
+          return this.recordBBox(idx, ctx, computedBBox[0], computedBBox[2], computedBBox[1], computedBBox[3]);
+        }
+      }
+    }
+    if (!getMeasure) {
+      return this.recordFullPageBBox(idx);
+    }
+    const measure = getMeasure();
+    if (fontBBox && computedBBox && isBBoxTrustworthy === undefined) {
+      isBBoxTrustworthy = computedBBox[0] <= x - measure.actualBoundingBoxLeft && computedBBox[2] >= x + measure.actualBoundingBoxRight && computedBBox[1] <= y - measure.actualBoundingBoxAscent && computedBBox[3] >= y + measure.actualBoundingBoxDescent;
+      this.#fontBBoxTrustworthy.set(font, isBBoxTrustworthy);
+      if (isBBoxTrustworthy) {
+        return this.recordBBox(idx, ctx, computedBBox[0], computedBBox[2], computedBBox[1], computedBBox[3]);
+      }
+    }
+    return this.recordBBox(idx, ctx, x - measure.actualBoundingBoxLeft, x + measure.actualBoundingBoxRight, y - measure.actualBoundingBoxAscent, y + measure.actualBoundingBoxDescent);
+  }
+  recordFullPageBBox(idx) {
+    this.#pendingBBox[0] = Math.max(0, this.#clipBox[0]);
+    this.#pendingBBox[1] = Math.max(0, this.#clipBox[1]);
+    this.#pendingBBox[2] = Math.min(this.#canvasWidth, this.#clipBox[2]);
+    this.#pendingBBox[3] = Math.min(this.#canvasHeight, this.#clipBox[3]);
+    return this;
+  }
+  getSimpleIndex(dependencyName) {
+    return this.#simple[dependencyName];
+  }
+  recordDependencies(idx, dependencyNames) {
+    const pendingDependencies = this.#pendingDependencies;
+    const simple = this.#simple;
+    const incremental = this.#incremental;
+    for (const name of dependencyNames) {
+      if (name in this.#simple) {
+        pendingDependencies.add(simple[name]);
+      } else if (name in incremental) {
+        incremental[name].forEach(pendingDependencies.add, pendingDependencies);
+      }
+    }
+    return this;
+  }
+  copyDependenciesFromIncrementalOperation(idx, name) {
+    const operations = this.#operations;
+    const pendingDependencies = this.#pendingDependencies;
+    for (const depIdx of this.#incremental[name]) {
+      operations.get(depIdx).dependencies.forEach(pendingDependencies.add, pendingDependencies.add(depIdx));
+    }
+    return this;
+  }
+  recordNamedDependency(idx, name) {
+    if (this.#namedDependencies.has(name)) {
+      this.#pendingDependencies.add(this.#namedDependencies.get(name));
+    }
+    return this;
+  }
+  recordOperation(idx, preserveBbox = false) {
+    this.recordDependencies(idx, [FORCED_DEPENDENCY_LABEL]);
+    const dependencies = new Set(this.#pendingDependencies);
+    const pairs = this.#savesStack.concat(this.#markedContentStack);
+    const bbox = this.#pendingBBoxIdx === idx ? {
+      minX: this.#pendingBBox[0],
+      minY: this.#pendingBBox[1],
+      maxX: this.#pendingBBox[2],
+      maxY: this.#pendingBBox[3]
+    } : null;
+    this.#operations.set(idx, {
+      bbox,
+      pairs,
+      dependencies
+    });
+    if (!preserveBbox) {
+      this.#pendingBBoxIdx = -1;
+    }
+    this.#pendingDependencies.clear();
+    return this;
+  }
+  bboxToClipBoxDropOperation(idx) {
+    if (this.#pendingBBoxIdx !== -1) {
+      this.#pendingBBoxIdx = -1;
+      this.#clipBox[0] = Math.max(this.#clipBox[0], this.#pendingBBox[0]);
+      this.#clipBox[1] = Math.max(this.#clipBox[1], this.#pendingBBox[1]);
+      this.#clipBox[2] = Math.min(this.#clipBox[2], this.#pendingBBox[2]);
+      this.#clipBox[3] = Math.min(this.#clipBox[3], this.#pendingBBox[3]);
+    }
+    this.#pendingDependencies.clear();
+    return this;
+  }
+  _takePendingDependencies() {
+    const pendingDependencies = this.#pendingDependencies;
+    this.#pendingDependencies = new Set();
+    return pendingDependencies;
+  }
+  _extractOperation(idx) {
+    const operation = this.#operations.get(idx);
+    this.#operations.delete(idx);
+    return operation;
+  }
+  _pushPendingDependencies(dependencies) {
+    for (const dep of dependencies) {
+      this.#pendingDependencies.add(dep);
+    }
+  }
+  take() {
+    this.#fontBBoxTrustworthy.clear();
+    return Array.from(this.#operations, ([idx, {
+      bbox,
+      pairs,
+      dependencies
+    }]) => {
+      pairs.forEach(pair => pair.forEach(dependencies.add, dependencies));
+      dependencies.delete(idx);
+      return {
+        minX: (bbox?.minX ?? 0) / this.#canvasWidth,
+        maxX: (bbox?.maxX ?? this.#canvasWidth) / this.#canvasWidth,
+        minY: (bbox?.minY ?? 0) / this.#canvasHeight,
+        maxY: (bbox?.maxY ?? this.#canvasHeight) / this.#canvasHeight,
+        dependencies: Array.from(dependencies).sort((a, b) => a - b),
+        idx
+      };
+    });
+  }
+}
+class CanvasNestedDependencyTracker {
+  #dependencyTracker;
+  #opIdx;
+  #nestingLevel = 0;
+  #outerDependencies;
+  #savesLevel = 0;
+  constructor(dependencyTracker, opIdx) {
+    if (dependencyTracker instanceof CanvasNestedDependencyTracker) {
+      return dependencyTracker;
+    }
+    this.#dependencyTracker = dependencyTracker;
+    this.#outerDependencies = dependencyTracker._takePendingDependencies();
+    this.#opIdx = opIdx;
+  }
+  save(opIdx) {
+    this.#savesLevel++;
+    this.#dependencyTracker.save(this.#opIdx);
+    return this;
+  }
+  restore(opIdx) {
+    if (this.#savesLevel > 0) {
+      this.#dependencyTracker.restore(this.#opIdx);
+      this.#savesLevel--;
+    }
+    return this;
+  }
+  recordOpenMarker(idx) {
+    this.#nestingLevel++;
+    return this;
+  }
+  getOpenMarker() {
+    return this.#nestingLevel > 0 ? this.#opIdx : this.#dependencyTracker.getOpenMarker();
+  }
+  recordCloseMarker(idx) {
+    this.#nestingLevel--;
+    return this;
+  }
+  beginMarkedContent(opIdx) {
+    return this;
+  }
+  endMarkedContent(opIdx) {
+    return this;
+  }
+  pushBaseTransform(ctx) {
+    this.#dependencyTracker.pushBaseTransform(ctx);
+    return this;
+  }
+  popBaseTransform() {
+    this.#dependencyTracker.popBaseTransform();
+    return this;
+  }
+  recordSimpleData(name, idx) {
+    this.#dependencyTracker.recordSimpleData(name, this.#opIdx);
+    return this;
+  }
+  recordIncrementalData(name, idx) {
+    this.#dependencyTracker.recordIncrementalData(name, this.#opIdx);
+    return this;
+  }
+  resetIncrementalData(name, idx) {
+    this.#dependencyTracker.resetIncrementalData(name, this.#opIdx);
+    return this;
+  }
+  recordNamedData(name, idx) {
+    return this;
+  }
+  recordFutureForcedDependency(name, idx) {
+    this.#dependencyTracker.recordFutureForcedDependency(name, this.#opIdx);
+    return this;
+  }
+  inheritSimpleDataAsFutureForcedDependencies(names) {
+    this.#dependencyTracker.inheritSimpleDataAsFutureForcedDependencies(names);
+    return this;
+  }
+  inheritPendingDependenciesAsFutureForcedDependencies() {
+    this.#dependencyTracker.inheritPendingDependenciesAsFutureForcedDependencies();
+    return this;
+  }
+  resetBBox(idx) {
+    if (!this.#dependencyTracker.hasPendingBBox) {
+      this.#dependencyTracker.resetBBox(this.#opIdx);
+    }
+    return this;
+  }
+  get hasPendingBBox() {
+    return this.#dependencyTracker.hasPendingBBox;
+  }
+  recordClipBox(idx, ctx, minX, maxX, minY, maxY) {
+    this.#dependencyTracker.recordClipBox(this.#opIdx, ctx, minX, maxX, minY, maxY);
+    return this;
+  }
+  recordBBox(idx, ctx, minX, maxX, minY, maxY) {
+    this.#dependencyTracker.recordBBox(this.#opIdx, ctx, minX, maxX, minY, maxY);
+    return this;
+  }
+  recordCharacterBBox(idx, ctx, font, scale, x, y, getMeasure) {
+    this.#dependencyTracker.recordCharacterBBox(this.#opIdx, ctx, font, scale, x, y, getMeasure);
+    return this;
+  }
+  recordFullPageBBox(idx) {
+    this.#dependencyTracker.recordFullPageBBox(this.#opIdx);
+    return this;
+  }
+  getSimpleIndex(dependencyName) {
+    return this.#dependencyTracker.getSimpleIndex(dependencyName);
+  }
+  recordDependencies(idx, dependencyNames) {
+    this.#dependencyTracker.recordDependencies(this.#opIdx, dependencyNames);
+    return this;
+  }
+  copyDependenciesFromIncrementalOperation(idx, name) {
+    this.#dependencyTracker.copyDependenciesFromIncrementalOperation(this.#opIdx, name);
+    return this;
+  }
+  recordNamedDependency(idx, name) {
+    this.#dependencyTracker.recordNamedDependency(this.#opIdx, name);
+    return this;
+  }
+  recordOperation(idx) {
+    this.#dependencyTracker.recordOperation(this.#opIdx, true);
+    const operation = this.#dependencyTracker._extractOperation(this.#opIdx);
+    for (const depIdx of operation.dependencies) {
+      this.#outerDependencies.add(depIdx);
+    }
+    this.#outerDependencies.delete(this.#opIdx);
+    this.#outerDependencies.delete(null);
+    return this;
+  }
+  bboxToClipBoxDropOperation(idx) {
+    this.#dependencyTracker.bboxToClipBoxDropOperation(this.#opIdx);
+    return this;
+  }
+  recordNestedDependencies() {
+    this.#dependencyTracker._pushPendingDependencies(this.#outerDependencies);
+  }
+  take() {
+    throw new Error("Unreachable");
+  }
+}
+const Dependencies = {
+  stroke: ["path", "transform", "filter", "strokeColor", "strokeAlpha", "lineWidth", "lineCap", "lineJoin", "miterLimit", "dash"],
+  fill: ["path", "transform", "filter", "fillColor", "fillAlpha", "globalCompositeOperation", "SMask"],
+  imageXObject: ["transform", "SMask", "filter", "fillAlpha", "strokeAlpha", "globalCompositeOperation"],
+  rawFillPath: ["filter", "fillColor", "fillAlpha"],
+  showText: ["transform", "leading", "charSpacing", "wordSpacing", "hScale", "textRise", "moveText", "textMatrix", "font", "filter", "fillColor", "textRenderingMode", "SMask", "fillAlpha", "strokeAlpha", "globalCompositeOperation"],
+  transform: ["transform"],
+  transformAndFill: ["transform", "fillColor"]
+};
+
 ;// ./src/display/pattern_helper.js
 
 
@@ -7561,12 +8059,14 @@ class TilingPattern {
     graphics.groupLevel = owner.groupLevel;
     this.setFillAndStrokeStyleToContext(graphics, paintType, color);
     tmpCtx.translate(-dimx.scale * x0, -dimy.scale * y0);
-    graphics.transform(dimx.scale, 0, 0, dimy.scale, 0, 0);
+    graphics.transform(0, dimx.scale, 0, 0, dimy.scale, 0, 0);
     tmpCtx.save();
+    graphics.dependencyTracker?.save();
     this.clipBbox(graphics, x0, y0, x1, y1);
     graphics.baseTransform = getCurrentTransform(graphics.ctx);
     graphics.executeOperatorList(operatorList);
     graphics.endDrawing();
+    graphics.dependencyTracker?.restore().recordNestedDependencies?.();
     tmpCtx.restore();
     if (redrawHorizontally || redrawVertically) {
       const image = tmpCanvas.canvas;
@@ -7780,6 +8280,7 @@ function grayToRGBA(src, dest) {
 
 
 
+
 const MIN_FONT_SIZE = 16;
 const MAX_FONT_SIZE = 100;
 const EXECUTION_TIME = 15;
@@ -7974,7 +8475,8 @@ class CanvasExtraState {
   lineWidth = 1;
   activeSMask = null;
   transferMaps = "none";
-  constructor(width, height) {
+  constructor(width, height, preInit) {
+    preInit?.(this);
     this.clipBox = new Float32Array([0, 0, width, height]);
     this.minMax = MIN_MAX_INIT.slice();
   }
@@ -8186,7 +8688,7 @@ class CanvasGraphics {
   constructor(canvasCtx, commonObjs, objs, canvasFactory, filterFactory, {
     optionalContentConfig,
     markedContentStack = null
-  }, annotationCanvasMap, pageColors) {
+  }, annotationCanvasMap, pageColors, dependencyTracker) {
     this.ctx = canvasCtx;
     this.current = new CanvasExtraState(this.ctx.canvas.width, this.ctx.canvas.height);
     this.stateStack = [];
@@ -8219,9 +8721,11 @@ class CanvasGraphics {
     this._cachedScaleForStroking = [-1, 0];
     this._cachedGetSinglePixelWidth = null;
     this._cachedBitmapsMap = new Map();
+    this.dependencyTracker = dependencyTracker ?? null;
   }
-  getObject(data, fallback = null) {
+  getObject(opIdx, data, fallback = null) {
     if (typeof data === "string") {
+      this.dependencyTracker?.recordNamedDependency(opIdx, data);
       return data.startsWith("g_") ? this.commonObjs.get(data) : this.objs.get(data);
     }
     return fallback;
@@ -8257,7 +8761,7 @@ class CanvasGraphics {
     this.viewportScale = viewport.scale;
     this.baseTransform = getCurrentTransform(this.ctx);
   }
-  executeOperatorList(operatorList, executionStartIdx, continueCallback, stepper) {
+  executeOperatorList(operatorList, executionStartIdx, continueCallback, stepper, filteredOperationIndexes) {
     const argsArray = operatorList.argsArray;
     const fnArray = operatorList.fnArray;
     let i = executionStartIdx || 0;
@@ -8270,21 +8774,29 @@ class CanvasGraphics {
     let steps = 0;
     const commonObjs = this.commonObjs;
     const objs = this.objs;
-    let fnId;
+    let fnId, fnArgs;
     while (true) {
       if (stepper !== undefined && i === stepper.nextBreakPoint) {
         stepper.breakIt(i, continueCallback);
         return i;
       }
-      fnId = fnArray[i];
-      if (fnId !== OPS.dependency) {
-        this[fnId].apply(this, argsArray[i]);
-      } else {
-        for (const depObjId of argsArray[i]) {
-          const objsPool = depObjId.startsWith("g_") ? commonObjs : objs;
-          if (!objsPool.has(depObjId)) {
-            objsPool.get(depObjId, continueCallback);
-            return i;
+      if (!filteredOperationIndexes || filteredOperationIndexes.has(i)) {
+        fnId = fnArray[i];
+        fnArgs = argsArray[i] ?? null;
+        if (fnId !== OPS.dependency) {
+          if (fnArgs === null) {
+            this[fnId](i);
+          } else {
+            this[fnId](i, ...fnArgs);
+          }
+        } else {
+          for (const depObjId of fnArgs) {
+            this.dependencyTracker?.recordNamedData(depObjId, i);
+            const objsPool = depObjId.startsWith("g_") ? commonObjs : objs;
+            if (!objsPool.has(depObjId)) {
+              objsPool.get(depObjId, continueCallback);
+              return i;
+            }
           }
         }
       }
@@ -8377,7 +8889,7 @@ class CanvasGraphics {
       paintHeight
     };
   }
-  _createMaskCanvas(img) {
+  _createMaskCanvas(opIdx, img) {
     const ctx = this.ctx;
     const {
       width,
@@ -8399,6 +8911,7 @@ class CanvasGraphics {
       if (cachedImage && !isPatternFill) {
         const offsetX = Math.round(Math.min(currentTransform[0], currentTransform[2]) + currentTransform[4]);
         const offsetY = Math.round(Math.min(currentTransform[1], currentTransform[3]) + currentTransform[5]);
+        this.dependencyTracker?.recordDependencies(opIdx, Dependencies.transformAndFill);
         return {
           canvas: cachedImage,
           offsetX,
@@ -8441,79 +8954,90 @@ class CanvasGraphics {
       this.cachedCanvases.delete("fillCanvas");
       cache.set(cacheKey, fillCanvas.canvas);
     }
+    this.dependencyTracker?.recordDependencies(opIdx, Dependencies.transformAndFill);
     return {
       canvas: fillCanvas.canvas,
       offsetX: Math.round(offsetX),
       offsetY: Math.round(offsetY)
     };
   }
-  setLineWidth(width) {
+  setLineWidth(opIdx, width) {
+    this.dependencyTracker?.recordSimpleData("lineWidth", opIdx);
     if (width !== this.current.lineWidth) {
       this._cachedScaleForStroking[0] = -1;
     }
     this.current.lineWidth = width;
     this.ctx.lineWidth = width;
   }
-  setLineCap(style) {
+  setLineCap(opIdx, style) {
+    this.dependencyTracker?.recordSimpleData("lineCap", opIdx);
     this.ctx.lineCap = LINE_CAP_STYLES[style];
   }
-  setLineJoin(style) {
+  setLineJoin(opIdx, style) {
+    this.dependencyTracker?.recordSimpleData("lineJoin", opIdx);
     this.ctx.lineJoin = LINE_JOIN_STYLES[style];
   }
-  setMiterLimit(limit) {
+  setMiterLimit(opIdx, limit) {
+    this.dependencyTracker?.recordSimpleData("miterLimit", opIdx);
     this.ctx.miterLimit = limit;
   }
-  setDash(dashArray, dashPhase) {
+  setDash(opIdx, dashArray, dashPhase) {
+    this.dependencyTracker?.recordSimpleData("dash", opIdx);
     const ctx = this.ctx;
     if (ctx.setLineDash !== undefined) {
       ctx.setLineDash(dashArray);
       ctx.lineDashOffset = dashPhase;
     }
   }
-  setRenderingIntent(intent) {}
-  setFlatness(flatness) {}
-  setGState(states) {
+  setRenderingIntent(opIdx, intent) {}
+  setFlatness(opIdx, flatness) {}
+  setGState(opIdx, states) {
     for (const [key, value] of states) {
       switch (key) {
         case "LW":
-          this.setLineWidth(value);
+          this.setLineWidth(opIdx, value);
           break;
         case "LC":
-          this.setLineCap(value);
+          this.setLineCap(opIdx, value);
           break;
         case "LJ":
-          this.setLineJoin(value);
+          this.setLineJoin(opIdx, value);
           break;
         case "ML":
-          this.setMiterLimit(value);
+          this.setMiterLimit(opIdx, value);
           break;
         case "D":
-          this.setDash(value[0], value[1]);
+          this.setDash(opIdx, value[0], value[1]);
           break;
         case "RI":
-          this.setRenderingIntent(value);
+          this.setRenderingIntent(opIdx, value);
           break;
         case "FL":
-          this.setFlatness(value);
+          this.setFlatness(opIdx, value);
           break;
         case "Font":
-          this.setFont(value[0], value[1]);
+          this.setFont(opIdx, value[0], value[1]);
           break;
         case "CA":
+          this.dependencyTracker?.recordSimpleData("strokeAlpha", opIdx);
           this.current.strokeAlpha = value;
           break;
         case "ca":
+          this.dependencyTracker?.recordSimpleData("fillAlpha", opIdx);
           this.ctx.globalAlpha = this.current.fillAlpha = value;
           break;
         case "BM":
+          this.dependencyTracker?.recordSimpleData("globalCompositeOperation", opIdx);
           this.ctx.globalCompositeOperation = value;
           break;
         case "SMask":
+          this.dependencyTracker?.recordSimpleData("SMask", opIdx);
           this.current.activeSMask = value ? this.tempSMask : null;
           this.tempSMask = null;
           this.checkSMaskState();
           break;
         case "TR":
+          this.dependencyTracker?.recordSimpleData("filter", opIdx);
           this.ctx.filter = this.current.transferMaps = this.filterFactory.addFilter(value);
           break;
       }
@@ -8530,7 +9054,7 @@ class CanvasGraphics {
       this.endSMaskMode();
     }
   }
-  beginSMaskMode() {
+  beginSMaskMode(opIdx) {
     if (this.inSMaskMode) {
       throw new Error("beginSMaskMode called while already in smask mode");
     }
@@ -8543,7 +9067,7 @@ class CanvasGraphics {
     ctx.setTransform(this.suspendedCtx.getTransform());
     copyCtxState(this.suspendedCtx, ctx);
     mirrorContextOperations(ctx, this.suspendedCtx);
-    this.setGState([["BM", "source-over"]]);
+    this.setGState(opIdx, [["BM", "source-over"]]);
   }
   endSMaskMode() {
     if (!this.inSMaskMode) {
@@ -8633,7 +9157,7 @@ class CanvasGraphics {
     layerCtx.drawImage(maskCanvas, maskX, maskY, width, height, layerOffsetX, layerOffsetY, width, height);
     layerCtx.restore();
   }
-  save() {
+  save(opIdx) {
     if (this.inSMaskMode) {
       copyCtxState(this.ctx, this.suspendedCtx);
     }
@@ -8641,8 +9165,10 @@ class CanvasGraphics {
     const old = this.current;
     this.stateStack.push(old);
     this.current = old.clone();
+    this.dependencyTracker?.save(opIdx);
   }
-  restore() {
+  restore(opIdx) {
+    this.dependencyTracker?.restore(opIdx);
     if (this.stateStack.length === 0) {
       if (this.inSMaskMode) {
         this.endSMaskMode();
@@ -8659,17 +9185,22 @@ class CanvasGraphics {
     this._cachedScaleForStroking[0] = -1;
     this._cachedGetSinglePixelWidth = null;
   }
-  transform(a, b, c, d, e, f) {
+  transform(opIdx, a, b, c, d, e, f) {
+    this.dependencyTracker?.recordIncrementalData("transform", opIdx);
     this.ctx.transform(a, b, c, d, e, f);
     this._cachedScaleForStroking[0] = -1;
     this._cachedGetSinglePixelWidth = null;
   }
-  constructPath(op, data, minMax) {
+  constructPath(opIdx, op, data, minMax) {
     let [path] = data;
     if (!minMax) {
       path ||= data[0] = new Path2D();
-      this[op](path);
+      this[op](opIdx, path);
       return;
+    }
+    if (this.dependencyTracker !== null) {
+      const outerExtraSize = op === OPS.stroke ? this.current.lineWidth / 2 : 0;
+      this.dependencyTracker.resetBBox(opIdx).recordBBox(opIdx, this.ctx, minMax[0] - outerExtraSize, minMax[2] + outerExtraSize, minMax[1] - outerExtraSize, minMax[3] + outerExtraSize).recordDependencies(opIdx, ["transform"]);
     }
     if (!(path instanceof Path2D)) {
       const path2d = data[0] = new Path2D();
@@ -8695,12 +9226,13 @@ class CanvasGraphics {
       path = path2d;
     }
     Util.axialAlignedBoundingBox(minMax, getCurrentTransform(this.ctx), this.current.minMax);
-    this[op](path);
+    this[op](opIdx, path);
+    this._pathStartIdx = opIdx;
   }
-  closePath() {
+  closePath(opIdx) {
     this.ctx.closePath();
   }
-  stroke(path, consumePath = true) {
+  stroke(opIdx, path, consumePath = true) {
     const ctx = this.ctx;
     const strokeColor = this.current.strokeColor;
     ctx.globalAlpha = this.current.strokeAlpha;
@@ -8720,21 +9252,23 @@ class CanvasGraphics {
         this.rescaleAndStroke(path, true);
       }
     }
+    this.dependencyTracker?.recordDependencies(opIdx, Dependencies.stroke);
     if (consumePath) {
-      this.consumePath(path, this.current.getClippedPathBoundingBox(PathType.STROKE, getCurrentTransform(this.ctx)));
+      this.consumePath(opIdx, path, this.current.getClippedPathBoundingBox(PathType.STROKE, getCurrentTransform(this.ctx)));
     }
     ctx.globalAlpha = this.current.fillAlpha;
   }
-  closeStroke(path) {
-    this.stroke(path);
+  closeStroke(opIdx, path) {
+    this.stroke(opIdx, path);
   }
-  fill(path, consumePath = true) {
+  fill(opIdx, path, consumePath = true) {
     const ctx = this.ctx;
     const fillColor = this.current.fillColor;
     const isPatternFill = this.current.patternFill;
     let needRestore = false;
     if (isPatternFill) {
       const baseTransform = fillColor.isModifyingCurrentTransform() ? ctx.getTransform() : null;
+      this.dependencyTracker?.save(opIdx);
       ctx.save();
       ctx.fillStyle = fillColor.getPattern(ctx, this, getCurrentTransformInverse(ctx), PathType.FILL);
       if (baseTransform) {
@@ -8753,87 +9287,106 @@ class CanvasGraphics {
         ctx.fill(path);
       }
     }
+    this.dependencyTracker?.recordDependencies(opIdx, Dependencies.fill);
     if (needRestore) {
       ctx.restore();
+      this.dependencyTracker?.restore(opIdx);
     }
     if (consumePath) {
-      this.consumePath(path, intersect);
+      this.consumePath(opIdx, path, intersect);
     }
   }
-  eoFill(path) {
+  eoFill(opIdx, path) {
     this.pendingEOFill = true;
-    this.fill(path);
+    this.fill(opIdx, path);
   }
-  fillStroke(path) {
-    this.fill(path, false);
-    this.stroke(path, false);
-    this.consumePath(path);
+  fillStroke(opIdx, path) {
+    this.fill(opIdx, path, false);
+    this.stroke(opIdx, path, false);
+    this.consumePath(opIdx, path);
   }
-  eoFillStroke(path) {
+  eoFillStroke(opIdx, path) {
     this.pendingEOFill = true;
-    this.fillStroke(path);
+    this.fillStroke(opIdx, path);
   }
-  closeFillStroke(path) {
-    this.fillStroke(path);
+  closeFillStroke(opIdx, path) {
+    this.fillStroke(opIdx, path);
   }
-  closeEOFillStroke(path) {
+  closeEOFillStroke(opIdx, path) {
     this.pendingEOFill = true;
-    this.fillStroke(path);
+    this.fillStroke(opIdx, path);
   }
-  endPath(path) {
-    this.consumePath(path);
+  endPath(opIdx, path) {
+    this.consumePath(opIdx, path);
   }
-  rawFillPath(path) {
+  rawFillPath(opIdx, path) {
     this.ctx.fill(path);
+    this.dependencyTracker?.recordDependencies(opIdx, Dependencies.rawFillPath).recordOperation(opIdx);
   }
-  clip() {
+  clip(opIdx) {
+    this.dependencyTracker?.recordFutureForcedDependency("clipMode", opIdx);
     this.pendingClip = NORMAL_CLIP;
   }
-  eoClip() {
+  eoClip(opIdx) {
+    this.dependencyTracker?.recordFutureForcedDependency("clipMode", opIdx);
     this.pendingClip = EO_CLIP;
   }
-  beginText() {
+  beginText(opIdx) {
     this.current.textMatrix = null;
     this.current.textMatrixScale = 1;
     this.current.x = this.current.lineX = 0;
     this.current.y = this.current.lineY = 0;
+    this.dependencyTracker?.recordOpenMarker(opIdx).resetIncrementalData("sameLineText").resetIncrementalData("moveText", opIdx);
   }
-  endText() {
+  endText(opIdx) {
     const paths = this.pendingTextPaths;
     const ctx = this.ctx;
-    if (paths === undefined) {
-      return;
-    }
-    const newPath = new Path2D();
-    const invTransf = ctx.getTransform().invertSelf();
-    for (const {
-      transform,
-      x,
-      y,
-      fontSize,
-      path
-    } of paths) {
-      if (!path) {
-        continue;
+    if (this.dependencyTracker) {
+      const {
+        dependencyTracker
+      } = this;
+      if (paths !== undefined) {
+        dependencyTracker.recordFutureForcedDependency("textClip", dependencyTracker.getOpenMarker()).recordFutureForcedDependency("textClip", opIdx);
       }
-      newPath.addPath(path, new DOMMatrix(transform).preMultiplySelf(invTransf).translate(x, y).scale(fontSize, -fontSize));
+      dependencyTracker.recordCloseMarker(opIdx);
     }
-    ctx.clip(newPath);
+    if (paths !== undefined) {
+      const newPath = new Path2D();
+      const invTransf = ctx.getTransform().invertSelf();
+      for (const {
+        transform,
+        x,
+        y,
+        fontSize,
+        path
+      } of paths) {
+        if (!path) {
+          continue;
+        }
+        newPath.addPath(path, new DOMMatrix(transform).preMultiplySelf(invTransf).translate(x, y).scale(fontSize, -fontSize));
+      }
+      ctx.clip(newPath);
+    }
     delete this.pendingTextPaths;
   }
-  setCharSpacing(spacing) {
+  setCharSpacing(opIdx, spacing) {
+    this.dependencyTracker?.recordSimpleData("charSpacing", opIdx);
     this.current.charSpacing = spacing;
   }
-  setWordSpacing(spacing) {
+  setWordSpacing(opIdx, spacing) {
+    this.dependencyTracker?.recordSimpleData("wordSpacing", opIdx);
     this.current.wordSpacing = spacing;
   }
-  setHScale(scale) {
+  setHScale(opIdx, scale) {
+    this.dependencyTracker?.recordSimpleData("hScale", opIdx);
     this.current.textHScale = scale / 100;
   }
-  setLeading(leading) {
+  setLeading(opIdx, leading) {
+    this.dependencyTracker?.recordSimpleData("leading", opIdx);
     this.current.leading = -leading;
   }
-  setFont(fontRefName, size) {
+  setFont(opIdx, fontRefName, size) {
+    this.dependencyTracker?.recordSimpleData("font", opIdx).recordNamedDependency(opIdx, fontRefName);
     const fontObj = this.commonObjs.get(fontRefName);
     const current = this.current;
     if (!fontObj) {
@@ -8872,21 +9425,25 @@ class CanvasGraphics {
     this.current.fontSizeScale = size / browserFontSize;
     this.ctx.font = `${italic} ${bold} ${browserFontSize}px ${typeface}`;
   }
-  setTextRenderingMode(mode) {
+  setTextRenderingMode(opIdx, mode) {
+    this.dependencyTracker?.recordSimpleData("textRenderingMode", opIdx);
     this.current.textRenderingMode = mode;
   }
-  setTextRise(rise) {
+  setTextRise(opIdx, rise) {
+    this.dependencyTracker?.recordSimpleData("textRise", opIdx);
     this.current.textRise = rise;
   }
-  moveText(x, y) {
+  moveText(opIdx, x, y) {
+    this.dependencyTracker?.resetIncrementalData("sameLineText").recordIncrementalData("moveText", opIdx);
     this.current.x = this.current.lineX += x;
     this.current.y = this.current.lineY += y;
   }
-  setLeadingMoveText(x, y) {
-    this.setLeading(-y);
-    this.moveText(x, y);
+  setLeadingMoveText(opIdx, x, y) {
+    this.setLeading(opIdx, -y);
+    this.moveText(opIdx, x, y);
   }
-  setTextMatrix(matrix) {
+  setTextMatrix(opIdx, matrix) {
+    this.dependencyTracker?.recordSimpleData("textMatrix", opIdx);
     const {
       current
     } = this;
@@ -8895,15 +9452,16 @@ class CanvasGraphics {
     current.x = current.lineX = 0;
     current.y = current.lineY = 0;
   }
-  nextLine() {
-    this.moveText(0, this.current.leading);
+  nextLine(opIdx) {
+    this.moveText(opIdx, 0, this.current.leading);
+    this.dependencyTracker?.recordIncrementalData("moveText", this.dependencyTracker.getSimpleIndex("leading") ?? opIdx);
   }
   #getScaledPath(path, currentTransform, transform) {
     const newPath = new Path2D();
     newPath.addPath(path, new DOMMatrix(transform).invertSelf().multiplySelf(currentTransform));
     return newPath;
   }
-  paintChar(character, x, y, patternFillTransform, patternStrokeTransform) {
+  paintChar(opIdx, character, x, y, patternFillTransform, patternStrokeTransform) {
     const ctx = this.ctx;
     const current = this.current;
     const font = current.font;
@@ -8921,12 +9479,14 @@ class CanvasGraphics {
       ctx.save();
       ctx.translate(x, y);
       ctx.scale(fontSize, -fontSize);
+      this.dependencyTracker?.recordCharacterBBox(opIdx, ctx, font);
       let currentTransform;
       if (fillStrokeMode === TextRenderingMode.FILL || fillStrokeMode === TextRenderingMode.FILL_STROKE) {
         if (patternFillTransform) {
           currentTransform = ctx.getTransform();
           ctx.setTransform(...patternFillTransform);
-          ctx.fill(this.#getScaledPath(path, currentTransform, patternFillTransform));
+          const scaledPath = this.#getScaledPath(path, currentTransform, patternFillTransform);
+          ctx.fill(scaledPath);
         } else {
           ctx.fill(path);
         }
@@ -8955,8 +9515,12 @@ class CanvasGraphics {
     } else {
       if (fillStrokeMode === TextRenderingMode.FILL || fillStrokeMode === TextRenderingMode.FILL_STROKE) {
         ctx.fillText(character, x, y);
+        this.dependencyTracker?.recordCharacterBBox(opIdx, ctx, font, fontSize, x, y, () => ctx.measureText(character));
       }
       if (fillStrokeMode === TextRenderingMode.STROKE || fillStrokeMode === TextRenderingMode.FILL_STROKE) {
+        if (this.dependencyTracker) {
+          this.dependencyTracker?.recordCharacterBBox(opIdx, ctx, font, fontSize, x, y, () => ctx.measureText(character)).recordDependencies(opIdx, Dependencies.stroke);
+        }
         ctx.strokeText(character, x, y);
       }
     }
@@ -8969,6 +9533,7 @@ class CanvasGraphics {
         fontSize,
         path
       });
+      this.dependencyTracker?.recordCharacterBBox(opIdx, ctx, font, fontSize, x, y);
     }
   }
   get isFontSubpixelAAEnabled() {
@@ -8987,14 +9552,23 @@ class CanvasGraphics {
     }
     return shadow(this, "isFontSubpixelAAEnabled", enabled);
   }
-  showText(glyphs) {
+  showText(opIdx, glyphs) {
+    if (this.dependencyTracker) {
+      this.dependencyTracker.recordDependencies(opIdx, Dependencies.showText).copyDependenciesFromIncrementalOperation(opIdx, "sameLineText").resetBBox(opIdx);
+      if (this.current.textRenderingMode & TextRenderingMode.ADD_TO_PATH_FLAG) {
+        this.dependencyTracker.recordFutureForcedDependency("textClip", opIdx).inheritPendingDependenciesAsFutureForcedDependencies();
+      }
+    }
     const current = this.current;
     const font = current.font;
     if (font.isType3Font) {
-      return this.showType3Text(glyphs);
+      this.showType3Text(opIdx, glyphs);
+      this.dependencyTracker?.recordOperation(opIdx).recordIncrementalData("sameLineText", opIdx);
+      return undefined;
     }
     const fontSize = current.fontSize;
     if (fontSize === 0) {
+      this.dependencyTracker?.recordOperation(opIdx);
       return undefined;
     }
     const ctx = this.ctx;
@@ -9056,7 +9630,12 @@ class CanvasGraphics {
         chars.push(glyph.unicode);
         width += glyph.width;
       }
-      ctx.fillText(chars.join(""), 0, 0);
+      const joinedChars = chars.join("");
+      ctx.fillText(joinedChars, 0, 0);
+      if (this.dependencyTracker !== null) {
+        const measure = ctx.measureText(joinedChars);
+        this.dependencyTracker.recordBBox(opIdx, this.ctx, -measure.actualBoundingBoxLeft, measure.actualBoundingBoxRight, -measure.actualBoundingBoxAscent, measure.actualBoundingBoxDescent).recordOperation(opIdx).recordIncrementalData("sameLineText", opIdx);
+      }
       current.x += width * widthAdvanceScale * textHScale;
       ctx.restore();
       this.compose();
@@ -9087,8 +9666,10 @@ class CanvasGraphics {
         scaledX = x / fontSizeScale;
         scaledY = 0;
       }
+      let measure;
       if (font.remeasure && width > 0) {
-        const measuredWidth = ctx.measureText(character).width * 1000 / fontSize * fontSizeScale;
+        measure = ctx.measureText(character);
+        const measuredWidth = measure.width * 1000 / fontSize * fontSizeScale;
         if (width < measuredWidth && this.isFontSubpixelAAEnabled) {
           const characterScaleX = width / measuredWidth;
           restoreNeeded = true;
@@ -9102,12 +9683,15 @@ class CanvasGraphics {
       if (this.contentVisible && (glyph.isInFont || font.missingFile)) {
         if (simpleFillText && !accent) {
           ctx.fillText(character, scaledX, scaledY);
+          this.dependencyTracker?.recordCharacterBBox(opIdx, ctx, measure ? {
+            bbox: null
+          } : font, fontSize / fontSizeScale, scaledX, scaledY, () => measure ?? ctx.measureText(character));
         } else {
-          this.paintChar(character, scaledX, scaledY, patternFillTransform, patternStrokeTransform);
+          this.paintChar(opIdx, character, scaledX, scaledY, patternFillTransform, patternStrokeTransform);
           if (accent) {
             const scaledAccentX = scaledX + fontSize * accent.offset.x / fontSizeScale;
             const scaledAccentY = scaledY - fontSize * accent.offset.y / fontSizeScale;
-            this.paintChar(accent.fontChar, scaledAccentX, scaledAccentY, patternFillTransform, patternStrokeTransform);
+            this.paintChar(opIdx, accent.fontChar, scaledAccentX, scaledAccentY, patternFillTransform, patternStrokeTransform);
           }
         }
       }
@@ -9124,9 +9708,10 @@ class CanvasGraphics {
     }
     ctx.restore();
     this.compose();
+    this.dependencyTracker?.recordOperation(opIdx).recordIncrementalData("sameLineText", opIdx);
     return undefined;
   }
-  showType3Text(glyphs) {
+  showType3Text(opIdx, glyphs) {
     const ctx = this.ctx;
     const current = this.current;
     const font = current.font;
@@ -9151,6 +9736,8 @@ class CanvasGraphics {
     }
     ctx.translate(current.x, current.y + current.textRise);
     ctx.scale(textHScale, fontDirection);
+    const dependencyTracker = this.dependencyTracker;
+    this.dependencyTracker = dependencyTracker ? new CanvasNestedDependencyTracker(dependencyTracker, opIdx) : null;
     for (i = 0; i < glyphsLength; ++i) {
       glyph = glyphs[i];
       if (typeof glyph === "number") {
@@ -9177,15 +9764,20 @@ class CanvasGraphics {
       current.x += width * textHScale;
     }
     ctx.restore();
+    if (dependencyTracker) {
+      this.dependencyTracker.recordNestedDependencies();
+      this.dependencyTracker = dependencyTracker;
+    }
   }
-  setCharWidth(xWidth, yWidth) {}
-  setCharWidthAndBounds(xWidth, yWidth, llx, lly, urx, ury) {
+  setCharWidth(opIdx, xWidth, yWidth) {}
+  setCharWidthAndBounds(opIdx, xWidth, yWidth, llx, lly, urx, ury) {
     const clip = new Path2D();
     clip.rect(llx, lly, urx - llx, ury - lly);
     this.ctx.clip(clip);
-    this.endPath();
+    this.dependencyTracker?.recordBBox(opIdx, this.ctx, llx, urx, lly, ury).recordClipBox(opIdx, this.ctx, llx, urx, lly, ury);
+    this.endPath(opIdx);
   }
-  getColorN_Pattern(IR) {
+  getColorN_Pattern(opIdx, IR) {
     let pattern;
     if (IR[0] === "TilingPattern") {
       const baseTransform = this.baseTransform || getCurrentTransform(this.ctx);
@@ -9193,44 +9785,50 @@ class CanvasGraphics {
         createCanvasGraphics: ctx => new CanvasGraphics(ctx, this.commonObjs, this.objs, this.canvasFactory, this.filterFactory, {
           optionalContentConfig: this.optionalContentConfig,
           markedContentStack: this.markedContentStack
-        })
+        }, undefined, undefined, this.dependencyTracker ? new CanvasNestedDependencyTracker(this.dependencyTracker, opIdx) : null)
       };
       pattern = new TilingPattern(IR, this.ctx, canvasGraphicsFactory, baseTransform);
     } else {
-      pattern = this._getPattern(IR[1], IR[2]);
+      pattern = this._getPattern(opIdx, IR[1], IR[2]);
     }
     return pattern;
   }
-  setStrokeColorN() {
-    this.current.strokeColor = this.getColorN_Pattern(arguments);
+  setStrokeColorN(opIdx, ...args) {
+    this.dependencyTracker?.recordSimpleData("strokeColor", opIdx);
+    this.current.strokeColor = this.getColorN_Pattern(opIdx, args);
     this.current.patternStroke = true;
   }
-  setFillColorN() {
-    this.current.fillColor = this.getColorN_Pattern(arguments);
+  setFillColorN(opIdx, ...args) {
+    this.dependencyTracker?.recordSimpleData("fillColor", opIdx);
+    this.current.fillColor = this.getColorN_Pattern(opIdx, args);
     this.current.patternFill = true;
   }
-  setStrokeRGBColor(color) {
+  setStrokeRGBColor(opIdx, color) {
+    this.dependencyTracker?.recordSimpleData("strokeColor", opIdx);
     this.ctx.strokeStyle = this.current.strokeColor = color;
     this.current.patternStroke = false;
   }
-  setStrokeTransparent() {
+  setStrokeTransparent(opIdx) {
+    this.dependencyTracker?.recordSimpleData("strokeColor", opIdx);
     this.ctx.strokeStyle = this.current.strokeColor = "transparent";
     this.current.patternStroke = false;
   }
-  setFillRGBColor(color) {
+  setFillRGBColor(opIdx, color) {
+    this.dependencyTracker?.recordSimpleData("fillColor", opIdx);
     this.ctx.fillStyle = this.current.fillColor = color;
     this.current.patternFill = false;
   }
-  setFillTransparent() {
+  setFillTransparent(opIdx) {
+    this.dependencyTracker?.recordSimpleData("fillColor", opIdx);
     this.ctx.fillStyle = this.current.fillColor = "transparent";
     this.current.patternFill = false;
   }
-  _getPattern(objId, matrix = null) {
+  _getPattern(opIdx, objId, matrix = null) {
     let pattern;
     if (this.cachedPatterns.has(objId)) {
       pattern = this.cachedPatterns.get(objId);
     } else {
-      pattern = getShadingPattern(this.getObject(objId));
+      pattern = getShadingPattern(this.getObject(opIdx, objId));
       this.cachedPatterns.set(objId, pattern);
     }
     if (matrix) {
@@ -9238,13 +9836,13 @@ class CanvasGraphics {
     }
     return pattern;
   }
-  shadingFill(objId) {
+  shadingFill(opIdx, objId) {
     if (!this.contentVisible) {
       return;
     }
     const ctx = this.ctx;
-    this.save();
-    const pattern = this._getPattern(objId);
+    this.save(opIdx);
+    const pattern = this._getPattern(opIdx, objId);
     ctx.fillStyle = pattern.getPattern(ctx, this, getCurrentTransformInverse(ctx), PathType.SHADING);
     const inv = getCurrentTransformInverse(ctx);
     if (inv) {
@@ -9259,8 +9857,9 @@ class CanvasGraphics {
     } else {
       this.ctx.fillRect(-1e10, -1e10, 2e10, 2e10);
     }
+    this.dependencyTracker?.resetBBox(opIdx).recordFullPageBBox(opIdx).recordDependencies(opIdx, Dependencies.transform).recordDependencies(opIdx, Dependencies.fill).recordOperation(opIdx);
     this.compose(this.current.getClippedPathBoundingBox());
-    this.restore();
+    this.restore(opIdx);
   }
   beginInlineImage() {
     unreachable("Should not call beginInlineImage");
@@ -9268,14 +9867,14 @@ class CanvasGraphics {
   beginImageData() {
     unreachable("Should not call beginImageData");
   }
-  paintFormXObjectBegin(matrix, bbox) {
+  paintFormXObjectBegin(opIdx, matrix, bbox) {
     if (!this.contentVisible) {
       return;
     }
-    this.save();
+    this.save(opIdx);
     this.baseTransformStack.push(this.baseTransform);
     if (matrix) {
-      this.transform(...matrix);
+      this.transform(opIdx, ...matrix);
     }
     this.baseTransform = getCurrentTransform(this.ctx);
     if (bbox) {
@@ -9284,21 +9883,22 @@ class CanvasGraphics {
       const clip = new Path2D();
       clip.rect(x0, y0, x1 - x0, y1 - y0);
       this.ctx.clip(clip);
-      this.endPath();
+      this.dependencyTracker?.recordClipBox(opIdx, this.ctx, x0, x1, y0, y1);
+      this.endPath(opIdx);
     }
   }
-  paintFormXObjectEnd() {
+  paintFormXObjectEnd(opIdx) {
     if (!this.contentVisible) {
       return;
     }
-    this.restore();
+    this.restore(opIdx);
     this.baseTransform = this.baseTransformStack.pop();
   }
-  beginGroup(group) {
+  beginGroup(opIdx, group) {
     if (!this.contentVisible) {
       return;
     }
-    this.save();
+    this.save(opIdx);
     if (this.inSMaskMode) {
       this.endSMaskMode();
       this.current.activeSMask = null;
@@ -9354,18 +9954,20 @@ class CanvasGraphics {
         transferMap: group.smask.transferMap || null,
         startTransformInverse: null
       });
-    } else {
+    }
+    if (!group.smask || this.dependencyTracker) {
       currentCtx.setTransform(1, 0, 0, 1, 0, 0);
       currentCtx.translate(offsetX, offsetY);
       currentCtx.save();
     }
     copyCtxState(currentCtx, groupCtx);
     this.ctx = groupCtx;
-    this.setGState([["BM", "source-over"], ["ca", 1], ["CA", 1]]);
+    this.dependencyTracker?.inheritSimpleDataAsFutureForcedDependencies(["fillAlpha", "strokeAlpha", "globalCompositeOperation"]).pushBaseTransform(currentCtx);
+    this.setGState(opIdx, [["BM", "source-over"], ["ca", 1], ["CA", 1]]);
     this.groupStack.push(currentCtx);
     this.groupLevel++;
   }
-  endGroup(group) {
+  endGroup(opIdx, group) {
     if (!this.contentVisible) {
       return;
     }
@@ -9374,13 +9976,17 @@ class CanvasGraphics {
     const ctx = this.groupStack.pop();
     this.ctx = ctx;
     this.ctx.imageSmoothingEnabled = false;
+    this.dependencyTracker?.popBaseTransform();
     if (group.smask) {
       this.tempSMask = this.smaskStack.pop();
-      this.restore();
+      this.restore(opIdx);
+      if (this.dependencyTracker) {
+        this.ctx.restore();
+      }
     } else {
       this.ctx.restore();
       const currentMtx = getCurrentTransform(this.ctx);
-      this.restore();
+      this.restore(opIdx);
       this.ctx.save();
       this.ctx.setTransform(...currentMtx);
       const dirtyBox = MIN_MAX_INIT.slice();
@@ -9390,11 +9996,11 @@ class CanvasGraphics {
       this.compose(dirtyBox);
     }
   }
-  beginAnnotation(id, rect, transform, matrix, hasOwnCanvas) {
+  beginAnnotation(opIdx, id, rect, transform, matrix, hasOwnCanvas) {
     this.#restoreInitialState();
     resetCtxToDefault(this.ctx);
     this.ctx.save();
-    this.save();
+    this.save(opIdx);
     if (this.baseTransform) {
       this.ctx.setTransform(...this.baseTransform);
     }
@@ -9428,17 +10034,17 @@ class CanvasGraphics {
         resetCtxToDefault(this.ctx);
       } else {
         resetCtxToDefault(this.ctx);
-        this.endPath();
+        this.endPath(opIdx);
         const clip = new Path2D();
         clip.rect(rect[0], rect[1], width, height);
         this.ctx.clip(clip);
       }
     }
     this.current = new CanvasExtraState(this.ctx.canvas.width, this.ctx.canvas.height);
-    this.transform(...transform);
-    this.transform(...matrix);
+    this.transform(opIdx, ...transform);
+    this.transform(opIdx, ...matrix);
   }
-  endAnnotation() {
+  endAnnotation(opIdx) {
     if (this.annotationCanvas) {
       this.ctx.restore();
       this.#drawFilter();
@@ -9447,47 +10053,52 @@ class CanvasGraphics {
       delete this.annotationCanvas;
     }
   }
-  paintImageMaskXObject(img) {
+  paintImageMaskXObject(opIdx, img) {
     if (!this.contentVisible) {
       return;
     }
     const count = img.count;
-    img = this.getObject(img.data, img);
+    img = this.getObject(opIdx, img.data, img);
     img.count = count;
     const ctx = this.ctx;
-    const mask = this._createMaskCanvas(img);
+    const mask = this._createMaskCanvas(opIdx, img);
     const maskCanvas = mask.canvas;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(maskCanvas, mask.offsetX, mask.offsetY);
+    this.dependencyTracker?.resetBBox(opIdx).recordBBox(opIdx, this.ctx, mask.offsetX, mask.offsetX + maskCanvas.width, mask.offsetY, mask.offsetY + maskCanvas.height).recordOperation(opIdx);
     ctx.restore();
     this.compose();
   }
-  paintImageMaskXObjectRepeat(img, scaleX, skewX = 0, skewY = 0, scaleY, positions) {
+  paintImageMaskXObjectRepeat(opIdx, img, scaleX, skewX = 0, skewY = 0, scaleY, positions) {
     if (!this.contentVisible) {
       return;
     }
-    img = this.getObject(img.data, img);
+    img = this.getObject(opIdx, img.data, img);
     const ctx = this.ctx;
     ctx.save();
     const currentTransform = getCurrentTransform(ctx);
     ctx.transform(scaleX, skewX, skewY, scaleY, 0, 0);
-    const mask = this._createMaskCanvas(img);
+    const mask = this._createMaskCanvas(opIdx, img);
     ctx.setTransform(1, 0, 0, 1, mask.offsetX - currentTransform[4], mask.offsetY - currentTransform[5]);
+    this.dependencyTracker?.resetBBox(opIdx);
     for (let i = 0, ii = positions.length; i < ii; i += 2) {
       const trans = Util.transform(currentTransform, [scaleX, skewX, skewY, scaleY, positions[i], positions[i + 1]]);
       ctx.drawImage(mask.canvas, trans[4], trans[5]);
+      this.dependencyTracker?.recordBBox(opIdx, this.ctx, trans[4], trans[4] + mask.canvas.width, trans[5], trans[5] + mask.canvas.height);
     }
     ctx.restore();
     this.compose();
+    this.dependencyTracker?.recordOperation(opIdx);
   }
-  paintImageMaskXObjectGroup(images) {
+  paintImageMaskXObjectGroup(opIdx, images) {
     if (!this.contentVisible) {
       return;
     }
     const ctx = this.ctx;
     const fillColor = this.current.fillColor;
     const isPatternFill = this.current.patternFill;
+    this.dependencyTracker?.resetBBox(opIdx).recordDependencies(opIdx, Dependencies.transformAndFill);
     for (const image of images) {
       const {
         data,
@@ -9498,7 +10109,7 @@ class CanvasGraphics {
       const maskCanvas = this.cachedCanvases.getCanvas("maskCanvas", width, height);
       const maskCtx = maskCanvas.context;
       maskCtx.save();
-      const img = this.getObject(data, image);
+      const img = this.getObject(opIdx, data, image);
       putBinaryImageMask(maskCtx, img);
       maskCtx.globalCompositeOperation = "source-in";
       maskCtx.fillStyle = isPatternFill ? fillColor.getPattern(maskCtx, this, getCurrentTransformInverse(ctx), PathType.FILL) : fillColor;
@@ -9508,26 +10119,28 @@ class CanvasGraphics {
       ctx.transform(...transform);
       ctx.scale(1, -1);
       drawImageAtIntegerCoords(ctx, maskCanvas.canvas, 0, 0, width, height, 0, -1, 1, 1);
+      this.dependencyTracker?.recordBBox(opIdx, ctx, 0, width, 0, height);
       ctx.restore();
     }
     this.compose();
+    this.dependencyTracker?.recordOperation(opIdx);
   }
-  paintImageXObject(objId) {
+  paintImageXObject(opIdx, objId) {
     if (!this.contentVisible) {
       return;
     }
-    const imgData = this.getObject(objId);
+    const imgData = this.getObject(opIdx, objId);
     if (!imgData) {
       warn("Dependent image isn't ready yet");
       return;
     }
-    this.paintInlineImageXObject(imgData);
+    this.paintInlineImageXObject(opIdx, imgData);
   }
-  paintImageXObjectRepeat(objId, scaleX, scaleY, positions) {
+  paintImageXObjectRepeat(opIdx, objId, scaleX, scaleY, positions) {
     if (!this.contentVisible) {
       return;
     }
-    const imgData = this.getObject(objId);
+    const imgData = this.getObject(opIdx, objId);
     if (!imgData) {
       warn("Dependent image isn't ready yet");
       return;
@@ -9544,7 +10157,7 @@ class CanvasGraphics {
         h: height
       });
     }
-    this.paintInlineImageXObjectGroup(imgData, map);
+    this.paintInlineImageXObjectGroup(opIdx, imgData, map);
   }
   applyTransferMapsToCanvas(ctx) {
     if (this.current.transferMaps !== "none") {
@@ -9570,14 +10183,14 @@ class CanvasGraphics {
     tmpCtx.filter = "none";
     return tmpCanvas.canvas;
   }
-  paintInlineImageXObject(imgData) {
+  paintInlineImageXObject(opIdx, imgData) {
     if (!this.contentVisible) {
       return;
     }
     const width = imgData.width;
     const height = imgData.height;
     const ctx = this.ctx;
-    this.save();
+    this.save(opIdx);
     const {
       filter
     } = ctx;
@@ -9598,11 +10211,12 @@ class CanvasGraphics {
     }
     const scaled = this._scaleImage(imgToPaint, getCurrentTransformInverse(ctx));
     ctx.imageSmoothingEnabled = getImageSmoothingEnabled(getCurrentTransform(ctx), imgData.interpolate);
+    this.dependencyTracker?.resetBBox(opIdx).recordBBox(opIdx, ctx, 0, width, -height, 0).recordDependencies(opIdx, Dependencies.imageXObject).recordOperation(opIdx);
     drawImageAtIntegerCoords(ctx, scaled.img, 0, 0, scaled.paintWidth, scaled.paintHeight, 0, -height, width, height);
     this.compose();
-    this.restore();
+    this.restore(opIdx);
   }
-  paintInlineImageXObjectGroup(imgData, map) {
+  paintInlineImageXObjectGroup(opIdx, imgData, map) {
     if (!this.contentVisible) {
       return;
     }
@@ -9618,30 +10232,36 @@ class CanvasGraphics {
       putBinaryImageData(tmpCtx, imgData);
       imgToPaint = this.applyTransferMapsToCanvas(tmpCtx);
     }
+    this.dependencyTracker?.resetBBox(opIdx);
     for (const entry of map) {
       ctx.save();
       ctx.transform(...entry.transform);
       ctx.scale(1, -1);
       drawImageAtIntegerCoords(ctx, imgToPaint, entry.x, entry.y, entry.w, entry.h, 0, -1, 1, 1);
+      this.dependencyTracker?.recordBBox(opIdx, ctx, 0, 1, -1, 0);
       ctx.restore();
     }
+    this.dependencyTracker?.recordOperation(opIdx);
     this.compose();
   }
-  paintSolidColorImageMask() {
+  paintSolidColorImageMask(opIdx) {
     if (!this.contentVisible) {
       return;
     }
+    this.dependencyTracker?.resetBBox(opIdx).recordBBox(opIdx, this.ctx, 0, 1, 0, 1).recordDependencies(opIdx, Dependencies.fill).recordOperation(opIdx);
     this.ctx.fillRect(0, 0, 1, 1);
     this.compose();
   }
-  markPoint(tag) {}
-  markPointProps(tag, properties) {}
-  beginMarkedContent(tag) {
+  markPoint(opIdx, tag) {}
+  markPointProps(opIdx, tag, properties) {}
+  beginMarkedContent(opIdx, tag) {
+    this.dependencyTracker?.beginMarkedContent(opIdx);
     this.markedContentStack.push({
       visible: true
     });
   }
-  beginMarkedContentProps(tag, properties) {
+  beginMarkedContentProps(opIdx, tag, properties) {
+    this.dependencyTracker?.beginMarkedContent(opIdx);
     if (tag === "OC") {
       this.markedContentStack.push({
         visible: this.optionalContentConfig.isVisible(properties)
@@ -9653,13 +10273,14 @@ class CanvasGraphics {
     }
     this.contentVisible = this.isContentVisible();
   }
-  endMarkedContent() {
+  endMarkedContent(opIdx) {
+    this.dependencyTracker?.endMarkedContent(opIdx);
     this.markedContentStack.pop();
     this.contentVisible = this.isContentVisible();
   }
-  beginCompat() {}
-  endCompat() {}
-  consumePath(path, clipBox) {
+  beginCompat(opIdx) {}
+  endCompat(opIdx) {}
+  consumePath(opIdx, path, clipBox) {
     const isEmpty = this.current.isEmptyClip();
     if (this.pendingClip) {
       this.current.updateClipFromPath();
@@ -9677,6 +10298,9 @@ class CanvasGraphics {
         }
       }
       this.pendingClip = null;
+      this.dependencyTracker?.bboxToClipBoxDropOperation(opIdx).recordFutureForcedDependency("clipPath", opIdx);
+    } else {
+      this.dependencyTracker?.recordOperation(opIdx);
     }
     this.current.startNewPathAndClipBox(this.current.clipBox);
   }
@@ -11898,6 +12522,7 @@ class XfaText {
 
 
 
+
 const RENDERING_CANCELLED_TIMEOUT = 100;
 function getDocument(src = {}) {
   if (typeof src === "string" || src instanceof URL) {
@@ -12209,6 +12834,9 @@ class PDFDocumentProxy {
   getAttachments() {
     return this._transport.getAttachments();
   }
+  getAnnotationsByType(types, pageIndexesToSkip) {
+    return this._transport.getAnnotationsByType(types, pageIndexesToSkip);
+  }
   getJSActions() {
     return this._transport.getDocJSActions();
   }
@@ -12278,6 +12906,7 @@ class PDFPageProxy {
     this.objs = new PDFObjects();
     this._intentStates = new Map();
     this.destroyed = false;
+    this.recordedGroups = null;
   }
   get pageNumber() {
     return this._pageIndex + 1;
@@ -12343,7 +12972,9 @@ class PDFPageProxy {
     annotationCanvasMap = null,
     pageColors = null,
     printAnnotationStorage = null,
-    isEditing = false
+    isEditing = false,
+    recordOperations = false,
+    filteredOperationIndexes = null
   }) {
     this._stats?.time("Overall");
     const intentArgs = this._transport.getRenderingIntent(intent, annotationMode, printAnnotationStorage, isEditing);
@@ -12374,8 +13005,20 @@ class PDFPageProxy {
       this._stats?.time("Page Request");
       this._pumpOperatorList(intentArgs);
     }
+    const shouldRecordOperations = !this.recordedGroups && (recordOperations || this._pdfBug && globalThis.StepperManager?.enabled);
     const complete = error => {
       intentState.renderTasks.delete(internalRenderTask);
+      if (shouldRecordOperations) {
+        const recordedGroups = internalRenderTask.gfx?.dependencyTracker.take();
+        if (recordedGroups) {
+          internalRenderTask.stepper?.setOperatorGroups(recordedGroups);
+          if (recordOperations) {
+            this.recordedGroups = recordedGroups;
+          }
+        } else if (recordOperations) {
+          this.recordedGroups = [];
+        }
+      }
       if (intentPrint) {
         this.#pendingCleanup = true;
       }
@@ -12402,6 +13045,7 @@ class PDFPageProxy {
       params: {
         canvas,
         canvasContext,
+        dependencyTracker: shouldRecordOperations ? new CanvasDependencyTracker(canvas) : null,
         viewport,
         transform,
         background
@@ -12416,7 +13060,8 @@ class PDFPageProxy {
       useRequestAnimationFrame: !intentPrint,
       pdfBug: this._pdfBug,
       pageColors,
-      enableHWA: this._transport.enableHWA
+      enableHWA: this._transport.enableHWA,
+      filteredOperationIndexes
     });
     (intentState.renderTasks ||= new Set()).add(internalRenderTask);
     const renderTask = internalRenderTask.task;
@@ -13362,6 +14007,12 @@ class WorkerTransport {
   getAttachments() {
     return this.messageHandler.sendWithPromise("GetAttachments", null);
   }
+  getAnnotationsByType(types, pageIndexesToSkip) {
+    return this.messageHandler.sendWithPromise("GetAnnotationsByType", {
+      types,
+      pageIndexesToSkip
+    });
+  }
   getDocJSActions() {
     return this.#cacheSimpleMethod("GetDocJSActions");
   }
@@ -13471,7 +14122,8 @@ class InternalRenderTask {
     useRequestAnimationFrame = false,
     pdfBug = false,
     pageColors = null,
-    enableHWA = false
+    enableHWA = false,
+    filteredOperationIndexes = null
   }) {
     this.callback = callback;
     this.params = params;
@@ -13499,6 +14151,8 @@ class InternalRenderTask {
     this._canvas = params.canvas;
     this._canvasContext = params.canvas ? null : params.canvasContext;
     this._enableHWA = enableHWA;
+    this._dependencyTracker = params.dependencyTracker;
+    this._filteredOperationIndexes = filteredOperationIndexes;
   }
   get completed() {
     return this.capability.promise.catch(function () {});
@@ -13524,7 +14178,8 @@ class InternalRenderTask {
     const {
       viewport,
       transform,
-      background
+      background,
+      dependencyTracker
     } = this.params;
     const canvasContext = this._canvasContext || this._canvas.getContext("2d", {
       alpha: false,
@@ -13532,7 +14187,7 @@ class InternalRenderTask {
     });
     this.gfx = new CanvasGraphics(canvasContext, this.commonObjs, this.objs, this.canvasFactory, this.filterFactory, {
       optionalContentConfig
-    }, this.annotationCanvasMap, this.pageColors);
+    }, this.annotationCanvasMap, this.pageColors, dependencyTracker);
     this.gfx.beginDrawing({
       transform,
       viewport,
@@ -13592,7 +14247,7 @@ class InternalRenderTask {
     if (this.cancelled) {
       return;
     }
-    this.operatorListIdx = this.gfx.executeOperatorList(this.operatorList, this.operatorListIdx, this._continueBound, this.stepper);
+    this.operatorListIdx = this.gfx.executeOperatorList(this.operatorList, this.operatorListIdx, this._continueBound, this.stepper, this._filteredOperationIndexes);
     if (this.operatorListIdx === this.operatorList.argsArray.length) {
       this.running = false;
       if (this.operatorList.lastChunk) {
@@ -13604,7 +14259,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "5adff6a";
+const build = "8be2171";
 
 ;// ./src/display/editor/color_picker.js
 

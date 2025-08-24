@@ -22,8 +22,31 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 5adff6a
+ * pdfjsBuild = 8be2171
  */
+/******/ // The require scope
+/******/ var __webpack_require__ = {};
+/******/ 
+/************************************************************************/
+/******/ /* webpack/runtime/define property getters */
+/******/ (() => {
+/******/ 	// define getter functions for harmony exports
+/******/ 	__webpack_require__.d = (exports, definition) => {
+/******/ 		for(var key in definition) {
+/******/ 			if(__webpack_require__.o(definition, key) && !__webpack_require__.o(exports, key)) {
+/******/ 				Object.defineProperty(exports, key, { enumerable: true, get: definition[key] });
+/******/ 			}
+/******/ 		}
+/******/ 	};
+/******/ })();
+/******/ 
+/******/ /* webpack/runtime/hasOwnProperty shorthand */
+/******/ (() => {
+/******/ 	__webpack_require__.o = (obj, prop) => (Object.prototype.hasOwnProperty.call(obj, prop))
+/******/ })();
+/******/ 
+/************************************************************************/
+var __webpack_exports__ = {};
 
 ;// ./web/pdfjs.js
 const {
@@ -735,6 +758,10 @@ const defaultOptions = {
   },
   enableNewAltTextWhenAddingImage: {
     value: true,
+    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+  },
+  enableOptimizedPartialRendering: {
+    value: false,
     kind: OptionKind.VIEWER + OptionKind.PREFERENCE
   },
   enablePermissions: {
@@ -1481,6 +1508,7 @@ class BasePreferences {
     enableGuessAltText: true,
     enableHighlightFloatingButton: false,
     enableNewAltTextWhenAddingImage: true,
+    enableOptimizedPartialRendering: false,
     enablePermissions: false,
     enablePrintAutoRotate: true,
     enableScripting: true,
@@ -9951,9 +9979,11 @@ class BasePDFPageView {
   #tempCanvas = null;
   canvas = null;
   div = null;
+  enableOptimizedPartialRendering = false;
   eventBus = null;
   id = null;
   pageColors = null;
+  recordedGroups = null;
   renderingQueue = null;
   renderTask = null;
   resume = null;
@@ -9962,6 +9992,7 @@ class BasePDFPageView {
     this.id = options.id;
     this.pageColors = options.pageColors || null;
     this.renderingQueue = options.renderingQueue;
+    this.enableOptimizedPartialRendering = options.enableOptimizedPartialRendering ?? false;
     this.#minDurationToUpdateCanvas = options.minDurationToUpdateCanvas ?? 500;
   }
   get renderingState() {
@@ -10102,6 +10133,9 @@ class BasePDFPageView {
       this.#renderError = error;
       if (renderTask === this.renderTask) {
         this.renderTask = null;
+        if (this.enableOptimizedPartialRendering) {
+          this.recordedGroups ??= renderTask.recordedGroups;
+        }
       }
     }
     this.renderingState = RenderingStates.FINISHED;
@@ -10284,6 +10318,45 @@ class PDFPageDetailView extends BasePDFPageView {
       keepCanvas: true
     });
   }
+  _getRenderingContext(canvas, transform) {
+    const baseContext = this.pageView._getRenderingContext(canvas, transform);
+    const recordedGroups = this.pdfPage.recordedGroups;
+    if (!recordedGroups || !this.enableOptimizedPartialRendering) {
+      return {
+        ...baseContext,
+        recordOperations: false
+      };
+    }
+    const filteredIndexes = new Set();
+    const {
+      viewport: {
+        width: vWidth,
+        height: vHeight
+      }
+    } = this.pageView;
+    const {
+      width: aWidth,
+      height: aHeight,
+      minX: aMinX,
+      minY: aMinY
+    } = this.#detailArea;
+    const detailMinX = aMinX / vWidth;
+    const detailMinY = aMinY / vHeight;
+    const detailMaxX = (aMinX + aWidth) / vWidth;
+    const detailMaxY = (aMinY + aHeight) / vHeight;
+    for (let i = 0, ii = recordedGroups.length; i < ii; i++) {
+      const group = recordedGroups[i];
+      if (group.minX <= detailMaxX && group.maxX >= detailMinX && group.minY <= detailMaxY && group.maxY >= detailMinY) {
+        filteredIndexes.add(group.idx);
+        group.dependencies.forEach(filteredIndexes.add, filteredIndexes);
+      }
+    }
+    return {
+      ...baseContext,
+      recordOperations: false,
+      filteredOperationIndexes: filteredIndexes
+    };
+  }
   async draw() {
     if (this.pageView.detailView !== this) {
       return undefined;
@@ -10333,7 +10406,7 @@ class PDFPageDetailView extends BasePDFPageView {
     style.height = `${area.height * 100 / height}%`;
     style.top = `${area.minY * 100 / height}%`;
     style.left = `${area.minX * 100 / width}%`;
-    const renderingPromise = this._drawCanvas(this.pageView._getRenderingContext(canvas, transform), () => {
+    const renderingPromise = this._drawCanvas(this._getRenderingContext(canvas, transform), () => {
       this.canvas?.remove();
       this.canvas = prevCanvas;
     }, () => {
@@ -11438,6 +11511,7 @@ class PDFPageView extends BasePDFPageView {
     keepCanvasWrapper = false,
     preserveDetailViewState = false
   } = {}) {
+    const keepPdfBugGroups = this.pdfPage?._pdfBug ?? false;
     this.cancelRendering({
       keepAnnotationLayer,
       keepAnnotationEditorLayer,
@@ -11461,6 +11535,9 @@ class PDFPageView extends BasePDFPageView {
         case textLayerNode:
         case canvasWrapperNode:
           continue;
+      }
+      if (keepPdfBugGroups && node.classList.contains("pdfBugGroupsLayer")) {
+        continue;
       }
       node.remove();
       const layerIndex = this.#layers.indexOf(node);
@@ -11512,7 +11589,8 @@ class PDFPageView extends BasePDFPageView {
     if (this.enableDetailCanvas) {
       if (this.#needsRestrictedScaling && this.maxCanvasPixels > 0 && visibleArea) {
         this.detailView ??= new PDFPageDetailView({
-          pageView: this
+          pageView: this,
+          enableOptimizedPartialRendering: this.enableOptimizedPartialRendering
         });
         this.detailView.update({
           visibleArea
@@ -11724,7 +11802,8 @@ class PDFPageView extends BasePDFPageView {
       optionalContentConfigPromise: this._optionalContentConfigPromise,
       annotationCanvasMap: this._annotationCanvasMap,
       pageColors: this.pageColors,
-      isEditing: this.#isEditing
+      isEditing: this.#isEditing,
+      recordOperations: this.enableOptimizedPartialRendering && !this.recordedGroups
     };
   }
   async draw() {
@@ -12042,6 +12121,7 @@ class PDFViewer {
     this.maxCanvasDim = options.maxCanvasDim;
     this.capCanvasAreaFactor = options.capCanvasAreaFactor;
     this.enableDetailCanvas = options.enableDetailCanvas ?? true;
+    this.enableOptimizedPartialRendering = options.enableOptimizedPartialRendering ?? false;
     this.l10n = options.l10n;
     this.l10n ||= new genericl10n_GenericL10n();
     this.#enablePermissions = options.enablePermissions || false;
@@ -12498,6 +12578,7 @@ class PDFViewer {
           maxCanvasDim: this.maxCanvasDim,
           capCanvasAreaFactor: this.capCanvasAreaFactor,
           enableDetailCanvas: this.enableDetailCanvas,
+          enableOptimizedPartialRendering: this.enableOptimizedPartialRendering,
           pageColors,
           l10n: this.l10n,
           layerProperties: this._layerProperties,
@@ -15444,6 +15525,7 @@ const PDFViewerApplication = {
       capCanvasAreaFactor,
       enableDetailCanvas: AppOptions.get("enableDetailCanvas"),
       enablePermissions: AppOptions.get("enablePermissions"),
+      enableOptimizedPartialRendering: AppOptions.get("enableOptimizedPartialRendering"),
       pageColors,
       mlManager,
       abortSignal,
