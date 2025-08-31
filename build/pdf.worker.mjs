@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 8be2171
+ * pdfjsBuild = c96fa68
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -79,6 +79,7 @@ const AnnotationEditorType = {
   HIGHLIGHT: 9,
   STAMP: 13,
   INK: 15,
+  POPUP: 16,
   SIGNATURE: 101,
   COMMENT: 102
 };
@@ -54847,11 +54848,12 @@ class XRef {
       return this.topDict;
     }
     if (!trailerDicts.length) {
-      for (const [num, entry] of this.entries.entries()) {
-        if (!entry) {
+      for (const num in this.entries) {
+        if (!Object.hasOwn(this.entries, num)) {
           continue;
         }
-        const ref = Ref.get(num, entry.gen);
+        const entry = this.entries[num];
+        const ref = Ref.get(parseInt(num), entry.gen);
         let obj;
         try {
           obj = this.fetch(ref);
@@ -55133,6 +55135,7 @@ class XRef {
 
 const LETTER_SIZE_MEDIABOX = [0, 0, 612, 792];
 class Page {
+  #areAnnotationsCached = false;
   #resourcesPromise = null;
   constructor({
     pdfManager,
@@ -55646,6 +55649,7 @@ class Page {
       }
       return sortedAnnotations;
     });
+    this.#areAnnotationsCached = true;
     return shadow(this, "_parsedAnnotations", promise);
   }
   get jsActions() {
@@ -55653,10 +55657,22 @@ class Page {
     return shadow(this, "jsActions", actions);
   }
   async collectAnnotationsByType(handler, task, types, promises, annotationGlobals) {
-    const annots = await this.pdfManager.ensure(this, "annotations");
     const {
       pageIndex
     } = this;
+    if (this.#areAnnotationsCached) {
+      const cachedAnnotations = await this._parsedAnnotations;
+      for (const {
+        data
+      } of cachedAnnotations) {
+        if (!types || types.has(data.annotationType)) {
+          data.pageIndex = pageIndex;
+          promises.push(Promise.resolve(data));
+        }
+      }
+      return;
+    }
+    const annots = await this.pdfManager.ensure(this, "annotations");
     for (const annotationRef of annots) {
       promises.push(AnnotationFactory.create(this.xref, annotationRef, annotationGlobals, this._localIdFactory, false, null, types, this.ref).then(async annotation => {
         if (!annotation) {

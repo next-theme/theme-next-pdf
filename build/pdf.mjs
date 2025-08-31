@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 8be2171
+ * pdfjsBuild = c96fa68
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -79,6 +79,7 @@ const AnnotationEditorType = {
   HIGHLIGHT: 9,
   STAMP: 13,
   INK: 15,
+  POPUP: 16,
   SIGNATURE: 101,
   COMMENT: 102
 };
@@ -1403,6 +1404,30 @@ class OutputScale {
   }
 }
 const SupportedImageMimeTypes = ["image/apng", "image/avif", "image/bmp", "image/gif", "image/jpeg", "image/png", "image/svg+xml", "image/webp", "image/x-icon"];
+function changeLightness(r, g, b, lumCallback = l => (1 + Math.sqrt(l)) / 2) {
+  r /= 255;
+  g /= 255;
+  b /= 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const newL = (lumCallback(l) * 100).toFixed(2);
+  if (max === min) {
+    return `hsl(0, 0%, ${newL}%)`;
+  }
+  const d = max - min;
+  let h;
+  if (max === r) {
+    h = (g - b) / d + (g < b ? 6 : 0);
+  } else if (max === g) {
+    h = (b - r) / d + 2;
+  } else {
+    h = (r - g) / d + 4;
+  }
+  h = (h * 60).toFixed(2);
+  const s = (d / (1 - Math.abs(2 * l - 1)) * 100).toFixed(2);
+  return `hsl(${h}, ${s}%, ${newL}%)`;
+}
 
 ;// ./src/display/editor/toolbar.js
 
@@ -1531,7 +1556,7 @@ class EditorToolbar {
       return;
     }
     this.#addListenersToElement(button);
-    this.#buttons.prepend(button, this.#divider);
+    this.#buttons.append(button, this.#divider);
     this.#comment = comment;
     comment.toolbar = this;
   }
@@ -2055,6 +2080,7 @@ class ColorManager {
 class AnnotationEditorUIManager {
   #abortController = new AbortController();
   #activeEditor = null;
+  #allEditableAnnotations = null;
   #allEditors = new Map();
   #allLayers = new Map();
   #altTextManager = null;
@@ -2094,6 +2120,7 @@ class AnnotationEditorUIManager {
   #signatureManager = null;
   #pageColors = null;
   #showAllStates = null;
+  #pdfDocument = null;
   #previousStates = {
     isEditing: false,
     isEmpty: true,
@@ -2176,6 +2203,7 @@ class AnnotationEditorUIManager {
     this.#altTextManager = altTextManager;
     this.#commentManager = commentManager;
     this.#signatureManager = signatureManager;
+    this.#pdfDocument = pdfDocument;
     this._eventBus = eventBus;
     eventBus._on("editingaction", this.onEditingAction.bind(this), {
       signal
@@ -2249,6 +2277,7 @@ class AnnotationEditorUIManager {
     this.#floatingToolbar = null;
     this.#mainHighlightColorPicker?.destroy();
     this.#mainHighlightColorPicker = null;
+    this.#allEditableAnnotations = null;
     if (this.#focusMainContainerTimeoutId) {
       clearTimeout(this.#focusMainContainerTimeoutId);
       this.#focusMainContainerTimeoutId = null;
@@ -2258,6 +2287,7 @@ class AnnotationEditorUIManager {
       this.#translationTimeoutId = null;
     }
     this._editorUndoBar?.destroy();
+    this.#pdfDocument = null;
   }
   combinedSignal(ac) {
     return AbortSignal.any([this._signal, ac.signal]);
@@ -2929,6 +2959,9 @@ class AnnotationEditorUIManager {
     }
     this.#updateModeCapability = Promise.withResolvers();
     this.#currentDrawingSession?.commitOrRemove();
+    if (this.#mode === AnnotationEditorType.POPUP) {
+      this.#commentManager?.hideSidebar();
+    }
     this.#mode = mode;
     if (mode === AnnotationEditorType.NONE) {
       this.setEditingState(false);
@@ -2939,6 +2972,10 @@ class AnnotationEditorUIManager {
     }
     if (mode === AnnotationEditorType.SIGNATURE) {
       await this.#signatureManager?.loadSignatures();
+    }
+    if (mode === AnnotationEditorType.POPUP) {
+      this.#allEditableAnnotations ||= await this.#pdfDocument.getAnnotationsByType(new Set(this.#editorTypes.map(editorClass => editorClass._editorType)));
+      this.#commentManager?.showSidebar(this.#allEditableAnnotations);
     }
     this.setEditingState(true);
     await this.#enableAll();
@@ -3859,6 +3896,9 @@ class Comment {
     comment.tabIndex = "0";
     comment.setAttribute("data-l10n-id", "pdfjs-editor-edit-comment-button");
     const signal = this.#editor._uiManager._signal;
+    if (!(signal instanceof AbortSignal) || signal.aborted) {
+      return comment;
+    }
     comment.addEventListener("contextmenu", noContextMenu, {
       signal
     });
@@ -4835,7 +4875,6 @@ class AnnotationEditor {
     }
     this._editToolbar = new EditorToolbar(this);
     this.div.append(this._editToolbar.render());
-    this._editToolbar.addButton("comment", this.addCommentButton());
     const {
       toolbarButtons
     } = this;
@@ -4844,6 +4883,7 @@ class AnnotationEditor {
         await this._editToolbar.addButton(name, tool);
       }
     }
+    this._editToolbar.addButton("comment", this.addCommentButton());
     this._editToolbar.addButton("delete");
     return this._editToolbar;
   }
@@ -4942,9 +4982,18 @@ class AnnotationEditor {
   }
   addComment(serialized) {
     if (this.hasEditedComment) {
+      const DEFAULT_POPUP_WIDTH = 180;
+      const DEFAULT_POPUP_HEIGHT = 100;
+      const [,,, trY] = serialized.rect;
+      const [pageWidth] = this.pageDimensions;
+      const [pageX] = this.pageTranslation;
+      const blX = pageX + pageWidth + 1;
+      const blY = trY - DEFAULT_POPUP_HEIGHT;
+      const trX = blX + DEFAULT_POPUP_WIDTH;
       serialized.popup = {
         contents: this.comment.text,
-        deleted: this.comment.deleted
+        deleted: this.comment.deleted,
+        rect: [blX, blY, trX, trY]
       };
     }
   }
@@ -5187,6 +5236,9 @@ class AnnotationEditor {
       default:
         throw new Error("Invalid rotation");
     }
+  }
+  getPDFRect() {
+    return this.getRect(0, 0);
   }
   onceAdded(focus) {}
   isEmpty() {
@@ -14259,7 +14311,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "8be2171";
+const build = "c96fa68";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -14938,6 +14990,7 @@ class AnnotationElement {
     this.renderForms = parameters.renderForms;
     this.svgFactory = parameters.svgFactory;
     this.annotationStorage = parameters.annotationStorage;
+    this.enableComment = parameters.enableComment;
     this.enableScripting = parameters.enableScripting;
     this.hasJSActions = parameters.hasJSActions;
     this._fieldObjects = parameters.fieldObjects;
@@ -14960,6 +15013,60 @@ class AnnotationElement {
   }
   get hasPopupData() {
     return AnnotationElement._hasPopupData(this.data);
+  }
+  get hasCommentButton() {
+    return this.enableComment && this._isEditable && this.hasPopupElement;
+  }
+  get commentButtonPosition() {
+    const {
+      quadPoints,
+      rect
+    } = this.data;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    if (quadPoints?.length >= 8) {
+      for (let i = 0; i < quadPoints.length; i += 8) {
+        if (quadPoints[i + 1] > maxY) {
+          maxY = quadPoints[i + 1];
+          maxX = quadPoints[i + 2];
+        } else if (quadPoints[i + 1] === maxY) {
+          maxX = Math.max(maxX, quadPoints[i + 2]);
+        }
+      }
+      return [maxX, maxY];
+    }
+    if (rect) {
+      return [rect[2], rect[3]];
+    }
+    return null;
+  }
+  get commentButtonColor() {
+    if (!this.data.color) {
+      return null;
+    }
+    const [r, g, b] = this.data.color;
+    const opacity = this.data.opacity ?? 1;
+    const oppositeOpacity = 255 * (1 - opacity);
+    return changeLightness(Math.min(r + oppositeOpacity, 255), Math.min(g + oppositeOpacity, 255), Math.min(b + oppositeOpacity, 255));
+  }
+  _normalizePoint(point) {
+    const {
+      page: {
+        view
+      },
+      viewport: {
+        rawDims: {
+          pageWidth,
+          pageHeight,
+          pageX,
+          pageY
+        }
+      }
+    } = this.parent;
+    point[1] = view[3] - point[1] + view[1];
+    point[0] = 100 * (point[0] - pageX) / pageWidth;
+    point[1] = 100 * (point[1] - pageY) / pageHeight;
+    return point;
   }
   updateEdited(params) {
     if (!this.container) {
@@ -15046,7 +15153,8 @@ class AnnotationElement {
     const {
       style
     } = container;
-    style.zIndex = this.parent.zIndex++;
+    style.zIndex = this.parent.zIndex;
+    this.parent.zIndex += 2;
     if (data.alternativeText) {
       container.title = data.alternativeText;
     }
@@ -16625,7 +16733,8 @@ class PopupAnnotationElement extends AnnotationElement {
       parentRect: this.data.parentRect || null,
       parent: this.parent,
       elements: this.elements,
-      open: this.data.open
+      open: this.data.open,
+      eventBus: this.linkService.eventBus
     });
     const elementIds = [];
     for (const element of this.elements) {
@@ -16648,12 +16757,16 @@ class PopupElement {
   #contentsObj = null;
   #dateObj = null;
   #elements = null;
+  #eventBus = null;
   #parent = null;
   #parentRect = null;
   #pinned = false;
   #popup = null;
   #popupAbortController = null;
   #position = null;
+  #commentButton = null;
+  #commentButtonPosition = null;
+  #commentButtonColor = null;
   #rect = null;
   #richText = null;
   #titleObj = null;
@@ -16670,7 +16783,8 @@ class PopupElement {
     parent,
     rect,
     parentRect,
-    open
+    open,
+    eventBus = null
   }) {
     this.#container = container;
     this.#titleObj = titleObj;
@@ -16681,6 +16795,7 @@ class PopupElement {
     this.#rect = rect;
     this.#parentRect = parentRect;
     this.#elements = elements;
+    this.#eventBus = eventBus;
     this.#dateObj = PDFDateString.toDateObject(modificationDate);
     this.trigger = elements.flatMap(e => e.getElementsToTriggerPopup());
     this.#addEventListeners();
@@ -16714,6 +16829,65 @@ class PopupElement {
         signal
       });
     }
+    this.#renderCommentButton();
+  }
+  #setCommentButtonPosition() {
+    const element = this.#elements.find(e => e.hasCommentButton);
+    if (!element) {
+      return;
+    }
+    this.#commentButtonPosition = element._normalizePoint(element.commentButtonPosition);
+    this.#commentButtonColor = element.commentButtonColor;
+  }
+  #renderCommentButton() {
+    if (this.#commentButton) {
+      return;
+    }
+    if (!this.#commentButtonPosition) {
+      this.#setCommentButtonPosition();
+    }
+    if (!this.#commentButtonPosition) {
+      return;
+    }
+    const button = this.#commentButton = document.createElement("button");
+    button.className = "annotationCommentButton";
+    const parentContainer = this.#elements[0].container;
+    button.style.zIndex = parentContainer.style.zIndex + 1;
+    button.tabIndex = 0;
+    const {
+      signal
+    } = this.#popupAbortController;
+    button.addEventListener("hover", this.#boundToggle, {
+      signal
+    });
+    button.addEventListener("keydown", this.#boundKeyDown, {
+      signal
+    });
+    button.addEventListener("click", () => {
+      const [{
+        data: {
+          id: editId
+        },
+        annotationEditorType: mode
+      }] = this.#elements;
+      this.#eventBus?.dispatch("switchannotationeditormode", {
+        source: this,
+        editId,
+        mode,
+        editComment: true
+      });
+    }, {
+      signal
+    });
+    const {
+      style
+    } = button;
+    style.left = `calc(${this.#commentButtonPosition[0]}%)`;
+    style.top = `calc(${this.#commentButtonPosition[1]}% - var(--comment-button-dim))`;
+    if (this.#commentButtonColor) {
+      style.backgroundColor = this.#commentButtonColor;
+    }
+    parentContainer.after(button);
   }
   render() {
     if (this.#popup) {
@@ -17303,6 +17477,33 @@ class InkAnnotationElement extends AnnotationElement {
   addHighlightArea() {
     this.container.classList.add("highlightArea");
   }
+  get commentButtonPosition() {
+    const {
+      inkLists,
+      rect
+    } = this.data;
+    if (inkLists?.length >= 1) {
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const inkList of inkLists) {
+        for (let i = 0, ii = inkList.length; i < ii; i += 2) {
+          if (inkList[i + 1] > maxY) {
+            maxY = inkList[i + 1];
+            maxX = inkList[i];
+          } else if (inkList[i + 1] === maxY) {
+            maxX = Math.max(maxX, inkList[i]);
+          }
+        }
+      }
+      if (maxX !== Infinity) {
+        return [maxX, maxY];
+      }
+    }
+    if (rect) {
+      return [rect[2], rect[3]];
+    }
+    return null;
+  }
 }
 class HighlightAnnotationElement extends AnnotationElement {
   constructor(parameters) {
@@ -17554,6 +17755,7 @@ class AnnotationLayer {
       renderForms: params.renderForms !== false,
       svgFactory: new DOMSVGFactory(),
       annotationStorage: params.annotationStorage || new AnnotationStorage(),
+      enableComment: params.enableComment === true,
       enableScripting: params.enableScripting === true,
       hasJSActions: params.hasJSActions,
       fieldObjects: params.fieldObjects,
@@ -18200,6 +18402,10 @@ class FreeTextEditor extends AnnotationEditor {
   get contentDiv() {
     return this.editorDiv;
   }
+  getPDFRect() {
+    const padding = FreeTextEditor._internalPadding * this.parentScale;
+    return this.getRect(padding, padding);
+  }
   static async deserialize(data, parent, uiManager) {
     let initialData = null;
     if (data instanceof FreeTextAnnotationElement) {
@@ -18259,8 +18465,7 @@ class FreeTextEditor extends AnnotationEditor {
     if (this.deleted) {
       return this.serializeDeleted();
     }
-    const padding = FreeTextEditor._internalPadding * this.parentScale;
-    const rect = this.getRect(padding, padding);
+    const rect = this.getPDFRect();
     const color = AnnotationEditor._colorManager.convert(this.isAttachedToDOM ? getComputedStyle(this.editorDiv).color : this.#color);
     const serialized = {
       annotationType: AnnotationEditorType.FREETEXT,
@@ -18308,9 +18513,8 @@ class FreeTextEditor extends AnnotationEditor {
       div.append(line ? document.createTextNode(line) : document.createElement("br"));
       content.append(div);
     }
-    const padding = FreeTextEditor._internalPadding * this.parentScale;
     const params = {
-      rect: this.getRect(padding, padding)
+      rect: this.getPDFRect()
     };
     params.popup = this.hasEditedComment ? this.comment : {
       text: this.#content
@@ -19793,7 +19997,7 @@ class HighlightEditor extends AnnotationEditor {
     if (this.deleted) {
       return this.serializeDeleted();
     }
-    const rect = this.getRect(0, 0);
+    const rect = this.getPDFRect();
     const color = AnnotationEditor._colorManager.convert(this._uiManager.getNonHCMColor(this.color));
     const serialized = {
       annotationType: AnnotationEditorType.HIGHLIGHT,
@@ -19826,7 +20030,7 @@ class HighlightEditor extends AnnotationEditor {
       return null;
     }
     const params = {
-      rect: this.getRect(0, 0)
+      rect: this.getPDFRect()
     };
     if (this.hasEditedComment) {
       params.popup = this.comment;
@@ -20472,7 +20676,7 @@ class DrawingEditor extends AnnotationEditor {
   }
   renderAnnotationElement(annotation) {
     annotation.updateEdited({
-      rect: this.getRect(0, 0)
+      rect: this.getPDFRect()
     });
     return null;
   }
@@ -22990,7 +23194,7 @@ class StampEditor extends AnnotationEditor {
       annotationType: AnnotationEditorType.STAMP,
       bitmapId: this.#bitmapId,
       pageIndex: this.pageIndex,
-      rect: this.getRect(0, 0),
+      rect: this.getPDFRect(),
       rotation: this.rotation,
       isSvg: this.#isSvg,
       structTreeParentId: this._structTreeParentId
@@ -23065,7 +23269,7 @@ class StampEditor extends AnnotationEditor {
       return null;
     }
     const params = {
-      rect: this.getRect(0, 0)
+      rect: this.getPDFRect()
     };
     if (this.hasEditedComment) {
       params.popup = this.comment;
@@ -24039,6 +24243,7 @@ globalThis.pdfjsLib = {
   AnnotationMode: AnnotationMode,
   AnnotationType: AnnotationType,
   build: build,
+  changeLightness: changeLightness,
   ColorPicker: ColorPicker,
   createValidAbsoluteUrl: createValidAbsoluteUrl,
   DOMSVGFactory: DOMSVGFactory,
@@ -24084,6 +24289,6 @@ globalThis.pdfjsLib = {
   XfaLayer: XfaLayer
 };
 
-export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, ColorPicker, DOMSVGFactory, DrawLayer, util_FeatureTest as FeatureTest, GlobalWorkerOptions, util_ImageKind as ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TouchManager, Util, VerbosityLevel, XfaLayer, build, createValidAbsoluteUrl, fetchData, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getUuid, getXfaPageViewport, isDataScheme, isPdfFile, isValidExplicitDest, noContextMenu, normalizeUnicode, setLayerDimensions, shadow, stopEvent, updateUrlHash, version };
+export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, ColorPicker, DOMSVGFactory, DrawLayer, util_FeatureTest as FeatureTest, GlobalWorkerOptions, util_ImageKind as ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TouchManager, Util, VerbosityLevel, XfaLayer, build, changeLightness, createValidAbsoluteUrl, fetchData, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getUuid, getXfaPageViewport, isDataScheme, isPdfFile, isValidExplicitDest, noContextMenu, normalizeUnicode, setLayerDimensions, shadow, stopEvent, updateUrlHash, version };
 
 //# sourceMappingURL=pdf.mjs.map
