@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = c96fa68
+ * pdfjsBuild = 2a93ade
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -916,7 +916,262 @@ if (typeof Math.sumPrecise !== "function") {
   };
 }
 
+;// ./src/display/xfa_text.js
+class XfaText {
+  static textContent(xfa) {
+    const items = [];
+    const output = {
+      items,
+      styles: Object.create(null)
+    };
+    function walk(node) {
+      if (!node) {
+        return;
+      }
+      let str = null;
+      const name = node.name;
+      if (name === "#text") {
+        str = node.value;
+      } else if (!XfaText.shouldBuildText(name)) {
+        return;
+      } else if (node?.attributes?.textContent) {
+        str = node.attributes.textContent;
+      } else if (node.value) {
+        str = node.value;
+      }
+      if (str !== null) {
+        items.push({
+          str
+        });
+      }
+      if (!node.children) {
+        return;
+      }
+      for (const child of node.children) {
+        walk(child);
+      }
+    }
+    walk(xfa);
+    return output;
+  }
+  static shouldBuildText(name) {
+    return !(name === "textarea" || name === "input" || name === "option" || name === "select");
+  }
+}
+
+;// ./src/display/xfa_layer.js
+
+class XfaLayer {
+  static setupStorage(html, id, element, storage, intent) {
+    const storedData = storage.getValue(id, {
+      value: null
+    });
+    switch (element.name) {
+      case "textarea":
+        if (storedData.value !== null) {
+          html.textContent = storedData.value;
+        }
+        if (intent === "print") {
+          break;
+        }
+        html.addEventListener("input", event => {
+          storage.setValue(id, {
+            value: event.target.value
+          });
+        });
+        break;
+      case "input":
+        if (element.attributes.type === "radio" || element.attributes.type === "checkbox") {
+          if (storedData.value === element.attributes.xfaOn) {
+            html.setAttribute("checked", true);
+          } else if (storedData.value === element.attributes.xfaOff) {
+            html.removeAttribute("checked");
+          }
+          if (intent === "print") {
+            break;
+          }
+          html.addEventListener("change", event => {
+            storage.setValue(id, {
+              value: event.target.checked ? event.target.getAttribute("xfaOn") : event.target.getAttribute("xfaOff")
+            });
+          });
+        } else {
+          if (storedData.value !== null) {
+            html.setAttribute("value", storedData.value);
+          }
+          if (intent === "print") {
+            break;
+          }
+          html.addEventListener("input", event => {
+            storage.setValue(id, {
+              value: event.target.value
+            });
+          });
+        }
+        break;
+      case "select":
+        if (storedData.value !== null) {
+          html.setAttribute("value", storedData.value);
+          for (const option of element.children) {
+            if (option.attributes.value === storedData.value) {
+              option.attributes.selected = true;
+            } else if (option.attributes.hasOwnProperty("selected")) {
+              delete option.attributes.selected;
+            }
+          }
+        }
+        html.addEventListener("input", event => {
+          const options = event.target.options;
+          const value = options.selectedIndex === -1 ? "" : options[options.selectedIndex].value;
+          storage.setValue(id, {
+            value
+          });
+        });
+        break;
+    }
+  }
+  static setAttributes({
+    html,
+    element,
+    storage = null,
+    intent,
+    linkService
+  }) {
+    const {
+      attributes
+    } = element;
+    const isHTMLAnchorElement = html instanceof HTMLAnchorElement;
+    if (attributes.type === "radio") {
+      attributes.name = `${attributes.name}-${intent}`;
+    }
+    for (const [key, value] of Object.entries(attributes)) {
+      if (value === null || value === undefined) {
+        continue;
+      }
+      switch (key) {
+        case "class":
+          if (value.length) {
+            html.setAttribute(key, value.join(" "));
+          }
+          break;
+        case "dataId":
+          break;
+        case "id":
+          html.setAttribute("data-element-id", value);
+          break;
+        case "style":
+          Object.assign(html.style, value);
+          break;
+        case "textContent":
+          html.textContent = value;
+          break;
+        default:
+          if (!isHTMLAnchorElement || key !== "href" && key !== "newWindow") {
+            html.setAttribute(key, value);
+          }
+      }
+    }
+    if (isHTMLAnchorElement) {
+      linkService.addLinkAttributes(html, attributes.href, attributes.newWindow);
+    }
+    if (storage && attributes.dataId) {
+      this.setupStorage(html, attributes.dataId, element, storage);
+    }
+  }
+  static render(parameters) {
+    const storage = parameters.annotationStorage;
+    const linkService = parameters.linkService;
+    const root = parameters.xfaHtml;
+    const intent = parameters.intent || "display";
+    const rootHtml = document.createElement(root.name);
+    if (root.attributes) {
+      this.setAttributes({
+        html: rootHtml,
+        element: root,
+        intent,
+        linkService
+      });
+    }
+    const isNotForRichText = intent !== "richText";
+    const rootDiv = parameters.div;
+    rootDiv.append(rootHtml);
+    if (parameters.viewport) {
+      const transform = `matrix(${parameters.viewport.transform.join(",")})`;
+      rootDiv.style.transform = transform;
+    }
+    if (isNotForRichText) {
+      rootDiv.setAttribute("class", "xfaLayer xfaFont");
+    }
+    const textDivs = [];
+    if (root.children.length === 0) {
+      if (root.value) {
+        const node = document.createTextNode(root.value);
+        rootHtml.append(node);
+        if (isNotForRichText && XfaText.shouldBuildText(root.name)) {
+          textDivs.push(node);
+        }
+      }
+      return {
+        textDivs
+      };
+    }
+    const stack = [[root, -1, rootHtml]];
+    while (stack.length > 0) {
+      const [parent, i, html] = stack.at(-1);
+      if (i + 1 === parent.children.length) {
+        stack.pop();
+        continue;
+      }
+      const child = parent.children[++stack.at(-1)[1]];
+      if (child === null) {
+        continue;
+      }
+      const {
+        name
+      } = child;
+      if (name === "#text") {
+        const node = document.createTextNode(child.value);
+        textDivs.push(node);
+        html.append(node);
+        continue;
+      }
+      const childHtml = child?.attributes?.xmlns ? document.createElementNS(child.attributes.xmlns, name) : document.createElement(name);
+      html.append(childHtml);
+      if (child.attributes) {
+        this.setAttributes({
+          html: childHtml,
+          element: child,
+          storage,
+          intent,
+          linkService
+        });
+      }
+      if (child.children?.length > 0) {
+        stack.push([child, -1, childHtml]);
+      } else if (child.value) {
+        const node = document.createTextNode(child.value);
+        if (isNotForRichText && XfaText.shouldBuildText(name)) {
+          textDivs.push(node);
+        }
+        childHtml.append(node);
+      }
+    }
+    for (const el of rootDiv.querySelectorAll(".xfaNonInteractive input, .xfaNonInteractive textarea")) {
+      el.setAttribute("readOnly", true);
+    }
+    return {
+      textDivs
+    };
+  }
+  static update(parameters) {
+    const transform = `matrix(${parameters.viewport.transform.join(",")})`;
+    parameters.div.style.transform = transform;
+    parameters.div.hidden = false;
+  }
+}
+
 ;// ./src/display/display_utils.js
+
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 class PixelsPerInch {
@@ -1404,7 +1659,12 @@ class OutputScale {
   }
 }
 const SupportedImageMimeTypes = ["image/apng", "image/avif", "image/bmp", "image/gif", "image/jpeg", "image/png", "image/svg+xml", "image/webp", "image/x-icon"];
-function changeLightness(r, g, b, lumCallback = l => (1 + Math.sqrt(l)) / 2) {
+class ColorScheme {
+  static get isDarkMode() {
+    return shadow(this, "isDarkMode", !!window?.matchMedia?.("(prefers-color-scheme: dark)").matches);
+  }
+}
+function changeLightness(r, g, b, lumCallback = ColorScheme.isDarkMode ? l => (1 - Math.sqrt(1 - l)) / 2 : l => (1 + Math.sqrt(l)) / 2) {
   r /= 255;
   g /= 255;
   b /= 255;
@@ -1427,6 +1687,42 @@ function changeLightness(r, g, b, lumCallback = l => (1 + Math.sqrt(l)) / 2) {
   h = (h * 60).toFixed(2);
   const s = (d / (1 - Math.abs(2 * l - 1)) * 100).toFixed(2);
   return `hsl(${h}, ${s}%, ${newL}%)`;
+}
+function applyOpacity(r, g, b, opacity) {
+  opacity = Math.min(Math.max(opacity ?? 1, 0), 1);
+  const white = 255 * (1 - opacity);
+  r = Math.round(r * opacity + white);
+  g = Math.round(g * opacity + white);
+  b = Math.round(b * opacity + white);
+  return [r, g, b];
+}
+function renderRichText({
+  html,
+  dir,
+  className
+}, container) {
+  const fragment = document.createDocumentFragment();
+  if (typeof html === "string") {
+    const p = document.createElement("p");
+    p.dir = dir || "auto";
+    const lines = html.split(/(?:\r\n?|\n)/);
+    for (let i = 0, ii = lines.length; i < ii; ++i) {
+      const line = lines[i];
+      p.append(document.createTextNode(line));
+      if (i < ii - 1) {
+        p.append(document.createElement("br"));
+      }
+    }
+    fragment.append(p);
+  } else {
+    XfaLayer.render({
+      xfaHtml: html,
+      div: fragment,
+      intent: "richText"
+    });
+  }
+  fragment.firstChild.classList.add("richText", className);
+  container.append(fragment);
 }
 
 ;// ./src/display/editor/toolbar.js
@@ -1551,7 +1847,7 @@ class EditorToolbar {
     if (this.#comment) {
       return;
     }
-    const button = comment.render();
+    const button = comment.renderForToolbar();
     if (!button) {
       return;
     }
@@ -2253,6 +2549,7 @@ class AnnotationEditorUIManager {
     this.isShiftKeyDown = false;
     this._editorUndoBar = editorUndoBar || null;
     this._supportsPinchToZoom = supportsPinchToZoom !== false;
+    commentManager?.setSidebarUiManager(this);
   }
   destroy() {
     this.#updateModeCapability?.resolve();
@@ -2368,6 +2665,28 @@ class AnnotationEditorUIManager {
   }
   editComment(editor, position) {
     this.#commentManager?.open(this, editor, position);
+  }
+  showComment(pageIndex, uid) {
+    const layer = this.#allLayers.get(pageIndex);
+    const editor = layer?.getEditorByUID(uid);
+    editor?.showComment();
+  }
+  async waitForPageRendered(pageNumber) {
+    if (this.#allLayers.has(pageNumber - 1)) {
+      return;
+    }
+    const {
+      resolve,
+      promise
+    } = Promise.withResolvers();
+    const onPageRendered = evt => {
+      if (evt.pageNumber === pageNumber) {
+        this._eventBus._off("annotationeditorlayerrendered", onPageRendered);
+        resolve();
+      }
+    };
+    this._eventBus.on("annotationeditorlayerrendered", onPageRendered);
+    await promise;
   }
   getSignature(editor) {
     this.#signatureManager?.getSignature({
@@ -2961,6 +3280,9 @@ class AnnotationEditorUIManager {
     this.#currentDrawingSession?.commitOrRemove();
     if (this.#mode === AnnotationEditorType.POPUP) {
       this.#commentManager?.hideSidebar();
+      for (const editor of this.#allEditors.values()) {
+        editor.removeStandaloneCommentButton();
+      }
     }
     this.#mode = mode;
     if (mode === AnnotationEditorType.NONE) {
@@ -2973,15 +3295,41 @@ class AnnotationEditorUIManager {
     if (mode === AnnotationEditorType.SIGNATURE) {
       await this.#signatureManager?.loadSignatures();
     }
-    if (mode === AnnotationEditorType.POPUP) {
-      this.#allEditableAnnotations ||= await this.#pdfDocument.getAnnotationsByType(new Set(this.#editorTypes.map(editorClass => editorClass._editorType)));
-      this.#commentManager?.showSidebar(this.#allEditableAnnotations);
-    }
     this.setEditingState(true);
     await this.#enableAll();
     this.unselectAll();
     for (const layer of this.#allLayers.values()) {
       layer.updateMode(mode);
+    }
+    if (mode === AnnotationEditorType.POPUP) {
+      this.#allEditableAnnotations ||= await this.#pdfDocument.getAnnotationsByType(new Set(this.#editorTypes.map(editorClass => editorClass._editorType)));
+      const elementIds = new Set();
+      const allComments = [];
+      for (const editor of this.#allEditors.values()) {
+        const {
+          annotationElementId,
+          hasComment,
+          deleted
+        } = editor;
+        if (annotationElementId) {
+          elementIds.add(annotationElementId);
+        }
+        if (hasComment && !deleted) {
+          allComments.push(editor.getData());
+          editor.addStandaloneCommentButton();
+        }
+      }
+      for (const annotation of this.#allEditableAnnotations) {
+        const {
+          id,
+          popupRef,
+          contentsObj
+        } = annotation;
+        if (popupRef && contentsObj?.str && !elementIds.has(id) && !this.#deletedAnnotationsElementIds.has(id)) {
+          allComments.push(annotation);
+        }
+      }
+      this.#commentManager?.showSidebar(allComments);
     }
     if (!editId) {
       if (isFromKeyboard) {
@@ -3876,7 +4224,8 @@ class AltText {
 ;// ./src/display/editor/comment.js
 
 class Comment {
-  #commentButton = null;
+  #commentStandaloneButton = null;
+  #commentToolbarButton = null;
   #commentWasFromKeyBoard = false;
   #editor = null;
   #initialText = null;
@@ -3885,14 +4234,33 @@ class Comment {
   #deleted = false;
   constructor(editor) {
     this.#editor = editor;
-    this.toolbar = null;
   }
-  render() {
+  renderForToolbar() {
+    const button = this.#commentToolbarButton = document.createElement("button");
+    button.className = "comment";
+    return this.#render(button);
+  }
+  renderForStandalone() {
+    const button = this.#commentStandaloneButton = document.createElement("button");
+    button.className = "annotationCommentButton";
+    const position = this.#editor.commentButtonPosition;
+    if (position) {
+      const {
+        style
+      } = button;
+      style.insetInlineEnd = `calc(${100 * (this.#editor._uiManager.direction === "ltr" ? 1 - position[0] : position[0])}% - var(--comment-button-dim))`;
+      style.top = `calc(${100 * position[1]}% - var(--comment-button-dim))`;
+      const color = this.#editor.commentButtonColor;
+      if (color) {
+        style.backgroundColor = color;
+      }
+    }
+    return this.#render(button);
+  }
+  #render(comment) {
     if (!this.#editor._uiManager.hasCommentManager()) {
       return null;
     }
-    const comment = this.#commentButton = document.createElement("button");
-    comment.className = "comment";
     comment.tabIndex = "0";
     comment.setAttribute("data-l10n-id", "pdfjs-editor-edit-comment-button");
     const signal = this.#editor._uiManager._signal;
@@ -3907,7 +4275,11 @@ class Comment {
     });
     const onClick = event => {
       event.preventDefault();
-      this.edit();
+      if (comment === this.#commentToolbarButton) {
+        this.edit();
+      } else {
+        this.#editor._uiManager.toggleComment(this.#editor);
+      }
     };
     comment.addEventListener("click", onClick, {
       capture: true,
@@ -3940,10 +4312,10 @@ class Comment {
     this.#editor._uiManager.editComment(this.#editor, position);
   }
   finish() {
-    if (!this.#commentButton) {
+    if (!this.#commentToolbarButton) {
       return;
     }
-    this.#commentButton.focus({
+    this.#commentToolbarButton.focus({
       focusVisible: this.#commentWasFromKeyBoard
     });
     this.#commentWasFromKeyBoard = false;
@@ -3978,16 +4350,12 @@ class Comment {
     this.#initialText = text;
     this.data = text;
   }
-  toggle(enabled = false) {
-    if (!this.#commentButton) {
-      return;
-    }
-    this.#commentButton.disabled = !enabled;
-  }
   shown() {}
   destroy() {
-    this.#commentButton?.remove();
-    this.#commentButton = null;
+    this.#commentToolbarButton?.remove();
+    this.#commentToolbarButton = null;
+    this.#commentStandaloneButton?.remove();
+    this.#commentStandaloneButton = null;
     this.#text = "";
     this.#date = null;
     this.#editor = null;
@@ -4185,6 +4553,7 @@ class AnnotationEditor {
   #allResizerDivs = null;
   #altText = null;
   #comment = null;
+  #commentStandaloneButton = null;
   #disabled = false;
   #dragPointerId = null;
   #dragPointerType = "";
@@ -4255,6 +4624,7 @@ class AnnotationEditor {
     this._initialOptions.isCentered = parameters.isCentered;
     this._structTreeParentId = null;
     this.annotationElementId = parameters.annotationElementId || null;
+    this.creationDate = new Date();
     const {
       rotation,
       rawDims: {
@@ -4333,6 +4703,9 @@ class AnnotationEditor {
   set _isDraggable(value) {
     this.#isDraggable = value;
     this.div?.classList.toggle("draggable", value);
+  }
+  get uid() {
+    return this.annotationElementId || this.id;
   }
   get isEnterHandled() {
     return true;
@@ -4942,10 +5315,19 @@ class AnnotationEditor {
     return this.#altText?.hasData() ?? false;
   }
   addCommentButton() {
-    if (this.#comment) {
-      return this.#comment;
+    return this.#comment ||= new Comment(this);
+  }
+  addStandaloneCommentButton() {
+    this.#comment ||= new Comment(this);
+    if (this.#commentStandaloneButton) {
+      return;
     }
-    return this.#comment = new Comment(this);
+    this.#commentStandaloneButton = this.#comment.renderForStandalone();
+    this.div.append(this.#commentStandaloneButton);
+  }
+  removeStandaloneCommentButton() {
+    this.#commentStandaloneButton?.remove();
+    this.#commentStandaloneButton = null;
   }
   get commentColor() {
     return null;
@@ -4974,12 +5356,16 @@ class AnnotationEditor {
   get hasEditedComment() {
     return this.#comment?.hasBeenEdited();
   }
+  get hasComment() {
+    return !!this.#comment && !this.#comment.isDeleted();
+  }
   async editComment() {
     if (!this.#comment) {
       this.#comment = new Comment(this);
     }
     this.#comment.edit();
   }
+  showComment() {}
   addComment(serialized) {
     if (this.hasEditedComment) {
       const DEFAULT_POPUP_WIDTH = 180;
@@ -5240,6 +5626,18 @@ class AnnotationEditor {
   getPDFRect() {
     return this.getRect(0, 0);
   }
+  getData() {
+    return {
+      id: this.uid,
+      pageIndex: this.pageIndex,
+      rect: this.getPDFRect(),
+      contentsObj: {
+        str: this.comment.text
+      },
+      creationDate: this.creationDate,
+      popupRef: !this.#comment.isDeleted()
+    };
+  }
   onceAdded(focus) {}
   isEmpty() {
     return false;
@@ -5370,6 +5768,17 @@ class AnnotationEditor {
   }
   get toolbarPosition() {
     return null;
+  }
+  get commentButtonPosition() {
+    return this._uiManager.direction === "ltr" ? [1, 0] : [0, 0];
+  }
+  get commentButtonColor() {
+    if (!this.color) {
+      return null;
+    }
+    let [r, g, b] = AnnotationEditor._colorManager.convert(this._uiManager.getNonHCMColor(this.color));
+    [r, g, b] = applyOpacity(r, g, b, this.opacity);
+    return changeLightness(r, g, b);
   }
   keydown(event) {
     if (!this.isResizable || event.target !== this.div || event.key !== "Enter") {
@@ -12507,49 +12916,6 @@ class TextLayer {
   }
 }
 
-;// ./src/display/xfa_text.js
-class XfaText {
-  static textContent(xfa) {
-    const items = [];
-    const output = {
-      items,
-      styles: Object.create(null)
-    };
-    function walk(node) {
-      if (!node) {
-        return;
-      }
-      let str = null;
-      const name = node.name;
-      if (name === "#text") {
-        str = node.value;
-      } else if (!XfaText.shouldBuildText(name)) {
-        return;
-      } else if (node?.attributes?.textContent) {
-        str = node.attributes.textContent;
-      } else if (node.value) {
-        str = node.value;
-      }
-      if (str !== null) {
-        items.push({
-          str
-        });
-      }
-      if (!node.children) {
-        return;
-      }
-      for (const child of node.children) {
-        walk(child);
-      }
-    }
-    walk(xfa);
-    return output;
-  }
-  static shouldBuildText(name) {
-    return !(name === "textarea" || name === "input" || name === "option" || name === "select");
-  }
-}
-
 ;// ./src/display/api.js
 
 
@@ -14311,7 +14677,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "c96fa68";
+const build = "2a93ade";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -14690,219 +15056,7 @@ class DOMSVGFactory extends BaseSVGFactory {
   }
 }
 
-;// ./src/display/xfa_layer.js
-
-class XfaLayer {
-  static setupStorage(html, id, element, storage, intent) {
-    const storedData = storage.getValue(id, {
-      value: null
-    });
-    switch (element.name) {
-      case "textarea":
-        if (storedData.value !== null) {
-          html.textContent = storedData.value;
-        }
-        if (intent === "print") {
-          break;
-        }
-        html.addEventListener("input", event => {
-          storage.setValue(id, {
-            value: event.target.value
-          });
-        });
-        break;
-      case "input":
-        if (element.attributes.type === "radio" || element.attributes.type === "checkbox") {
-          if (storedData.value === element.attributes.xfaOn) {
-            html.setAttribute("checked", true);
-          } else if (storedData.value === element.attributes.xfaOff) {
-            html.removeAttribute("checked");
-          }
-          if (intent === "print") {
-            break;
-          }
-          html.addEventListener("change", event => {
-            storage.setValue(id, {
-              value: event.target.checked ? event.target.getAttribute("xfaOn") : event.target.getAttribute("xfaOff")
-            });
-          });
-        } else {
-          if (storedData.value !== null) {
-            html.setAttribute("value", storedData.value);
-          }
-          if (intent === "print") {
-            break;
-          }
-          html.addEventListener("input", event => {
-            storage.setValue(id, {
-              value: event.target.value
-            });
-          });
-        }
-        break;
-      case "select":
-        if (storedData.value !== null) {
-          html.setAttribute("value", storedData.value);
-          for (const option of element.children) {
-            if (option.attributes.value === storedData.value) {
-              option.attributes.selected = true;
-            } else if (option.attributes.hasOwnProperty("selected")) {
-              delete option.attributes.selected;
-            }
-          }
-        }
-        html.addEventListener("input", event => {
-          const options = event.target.options;
-          const value = options.selectedIndex === -1 ? "" : options[options.selectedIndex].value;
-          storage.setValue(id, {
-            value
-          });
-        });
-        break;
-    }
-  }
-  static setAttributes({
-    html,
-    element,
-    storage = null,
-    intent,
-    linkService
-  }) {
-    const {
-      attributes
-    } = element;
-    const isHTMLAnchorElement = html instanceof HTMLAnchorElement;
-    if (attributes.type === "radio") {
-      attributes.name = `${attributes.name}-${intent}`;
-    }
-    for (const [key, value] of Object.entries(attributes)) {
-      if (value === null || value === undefined) {
-        continue;
-      }
-      switch (key) {
-        case "class":
-          if (value.length) {
-            html.setAttribute(key, value.join(" "));
-          }
-          break;
-        case "dataId":
-          break;
-        case "id":
-          html.setAttribute("data-element-id", value);
-          break;
-        case "style":
-          Object.assign(html.style, value);
-          break;
-        case "textContent":
-          html.textContent = value;
-          break;
-        default:
-          if (!isHTMLAnchorElement || key !== "href" && key !== "newWindow") {
-            html.setAttribute(key, value);
-          }
-      }
-    }
-    if (isHTMLAnchorElement) {
-      linkService.addLinkAttributes(html, attributes.href, attributes.newWindow);
-    }
-    if (storage && attributes.dataId) {
-      this.setupStorage(html, attributes.dataId, element, storage);
-    }
-  }
-  static render(parameters) {
-    const storage = parameters.annotationStorage;
-    const linkService = parameters.linkService;
-    const root = parameters.xfaHtml;
-    const intent = parameters.intent || "display";
-    const rootHtml = document.createElement(root.name);
-    if (root.attributes) {
-      this.setAttributes({
-        html: rootHtml,
-        element: root,
-        intent,
-        linkService
-      });
-    }
-    const isNotForRichText = intent !== "richText";
-    const rootDiv = parameters.div;
-    rootDiv.append(rootHtml);
-    if (parameters.viewport) {
-      const transform = `matrix(${parameters.viewport.transform.join(",")})`;
-      rootDiv.style.transform = transform;
-    }
-    if (isNotForRichText) {
-      rootDiv.setAttribute("class", "xfaLayer xfaFont");
-    }
-    const textDivs = [];
-    if (root.children.length === 0) {
-      if (root.value) {
-        const node = document.createTextNode(root.value);
-        rootHtml.append(node);
-        if (isNotForRichText && XfaText.shouldBuildText(root.name)) {
-          textDivs.push(node);
-        }
-      }
-      return {
-        textDivs
-      };
-    }
-    const stack = [[root, -1, rootHtml]];
-    while (stack.length > 0) {
-      const [parent, i, html] = stack.at(-1);
-      if (i + 1 === parent.children.length) {
-        stack.pop();
-        continue;
-      }
-      const child = parent.children[++stack.at(-1)[1]];
-      if (child === null) {
-        continue;
-      }
-      const {
-        name
-      } = child;
-      if (name === "#text") {
-        const node = document.createTextNode(child.value);
-        textDivs.push(node);
-        html.append(node);
-        continue;
-      }
-      const childHtml = child?.attributes?.xmlns ? document.createElementNS(child.attributes.xmlns, name) : document.createElement(name);
-      html.append(childHtml);
-      if (child.attributes) {
-        this.setAttributes({
-          html: childHtml,
-          element: child,
-          storage,
-          intent,
-          linkService
-        });
-      }
-      if (child.children?.length > 0) {
-        stack.push([child, -1, childHtml]);
-      } else if (child.value) {
-        const node = document.createTextNode(child.value);
-        if (isNotForRichText && XfaText.shouldBuildText(name)) {
-          textDivs.push(node);
-        }
-        childHtml.append(node);
-      }
-    }
-    for (const el of rootDiv.querySelectorAll(".xfaNonInteractive input, .xfaNonInteractive textarea")) {
-      el.setAttribute("readOnly", true);
-    }
-    return {
-      textDivs
-    };
-  }
-  static update(parameters) {
-    const transform = `matrix(${parameters.viewport.transform.join(",")})`;
-    parameters.div.style.transform = transform;
-    parameters.div.hidden = false;
-  }
-}
-
 ;// ./src/display/annotation_layer.js
-
 
 
 
@@ -15044,10 +15198,8 @@ class AnnotationElement {
     if (!this.data.color) {
       return null;
     }
-    const [r, g, b] = this.data.color;
-    const opacity = this.data.opacity ?? 1;
-    const oppositeOpacity = 255 * (1 - opacity);
-    return changeLightness(Math.min(r + oppositeOpacity, 255), Math.min(g + oppositeOpacity, 255), Math.min(b + oppositeOpacity, 255));
+    const [r, g, b] = applyOpacity(...this.data.color, this.data.opacity);
+    return changeLightness(r, g, b);
   }
   _normalizePoint(point) {
     const {
@@ -16921,18 +17073,11 @@ class PopupElement {
       modificationDate.dateTime = this.#dateObj.toISOString();
       header.append(modificationDate);
     }
-    const html = this.#html;
-    if (html) {
-      XfaLayer.render({
-        xfaHtml: html,
-        intent: "richText",
-        div: popup
-      });
-      popup.lastChild.classList.add("richText", "popupContent");
-    } else {
-      const contents = this._formatContents(this.#contentsObj);
-      popup.append(contents);
-    }
+    renderRichText({
+      html: this.#html || this.#contentsObj.str,
+      dir: this.#contentsObj.dir,
+      className: "popupContent"
+    }, popup);
     this.#container.append(popup);
   }
   get #html() {
@@ -16978,23 +17123,6 @@ class PopupElement {
       });
     }
     return popupContent;
-  }
-  _formatContents({
-    str,
-    dir
-  }) {
-    const p = document.createElement("p");
-    p.classList.add("popupContent");
-    p.dir = dir;
-    const lines = str.split(/(?:\r\n?|\n)/);
-    for (let i = 0, ii = lines.length; i < ii; ++i) {
-      const line = lines[i];
-      p.append(document.createTextNode(line));
-      if (i < ii - 1) {
-        p.append(document.createElement("br"));
-      }
-    }
-    return p;
   }
   #keyDown(event) {
     if (event.altKey || event.shiftKey || event.ctrlKey || event.metaKey) {
@@ -17895,7 +18023,6 @@ class AnnotationLayer {
 
 const EOL_PATTERN = /\r\n?|\n/g;
 class FreeTextEditor extends AnnotationEditor {
-  #color;
   #content = "";
   #editorDivId = `${this.id}-editor`;
   #editModeAC = null;
@@ -17945,7 +18072,7 @@ class FreeTextEditor extends AnnotationEditor {
       ...params,
       name: "freeTextEditor"
     });
-    this.#color = params.color || FreeTextEditor._defaultColor || AnnotationEditor._defaultLineColor;
+    this.color = params.color || FreeTextEditor._defaultColor || AnnotationEditor._defaultLineColor;
     this.#fontSize = params.fontSize || FreeTextEditor._defaultFontSize;
     if (!this.annotationElementId) {
       this._uiManager.a11yAlert("pdfjs-editor-freetext-added-alert");
@@ -17980,7 +18107,7 @@ class FreeTextEditor extends AnnotationEditor {
     return [[AnnotationEditorParamsType.FREETEXT_SIZE, FreeTextEditor._defaultFontSize], [AnnotationEditorParamsType.FREETEXT_COLOR, FreeTextEditor._defaultColor || AnnotationEditor._defaultLineColor]];
   }
   get propertiesToUpdate() {
-    return [[AnnotationEditorParamsType.FREETEXT_SIZE, this.#fontSize], [AnnotationEditorParamsType.FREETEXT_COLOR, this.#color]];
+    return [[AnnotationEditorParamsType.FREETEXT_SIZE, this.#fontSize], [AnnotationEditorParamsType.FREETEXT_COLOR, this.color]];
   }
   get toolbarButtons() {
     this._colorPicker ||= new BasicColorPicker(this);
@@ -17988,9 +18115,6 @@ class FreeTextEditor extends AnnotationEditor {
   }
   get colorType() {
     return AnnotationEditorParamsType.FREETEXT_COLOR;
-  }
-  get colorValue() {
-    return this.#color;
   }
   #updateFontSize(fontSize) {
     const setFontsize = size => {
@@ -18012,10 +18136,10 @@ class FreeTextEditor extends AnnotationEditor {
   }
   #updateColor(color) {
     const setColor = col => {
-      this.#color = this.editorDiv.style.color = col;
+      this.color = this.editorDiv.style.color = col;
       this._colorPicker?.update(col);
     };
-    const savedColor = this.#color;
+    const savedColor = this.color;
     this.addCommands({
       cmd: setColor.bind(this, color),
       undo: setColor.bind(this, savedColor),
@@ -18253,7 +18377,7 @@ class FreeTextEditor extends AnnotationEditor {
       style
     } = this.editorDiv;
     style.fontSize = `calc(${this.#fontSize}px * var(--total-scale-factor))`;
-    style.color = this.#color;
+    style.color = this.color;
     this.div.append(this.editorDiv);
     this.overlayDiv = document.createElement("div");
     this.overlayDiv.classList.add("overlay", "enabled");
@@ -18450,7 +18574,7 @@ class FreeTextEditor extends AnnotationEditor {
     }
     const editor = await super.deserialize(data, parent, uiManager);
     editor.#fontSize = data.fontSize;
-    editor.#color = Util.makeHexColor(...data.color);
+    editor.color = Util.makeHexColor(...data.color);
     editor.#content = FreeTextEditor.#deserializeContent(data.value);
     editor._initialData = initialData;
     if (data.comment) {
@@ -18466,7 +18590,7 @@ class FreeTextEditor extends AnnotationEditor {
       return this.serializeDeleted();
     }
     const rect = this.getPDFRect();
-    const color = AnnotationEditor._colorManager.convert(this.isAttachedToDOM ? getComputedStyle(this.editorDiv).color : this.#color);
+    const color = AnnotationEditor._colorManager.convert(this.isAttachedToDOM ? getComputedStyle(this.editorDiv).color : this.color);
     const serialized = {
       annotationType: AnnotationEditorType.FREETEXT,
       color,
@@ -18506,7 +18630,7 @@ class FreeTextEditor extends AnnotationEditor {
       style
     } = content;
     style.fontSize = `calc(${this.#fontSize}px * var(--total-scale-factor))`;
-    style.color = this.#color;
+    style.color = this.color;
     content.replaceChildren();
     for (const line of this.#content.split("\n")) {
       const div = document.createElement("div");
@@ -18825,6 +18949,7 @@ class FreeDrawOutline extends Outline {
     this.#scaleFactor = scaleFactor;
     this.#innerMargin = innerMargin;
     this.#isLTR = isLTR;
+    this.firstPoint = [NaN, NaN];
     this.lastPoint = [NaN, NaN];
     this.#computeMinMax(isLTR);
     const [x, y, width, height] = this.#bbox;
@@ -18882,14 +19007,23 @@ class FreeDrawOutline extends Outline {
     let lastX = outline[4];
     let lastY = outline[5];
     const minMax = [lastX, lastY, lastX, lastY];
+    let firstPointX = lastX;
+    let firstPointY = lastY;
     let lastPointX = lastX;
     let lastPointY = lastY;
     const ltrCallback = isLTR ? Math.max : Math.min;
+    const bezierBbox = new Float32Array(4);
     for (let i = 6, ii = outline.length; i < ii; i += 6) {
       const x = outline[i + 4],
         y = outline[i + 5];
       if (isNaN(outline[i])) {
         Util.pointBoundingBox(x, y, minMax);
+        if (firstPointY > y) {
+          firstPointX = x;
+          firstPointY = y;
+        } else if (firstPointY === y) {
+          firstPointX = ltrCallback(firstPointX, x);
+        }
         if (lastPointY < y) {
           lastPointX = x;
           lastPointY = y;
@@ -18897,14 +19031,21 @@ class FreeDrawOutline extends Outline {
           lastPointX = ltrCallback(lastPointX, x);
         }
       } else {
-        const bbox = [Infinity, Infinity, -Infinity, -Infinity];
-        Util.bezierBoundingBox(lastX, lastY, ...outline.slice(i, i + 6), bbox);
-        Util.rectBoundingBox(...bbox, minMax);
-        if (lastPointY < bbox[3]) {
-          lastPointX = bbox[2];
-          lastPointY = bbox[3];
-        } else if (lastPointY === bbox[3]) {
-          lastPointX = ltrCallback(lastPointX, bbox[2]);
+        bezierBbox[0] = bezierBbox[1] = Infinity;
+        bezierBbox[2] = bezierBbox[3] = -Infinity;
+        Util.bezierBoundingBox(lastX, lastY, ...outline.slice(i, i + 6), bezierBbox);
+        Util.rectBoundingBox(bezierBbox[0], bezierBbox[1], bezierBbox[2], bezierBbox[3], minMax);
+        if (firstPointY > bezierBbox[1]) {
+          firstPointX = bezierBbox[0];
+          firstPointY = bezierBbox[1];
+        } else if (firstPointY === bezierBbox[1]) {
+          firstPointX = ltrCallback(firstPointX, bezierBbox[0]);
+        }
+        if (lastPointY < bezierBbox[3]) {
+          lastPointX = bezierBbox[2];
+          lastPointY = bezierBbox[3];
+        } else if (lastPointY === bezierBbox[3]) {
+          lastPointX = ltrCallback(lastPointX, bezierBbox[2]);
         }
       }
       lastX = x;
@@ -18915,6 +19056,7 @@ class FreeDrawOutline extends Outline {
     bbox[1] = minMax[1] - this.#innerMargin;
     bbox[2] = minMax[2] - minMax[0] + 2 * this.#innerMargin;
     bbox[3] = minMax[3] - minMax[1] + 2 * this.#innerMargin;
+    this.firstPoint = [firstPointX, firstPointY];
     this.lastPoint = [lastPointX, lastPointY];
   }
   get box() {
@@ -18950,6 +19092,7 @@ class FreeDrawOutline extends Outline {
 
 class HighlightOutliner {
   #box;
+  #firstPoint;
   #lastPoint;
   #verticalEdges = [];
   #intervals = [];
@@ -18976,15 +19119,33 @@ class HighlightOutliner {
     const bboxHeight = minMax[3] - minMax[1] + 2 * innerMargin;
     const shiftedMinX = minMax[0] - innerMargin;
     const shiftedMinY = minMax[1] - innerMargin;
+    let firstPointX = isLTR ? -Infinity : Infinity;
+    let firstPointY = Infinity;
     const lastEdge = this.#verticalEdges.at(isLTR ? -1 : -2);
     const lastPoint = [lastEdge[0], lastEdge[2]];
     for (const edge of this.#verticalEdges) {
-      const [x, y1, y2] = edge;
+      const [x, y1, y2, left] = edge;
+      if (!left && isLTR) {
+        if (y1 < firstPointY) {
+          firstPointY = y1;
+          firstPointX = x;
+        } else if (y1 === firstPointY) {
+          firstPointX = Math.max(firstPointX, x);
+        }
+      } else if (left && !isLTR) {
+        if (y1 < firstPointY) {
+          firstPointY = y1;
+          firstPointX = x;
+        } else if (y1 === firstPointY) {
+          firstPointX = Math.min(firstPointX, x);
+        }
+      }
       edge[0] = (x - shiftedMinX) / bboxWidth;
       edge[1] = (y1 - shiftedMinY) / bboxHeight;
       edge[2] = (y2 - shiftedMinY) / bboxHeight;
     }
     this.#box = new Float32Array([shiftedMinX, shiftedMinY, bboxWidth, bboxHeight]);
+    this.#firstPoint = [firstPointX, firstPointY];
     this.#lastPoint = lastPoint;
   }
   getOutlines() {
@@ -19046,7 +19207,7 @@ class HighlightOutliner {
       }
       outline.push(lastPointX, lastPointY);
     }
-    return new HighlightOutline(outlines, this.#box, this.#lastPoint);
+    return new HighlightOutline(outlines, this.#box, this.#firstPoint, this.#lastPoint);
   }
   #binarySearch(y) {
     const array = this.#intervals;
@@ -19129,10 +19290,11 @@ class HighlightOutliner {
 class HighlightOutline extends Outline {
   #box;
   #outlines;
-  constructor(outlines, box, lastPoint) {
+  constructor(outlines, box, firstPoint, lastPoint) {
     super();
     this.#outlines = outlines;
     this.#box = box;
+    this.firstPoint = firstPoint;
     this.lastPoint = lastPoint;
   }
   toSVGPath() {
@@ -19208,8 +19370,8 @@ class HighlightEditor extends AnnotationEditor {
   #highlightOutlines = null;
   #id = null;
   #isFreeHighlight = false;
+  #firstPoint = null;
   #lastPoint = null;
-  #opacity;
   #outlineId = null;
   #text = "";
   #thickness;
@@ -19241,7 +19403,7 @@ class HighlightEditor extends AnnotationEditor {
     });
     this.color = params.color || HighlightEditor._defaultColor;
     this.#thickness = params.thickness || HighlightEditor._defaultThickness;
-    this.#opacity = params.opacity || HighlightEditor._defaultOpacity;
+    this.opacity = params.opacity || HighlightEditor._defaultOpacity;
     this.#boxes = params.boxes || null;
     this.#methodOfCreation = params.methodOfCreation || "";
     this.#text = params.text || "";
@@ -19294,8 +19456,10 @@ class HighlightEditor extends AnnotationEditor {
     const outlinerForOutline = new HighlightOutliner(this.#boxes, 0.0025, 0.001, this._uiManager.direction === "ltr");
     this.#focusOutlines = outlinerForOutline.getOutlines();
     const {
+      firstPoint,
       lastPoint
     } = this.#focusOutlines;
+    this.#firstPoint = [(firstPoint[0] - this.x) / this.width, (firstPoint[1] - this.y) / this.height];
     this.#lastPoint = [(lastPoint[0] - this.x) / this.width, (lastPoint[1] - this.y) / this.height];
   }
   #createFreeOutlines({
@@ -19374,8 +19538,10 @@ class HighlightEditor extends AnnotationEditor {
         }
     }
     const {
+      firstPoint,
       lastPoint
     } = this.#focusOutlines;
+    this.#firstPoint = [(firstPoint[0] - x) / width, (firstPoint[1] - y) / height];
     this.#lastPoint = [(lastPoint[0] - x) / width, (lastPoint[1] - y) / height];
   }
   static initialize(l10n, uiManager) {
@@ -19396,6 +19562,9 @@ class HighlightEditor extends AnnotationEditor {
   get toolbarPosition() {
     return this.#lastPoint;
   }
+  get commentButtonPosition() {
+    return this.#firstPoint;
+  }
   updateParams(type, value) {
     switch (type) {
       case AnnotationEditorParamsType.HIGHLIGHT_COLOR:
@@ -19415,7 +19584,7 @@ class HighlightEditor extends AnnotationEditor {
   #updateColor(color) {
     const setColorAndOpacity = (col, opa) => {
       this.color = col;
-      this.#opacity = opa;
+      this.opacity = opa;
       this.parent?.drawLayer.updateProperties(this.#id, {
         root: {
           fill: col,
@@ -19425,7 +19594,7 @@ class HighlightEditor extends AnnotationEditor {
       this.#colorPicker?.updateColor(col);
     };
     const savedColor = this.color;
-    const savedOpacity = this.#opacity;
+    const savedOpacity = this.opacity;
     this.addCommands({
       cmd: setColorAndOpacity.bind(this, color, HighlightEditor._defaultOpacity),
       undo: setColorAndOpacity.bind(this, savedColor, savedOpacity),
@@ -19560,7 +19729,7 @@ class HighlightEditor extends AnnotationEditor {
       root: {
         viewBox: "0 0 1 1",
         fill: this.color,
-        "fill-opacity": this.#opacity
+        "fill-opacity": this.opacity
       },
       rootClass: {
         highlight: true,
@@ -19926,7 +20095,7 @@ class HighlightEditor extends AnnotationEditor {
     } = data;
     const editor = await super.deserialize(data, parent, uiManager);
     editor.color = Util.makeHexColor(...color);
-    editor.#opacity = opacity || 1;
+    editor.opacity = opacity || 1;
     if (inkLists) {
       editor.#thickness = data.thickness;
     }
@@ -20002,7 +20171,7 @@ class HighlightEditor extends AnnotationEditor {
     const serialized = {
       annotationType: AnnotationEditorType.HIGHLIGHT,
       color,
-      opacity: this.#opacity,
+      opacity: this.opacity,
       thickness: this.#thickness,
       quadPoints: this.#serializeBoxes(),
       outlines: this.#serializeOutlines(rect),
@@ -21469,8 +21638,11 @@ class InkEditor extends DrawingEditor {
   get colorType() {
     return AnnotationEditorParamsType.INK_COLOR;
   }
-  get colorValue() {
+  get color() {
     return this._drawingOptions.stroke;
+  }
+  get opacity() {
+    return this._drawingOptions["stroke-opacity"];
   }
   onScaleChanging() {
     if (!this.parent) {
@@ -22970,7 +23142,7 @@ class StampEditor extends AnnotationEditor {
         black = "#cfcfd8";
       if (this._uiManager.hcmFilter !== "none") {
         black = "black";
-      } else if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
+      } else if (ColorScheme.isDarkMode) {
         white = "#8f8f9d";
         black = "#42414d";
       }
@@ -23226,8 +23398,10 @@ class StampEditor extends AnnotationEditor {
       } else {
         serialized.accessibilityData.structParent = this._initialData.structParent ?? -1;
       }
+      serialized.id = this.annotationElementId;
+      delete serialized.bitmapId;
+      return serialized;
     }
-    serialized.id = this.annotationElementId;
     if (context === null) {
       return serialized;
     }
@@ -23729,6 +23903,14 @@ class AnnotationEditorLayer {
       undo,
       mustExec: false
     });
+  }
+  getEditorByUID(uid) {
+    for (const editor of this.#editors.values()) {
+      if (editor.uid === uid) {
+        return editor;
+      }
+    }
+    return null;
   }
   getNextId() {
     return this.#uiManager.getId();
@@ -24242,6 +24424,7 @@ globalThis.pdfjsLib = {
   AnnotationLayer: AnnotationLayer,
   AnnotationMode: AnnotationMode,
   AnnotationType: AnnotationType,
+  applyOpacity: applyOpacity,
   build: build,
   changeLightness: changeLightness,
   ColorPicker: ColorPicker,
@@ -24274,6 +24457,7 @@ globalThis.pdfjsLib = {
   PermissionFlag: PermissionFlag,
   PixelsPerInch: PixelsPerInch,
   RenderingCancelledException: RenderingCancelledException,
+  renderRichText: renderRichText,
   ResponseException: ResponseException,
   setLayerDimensions: setLayerDimensions,
   shadow: shadow,
@@ -24289,6 +24473,6 @@ globalThis.pdfjsLib = {
   XfaLayer: XfaLayer
 };
 
-export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, ColorPicker, DOMSVGFactory, DrawLayer, util_FeatureTest as FeatureTest, GlobalWorkerOptions, util_ImageKind as ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TouchManager, Util, VerbosityLevel, XfaLayer, build, changeLightness, createValidAbsoluteUrl, fetchData, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getUuid, getXfaPageViewport, isDataScheme, isPdfFile, isValidExplicitDest, noContextMenu, normalizeUnicode, setLayerDimensions, shadow, stopEvent, updateUrlHash, version };
+export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, ColorPicker, DOMSVGFactory, DrawLayer, util_FeatureTest as FeatureTest, GlobalWorkerOptions, util_ImageKind as ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TouchManager, Util, VerbosityLevel, XfaLayer, applyOpacity, build, changeLightness, createValidAbsoluteUrl, fetchData, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getUuid, getXfaPageViewport, isDataScheme, isPdfFile, isValidExplicitDest, noContextMenu, normalizeUnicode, renderRichText, setLayerDimensions, shadow, stopEvent, updateUrlHash, version };
 
 //# sourceMappingURL=pdf.mjs.map

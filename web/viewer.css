@@ -3167,11 +3167,13 @@
         opacity:1;
       }
 
-.annotationLayer.disabled .annotationCommentButton{
+.annotationLayer.disabled :is(.annotationCommentButton){
   display:none;
 }
 
 :is(.annotationLayer,.annotationEditorLayer) .annotationCommentButton{
+    --csstools-color-scheme--light:initial;
+    color-scheme:light dark;
     --csstools-light-dark-toggle--75:var(--csstools-color-scheme--light) #1c1b22;
     --comment-button-bg:var(--csstools-light-dark-toggle--75, white);
     --csstools-light-dark-toggle--76:var(--csstools-color-scheme--light) #fbfbfe;
@@ -3258,6 +3260,13 @@
     --comment-button-box-shadow:0 0.25px 0.75px 0 var(--csstools-light-dark-toggle--85, rgb(0 0 0 / 0.05)), 0 2px 6px 0 var(--csstools-light-dark-toggle--86, rgb(0 0 0 / 0.1));
     --csstools-light-dark-toggle--87:var(--csstools-color-scheme--light) #00cadb;
     --comment-button-focus-outline-color:var(--csstools-light-dark-toggle--87, #0062fa);
+  }
+}
+
+@media (prefers-color-scheme: dark){
+
+:is(.annotationLayer,.annotationEditorLayer) .annotationCommentButton{
+    --csstools-color-scheme--light:;
   }
 }
 
@@ -3562,123 +3571,128 @@
         overflow:hidden;
       }
 
-#editorCommentsSidebar #editorCommentsSidebarList{
-    display:flex;
-    width:auto;
-    padding:1px 16px 0;
-    gap:10px;
-    flex:1 0 0;
-    align-self:stretch;
-    align-items:flex-start;
-    flex-direction:column;
-    list-style-type:none;
+#editorCommentsSidebar #editorCommentsSidebarListContainer{
+    overflow:scroll;
   }
 
-:is(#editorCommentsSidebar #editorCommentsSidebarList) .sidebarComment{
+:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList{
       display:flex;
       width:auto;
-      padding:8px 16px 16px;
-      flex-direction:column;
-      align-items:flex-start;
+      padding:1px 16px 0;
+      gap:10px;
+      flex:1 0 0;
       align-self:stretch;
-      gap:4px;
-
-      border-radius:8px;
-      border:0.5px solid var(--comment-border-color);
-      background-color:var(--comment-bg-color);
+      align-items:flex-start;
+      flex-direction:column;
+      list-style-type:none;
+      overflow:scroll;
     }
 
-:is(:is(#editorCommentsSidebar #editorCommentsSidebarList) .sidebarComment):not(.noComments):hover{
-          background-color:var(--comment-hover-bg-color);
-        }
+:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment{
+        display:flex;
+        width:auto;
+        padding:8px 16px 16px;
+        flex-direction:column;
+        align-items:flex-start;
+        align-self:stretch;
+        gap:4px;
 
-:is(:is(#editorCommentsSidebar #editorCommentsSidebarList) .sidebarComment):not(.noComments):hover time::after{
-            display:inline-block;
-            background-color:var(--comment-indicator-hover-fg-color);
-          }
-
-:is(:is(#editorCommentsSidebar #editorCommentsSidebarList) .sidebarComment):not(.noComments):active{
-          background-color:var(--comment-active-bg-color);
-        }
-
-:is(:is(#editorCommentsSidebar #editorCommentsSidebarList) .sidebarComment):not(.noComments):active time::after{
-            display:inline-block;
-            background-color:var(--comment-indicator-active-fg-color);
-          }
-
-:is(:is(#editorCommentsSidebar #editorCommentsSidebarList) .sidebarComment):not(.noComments):is(:focus,:focus-visible) time::after{
-          display:inline-block;
-          background-color:var(--comment-indicator-focus-fg-color);
-        }
-
-:is(:is(#editorCommentsSidebar #editorCommentsSidebarList) .sidebarComment):not(.noComments):focus-visible{
-          outline:2px solid var(--comment-focus-outline-color);
-          outline-offset:2px;
-        }
-
-.selected:is(:is(#editorCommentsSidebar #editorCommentsSidebarList) .sidebarComment):not(.noComments) .sidebarCommentText{
-            max-height:-moz-fit-content;
-            max-height:fit-content;
-            -webkit-line-clamp:unset;
-          }
-
-.selected:is(:is(#editorCommentsSidebar #editorCommentsSidebarList) .sidebarComment):not(.noComments) time::after{
-            display:inline-block;
-            background-color:var(--comment-indicator-selected-fg-color);
-          }
-
-:is(:is(#editorCommentsSidebar #editorCommentsSidebarList) .sidebarComment) .sidebarCommentText{
-        font:menu;
-        font-style:normal;
-        font-weight:400;
-        line-height:normal;
-        font-size:15px;
-        width:100%;
-        height:-moz-fit-content;
-        height:fit-content;
-        max-height:80px;
-        display:-webkit-box;
-        -webkit-box-orient:vertical;
-        -webkit-line-clamp:2;
-        overflow:hidden;
-        overflow-wrap:break-word;
+        border-radius:8px;
+        border:0.5px solid var(--comment-border-color);
+        background-color:var(--comment-bg-color);
       }
 
-.noComments:is(:is(#editorCommentsSidebar #editorCommentsSidebarList) .sidebarComment) .sidebarCommentText{
-        max-height:-moz-fit-content;
-        max-height:fit-content;
-        -webkit-line-clamp:unset;
-        -webkit-user-select:none;
-           -moz-user-select:none;
-                user-select:none;
-      }
+:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):hover{
+            background-color:var(--comment-hover-bg-color);
+          }
 
-:is(:is(#editorCommentsSidebar #editorCommentsSidebarList) .sidebarComment) time{
-        width:100%;
-        display:inline-flex;
-        align-items:center;
-        justify-content:space-between;
+:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):hover time::after{
+              display:inline-block;
+              background-color:var(--comment-indicator-hover-fg-color);
+            }
 
-        font:menu;
-        font-style:normal;
-        font-weight:400;
-        line-height:normal;
-        font-size:13px;
-      }
+:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):active{
+            background-color:var(--comment-active-bg-color);
+          }
 
-:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarList) .sidebarComment) time)::after{
-          content:"";
-          display:none;
-          width:16px;
-          height:16px;
-          -webkit-mask-repeat:no-repeat;
-                  mask-repeat:no-repeat;
-          -webkit-mask-position:center;
-                  mask-position:center;
-          -webkit-mask-image:var(--comment-edit-button-icon);
-                  mask-image:var(--comment-edit-button-icon);
-          transform:scaleX(var(--dir-factor));
+:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):active time::after{
+              display:inline-block;
+              background-color:var(--comment-indicator-active-fg-color);
+            }
+
+:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):is(:focus,:focus-visible) time::after{
+            display:inline-block;
+            background-color:var(--comment-indicator-focus-fg-color);
+          }
+
+:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):focus-visible{
+            outline:2px solid var(--comment-focus-outline-color);
+            outline-offset:2px;
+          }
+
+.selected:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments) .sidebarCommentText{
+              max-height:-moz-fit-content;
+              max-height:fit-content;
+              -webkit-line-clamp:unset;
+            }
+
+.selected:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments) time::after{
+              display:inline-block;
+              background-color:var(--comment-indicator-selected-fg-color);
+            }
+
+:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment) .sidebarCommentText{
+          font:menu;
+          font-style:normal;
+          font-weight:400;
+          line-height:normal;
+          font-size:15px;
+          width:100%;
+          height:-moz-fit-content;
+          height:fit-content;
+          max-height:80px;
+          display:-webkit-box;
+          -webkit-box-orient:vertical;
+          -webkit-line-clamp:2;
+          overflow:hidden;
+          overflow-wrap:break-word;
         }
+
+.noComments:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment) .sidebarCommentText{
+          max-height:-moz-fit-content;
+          max-height:fit-content;
+          -webkit-line-clamp:unset;
+          -webkit-user-select:none;
+             -moz-user-select:none;
+                  user-select:none;
+        }
+
+:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment) time{
+          width:100%;
+          display:inline-flex;
+          align-items:center;
+          justify-content:space-between;
+
+          font:menu;
+          font-style:normal;
+          font-weight:400;
+          line-height:normal;
+          font-size:13px;
+        }
+
+:is(:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment) time)::after{
+            content:"";
+            display:none;
+            width:16px;
+            height:16px;
+            -webkit-mask-repeat:no-repeat;
+                    mask-repeat:no-repeat;
+            -webkit-mask-position:center;
+                    mask-position:center;
+            -webkit-mask-image:var(--comment-edit-button-icon);
+                    mask-image:var(--comment-edit-button-icon);
+            transform:scaleX(var(--dir-factor));
+          }
 
 :root{
   --editor-toolbar-vert-offset:6px;

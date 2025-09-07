@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = c96fa68
+ * pdfjsBuild = 2a93ade
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -58,6 +58,7 @@ const {
   AnnotationLayer,
   AnnotationMode,
   AnnotationType,
+  applyOpacity,
   build,
   changeLightness,
   ColorPicker,
@@ -90,6 +91,7 @@ const {
   PermissionFlag,
   PixelsPerInch,
   RenderingCancelledException,
+  renderRichText,
   ResponseException,
   setLayerDimensions,
   shadow,
@@ -4549,6 +4551,9 @@ class CommentManager {
     });
     overlayManager.register(dialog);
   }
+  setSidebarUiManager(uiManager) {
+    this.#sidebar.setUIManager(uiManager);
+  }
   showSidebar(annotations) {
     this.#sidebar.show(annotations);
   }
@@ -4768,6 +4773,7 @@ class CommentManager {
   destroy() {
     this.#uiManager = null;
     this.#finish();
+    this.#sidebar.hide();
   }
 }
 class CommentSidebar {
@@ -4782,6 +4788,7 @@ class CommentSidebar {
   #linkService;
   #elementsToAnnotations = null;
   #idsToElements = null;
+  #uiManager = null;
   constructor({
     sidebar,
     commentsList,
@@ -4813,10 +4820,13 @@ class CommentSidebar {
     });
     this.#sidebar.hidden = true;
   }
+  setUIManager(uiManager) {
+    this.#uiManager = uiManager;
+  }
   show(annotations) {
     this.#elementsToAnnotations = new WeakMap();
     this.#idsToElements = new Map();
-    this.#annotations = annotations = annotations.filter(a => a.popupRef && a.contentsObj?.str);
+    this.#annotations = annotations;
     annotations.sort(this.#sortComments.bind(this));
     if (annotations.length !== 0) {
       const fragment = document.createDocumentFragment();
@@ -4937,6 +4947,7 @@ class CommentSidebar {
   }
   #createCommentElement(annotation) {
     const {
+      id,
       creationDate,
       modificationDate,
       contentsObj: {
@@ -4961,10 +4972,10 @@ class CommentSidebar {
     commentItem.addEventListener("click", this.#boundCommentClick);
     commentItem.addEventListener("keydown", this.#boundCommentKeydown);
     this.#elementsToAnnotations.set(commentItem, annotation);
-    this.#idsToElements.set(annotation.id, commentItem);
+    this.#idsToElements.set(id, commentItem);
     return commentItem;
   }
-  #commentClick({
+  async #commentClick({
     currentTarget
   }) {
     if (currentTarget.classList.contains("selected")) {
@@ -4975,12 +4986,17 @@ class CommentSidebar {
       return;
     }
     const {
+      id,
       pageIndex,
       rect
     } = annotation;
     const SPACE_ABOVE_ANNOTATION = 10;
-    this.#linkService?.goToXY(pageIndex + 1, rect[0], rect[3] + SPACE_ABOVE_ANNOTATION);
+    const pageNumber = pageIndex + 1;
+    const pageVisiblePromise = this.#uiManager?.waitForPageRendered(pageNumber);
+    this.#linkService?.goToXY(pageNumber, rect[0], rect[3] + SPACE_ABOVE_ANNOTATION);
     this.selectComment(currentTarget);
+    await pageVisiblePromise;
+    this.#uiManager?.showComment(pageIndex, id);
   }
   #commentKeydown(e) {
     const {
