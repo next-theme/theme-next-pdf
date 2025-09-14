@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 2a93ade
+ * pdfjsBuild = 2138ec1
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -1664,29 +1664,23 @@ class ColorScheme {
     return shadow(this, "isDarkMode", !!window?.matchMedia?.("(prefers-color-scheme: dark)").matches);
   }
 }
-function changeLightness(r, g, b, lumCallback = ColorScheme.isDarkMode ? l => (1 - Math.sqrt(1 - l)) / 2 : l => (1 + Math.sqrt(l)) / 2) {
-  r /= 255;
-  g /= 255;
-  b /= 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const l = (max + min) / 2;
-  const newL = (lumCallback(l) * 100).toFixed(2);
-  if (max === min) {
-    return `hsl(0, 0%, ${newL}%)`;
+class CSSConstants {
+  static get commentForegroundColor() {
+    const element = document.createElement("span");
+    element.classList.add("comment", "sidebar");
+    const {
+      style
+    } = element;
+    style.width = style.height = "0";
+    style.display = "none";
+    style.color = "var(--comment-fg-color)";
+    document.body.append(element);
+    const {
+      color
+    } = window.getComputedStyle(element);
+    element.remove();
+    return shadow(this, "commentForegroundColor", getRGB(color));
   }
-  const d = max - min;
-  let h;
-  if (max === r) {
-    h = (g - b) / d + (g < b ? 6 : 0);
-  } else if (max === g) {
-    h = (b - r) / d + 2;
-  } else {
-    h = (r - g) / d + 4;
-  }
-  h = (h * 60).toFixed(2);
-  const s = (d / (1 - Math.abs(2 * l - 1)) * 100).toFixed(2);
-  return `hsl(${h}, ${s}%, ${newL}%)`;
 }
 function applyOpacity(r, g, b, opacity) {
   opacity = Math.min(Math.max(opacity ?? 1, 0), 1);
@@ -1695,6 +1689,113 @@ function applyOpacity(r, g, b, opacity) {
   g = Math.round(g * opacity + white);
   b = Math.round(b * opacity + white);
   return [r, g, b];
+}
+function RGBToHSL(rgb, output) {
+  const r = rgb[0] / 255;
+  const g = rgb[1] / 255;
+  const b = rgb[2] / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  if (max === min) {
+    output[0] = output[1] = 0;
+  } else {
+    const d = max - min;
+    output[1] = l < 0.5 ? d / (max + min) : d / (2 - max - min);
+    switch (max) {
+      case r:
+        output[0] = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+        break;
+      case g:
+        output[0] = ((b - r) / d + 2) * 60;
+        break;
+      case b:
+        output[0] = ((r - g) / d + 4) * 60;
+        break;
+    }
+  }
+  output[2] = l;
+}
+function HSLToRGB(hsl, output) {
+  const h = hsl[0];
+  const s = hsl[1];
+  const l = hsl[2];
+  const c = (1 - Math.abs(2 * l - 1)) * s;
+  const x = c * (1 - Math.abs(h / 60 % 2 - 1));
+  const m = l - c / 2;
+  switch (Math.floor(h / 60)) {
+    case 0:
+      output[0] = c + m;
+      output[1] = x + m;
+      output[2] = m;
+      break;
+    case 1:
+      output[0] = x + m;
+      output[1] = c + m;
+      output[2] = m;
+      break;
+    case 2:
+      output[0] = m;
+      output[1] = c + m;
+      output[2] = x + m;
+      break;
+    case 3:
+      output[0] = m;
+      output[1] = x + m;
+      output[2] = c + m;
+      break;
+    case 4:
+      output[0] = x + m;
+      output[1] = m;
+      output[2] = c + m;
+      break;
+    case 5:
+    case 6:
+      output[0] = c + m;
+      output[1] = m;
+      output[2] = x + m;
+      break;
+  }
+}
+function computeLuminance(x) {
+  return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+}
+function contrastRatio(hsl1, hsl2, output) {
+  HSLToRGB(hsl1, output);
+  output.map(computeLuminance);
+  const lum1 = 0.2126 * output[0] + 0.7152 * output[1] + 0.0722 * output[2];
+  HSLToRGB(hsl2, output);
+  output.map(computeLuminance);
+  const lum2 = 0.2126 * output[0] + 0.7152 * output[1] + 0.0722 * output[2];
+  return lum1 > lum2 ? (lum1 + 0.05) / (lum2 + 0.05) : (lum2 + 0.05) / (lum1 + 0.05);
+}
+const contrastCache = new Map();
+function findContrastColor(baseColor, fixedColor) {
+  const key = baseColor[0] + baseColor[1] * 0x100 + baseColor[2] * 0x10000 + fixedColor[0] * 0x1000000 + fixedColor[1] * 0x100000000 + fixedColor[2] * 0x10000000000;
+  let cachedValue = contrastCache.get(key);
+  if (cachedValue) {
+    return cachedValue;
+  }
+  const array = new Float32Array(9);
+  const output = array.subarray(0, 3);
+  const baseHSL = array.subarray(3, 6);
+  RGBToHSL(baseColor, baseHSL);
+  const fixedHSL = array.subarray(6, 9);
+  RGBToHSL(fixedColor, fixedHSL);
+  const isFixedColorDark = fixedHSL[2] < 0.5;
+  const minContrast = isFixedColorDark ? 7 : 4.5;
+  baseHSL[2] = isFixedColorDark ? Math.sqrt(baseHSL[2]) : 1 - Math.sqrt(1 - baseHSL[2]);
+  const increment = isFixedColorDark ? 0.01 : -0.01;
+  let contrast = contrastRatio(baseHSL, fixedHSL, output);
+  while (baseHSL[2] >= 0 && baseHSL[2] <= 1 && contrast < minContrast) {
+    baseHSL[2] += increment;
+    contrast = contrastRatio(baseHSL, fixedHSL, output);
+  }
+  baseHSL[2] = MathClamp(baseHSL[2], 0, 1);
+  HSLToRGB(baseHSL, output);
+  cachedValue = Util.makeHexColor(Math.round(output[0] * 255), Math.round(output[1] * 255), Math.round(output[2] * 255));
+  contrastCache.set(key, cachedValue);
+  return cachedValue;
 }
 function renderRichText({
   html,
@@ -1843,7 +1944,7 @@ class EditorToolbar {
     this.#buttons.append(button, this.#divider);
     this.#altText = altText;
   }
-  addComment(comment) {
+  addComment(comment, beforeElement = null) {
     if (this.#comment) {
       return;
     }
@@ -1852,7 +1953,12 @@ class EditorToolbar {
       return;
     }
     this.#addListenersToElement(button);
-    this.#buttons.append(button, this.#divider);
+    if (!beforeElement) {
+      this.#buttons.append(button, this.#divider);
+    } else {
+      this.#buttons.insertBefore(button, beforeElement);
+      this.#buttons.insertBefore(this.#divider, beforeElement);
+    }
     this.#comment = comment;
     comment.toolbar = this;
   }
@@ -1887,6 +1993,15 @@ class EditorToolbar {
       case "comment":
         this.addComment(tool);
         break;
+    }
+  }
+  async addButtonBefore(name, tool, beforeSelector) {
+    const beforeElement = this.#buttons.querySelector(beforeSelector);
+    if (!beforeElement) {
+      return;
+    }
+    if (name === "comment") {
+      this.addComment(tool, beforeElement);
     }
   }
   updateEditSignatureButton(description) {
@@ -2671,7 +2786,7 @@ class AnnotationEditorUIManager {
     const editor = layer?.getEditorByUID(uid);
     editor?.showComment();
   }
-  async waitForPageRendered(pageNumber) {
+  async waitForEditorsRendered(pageNumber) {
     if (this.#allLayers.has(pageNumber - 1)) {
       return;
     }
@@ -2679,13 +2794,13 @@ class AnnotationEditorUIManager {
       resolve,
       promise
     } = Promise.withResolvers();
-    const onPageRendered = evt => {
+    const onEditorsRendered = evt => {
       if (evt.pageNumber === pageNumber) {
-        this._eventBus._off("annotationeditorlayerrendered", onPageRendered);
+        this._eventBus._off("editorsrendered", onEditorsRendered);
         resolve();
       }
     };
-    this._eventBus.on("annotationeditorlayerrendered", onPageRendered);
+    this._eventBus.on("editorsrendered", onEditorsRendered);
     await promise;
   }
   getSignature(editor) {
@@ -4229,6 +4344,7 @@ class Comment {
   #commentWasFromKeyBoard = false;
   #editor = null;
   #initialText = null;
+  #richText = null;
   #text = null;
   #date = null;
   #deleted = false;
@@ -4323,6 +4439,9 @@ class Comment {
   isDeleted() {
     return this.#deleted || this.#text === "";
   }
+  isEmpty() {
+    return this.#text === null;
+  }
   hasBeenEdited() {
     return this.isDeleted() || this.#text !== this.#initialText;
   }
@@ -4332,11 +4451,15 @@ class Comment {
   get data() {
     return {
       text: this.#text,
+      richText: this.#richText,
       date: this.#date,
-      deleted: this.#deleted
+      deleted: this.isDeleted()
     };
   }
   set data(text) {
+    if (text !== this.#text) {
+      this.#richText = null;
+    }
     if (text === null) {
       this.#text = "";
       this.#deleted = true;
@@ -4346,9 +4469,11 @@ class Comment {
     this.#date = new Date();
     this.#deleted = false;
   }
-  setInitialText(text) {
+  setInitialText(text, richText = null) {
     this.#initialText = text;
     this.data = text;
+    this.#date = null;
+    this.#richText = richText;
   }
   shown() {}
   destroy() {
@@ -4357,6 +4482,7 @@ class Comment {
     this.#commentStandaloneButton?.remove();
     this.#commentStandaloneButton = null;
     this.#text = "";
+    this.#richText = null;
     this.#date = null;
     this.#editor = null;
     this.#commentWasFromKeyBoard = false;
@@ -4624,7 +4750,8 @@ class AnnotationEditor {
     this._initialOptions.isCentered = parameters.isCentered;
     this._structTreeParentId = null;
     this.annotationElementId = parameters.annotationElementId || null;
-    this.creationDate = new Date();
+    this.creationDate = parameters.creationDate || new Date();
+    this.modificationDate = parameters.modificationDate || null;
     const {
       rotation,
       rawDims: {
@@ -5260,6 +5387,12 @@ class AnnotationEditor {
     this._editToolbar.addButton("delete");
     return this._editToolbar;
   }
+  addCommentButtonInToolbar() {
+    if (!this._editToolbar) {
+      return;
+    }
+    this._editToolbar.addButtonBefore("comment", this.addCommentButton(), ".deleteButton");
+  }
   removeEditToolbar() {
     if (!this._editToolbar) {
       return;
@@ -5333,31 +5466,46 @@ class AnnotationEditor {
     return null;
   }
   get comment() {
-    const comment = this.#comment;
+    const {
+      data: {
+        richText,
+        text,
+        date,
+        deleted
+      }
+    } = this.#comment;
     return {
-      text: comment.data.text,
-      date: comment.data.date,
-      deleted: comment.isDeleted(),
+      text,
+      richText,
+      date,
+      deleted,
       color: this.commentColor
     };
   }
   set comment(text) {
-    if (!this.#comment) {
-      this.#comment = new Comment(this);
-    }
+    this.#comment ||= new Comment(this);
     this.#comment.data = text;
+    if (this.hasComment) {
+      this.addStandaloneCommentButton();
+    } else {
+      this.addCommentButtonInToolbar();
+      this.removeStandaloneCommentButton();
+    }
   }
-  setCommentData(text) {
+  setCommentData({
+    comment,
+    richText
+  }) {
     if (!this.#comment) {
       this.#comment = new Comment(this);
     }
-    this.#comment.setInitialText(text);
+    this.#comment.setInitialText(comment, richText);
   }
   get hasEditedComment() {
     return this.#comment?.hasBeenEdited();
   }
   get hasComment() {
-    return !!this.#comment && !this.#comment.isDeleted();
+    return !!this.#comment && !this.#comment.isEmpty() && !this.#comment.isDeleted();
   }
   async editComment() {
     if (!this.#comment) {
@@ -5627,15 +5775,29 @@ class AnnotationEditor {
     return this.getRect(0, 0);
   }
   getData() {
-    return {
-      id: this.uid,
-      pageIndex: this.pageIndex,
-      rect: this.getPDFRect(),
-      contentsObj: {
-        str: this.comment.text
+    const {
+      comment: {
+        text: str,
+        date,
+        deleted,
+        richText
       },
-      creationDate: this.creationDate,
-      popupRef: !this.#comment.isDeleted()
+      uid: id,
+      pageIndex,
+      creationDate,
+      modificationDate
+    } = this;
+    return {
+      id,
+      pageIndex,
+      rect: this.getPDFRect(),
+      richText,
+      contentsObj: {
+        str
+      },
+      creationDate,
+      modificationDate: date || modificationDate,
+      popupRef: !deleted
     };
   }
   onceAdded(focus) {}
@@ -5707,14 +5869,23 @@ class AnnotationEditor {
     };
   }
   serialize(isForCopying = false, context = null) {
-    unreachable("An editor must be serializable");
+    return {
+      annotationType: this.mode,
+      pageIndex: this.pageIndex,
+      rect: this.getPDFRect(),
+      rotation: this.rotation,
+      structTreeParentId: this._structTreeParentId,
+      popupRef: this._initialData?.popupRef || ""
+    };
   }
   static async deserialize(data, parent, uiManager) {
     const editor = new this.prototype.constructor({
       parent,
       id: parent.getNextId(),
       uiManager,
-      annotationElementId: data.annotationElementId
+      annotationElementId: data.annotationElementId,
+      creationDate: data.creationDate,
+      modificationDate: data.modificationDate
     });
     editor.rotation = data.rotation;
     editor.#accessibilityData = data.accessibilityData;
@@ -5776,9 +5947,8 @@ class AnnotationEditor {
     if (!this.color) {
       return null;
     }
-    let [r, g, b] = AnnotationEditor._colorManager.convert(this._uiManager.getNonHCMColor(this.color));
-    [r, g, b] = applyOpacity(r, g, b, this.opacity);
-    return changeLightness(r, g, b);
+    const [r, g, b] = AnnotationEditor._colorManager.convert(this._uiManager.getNonHCMColor(this.color));
+    return findContrastColor(applyOpacity(r, g, b, this.opacity), CSSConstants.commentForegroundColor);
   }
   keydown(event) {
     if (!this.isResizable || event.target !== this.div || event.key !== "Enter") {
@@ -7670,6 +7840,57 @@ class NodeWasmFactory extends BaseWasmFactory {
 ;// ./src/display/canvas_dependency_tracker.js
 
 const FORCED_DEPENDENCY_LABEL = "__forcedDependency";
+const {
+  floor,
+  ceil
+} = Math;
+function expandBBox(array, index, minX, minY, maxX, maxY) {
+  array[index * 4 + 0] = Math.min(array[index * 4 + 0], minX);
+  array[index * 4 + 1] = Math.min(array[index * 4 + 1], minY);
+  array[index * 4 + 2] = Math.max(array[index * 4 + 2], maxX);
+  array[index * 4 + 3] = Math.max(array[index * 4 + 3], maxY);
+}
+const EMPTY_BBOX = new Uint32Array(new Uint8Array([255, 255, 0, 0]).buffer)[0];
+class BBoxReader {
+  #bboxes;
+  #coords;
+  constructor(bboxes, coords) {
+    this.#bboxes = bboxes;
+    this.#coords = coords;
+  }
+  get length() {
+    return this.#bboxes.length;
+  }
+  isEmpty(i) {
+    return this.#bboxes[i] === EMPTY_BBOX;
+  }
+  minX(i) {
+    return this.#coords[i * 4 + 0] / 256;
+  }
+  minY(i) {
+    return this.#coords[i * 4 + 1] / 256;
+  }
+  maxX(i) {
+    return (this.#coords[i * 4 + 2] + 1) / 256;
+  }
+  maxY(i) {
+    return (this.#coords[i * 4 + 3] + 1) / 256;
+  }
+}
+const ensureDebugMetadata = (map, key) => {
+  if (!map) {
+    return undefined;
+  }
+  let value = map.get(key);
+  if (!value) {
+    value = {
+      dependencies: new Set(),
+      isRenderingOperation: false
+    };
+    map.set(key, value);
+  }
+  return value;
+};
 class CanvasDependencyTracker {
   #simple = {
     __proto__: null
@@ -7693,9 +7914,32 @@ class CanvasDependencyTracker {
   #fontBBoxTrustworthy = new Map();
   #canvasWidth;
   #canvasHeight;
-  constructor(canvas) {
+  #bboxesCoords;
+  #bboxes;
+  #debugMetadata;
+  constructor(canvas, operationsCount, recordDebugMetadata = false) {
     this.#canvasWidth = canvas.width;
     this.#canvasHeight = canvas.height;
+    this.#initializeBBoxes(operationsCount);
+    if (recordDebugMetadata) {
+      this.#debugMetadata = new Map();
+    }
+  }
+  growOperationsCount(operationsCount) {
+    if (operationsCount >= this.#bboxes.length) {
+      this.#initializeBBoxes(operationsCount, this.#bboxes);
+    }
+  }
+  #initializeBBoxes(operationsCount, oldBBoxes) {
+    const buffer = new ArrayBuffer(operationsCount * 4);
+    this.#bboxesCoords = new Uint8ClampedArray(buffer);
+    this.#bboxes = new Uint32Array(buffer);
+    if (oldBBoxes && oldBBoxes.length > 0) {
+      this.#bboxes.set(oldBBoxes);
+      this.#bboxes.fill(EMPTY_BBOX, oldBBoxes.length);
+    } else {
+      this.#bboxes.fill(EMPTY_BBOX);
+    }
   }
   save(opIdx) {
     this.#simple = {
@@ -7719,7 +7963,7 @@ class CanvasDependencyTracker {
     this.#clipBox = {
       __proto__: this.#clipBox
     };
-    this.#savesStack.push([opIdx, null]);
+    this.#savesStack.push(opIdx);
     return this;
   }
   restore(opIdx) {
@@ -7730,37 +7974,40 @@ class CanvasDependencyTracker {
     this.#simple = previous;
     this.#incremental = Object.getPrototypeOf(this.#incremental);
     this.#clipBox = Object.getPrototypeOf(this.#clipBox);
-    const lastPair = this.#savesStack.pop();
-    if (lastPair !== undefined) {
-      lastPair[1] = opIdx;
+    const lastSave = this.#savesStack.pop();
+    if (lastSave !== undefined) {
+      ensureDebugMetadata(this.#debugMetadata, opIdx)?.dependencies.add(lastSave);
+      this.#bboxes[opIdx] = this.#bboxes[lastSave];
     }
     return this;
   }
   recordOpenMarker(idx) {
-    this.#savesStack.push([idx, null]);
+    this.#savesStack.push(idx);
     return this;
   }
   getOpenMarker() {
     if (this.#savesStack.length === 0) {
       return null;
     }
-    return this.#savesStack.at(-1)[0];
+    return this.#savesStack.at(-1);
   }
-  recordCloseMarker(idx) {
-    const lastPair = this.#savesStack.pop();
-    if (lastPair !== undefined) {
-      lastPair[1] = idx;
+  recordCloseMarker(opIdx) {
+    const lastSave = this.#savesStack.pop();
+    if (lastSave !== undefined) {
+      ensureDebugMetadata(this.#debugMetadata, opIdx)?.dependencies.add(lastSave);
+      this.#bboxes[opIdx] = this.#bboxes[lastSave];
     }
     return this;
   }
   beginMarkedContent(opIdx) {
-    this.#markedContentStack.push([opIdx, null]);
+    this.#markedContentStack.push(opIdx);
     return this;
   }
   endMarkedContent(opIdx) {
-    const lastPair = this.#markedContentStack.pop();
-    if (lastPair !== undefined) {
-      lastPair[1] = opIdx;
+    const lastSave = this.#markedContentStack.pop();
+    if (lastSave !== undefined) {
+      ensureDebugMetadata(this.#debugMetadata, opIdx)?.dependencies.add(lastSave);
+      this.#bboxes[opIdx] = this.#bboxes[lastSave];
     }
     return this;
   }
@@ -7790,6 +8037,9 @@ class CanvasDependencyTracker {
     this.#namedDependencies.set(name, idx);
     return this;
   }
+  recordSimpleDataFromNamed(name, depName, fallbackIdx) {
+    this.#simple[name] = this.#namedDependencies.get(depName) ?? fallbackIdx;
+  }
   recordFutureForcedDependency(name, idx) {
     this.recordIncrementalData(FORCED_DEPENDENCY_LABEL, idx);
     return this;
@@ -7809,15 +8059,14 @@ class CanvasDependencyTracker {
     return this;
   }
   resetBBox(idx) {
-    this.#pendingBBoxIdx = idx;
-    this.#pendingBBox[0] = Infinity;
-    this.#pendingBBox[1] = Infinity;
-    this.#pendingBBox[2] = -Infinity;
-    this.#pendingBBox[3] = -Infinity;
+    if (this.#pendingBBoxIdx !== idx) {
+      this.#pendingBBoxIdx = idx;
+      this.#pendingBBox[0] = Infinity;
+      this.#pendingBBox[1] = Infinity;
+      this.#pendingBBox[2] = -Infinity;
+      this.#pendingBBox[3] = -Infinity;
+    }
     return this;
-  }
-  get hasPendingBBox() {
-    return this.#pendingBBoxIdx !== -1;
   }
   recordClipBox(idx, ctx, minX, maxX, minY, maxY) {
     const transform = Util.multiplyByDOMMatrix(this.#baseTransformStack.at(-1), ctx.getTransform());
@@ -7906,50 +8155,73 @@ class CanvasDependencyTracker {
     }
     return this;
   }
-  copyDependenciesFromIncrementalOperation(idx, name) {
-    const operations = this.#operations;
-    const pendingDependencies = this.#pendingDependencies;
-    for (const depIdx of this.#incremental[name]) {
-      operations.get(depIdx).dependencies.forEach(pendingDependencies.add, pendingDependencies.add(depIdx));
-    }
-    return this;
-  }
   recordNamedDependency(idx, name) {
     if (this.#namedDependencies.has(name)) {
       this.#pendingDependencies.add(this.#namedDependencies.get(name));
     }
     return this;
   }
-  recordOperation(idx, preserveBbox = false) {
+  recordOperation(idx, preserve = false) {
     this.recordDependencies(idx, [FORCED_DEPENDENCY_LABEL]);
-    const dependencies = new Set(this.#pendingDependencies);
-    const pairs = this.#savesStack.concat(this.#markedContentStack);
-    const bbox = this.#pendingBBoxIdx === idx ? {
-      minX: this.#pendingBBox[0],
-      minY: this.#pendingBBox[1],
-      maxX: this.#pendingBBox[2],
-      maxY: this.#pendingBBox[3]
-    } : null;
-    this.#operations.set(idx, {
-      bbox,
-      pairs,
-      dependencies
-    });
-    if (!preserveBbox) {
-      this.#pendingBBoxIdx = -1;
+    if (this.#debugMetadata) {
+      const metadata = ensureDebugMetadata(this.#debugMetadata, idx);
+      const {
+        dependencies
+      } = metadata;
+      this.#pendingDependencies.forEach(dependencies.add, dependencies);
+      this.#savesStack.forEach(dependencies.add, dependencies);
+      this.#markedContentStack.forEach(dependencies.add, dependencies);
+      dependencies.delete(idx);
+      metadata.isRenderingOperation = true;
     }
-    this.#pendingDependencies.clear();
+    if (this.#pendingBBoxIdx === idx) {
+      const minX = floor(this.#pendingBBox[0] * 256 / this.#canvasWidth);
+      const minY = floor(this.#pendingBBox[1] * 256 / this.#canvasHeight);
+      const maxX = ceil(this.#pendingBBox[2] * 256 / this.#canvasWidth);
+      const maxY = ceil(this.#pendingBBox[3] * 256 / this.#canvasHeight);
+      expandBBox(this.#bboxesCoords, idx, minX, minY, maxX, maxY);
+      for (const depIdx of this.#pendingDependencies) {
+        if (depIdx !== idx) {
+          expandBBox(this.#bboxesCoords, depIdx, minX, minY, maxX, maxY);
+        }
+      }
+      for (const saveIdx of this.#savesStack) {
+        if (saveIdx !== idx) {
+          expandBBox(this.#bboxesCoords, saveIdx, minX, minY, maxX, maxY);
+        }
+      }
+      for (const saveIdx of this.#markedContentStack) {
+        if (saveIdx !== idx) {
+          expandBBox(this.#bboxesCoords, saveIdx, minX, minY, maxX, maxY);
+        }
+      }
+      if (!preserve) {
+        this.#pendingDependencies.clear();
+        this.#pendingBBoxIdx = -1;
+      }
+    }
     return this;
   }
-  bboxToClipBoxDropOperation(idx) {
-    if (this.#pendingBBoxIdx !== -1) {
+  recordShowTextOperation(idx, preserve = false) {
+    const deps = Array.from(this.#pendingDependencies);
+    this.recordOperation(idx, preserve);
+    this.recordIncrementalData("sameLineText", idx);
+    for (const dep of deps) {
+      this.recordIncrementalData("sameLineText", dep);
+    }
+    return this;
+  }
+  bboxToClipBoxDropOperation(idx, preserve = false) {
+    if (this.#pendingBBoxIdx === idx) {
       this.#pendingBBoxIdx = -1;
       this.#clipBox[0] = Math.max(this.#clipBox[0], this.#pendingBBox[0]);
       this.#clipBox[1] = Math.max(this.#clipBox[1], this.#pendingBBox[1]);
       this.#clipBox[2] = Math.min(this.#clipBox[2], this.#pendingBBox[2]);
       this.#clipBox[3] = Math.min(this.#clipBox[3], this.#pendingBBox[3]);
+      if (!preserve) {
+        this.#pendingDependencies.clear();
+      }
     }
-    this.#pendingDependencies.clear();
     return this;
   }
   _takePendingDependencies() {
@@ -7969,37 +8241,28 @@ class CanvasDependencyTracker {
   }
   take() {
     this.#fontBBoxTrustworthy.clear();
-    return Array.from(this.#operations, ([idx, {
-      bbox,
-      pairs,
-      dependencies
-    }]) => {
-      pairs.forEach(pair => pair.forEach(dependencies.add, dependencies));
-      dependencies.delete(idx);
-      return {
-        minX: (bbox?.minX ?? 0) / this.#canvasWidth,
-        maxX: (bbox?.maxX ?? this.#canvasWidth) / this.#canvasWidth,
-        minY: (bbox?.minY ?? 0) / this.#canvasHeight,
-        maxY: (bbox?.maxY ?? this.#canvasHeight) / this.#canvasHeight,
-        dependencies: Array.from(dependencies).sort((a, b) => a - b),
-        idx
-      };
-    });
+    return new BBoxReader(this.#bboxes, this.#bboxesCoords);
+  }
+  takeDebugMetadata() {
+    return this.#debugMetadata;
   }
 }
 class CanvasNestedDependencyTracker {
   #dependencyTracker;
   #opIdx;
+  #ignoreBBoxes;
   #nestingLevel = 0;
-  #outerDependencies;
   #savesLevel = 0;
-  constructor(dependencyTracker, opIdx) {
-    if (dependencyTracker instanceof CanvasNestedDependencyTracker) {
+  constructor(dependencyTracker, opIdx, ignoreBBoxes) {
+    if (dependencyTracker instanceof CanvasNestedDependencyTracker && dependencyTracker.#ignoreBBoxes === !!ignoreBBoxes) {
       return dependencyTracker;
     }
     this.#dependencyTracker = dependencyTracker;
-    this.#outerDependencies = dependencyTracker._takePendingDependencies();
     this.#opIdx = opIdx;
+    this.#ignoreBBoxes = !!ignoreBBoxes;
+  }
+  growOperationsCount() {
+    throw new Error("Unreachable");
   }
   save(opIdx) {
     this.#savesLevel++;
@@ -8053,6 +8316,10 @@ class CanvasNestedDependencyTracker {
   recordNamedData(name, idx) {
     return this;
   }
+  recordSimpleDataFromNamed(name, depName, fallbackIdx) {
+    this.#dependencyTracker.recordSimpleDataFromNamed(name, depName, this.#opIdx);
+    return this;
+  }
   recordFutureForcedDependency(name, idx) {
     this.#dependencyTracker.recordFutureForcedDependency(name, this.#opIdx);
     return this;
@@ -8066,28 +8333,33 @@ class CanvasNestedDependencyTracker {
     return this;
   }
   resetBBox(idx) {
-    if (!this.#dependencyTracker.hasPendingBBox) {
+    if (!this.#ignoreBBoxes) {
       this.#dependencyTracker.resetBBox(this.#opIdx);
     }
     return this;
   }
-  get hasPendingBBox() {
-    return this.#dependencyTracker.hasPendingBBox;
-  }
   recordClipBox(idx, ctx, minX, maxX, minY, maxY) {
-    this.#dependencyTracker.recordClipBox(this.#opIdx, ctx, minX, maxX, minY, maxY);
+    if (!this.#ignoreBBoxes) {
+      this.#dependencyTracker.recordClipBox(this.#opIdx, ctx, minX, maxX, minY, maxY);
+    }
     return this;
   }
   recordBBox(idx, ctx, minX, maxX, minY, maxY) {
-    this.#dependencyTracker.recordBBox(this.#opIdx, ctx, minX, maxX, minY, maxY);
+    if (!this.#ignoreBBoxes) {
+      this.#dependencyTracker.recordBBox(this.#opIdx, ctx, minX, maxX, minY, maxY);
+    }
     return this;
   }
   recordCharacterBBox(idx, ctx, font, scale, x, y, getMeasure) {
-    this.#dependencyTracker.recordCharacterBBox(this.#opIdx, ctx, font, scale, x, y, getMeasure);
+    if (!this.#ignoreBBoxes) {
+      this.#dependencyTracker.recordCharacterBBox(this.#opIdx, ctx, font, scale, x, y, getMeasure);
+    }
     return this;
   }
   recordFullPageBBox(idx) {
-    this.#dependencyTracker.recordFullPageBBox(this.#opIdx);
+    if (!this.#ignoreBBoxes) {
+      this.#dependencyTracker.recordFullPageBBox(this.#opIdx);
+    }
     return this;
   }
   getSimpleIndex(dependencyName) {
@@ -8097,32 +8369,28 @@ class CanvasNestedDependencyTracker {
     this.#dependencyTracker.recordDependencies(this.#opIdx, dependencyNames);
     return this;
   }
-  copyDependenciesFromIncrementalOperation(idx, name) {
-    this.#dependencyTracker.copyDependenciesFromIncrementalOperation(this.#opIdx, name);
-    return this;
-  }
   recordNamedDependency(idx, name) {
     this.#dependencyTracker.recordNamedDependency(this.#opIdx, name);
     return this;
   }
   recordOperation(idx) {
     this.#dependencyTracker.recordOperation(this.#opIdx, true);
-    const operation = this.#dependencyTracker._extractOperation(this.#opIdx);
-    for (const depIdx of operation.dependencies) {
-      this.#outerDependencies.add(depIdx);
-    }
-    this.#outerDependencies.delete(this.#opIdx);
-    this.#outerDependencies.delete(null);
+    return this;
+  }
+  recordShowTextOperation(idx) {
+    this.#dependencyTracker.recordShowTextOperation(this.#opIdx, true);
     return this;
   }
   bboxToClipBoxDropOperation(idx) {
-    this.#dependencyTracker.bboxToClipBoxDropOperation(this.#opIdx);
+    if (!this.#ignoreBBoxes) {
+      this.#dependencyTracker.bboxToClipBoxDropOperation(this.#opIdx, true);
+    }
     return this;
   }
-  recordNestedDependencies() {
-    this.#dependencyTracker._pushPendingDependencies(this.#outerDependencies);
-  }
   take() {
+    throw new Error("Unreachable");
+  }
+  takeDebugMetadata() {
     throw new Error("Unreachable");
   }
 }
@@ -8131,7 +8399,7 @@ const Dependencies = {
   fill: ["path", "transform", "filter", "fillColor", "fillAlpha", "globalCompositeOperation", "SMask"],
   imageXObject: ["transform", "SMask", "filter", "fillAlpha", "strokeAlpha", "globalCompositeOperation"],
   rawFillPath: ["filter", "fillColor", "fillAlpha"],
-  showText: ["transform", "leading", "charSpacing", "wordSpacing", "hScale", "textRise", "moveText", "textMatrix", "font", "filter", "fillColor", "textRenderingMode", "SMask", "fillAlpha", "strokeAlpha", "globalCompositeOperation"],
+  showText: ["transform", "leading", "charSpacing", "wordSpacing", "hScale", "textRise", "moveText", "textMatrix", "font", "fontObj", "filter", "fillColor", "textRenderingMode", "SMask", "fillAlpha", "strokeAlpha", "globalCompositeOperation", "sameLineText"],
   transform: ["transform"],
   transformAndFill: ["transform", "fillColor"]
 };
@@ -8466,7 +8734,7 @@ class TilingPattern {
     this.canvasGraphicsFactory = canvasGraphicsFactory;
     this.baseTransform = baseTransform;
   }
-  createPatternCanvas(owner) {
+  createPatternCanvas(owner, opIdx) {
     const {
       bbox,
       operatorList,
@@ -8516,7 +8784,7 @@ class TilingPattern {
     const dimy = this.getSizeAndScale(canvasHeight, this.ctx.canvas.height, combinedScaleY);
     const tmpCanvas = owner.cachedCanvases.getCanvas("pattern", dimx.size, dimy.size);
     const tmpCtx = tmpCanvas.context;
-    const graphics = canvasGraphicsFactory.createCanvasGraphics(tmpCtx);
+    const graphics = canvasGraphicsFactory.createCanvasGraphics(tmpCtx, opIdx);
     graphics.groupLevel = owner.groupLevel;
     this.setFillAndStrokeStyleToContext(graphics, paintType, color);
     tmpCtx.translate(-dimx.scale * x0, -dimy.scale * y0);
@@ -8527,7 +8795,7 @@ class TilingPattern {
     graphics.baseTransform = getCurrentTransform(graphics.ctx);
     graphics.executeOperatorList(operatorList);
     graphics.endDrawing();
-    graphics.dependencyTracker?.restore().recordNestedDependencies?.();
+    graphics.dependencyTracker?.restore();
     tmpCtx.restore();
     if (redrawHorizontally || redrawVertically) {
       const image = tmpCanvas.canvas;
@@ -8610,7 +8878,7 @@ class TilingPattern {
   isModifyingCurrentTransform() {
     return false;
   }
-  getPattern(ctx, owner, inverse, pathType) {
+  getPattern(ctx, owner, inverse, pathType, opIdx) {
     let matrix = inverse;
     if (pathType !== PathType.SHADING) {
       matrix = Util.transform(matrix, owner.baseTransform);
@@ -8618,7 +8886,7 @@ class TilingPattern {
         matrix = Util.transform(matrix, this.matrix);
       }
     }
-    const temporaryPatternCanvas = this.createPatternCanvas(owner);
+    const temporaryPatternCanvas = this.createPatternCanvas(owner, opIdx);
     let domMatrix = new DOMMatrix(matrix);
     domMatrix = domMatrix.translate(temporaryPatternCanvas.offsetX, temporaryPatternCanvas.offsetY);
     domMatrix = domMatrix.scale(1 / temporaryPatternCanvas.scaleX, 1 / temporaryPatternCanvas.scaleY);
@@ -9222,7 +9490,7 @@ class CanvasGraphics {
     this.viewportScale = viewport.scale;
     this.baseTransform = getCurrentTransform(this.ctx);
   }
-  executeOperatorList(operatorList, executionStartIdx, continueCallback, stepper, filteredOperationIndexes) {
+  executeOperatorList(operatorList, executionStartIdx, continueCallback, stepper, operationsFilter) {
     const argsArray = operatorList.argsArray;
     const fnArray = operatorList.fnArray;
     let i = executionStartIdx || 0;
@@ -9241,7 +9509,7 @@ class CanvasGraphics {
         stepper.breakIt(i, continueCallback);
         return i;
       }
-      if (!filteredOperationIndexes || filteredOperationIndexes.has(i)) {
+      if (!operationsFilter || operationsFilter(i)) {
         fnId = fnArray[i];
         fnArgs = argsArray[i] ?? null;
         if (fnId !== OPS.dependency) {
@@ -9409,7 +9677,7 @@ class CanvasGraphics {
     drawImageAtIntegerCoords(fillCtx, scaled, 0, 0, scaled.width, scaled.height, 0, 0, width, height);
     fillCtx.globalCompositeOperation = "source-in";
     const inverse = Util.transform(getCurrentTransformInverse(fillCtx), [1, 0, 0, 1, -offsetX, -offsetY]);
-    fillCtx.fillStyle = isPatternFill ? fillColor.getPattern(ctx, this, inverse, PathType.FILL) : fillColor;
+    fillCtx.fillStyle = isPatternFill ? fillColor.getPattern(ctx, this, inverse, PathType.FILL, opIdx) : fillColor;
     fillCtx.fillRect(0, 0, width, height);
     if (cache && !isPatternFill) {
       this.cachedCanvases.delete("fillCanvas");
@@ -9701,7 +9969,7 @@ class CanvasGraphics {
       if (typeof strokeColor === "object" && strokeColor?.getPattern) {
         const baseTransform = strokeColor.isModifyingCurrentTransform() ? ctx.getTransform() : null;
         ctx.save();
-        ctx.strokeStyle = strokeColor.getPattern(ctx, this, getCurrentTransformInverse(ctx), PathType.STROKE);
+        ctx.strokeStyle = strokeColor.getPattern(ctx, this, getCurrentTransformInverse(ctx), PathType.STROKE, opIdx);
         if (baseTransform) {
           const newPath = new Path2D();
           newPath.addPath(path, ctx.getTransform().invertSelf().multiplySelf(baseTransform));
@@ -9731,7 +9999,7 @@ class CanvasGraphics {
       const baseTransform = fillColor.isModifyingCurrentTransform() ? ctx.getTransform() : null;
       this.dependencyTracker?.save(opIdx);
       ctx.save();
-      ctx.fillStyle = fillColor.getPattern(ctx, this, getCurrentTransformInverse(ctx), PathType.FILL);
+      ctx.fillStyle = fillColor.getPattern(ctx, this, getCurrentTransformInverse(ctx), PathType.FILL, opIdx);
       if (baseTransform) {
         const newPath = new Path2D();
         newPath.addPath(path, ctx.getTransform().invertSelf().multiplySelf(baseTransform));
@@ -9847,7 +10115,7 @@ class CanvasGraphics {
     this.current.leading = -leading;
   }
   setFont(opIdx, fontRefName, size) {
-    this.dependencyTracker?.recordSimpleData("font", opIdx).recordNamedDependency(opIdx, fontRefName);
+    this.dependencyTracker?.recordSimpleData("font", opIdx).recordSimpleDataFromNamed("fontObj", fontRefName, opIdx);
     const fontObj = this.commonObjs.get(fontRefName);
     const current = this.current;
     if (!fontObj) {
@@ -10015,7 +10283,7 @@ class CanvasGraphics {
   }
   showText(opIdx, glyphs) {
     if (this.dependencyTracker) {
-      this.dependencyTracker.recordDependencies(opIdx, Dependencies.showText).copyDependenciesFromIncrementalOperation(opIdx, "sameLineText").resetBBox(opIdx);
+      this.dependencyTracker.recordDependencies(opIdx, Dependencies.showText).resetBBox(opIdx);
       if (this.current.textRenderingMode & TextRenderingMode.ADD_TO_PATH_FLAG) {
         this.dependencyTracker.recordFutureForcedDependency("textClip", opIdx).inheritPendingDependenciesAsFutureForcedDependencies();
       }
@@ -10024,7 +10292,7 @@ class CanvasGraphics {
     const font = current.font;
     if (font.isType3Font) {
       this.showType3Text(opIdx, glyphs);
-      this.dependencyTracker?.recordOperation(opIdx).recordIncrementalData("sameLineText", opIdx);
+      this.dependencyTracker?.recordShowTextOperation(opIdx);
       return undefined;
     }
     const fontSize = current.fontSize;
@@ -10057,14 +10325,14 @@ class CanvasGraphics {
     let patternFillTransform, patternStrokeTransform;
     if (current.patternFill) {
       ctx.save();
-      const pattern = current.fillColor.getPattern(ctx, this, getCurrentTransformInverse(ctx), PathType.FILL);
+      const pattern = current.fillColor.getPattern(ctx, this, getCurrentTransformInverse(ctx), PathType.FILL, opIdx);
       patternFillTransform = getCurrentTransform(ctx);
       ctx.restore();
       ctx.fillStyle = pattern;
     }
     if (current.patternStroke) {
       ctx.save();
-      const pattern = current.strokeColor.getPattern(ctx, this, getCurrentTransformInverse(ctx), PathType.STROKE);
+      const pattern = current.strokeColor.getPattern(ctx, this, getCurrentTransformInverse(ctx), PathType.STROKE, opIdx);
       patternStrokeTransform = getCurrentTransform(ctx);
       ctx.restore();
       ctx.strokeStyle = pattern;
@@ -10095,7 +10363,7 @@ class CanvasGraphics {
       ctx.fillText(joinedChars, 0, 0);
       if (this.dependencyTracker !== null) {
         const measure = ctx.measureText(joinedChars);
-        this.dependencyTracker.recordBBox(opIdx, this.ctx, -measure.actualBoundingBoxLeft, measure.actualBoundingBoxRight, -measure.actualBoundingBoxAscent, measure.actualBoundingBoxDescent).recordOperation(opIdx).recordIncrementalData("sameLineText", opIdx);
+        this.dependencyTracker.recordBBox(opIdx, this.ctx, -measure.actualBoundingBoxLeft, measure.actualBoundingBoxRight, -measure.actualBoundingBoxAscent, measure.actualBoundingBoxDescent).recordShowTextOperation(opIdx);
       }
       current.x += width * widthAdvanceScale * textHScale;
       ctx.restore();
@@ -10169,7 +10437,7 @@ class CanvasGraphics {
     }
     ctx.restore();
     this.compose();
-    this.dependencyTracker?.recordOperation(opIdx).recordIncrementalData("sameLineText", opIdx);
+    this.dependencyTracker?.recordShowTextOperation(opIdx);
     return undefined;
   }
   showType3Text(opIdx, glyphs) {
@@ -10226,7 +10494,6 @@ class CanvasGraphics {
     }
     ctx.restore();
     if (dependencyTracker) {
-      this.dependencyTracker.recordNestedDependencies();
       this.dependencyTracker = dependencyTracker;
     }
   }
@@ -10243,10 +10510,10 @@ class CanvasGraphics {
     if (IR[0] === "TilingPattern") {
       const baseTransform = this.baseTransform || getCurrentTransform(this.ctx);
       const canvasGraphicsFactory = {
-        createCanvasGraphics: ctx => new CanvasGraphics(ctx, this.commonObjs, this.objs, this.canvasFactory, this.filterFactory, {
+        createCanvasGraphics: (ctx, renderingOpIdx) => new CanvasGraphics(ctx, this.commonObjs, this.objs, this.canvasFactory, this.filterFactory, {
           optionalContentConfig: this.optionalContentConfig,
           markedContentStack: this.markedContentStack
-        }, undefined, undefined, this.dependencyTracker ? new CanvasNestedDependencyTracker(this.dependencyTracker, opIdx) : null)
+        }, undefined, undefined, this.dependencyTracker ? new CanvasNestedDependencyTracker(this.dependencyTracker, renderingOpIdx, true) : null)
       };
       pattern = new TilingPattern(IR, this.ctx, canvasGraphicsFactory, baseTransform);
     } else {
@@ -10304,7 +10571,7 @@ class CanvasGraphics {
     const ctx = this.ctx;
     this.save(opIdx);
     const pattern = this._getPattern(opIdx, objId);
-    ctx.fillStyle = pattern.getPattern(ctx, this, getCurrentTransformInverse(ctx), PathType.SHADING);
+    ctx.fillStyle = pattern.getPattern(ctx, this, getCurrentTransformInverse(ctx), PathType.SHADING, opIdx);
     const inv = getCurrentTransformInverse(ctx);
     if (inv) {
       const {
@@ -10573,7 +10840,7 @@ class CanvasGraphics {
       const img = this.getObject(opIdx, data, image);
       putBinaryImageMask(maskCtx, img);
       maskCtx.globalCompositeOperation = "source-in";
-      maskCtx.fillStyle = isPatternFill ? fillColor.getPattern(maskCtx, this, getCurrentTransformInverse(ctx), PathType.FILL) : fillColor;
+      maskCtx.fillStyle = isPatternFill ? fillColor.getPattern(maskCtx, this, getCurrentTransformInverse(ctx), PathType.FILL, opIdx) : fillColor;
       maskCtx.fillRect(0, 0, width, height);
       maskCtx.restore();
       ctx.save();
@@ -13324,7 +13591,7 @@ class PDFPageProxy {
     this.objs = new PDFObjects();
     this._intentStates = new Map();
     this.destroyed = false;
-    this.recordedGroups = null;
+    this.recordedBBoxes = null;
   }
   get pageNumber() {
     return this._pageIndex + 1;
@@ -13392,7 +13659,7 @@ class PDFPageProxy {
     printAnnotationStorage = null,
     isEditing = false,
     recordOperations = false,
-    filteredOperationIndexes = null
+    operationsFilter = null
   }) {
     this._stats?.time("Overall");
     const intentArgs = this._transport.getRenderingIntent(intent, annotationMode, printAnnotationStorage, isEditing);
@@ -13423,18 +13690,19 @@ class PDFPageProxy {
       this._stats?.time("Page Request");
       this._pumpOperatorList(intentArgs);
     }
-    const shouldRecordOperations = !this.recordedGroups && (recordOperations || this._pdfBug && globalThis.StepperManager?.enabled);
+    const recordForDebugger = Boolean(this._pdfBug && globalThis.StepperManager?.enabled);
+    const shouldRecordOperations = !this.recordedBBoxes && (recordOperations || recordForDebugger);
     const complete = error => {
       intentState.renderTasks.delete(internalRenderTask);
       if (shouldRecordOperations) {
-        const recordedGroups = internalRenderTask.gfx?.dependencyTracker.take();
-        if (recordedGroups) {
-          internalRenderTask.stepper?.setOperatorGroups(recordedGroups);
-          if (recordOperations) {
-            this.recordedGroups = recordedGroups;
+        const recordedBBoxes = internalRenderTask.gfx?.dependencyTracker.take();
+        if (recordedBBoxes) {
+          if (internalRenderTask.stepper) {
+            internalRenderTask.stepper.setOperatorBBoxes(recordedBBoxes, internalRenderTask.gfx.dependencyTracker.takeDebugMetadata());
           }
-        } else if (recordOperations) {
-          this.recordedGroups = [];
+          if (recordOperations) {
+            this.recordedBBoxes = recordedBBoxes;
+          }
         }
       }
       if (intentPrint) {
@@ -13463,7 +13731,7 @@ class PDFPageProxy {
       params: {
         canvas,
         canvasContext,
-        dependencyTracker: shouldRecordOperations ? new CanvasDependencyTracker(canvas) : null,
+        dependencyTracker: shouldRecordOperations ? new CanvasDependencyTracker(canvas, intentState.operatorList.length, recordForDebugger) : null,
         viewport,
         transform,
         background
@@ -13479,7 +13747,7 @@ class PDFPageProxy {
       pdfBug: this._pdfBug,
       pageColors,
       enableHWA: this._transport.enableHWA,
-      filteredOperationIndexes
+      operationsFilter
     });
     (intentState.renderTasks ||= new Set()).add(internalRenderTask);
     const renderTask = internalRenderTask.task;
@@ -14541,7 +14809,7 @@ class InternalRenderTask {
     pdfBug = false,
     pageColors = null,
     enableHWA = false,
-    filteredOperationIndexes = null
+    operationsFilter = null
   }) {
     this.callback = callback;
     this.params = params;
@@ -14570,7 +14838,7 @@ class InternalRenderTask {
     this._canvasContext = params.canvas ? null : params.canvasContext;
     this._enableHWA = enableHWA;
     this._dependencyTracker = params.dependencyTracker;
-    this._filteredOperationIndexes = filteredOperationIndexes;
+    this._operationsFilter = operationsFilter;
   }
   get completed() {
     return this.capability.promise.catch(function () {});
@@ -14634,6 +14902,7 @@ class InternalRenderTask {
       this.graphicsReadyCallback ||= this._continueBound;
       return;
     }
+    this.gfx.dependencyTracker?.growOperationsCount(this.operatorList.fnArray.length);
     this.stepper?.updateOperatorList(this.operatorList);
     if (this.running) {
       return;
@@ -14665,7 +14934,7 @@ class InternalRenderTask {
     if (this.cancelled) {
       return;
     }
-    this.operatorListIdx = this.gfx.executeOperatorList(this.operatorList, this.operatorListIdx, this._continueBound, this.stepper, this._filteredOperationIndexes);
+    this.operatorListIdx = this.gfx.executeOperatorList(this.operatorList, this.operatorListIdx, this._continueBound, this.stepper, this._operationsFilter);
     if (this.operatorListIdx === this.operatorList.argsArray.length) {
       this.running = false;
       if (this.operatorList.lastChunk) {
@@ -14677,7 +14946,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "2a93ade";
+const build = "2138ec1";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -15198,8 +15467,7 @@ class AnnotationElement {
     if (!this.data.color) {
       return null;
     }
-    const [r, g, b] = applyOpacity(...this.data.color, this.data.opacity);
-    return changeLightness(r, g, b);
+    return findContrastColor(applyOpacity(...this.data.color, this.data.opacity), CSSConstants.commentForegroundColor);
   }
   _normalizePoint(point) {
     const {
@@ -17075,7 +17343,7 @@ class PopupElement {
     }
     renderRichText({
       html: this.#html || this.#contentsObj.str,
-      dir: this.#contentsObj.dir,
+      dir: this.#contentsObj?.dir,
       className: "popupContent"
     }, popup);
     this.#container.append(popup);
@@ -18543,7 +18811,10 @@ class FreeTextEditor extends AnnotationEditor {
           rotation,
           id,
           popupRef,
-          contentsObj
+          richText,
+          contentsObj,
+          creationDate,
+          modificationDate
         },
         textContent,
         textPosition,
@@ -18569,7 +18840,10 @@ class FreeTextEditor extends AnnotationEditor {
         id,
         deleted: false,
         popupRef,
-        comment: contentsObj?.str || null
+        comment: contentsObj?.str || null,
+        richText,
+        creationDate,
+        modificationDate
       };
     }
     const editor = await super.deserialize(data, parent, uiManager);
@@ -18578,7 +18852,7 @@ class FreeTextEditor extends AnnotationEditor {
     editor.#content = FreeTextEditor.#deserializeContent(data.value);
     editor._initialData = initialData;
     if (data.comment) {
-      editor.setCommentData(data.comment);
+      editor.setCommentData(data);
     }
     return editor;
   }
@@ -18589,18 +18863,12 @@ class FreeTextEditor extends AnnotationEditor {
     if (this.deleted) {
       return this.serializeDeleted();
     }
-    const rect = this.getPDFRect();
     const color = AnnotationEditor._colorManager.convert(this.isAttachedToDOM ? getComputedStyle(this.editorDiv).color : this.color);
-    const serialized = {
-      annotationType: AnnotationEditorType.FREETEXT,
+    const serialized = Object.assign(super.serialize(isForCopying), {
       color,
       fontSize: this.#fontSize,
-      value: this.#serializeContent(),
-      pageIndex: this.pageIndex,
-      rect,
-      rotation: this.rotation,
-      structTreeParentId: this._structTreeParentId
-    };
+      value: this.#serializeContent()
+    });
     this.addComment(serialized);
     if (isForCopying) {
       serialized.isCopy = true;
@@ -19441,9 +19709,6 @@ class HighlightEditor extends AnnotationEditor {
       color: this._uiManager.getNonHCMColorName(this.color)
     };
   }
-  get commentColor() {
-    return this.color;
-  }
   static computeTelemetryFinalData(data) {
     return {
       numberOfColors: data.get("color").size
@@ -20028,7 +20293,10 @@ class HighlightEditor extends AnnotationEditor {
           color,
           opacity,
           popupRef,
-          contentsObj
+          richText,
+          contentsObj,
+          creationDate,
+          modificationDate
         },
         parent: {
           page: {
@@ -20049,7 +20317,10 @@ class HighlightEditor extends AnnotationEditor {
         id,
         deleted: false,
         popupRef,
-        comment: contentsObj?.str || null
+        richText,
+        comment: contentsObj?.str || null,
+        creationDate,
+        modificationDate
       };
     } else if (data instanceof InkAnnotationElement) {
       const {
@@ -20063,7 +20334,10 @@ class HighlightEditor extends AnnotationEditor {
             rawWidth: thickness
           },
           popupRef,
-          contentsObj
+          richText,
+          contentsObj,
+          creationDate,
+          modificationDate
         },
         parent: {
           page: {
@@ -20084,7 +20358,10 @@ class HighlightEditor extends AnnotationEditor {
         id,
         deleted: false,
         popupRef,
-        comment: contentsObj?.str || null
+        richText,
+        comment: contentsObj?.str || null,
+        creationDate,
+        modificationDate
       };
     }
     const {
@@ -20101,7 +20378,7 @@ class HighlightEditor extends AnnotationEditor {
     }
     editor._initialData = initialData;
     if (data.comment) {
-      editor.setCommentData(data.comment);
+      editor.setCommentData(data);
     }
     const [pageWidth, pageHeight] = editor.pageDimensions;
     const [pageX, pageY] = editor.pageTranslation;
@@ -20166,20 +20443,15 @@ class HighlightEditor extends AnnotationEditor {
     if (this.deleted) {
       return this.serializeDeleted();
     }
-    const rect = this.getPDFRect();
     const color = AnnotationEditor._colorManager.convert(this._uiManager.getNonHCMColor(this.color));
-    const serialized = {
-      annotationType: AnnotationEditorType.HIGHLIGHT,
+    const serialized = super.serialize(isForCopying);
+    Object.assign(serialized, {
       color,
       opacity: this.opacity,
       thickness: this.#thickness,
       quadPoints: this.#serializeBoxes(),
-      outlines: this.#serializeOutlines(rect),
-      pageIndex: this.pageIndex,
-      rect,
-      rotation: this.#getRotation(),
-      structTreeParentId: this._structTreeParentId
-    };
+      outlines: this.#serializeOutlines(serialized.rect)
+    });
     this.addComment(serialized);
     if (this.annotationElementId && !this.#hasElementChanged(serialized)) {
       return null;
@@ -21597,7 +21869,10 @@ class InkEditor extends DrawingEditor {
             rawWidth: thickness
           },
           popupRef,
-          contentsObj
+          richText,
+          contentsObj,
+          creationDate,
+          modificationDate
         },
         parent: {
           page: {
@@ -21621,13 +21896,16 @@ class InkEditor extends DrawingEditor {
         id,
         deleted: false,
         popupRef,
-        comment: contentsObj?.str || null
+        richText,
+        comment: contentsObj?.str || null,
+        creationDate,
+        modificationDate
       };
     }
     const editor = await super.deserialize(data, parent, uiManager);
     editor._initialData = initialData;
     if (data.comment) {
-      editor.setCommentData(data.comment);
+      editor.setCommentData(data);
     }
     return editor;
   }
@@ -21686,8 +21964,7 @@ class InkEditor extends DrawingEditor {
     }
     const {
       lines,
-      points,
-      rect
+      points
     } = this.serializeDraw(isForCopying);
     const {
       _drawingOptions: {
@@ -21696,20 +21973,15 @@ class InkEditor extends DrawingEditor {
         "stroke-width": thickness
       }
     } = this;
-    const serialized = {
-      annotationType: AnnotationEditorType.INK,
+    const serialized = Object.assign(super.serialize(isForCopying), {
       color: AnnotationEditor._colorManager.convert(stroke),
       opacity,
       thickness,
       paths: {
         lines,
         points
-      },
-      pageIndex: this.pageIndex,
-      rect,
-      rotation: this.rotation,
-      structTreeParentId: this._structTreeParentId
-    };
+      }
+    });
     this.addComment(serialized);
     if (isForCopying) {
       serialized.isCopy = true;
@@ -22703,25 +22975,19 @@ class SignatureEditor extends DrawingEditor {
     }
     const {
       lines,
-      points,
-      rect
+      points
     } = this.serializeDraw(isForCopying);
     const {
       _drawingOptions: {
         "stroke-width": thickness
       }
     } = this;
-    const serialized = {
-      annotationType: AnnotationEditorType.SIGNATURE,
+    const serialized = Object.assign(super.serialize(isForCopying), {
       isSignature: true,
       areContours: this.#isExtracted,
       color: [0, 0, 0],
-      thickness: this.#isExtracted ? 0 : thickness,
-      pageIndex: this.pageIndex,
-      rect,
-      rotation: this.rotation,
-      structTreeParentId: this._structTreeParentId
-    };
+      thickness: this.#isExtracted ? 0 : thickness
+    });
     this.addComment(serialized);
     if (isForCopying) {
       serialized.paths = {
@@ -23278,7 +23544,10 @@ class StampEditor extends AnnotationEditor {
           id,
           structParent,
           popupRef,
-          contentsObj
+          richText,
+          contentsObj,
+          creationDate,
+          modificationDate
         },
         container,
         parent: {
@@ -23318,7 +23587,10 @@ class StampEditor extends AnnotationEditor {
         isSvg: false,
         structParent,
         popupRef,
-        comment: contentsObj?.str || null
+        richText,
+        comment: contentsObj?.str || null,
+        creationDate,
+        modificationDate
       };
     }
     const editor = await super.deserialize(data, parent, uiManager);
@@ -23350,7 +23622,7 @@ class StampEditor extends AnnotationEditor {
     }
     editor._initialData = initialData;
     if (data.comment) {
-      editor.setCommentData(data.comment);
+      editor.setCommentData(data);
     }
     editor.#hasBeenAddedInUndoStack = !!initialData;
     return editor;
@@ -23362,15 +23634,10 @@ class StampEditor extends AnnotationEditor {
     if (this.deleted) {
       return this.serializeDeleted();
     }
-    const serialized = {
-      annotationType: AnnotationEditorType.STAMP,
+    const serialized = Object.assign(super.serialize(isForCopying), {
       bitmapId: this.#bitmapId,
-      pageIndex: this.pageIndex,
-      rect: this.getPDFRect(),
-      rotation: this.rotation,
-      isSvg: this.#isSvg,
-      structTreeParentId: this._structTreeParentId
-    };
+      isSvg: this.#isSvg
+    });
     this.addComment(serialized);
     if (isForCopying) {
       serialized.bitmapUrl = this.#serializeBitmap(true);
@@ -23611,6 +23878,10 @@ class AnnotationEditorLayer {
       editor.enableEditing();
     }
     this.#isEnabling = false;
+    this.#uiManager._eventBus.dispatch("editorsrendered", {
+      source: this,
+      pageNumber: this.pageIndex + 1
+    });
   }
   disable() {
     this.#isDisabling = true;
@@ -23968,13 +24239,16 @@ class AnnotationEditorLayer {
     }
     return editor;
   }
+  get boundingClientRect() {
+    return this.div.getBoundingClientRect();
+  }
   #getCenterPoint() {
     const {
       x,
       y,
       width,
       height
-    } = this.div.getBoundingClientRect();
+    } = this.boundingClientRect;
     const tlX = Math.max(0, x);
     const tlY = Math.max(0, y);
     const brX = Math.min(window.innerWidth, x + width);
@@ -24426,13 +24700,14 @@ globalThis.pdfjsLib = {
   AnnotationType: AnnotationType,
   applyOpacity: applyOpacity,
   build: build,
-  changeLightness: changeLightness,
   ColorPicker: ColorPicker,
   createValidAbsoluteUrl: createValidAbsoluteUrl,
+  CSSConstants: CSSConstants,
   DOMSVGFactory: DOMSVGFactory,
   DrawLayer: DrawLayer,
   FeatureTest: util_FeatureTest,
   fetchData: fetchData,
+  findContrastColor: findContrastColor,
   getDocument: getDocument,
   getFilenameFromUrl: getFilenameFromUrl,
   getPdfFilenameFromUrl: getPdfFilenameFromUrl,
@@ -24473,6 +24748,6 @@ globalThis.pdfjsLib = {
   XfaLayer: XfaLayer
 };
 
-export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, ColorPicker, DOMSVGFactory, DrawLayer, util_FeatureTest as FeatureTest, GlobalWorkerOptions, util_ImageKind as ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TouchManager, Util, VerbosityLevel, XfaLayer, applyOpacity, build, changeLightness, createValidAbsoluteUrl, fetchData, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getUuid, getXfaPageViewport, isDataScheme, isPdfFile, isValidExplicitDest, noContextMenu, normalizeUnicode, renderRichText, setLayerDimensions, shadow, stopEvent, updateUrlHash, version };
+export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, CSSConstants, ColorPicker, DOMSVGFactory, DrawLayer, util_FeatureTest as FeatureTest, GlobalWorkerOptions, util_ImageKind as ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TouchManager, Util, VerbosityLevel, XfaLayer, applyOpacity, build, createValidAbsoluteUrl, fetchData, findContrastColor, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getUuid, getXfaPageViewport, isDataScheme, isPdfFile, isValidExplicitDest, noContextMenu, normalizeUnicode, renderRichText, setLayerDimensions, shadow, stopEvent, updateUrlHash, version };
 
 //# sourceMappingURL=pdf.mjs.map

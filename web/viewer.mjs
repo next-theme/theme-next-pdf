@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 2a93ade
+ * pdfjsBuild = 2138ec1
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -60,13 +60,14 @@ const {
   AnnotationType,
   applyOpacity,
   build,
-  changeLightness,
   ColorPicker,
   createValidAbsoluteUrl,
+  CSSConstants,
   DOMSVGFactory,
   DrawLayer,
   FeatureTest,
   fetchData,
+  findContrastColor,
   getDocument,
   getFilenameFromUrl,
   getPdfFilenameFromUrl: pdfjs_getPdfFilenameFromUrl,
@@ -1174,13 +1175,14 @@ class PDFLinkService {
       pageNumber
     });
   }
-  goToXY(pageNumber, x, y) {
+  goToXY(pageNumber, x, y, options = {}) {
     this.pdfViewer.scrollPageIntoView({
       pageNumber,
       destArray: [null, {
         name: "XYZ"
       }, x, y],
-      ignoreDestinationZoom: true
+      ignoreDestinationZoom: true,
+      ...options
     });
   }
   addLinkAttributes(link, url, newWindow = false) {
@@ -4726,8 +4728,7 @@ class CommentManager {
     if (!color) {
       return null;
     }
-    const [r, g, b] = getRGB(color);
-    return changeLightness(r, g, b);
+    return findContrastColor(getRGB(color), CSSConstants.commentForegroundColor);
   }
   #setText(text) {
     const textView = this.#textView;
@@ -4992,7 +4993,7 @@ class CommentSidebar {
     } = annotation;
     const SPACE_ABOVE_ANNOTATION = 10;
     const pageNumber = pageIndex + 1;
-    const pageVisiblePromise = this.#uiManager?.waitForPageRendered(pageNumber);
+    const pageVisiblePromise = this.#uiManager?.waitForEditorsRendered(pageNumber);
     this.#linkService?.goToXY(pageNumber, rect[0], rect[3] + SPACE_ABOVE_ANNOTATION);
     this.selectComment(currentTarget);
     await pageVisiblePromise;
@@ -10292,7 +10293,7 @@ class BasePDFPageView {
   eventBus = null;
   id = null;
   pageColors = null;
-  recordedGroups = null;
+  recordedBBoxes = null;
   renderingQueue = null;
   renderTask = null;
   resume = null;
@@ -10443,7 +10444,7 @@ class BasePDFPageView {
       if (renderTask === this.renderTask) {
         this.renderTask = null;
         if (this.enableOptimizedPartialRendering) {
-          this.recordedGroups ??= renderTask.recordedGroups;
+          this.recordedBBoxes ??= renderTask.recordedBBoxes;
         }
       }
     }
@@ -10629,14 +10630,13 @@ class PDFPageDetailView extends BasePDFPageView {
   }
   _getRenderingContext(canvas, transform) {
     const baseContext = this.pageView._getRenderingContext(canvas, transform);
-    const recordedGroups = this.pdfPage.recordedGroups;
-    if (!recordedGroups || !this.enableOptimizedPartialRendering) {
+    const recordedBBoxes = this.pdfPage.recordedBBoxes;
+    if (!recordedBBoxes || !this.enableOptimizedPartialRendering) {
       return {
         ...baseContext,
         recordOperations: false
       };
     }
-    const filteredIndexes = new Set();
     const {
       viewport: {
         width: vWidth,
@@ -10653,17 +10653,15 @@ class PDFPageDetailView extends BasePDFPageView {
     const detailMinY = aMinY / vHeight;
     const detailMaxX = (aMinX + aWidth) / vWidth;
     const detailMaxY = (aMinY + aHeight) / vHeight;
-    for (let i = 0, ii = recordedGroups.length; i < ii; i++) {
-      const group = recordedGroups[i];
-      if (group.minX <= detailMaxX && group.maxX >= detailMinX && group.minY <= detailMaxY && group.maxY >= detailMinY) {
-        filteredIndexes.add(group.idx);
-        group.dependencies.forEach(filteredIndexes.add, filteredIndexes);
-      }
-    }
     return {
       ...baseContext,
       recordOperations: false,
-      filteredOperationIndexes: filteredIndexes
+      operationsFilter(index) {
+        if (recordedBBoxes.isEmpty(index)) {
+          return false;
+        }
+        return recordedBBoxes.minX(index) <= detailMaxX && recordedBBoxes.maxX(index) >= detailMinX && recordedBBoxes.minY(index) <= detailMaxY && recordedBBoxes.maxY(index) >= detailMinY;
+      }
     };
   }
   async draw() {
@@ -11997,6 +11995,10 @@ class PDFPageView extends BasePDFPageView {
       this.#needsRestrictedScaling = true;
     } else {
       this.#needsRestrictedScaling = outputScale.limitCanvas(width, height, this.maxCanvasPixels, this.maxCanvasDim, this.capCanvasAreaFactor);
+      if (this.#needsRestrictedScaling && this.enableDetailCanvas) {
+        outputScale.sx /= 10;
+        outputScale.sy /= 10;
+      }
     }
   }
   cancelRendering({
@@ -12112,7 +12114,7 @@ class PDFPageView extends BasePDFPageView {
       annotationCanvasMap: this._annotationCanvasMap,
       pageColors: this.pageColors,
       isEditing: this.#isEditing,
-      recordOperations: this.enableOptimizedPartialRendering && !this.recordedGroups
+      recordOperations: this.enableOptimizedPartialRendering && !this.recordedBBoxes
     };
   }
   async draw() {
@@ -12220,6 +12222,9 @@ class PDFPageView extends BasePDFPageView {
       this.#useThumbnailCanvas.regularAnnotations = !renderTask.separateAnnots;
       this.dispatchPageRendered(false, false);
     }).then(async () => {
+      if (this.renderingState !== RenderingStates.FINISHED) {
+        return;
+      }
       this.structTreeLayer ||= new StructTreeLayerBuilder(pdfPage, viewport.rawDims);
       const textLayerPromise = this.#renderTextLayer();
       if (this.annotationLayer) {
@@ -12909,6 +12914,17 @@ class PDFViewer {
       } else if (this._spreadMode !== SpreadMode.NONE) {
         this._updateSpreadMode();
       }
+      eventBus._on("annotationeditorlayerrendered", evt => {
+        if (this.#annotationEditorUIManager) {
+          eventBus.dispatch("annotationeditormodechanged", {
+            source: this,
+            mode: this.#annotationEditorMode
+          });
+        }
+      }, {
+        once: true,
+        signal
+      });
       this.#onePageRenderedOrForceFetch(signal).then(async () => {
         if (pdfDocument !== this.pdfDocument) {
           return;
@@ -12918,12 +12934,6 @@ class PDFViewer {
         if (this.#hiddenCopyElement) {
           document.addEventListener("copy", this.#copyCallback.bind(this, textLayerMode), {
             signal
-          });
-        }
-        if (this.#annotationEditorUIManager) {
-          eventBus.dispatch("annotationeditormodechanged", {
-            source: this,
-            mode: this.#annotationEditorMode
           });
         }
         if (pdfDocument.loadingParams.disableAutoFetch || pagesCount > PagesCountLimit.FORCE_LAZY_PAGE_INIT) {
@@ -13254,7 +13264,8 @@ class PDFViewer {
     pageNumber,
     destArray = null,
     allowNegativeOffset = false,
-    ignoreDestinationZoom = false
+    ignoreDestinationZoom = false,
+    center = null
   }) {
     if (!this.pdfDocument) {
       return;
@@ -13340,7 +13351,14 @@ class PDFViewer {
     const boundingRect = [pageView.viewport.convertToViewportPoint(x, y), pageView.viewport.convertToViewportPoint(x + width, y + height)];
     let left = Math.min(boundingRect[0][0], boundingRect[1][0]);
     let top = Math.min(boundingRect[0][1], boundingRect[1][1]);
-    if (!allowNegativeOffset) {
+    if (center) {
+      if (center === "both" || center === "vertical") {
+        top -= (this.container.clientHeight - Math.abs(boundingRect[1][1] - boundingRect[0][1])) / 2;
+      }
+      if (center === "both" || center === "horizontal") {
+        left -= (this.container.clientWidth - Math.abs(boundingRect[1][0] - boundingRect[0][0])) / 2;
+      }
+    } else if (!allowNegativeOffset) {
       left = Math.max(left, 0);
       top = Math.max(top, 0);
     }
@@ -13945,6 +13963,7 @@ class PDFViewer {
       if (!isEditing) {
         this.pdfDocument.annotationStorage.resetModifiedIds();
       }
+      this.cleanup();
       for (const pageView of this._pages) {
         pageView.toggleEditingMode(isEditing);
       }

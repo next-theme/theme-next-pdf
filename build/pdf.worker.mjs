@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 2a93ade
+ * pdfjsBuild = 2138ec1
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -1112,7 +1112,7 @@ class Dict {
     return dict;
   }
   delete(key) {
-    delete this._map[key];
+    this._map.delete(key);
   }
 }
 class Ref {
@@ -50385,8 +50385,10 @@ class MarkupAnnotation extends Annotation {
     const retRef = {
       ref: annotationRef
     };
-    if (annotation.popup) {
-      const popup = annotation.popup;
+    const {
+      popup
+    } = annotation;
+    if (popup) {
       if (popup.deleted) {
         annotationDict.delete("Popup");
         annotationDict.delete("Contents");

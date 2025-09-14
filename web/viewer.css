@@ -3358,7 +3358,7 @@
         background-color:var(--comment-button-selected-fg);
       }
 
-#editorCommentsSidebar{
+.comment.sidebar{
   --comment-close-button-icon:url(images/comment-closeButton.svg);
 
   --csstools-light-dark-toggle--88:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.69);
@@ -3389,7 +3389,7 @@
 }
 
 @supports (color: light-dark(red, red)) and (color: rgb(0 0 0 / 0)){
-#editorCommentsSidebar{
+.comment.sidebar{
 
   --comment-date-fg-color:light-dark(
     rgb(21 20 26 / 0.69),
@@ -3399,13 +3399,13 @@
 }
 
 @supports (color: light-dark(red, red)){
-#editorCommentsSidebar{
+.comment.sidebar{
   --comment-bg-color:light-dark(#f9f9fb, #1c1b22);
 }
 }
 
 @supports (color: light-dark(red, red)) and (color: rgb(0 0 0 / 0)){
-#editorCommentsSidebar{
+.comment.sidebar{
   --comment-hover-bg-color:light-dark(
     rgb(21 20 26 / 0.14),
     rgb(251 251 254 / 0.14)
@@ -3418,7 +3418,7 @@
 }
 
 @supports (color: light-dark(red, red)){
-#editorCommentsSidebar{
+.comment.sidebar{
   --comment-border-color:light-dark(#f0f0f4, #52525e);
   --comment-focus-outline-color:light-dark(#0062fa, #00cadb);
   --comment-fg-color:light-dark(#15141a, #fbfbfe);
@@ -3432,7 +3432,7 @@
 
 @supports not (color: light-dark(tan, tan)){
 
-#editorCommentsSidebar *{
+.comment.sidebar *{
 
   --csstools-light-dark-toggle--88:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.69);
 
@@ -3464,7 +3464,7 @@
 
 @media screen and (forced-colors: active){
 
-#editorCommentsSidebar{
+.comment.sidebar{
     --comment-date-fg-color:CanvasText;
     --comment-bg-color:Canvas;
     --comment-hover-bg-color:SelectedItemText;
@@ -3479,7 +3479,7 @@
 }
   }
 
-#editorCommentsSidebar{
+.comment.sidebar{
 
   display:flex;
   width:239px;
@@ -3491,7 +3491,7 @@
   align-items:flex-start;
 }
 
-#editorCommentsSidebar #editorCommentsSidebarHeader{
+.comment.sidebar #editorCommentsSidebarHeader{
     width:100%;
     box-sizing:border-box;
     padding:16px;
@@ -3500,7 +3500,7 @@
     justify-content:space-between;
   }
 
-:is(#editorCommentsSidebar #editorCommentsSidebarHeader) .commentCount{
+:is(.comment.sidebar #editorCommentsSidebarHeader) .commentCount{
       display:flex;
       align-items:baseline;
       gap:6px;
@@ -3509,7 +3509,7 @@
               user-select:none;
     }
 
-:is(:is(#editorCommentsSidebar #editorCommentsSidebarHeader) .commentCount) #editorCommentsSidebarTitle{
+:is(:is(.comment.sidebar #editorCommentsSidebarHeader) .commentCount) #editorCommentsSidebarTitle{
         font:menu;
         font-style:normal;
         font-weight:590;
@@ -3518,7 +3518,7 @@
         color:var(--comment-fg-color);
       }
 
-:is(:is(#editorCommentsSidebar #editorCommentsSidebarHeader) .commentCount) #editorCommentsSidebarCount{
+:is(:is(.comment.sidebar #editorCommentsSidebarHeader) .commentCount) #editorCommentsSidebarCount{
         padding:0 4px;
         border-radius:4px;
         background-color:var(--comment-count-bg-color);
@@ -3533,7 +3533,7 @@
         line-height:normal;
       }
 
-:is(#editorCommentsSidebar #editorCommentsSidebarHeader) #editorCommentsSidebarCloseButton{
+:is(.comment.sidebar #editorCommentsSidebarHeader) #editorCommentsSidebarCloseButton{
       width:32px;
       height:32px;
       padding:8px;
@@ -3542,7 +3542,7 @@
       cursor:pointer;
     }
 
-:is(:is(#editorCommentsSidebar #editorCommentsSidebarHeader) #editorCommentsSidebarCloseButton)::before{
+:is(:is(.comment.sidebar #editorCommentsSidebarHeader) #editorCommentsSidebarCloseButton)::before{
         content:"";
         display:inline-block;
         width:100%;
@@ -3556,26 +3556,26 @@
         background-color:var(--comment-fg-color);
       }
 
-:is(:is(#editorCommentsSidebar #editorCommentsSidebarHeader) #editorCommentsSidebarCloseButton):hover{
+:is(:is(.comment.sidebar #editorCommentsSidebarHeader) #editorCommentsSidebarCloseButton):hover{
         background-color:var(--comment-hover-bg-color);
       }
 
-:is(:is(#editorCommentsSidebar #editorCommentsSidebarHeader) #editorCommentsSidebarCloseButton):active{
+:is(:is(.comment.sidebar #editorCommentsSidebarHeader) #editorCommentsSidebarCloseButton):active{
         background-color:var(--comment-active-bg-color);
       }
 
-:is(:is(#editorCommentsSidebar #editorCommentsSidebarHeader) #editorCommentsSidebarCloseButton)  > span{
+:is(:is(.comment.sidebar #editorCommentsSidebarHeader) #editorCommentsSidebarCloseButton)  > span{
         display:inline-block;
         width:0;
         height:0;
         overflow:hidden;
       }
 
-#editorCommentsSidebar #editorCommentsSidebarListContainer{
+.comment.sidebar #editorCommentsSidebarListContainer{
     overflow:scroll;
   }
 
-:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList{
+:is(.comment.sidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList{
       display:flex;
       width:auto;
       padding:1px 16px 0;
@@ -3588,7 +3588,7 @@
       overflow:scroll;
     }
 
-:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment{
+:is(:is(.comment.sidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment{
         display:flex;
         width:auto;
         padding:8px 16px 16px;
@@ -3602,46 +3602,46 @@
         background-color:var(--comment-bg-color);
       }
 
-:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):hover{
+:is(:is(:is(.comment.sidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):hover{
             background-color:var(--comment-hover-bg-color);
           }
 
-:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):hover time::after{
+:is(:is(:is(.comment.sidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):hover time::after{
               display:inline-block;
               background-color:var(--comment-indicator-hover-fg-color);
             }
 
-:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):active{
+:is(:is(:is(.comment.sidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):active{
             background-color:var(--comment-active-bg-color);
           }
 
-:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):active time::after{
+:is(:is(:is(.comment.sidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):active time::after{
               display:inline-block;
               background-color:var(--comment-indicator-active-fg-color);
             }
 
-:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):is(:focus,:focus-visible) time::after{
+:is(:is(:is(.comment.sidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):is(:focus,:focus-visible) time::after{
             display:inline-block;
             background-color:var(--comment-indicator-focus-fg-color);
           }
 
-:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):focus-visible{
+:is(:is(:is(.comment.sidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments):focus-visible{
             outline:2px solid var(--comment-focus-outline-color);
             outline-offset:2px;
           }
 
-.selected:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments) .sidebarCommentText{
+.selected:is(:is(:is(.comment.sidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments) .sidebarCommentText{
               max-height:-moz-fit-content;
               max-height:fit-content;
               -webkit-line-clamp:unset;
             }
 
-.selected:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments) time::after{
+.selected:is(:is(:is(.comment.sidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment):not(.noComments) time::after{
               display:inline-block;
               background-color:var(--comment-indicator-selected-fg-color);
             }
 
-:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment) .sidebarCommentText{
+:is(:is(:is(.comment.sidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment) .sidebarCommentText{
           font:menu;
           font-style:normal;
           font-weight:400;
@@ -3658,7 +3658,7 @@
           overflow-wrap:break-word;
         }
 
-.noComments:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment) .sidebarCommentText{
+.noComments:is(:is(:is(.comment.sidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment) .sidebarCommentText{
           max-height:-moz-fit-content;
           max-height:fit-content;
           -webkit-line-clamp:unset;
@@ -3667,7 +3667,7 @@
                   user-select:none;
         }
 
-:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment) time{
+:is(:is(:is(.comment.sidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment) time{
           width:100%;
           display:inline-flex;
           align-items:center;
@@ -3680,7 +3680,7 @@
           font-size:13px;
         }
 
-:is(:is(:is(:is(#editorCommentsSidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment) time)::after{
+:is(:is(:is(:is(.comment.sidebar #editorCommentsSidebarListContainer) #editorCommentsSidebarList) .sidebarComment) time)::after{
             content:"";
             display:none;
             width:16px;
