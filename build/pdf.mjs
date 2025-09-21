@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 2138ec1
+ * pdfjsBuild = 33e638c
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -343,12 +343,12 @@ function getVerbosityLevel() {
 }
 function info(msg) {
   if (verbosity >= VerbosityLevel.INFOS) {
-    console.log(`Info: ${msg}`);
+    console.info(`Info: ${msg}`);
   }
 }
 function warn(msg) {
   if (verbosity >= VerbosityLevel.WARNINGS) {
-    console.log(`Warning: ${msg}`);
+    console.warn(`Warning: ${msg}`);
   }
 }
 function unreachable(msg) {
@@ -1783,15 +1783,28 @@ function findContrastColor(baseColor, fixedColor) {
   const fixedHSL = array.subarray(6, 9);
   RGBToHSL(fixedColor, fixedHSL);
   const isFixedColorDark = fixedHSL[2] < 0.5;
-  const minContrast = isFixedColorDark ? 7 : 4.5;
+  const minContrast = isFixedColorDark ? 12 : 4.5;
   baseHSL[2] = isFixedColorDark ? Math.sqrt(baseHSL[2]) : 1 - Math.sqrt(1 - baseHSL[2]);
-  const increment = isFixedColorDark ? 0.01 : -0.01;
-  let contrast = contrastRatio(baseHSL, fixedHSL, output);
-  while (baseHSL[2] >= 0 && baseHSL[2] <= 1 && contrast < minContrast) {
-    baseHSL[2] += increment;
-    contrast = contrastRatio(baseHSL, fixedHSL, output);
+  if (contrastRatio(baseHSL, fixedHSL, output) < minContrast) {
+    let start, end;
+    if (isFixedColorDark) {
+      start = baseHSL[2];
+      end = 1;
+    } else {
+      start = 0;
+      end = baseHSL[2];
+    }
+    const PRECISION = 0.005;
+    while (end - start > PRECISION) {
+      const mid = baseHSL[2] = (start + end) / 2;
+      if (isFixedColorDark === contrastRatio(baseHSL, fixedHSL, output) < minContrast) {
+        start = mid;
+      } else {
+        end = mid;
+      }
+    }
+    baseHSL[2] = isFixedColorDark ? end : start;
   }
-  baseHSL[2] = MathClamp(baseHSL[2], 0, 1);
   HSLToRGB(baseHSL, output);
   cachedValue = Util.makeHexColor(Math.round(output[0] * 255), Math.round(output[1] * 255), Math.round(output[2] * 255));
   contrastCache.set(key, cachedValue);
@@ -1835,6 +1848,7 @@ class EditorToolbar {
   #buttons = null;
   #altText = null;
   #comment = null;
+  #commentButtonDivider = null;
   #signatureDescriptionButton = null;
   static #l10nRemove = null;
   constructor(editor) {
@@ -1953,11 +1967,12 @@ class EditorToolbar {
       return;
     }
     this.#addListenersToElement(button);
+    const divider = this.#commentButtonDivider = this.#divider;
     if (!beforeElement) {
-      this.#buttons.append(button, this.#divider);
+      this.#buttons.append(button, divider);
     } else {
       this.#buttons.insertBefore(button, beforeElement);
-      this.#buttons.insertBefore(this.#divider, beforeElement);
+      this.#buttons.insertBefore(divider, beforeElement);
     }
     this.#comment = comment;
     comment.toolbar = this;
@@ -1975,6 +1990,16 @@ class EditorToolbar {
     const button = this.#signatureDescriptionButton = await signatureManager.renderEditButton(this.#editor);
     this.#addListenersToElement(button);
     this.#buttons.append(button, this.#divider);
+  }
+  removeButton(name) {
+    switch (name) {
+      case "comment":
+        this.#comment?.removeToolbarCommentButton();
+        this.#comment = null;
+        this.#commentButtonDivider?.remove();
+        this.#commentButtonDivider = null;
+        break;
+    }
   }
   async addButton(name, tool) {
     switch (name) {
@@ -2778,13 +2803,31 @@ class AnnotationEditorUIManager {
   hasCommentManager() {
     return !!this.#commentManager;
   }
-  editComment(editor, position) {
-    this.#commentManager?.open(this, editor, position);
+  editComment(editor, posX, posY, options) {
+    this.#commentManager?.showDialog(this, editor, posX, posY, options);
   }
-  showComment(pageIndex, uid) {
+  selectComment(pageIndex, uid) {
     const layer = this.#allLayers.get(pageIndex);
     const editor = layer?.getEditorByUID(uid);
-    editor?.showComment();
+    editor?.toggleComment(true, true);
+  }
+  updateComment(editor) {
+    this.#commentManager?.updateComment(editor.getData());
+  }
+  updatePopupColor(editor) {
+    this.#commentManager?.updatePopupColor(editor);
+  }
+  removeComment(editor) {
+    this.#commentManager?.removeComments([editor.uid]);
+  }
+  toggleComment(editor, isSelected, visibility = undefined) {
+    this.#commentManager?.toggleCommentPopup(editor, isSelected, visibility);
+  }
+  makeCommentColor(color, opacity) {
+    return color && this.#commentManager?.makeCommentColor(color, opacity) || null;
+  }
+  getCommentDialogElement() {
+    return this.#commentManager?.dialogElement || null;
   }
   async waitForEditorsRendered(pageNumber) {
     if (this.#allLayers.has(pageNumber - 1)) {
@@ -2968,6 +3011,17 @@ class AnnotationEditorUIManager {
     }
     this.#floatingToolbar ||= new FloatingToolbar(this);
     this.#floatingToolbar.show(textLayer, boxes, this.direction === "ltr");
+  }
+  getAndRemoveDataFromAnnotationStorage(annotationId) {
+    if (!this.#annotationStorage) {
+      return null;
+    }
+    const key = `${AnnotationEditorPrefix}${annotationId}`;
+    const storedValue = this.#annotationStorage.getRawValue(key);
+    if (storedValue) {
+      this.#annotationStorage.remove(key);
+    }
+    return storedValue;
   }
   addToAnnotationStorage(editor) {
     if (!editor.isEmpty() && this.#annotationStorage && !this.#annotationStorage.has(editor.id)) {
@@ -3395,17 +3449,22 @@ class AnnotationEditorUIManager {
     this.#currentDrawingSession?.commitOrRemove();
     if (this.#mode === AnnotationEditorType.POPUP) {
       this.#commentManager?.hideSidebar();
-      for (const editor of this.#allEditors.values()) {
-        editor.removeStandaloneCommentButton();
-      }
     }
+    this.#commentManager?.destroyPopup();
     this.#mode = mode;
     if (mode === AnnotationEditorType.NONE) {
       this.setEditingState(false);
       this.#disableAll();
+      for (const editor of this.#allEditors.values()) {
+        editor.hideStandaloneCommentButton();
+      }
       this._editorUndoBar?.hide();
+      this.toggleComment(null);
       this.#updateModeCapability.resolve();
       return;
+    }
+    for (const editor of this.#allEditors.values()) {
+      editor.addStandaloneCommentButton();
     }
     if (mode === AnnotationEditorType.SIGNATURE) {
       await this.#signatureManager?.loadSignatures();
@@ -3431,7 +3490,6 @@ class AnnotationEditorUIManager {
         }
         if (hasComment && !deleted) {
           allComments.push(editor.getData());
-          editor.addStandaloneCommentButton();
         }
       }
       for (const annotation of this.#allEditableAnnotations) {
@@ -3454,7 +3512,7 @@ class AnnotationEditorUIManager {
       return;
     }
     for (const editor of this.#allEditors.values()) {
-      if (editor.annotationElementId === editId || editor.id === editId) {
+      if (editor.uid === editId) {
         this.setSelected(editor);
         if (editComment) {
           editor.editComment();
@@ -3564,14 +3622,12 @@ class AnnotationEditorUIManager {
       }
     }
   }
-  getEditors(pageIndex) {
-    const editors = [];
+  *getEditors(pageIndex) {
     for (const editor of this.#allEditors.values()) {
       if (editor.pageIndex === pageIndex) {
-        editors.push(editor);
+        yield editor;
       }
     }
-    return editors;
   }
   getEditor(id) {
     return this.#allEditors.get(id);
@@ -4348,13 +4404,14 @@ class Comment {
   #text = null;
   #date = null;
   #deleted = false;
+  #popupPosition = null;
   constructor(editor) {
     this.#editor = editor;
   }
   renderForToolbar() {
     const button = this.#commentToolbarButton = document.createElement("button");
     button.className = "comment";
-    return this.#render(button);
+    return this.#render(button, false);
   }
   renderForStandalone() {
     const button = this.#commentStandaloneButton = document.createElement("button");
@@ -4371,14 +4428,77 @@ class Comment {
         style.backgroundColor = color;
       }
     }
-    return this.#render(button);
+    return this.#render(button, true);
   }
-  #render(comment) {
+  onUpdatedColor() {
+    if (!this.#commentStandaloneButton) {
+      return;
+    }
+    const color = this.#editor.commentButtonColor;
+    if (color) {
+      this.#commentStandaloneButton.style.backgroundColor = color;
+    }
+    this.#editor._uiManager.updatePopupColor(this.#editor);
+  }
+  get commentButtonWidth() {
+    return (this.#commentStandaloneButton?.getBoundingClientRect().width ?? 0) / this.#editor.parent.boundingClientRect.width;
+  }
+  get commentPopupPositionInLayer() {
+    if (this.#popupPosition) {
+      return this.#popupPosition;
+    }
+    if (!this.#commentStandaloneButton) {
+      return null;
+    }
+    const {
+      x,
+      y,
+      height
+    } = this.#commentStandaloneButton.getBoundingClientRect();
+    const {
+      x: parentX,
+      y: parentY,
+      width: parentWidth,
+      height: parentHeight
+    } = this.#editor.parent.boundingClientRect;
+    return [(x - parentX) / parentWidth, (y + height - parentY) / parentHeight];
+  }
+  set commentPopupPositionInLayer(pos) {
+    this.#popupPosition = pos;
+  }
+  hasDefaultPopupPosition() {
+    return this.#popupPosition === null;
+  }
+  removeStandaloneCommentButton() {
+    this.#commentStandaloneButton?.remove();
+    this.#commentStandaloneButton = null;
+  }
+  removeToolbarCommentButton() {
+    this.#commentToolbarButton?.remove();
+    this.#commentToolbarButton = null;
+  }
+  setCommentButtonStates({
+    selected,
+    hasPopup
+  }) {
+    if (!this.#commentStandaloneButton) {
+      return;
+    }
+    this.#commentStandaloneButton.classList.toggle("selected", selected);
+    this.#commentStandaloneButton.ariaExpanded = hasPopup;
+  }
+  #render(comment, isStandalone) {
     if (!this.#editor._uiManager.hasCommentManager()) {
       return null;
     }
     comment.tabIndex = "0";
-    comment.setAttribute("data-l10n-id", "pdfjs-editor-edit-comment-button");
+    comment.ariaHasPopup = "dialog";
+    if (isStandalone) {
+      comment.ariaControls = "commentPopup";
+    } else {
+      comment.ariaControlsElements = [this.#editor._uiManager.getCommentDialogElement()];
+      comment.setAttribute("data-l10n-id", "pdfjs-editor-edit-comment-button");
+    }
     const signal = this.#editor._uiManager._signal;
     if (!(signal instanceof AbortSignal) || signal.aborted) {
       return comment;
@@ -4386,6 +4506,22 @@ class Comment {
     comment.addEventListener("contextmenu", noContextMenu, {
       signal
     });
+    if (isStandalone) {
+      comment.addEventListener("focusin", e => {
+        this.#editor._focusEventsAllowed = false;
+        stopEvent(e);
+      }, {
+        capture: true,
+        signal
+      });
+      comment.addEventListener("focusout", e => {
+        this.#editor._focusEventsAllowed = true;
+        stopEvent(e);
+      }, {
+        capture: true,
+        signal
+      });
+    }
     comment.addEventListener("pointerdown", event => event.stopPropagation(), {
       signal
     });
@@ -4394,7 +4530,7 @@ class Comment {
       if (comment === this.#commentToolbarButton) {
         this.edit();
       } else {
-        this.#editor._uiManager.toggleComment(this.#editor);
+        this.#editor.toggleComment(true);
       }
     };
     comment.addEventListener("click", onClick, {
@@ -4409,23 +4545,45 @@ class Comment {
     }, {
       signal
     });
+    comment.addEventListener("pointerenter", () => {
+      this.#editor.toggleComment(false, true);
+    }, {
+      signal
+    });
+    comment.addEventListener("pointerleave", () => {
+      this.#editor.toggleComment(false, false);
+    }, {
+      signal
+    });
     return comment;
   }
-  edit() {
-    const {
-      bottom,
-      left,
-      right
-    } = this.#editor.getClientDimensions();
-    const position = {
-      top: bottom
-    };
-    if (this.#editor._uiManager.direction === "ltr") {
-      position.right = right;
+  edit(options) {
+    const position = this.commentPopupPositionInLayer;
+    let posX, posY;
+    if (position) {
+      [posX, posY] = position;
     } else {
-      position.left = left;
+      [posX, posY] = this.#editor.commentButtonPosition;
+      const {
+        width,
+        height,
+        x,
+        y
+      } = this.#editor;
+      posX = x + posX * width;
+      posY = y + posY * height;
     }
-    this.#editor._uiManager.editComment(this.#editor, position);
+    const parentDimensions = this.#editor.parent.boundingClientRect;
+    const {
+      x: parentX,
+      y: parentY,
+      width: parentWidth,
+      height: parentHeight
+    } = parentDimensions;
+    this.#editor._uiManager.editComment(this.#editor, parentX + posX * parentWidth, parentY + posY * parentHeight, {
+      ...options,
+      parentDimensions
+    });
   }
   finish() {
     if (!this.#commentToolbarButton) {
@@ -5383,21 +5541,20 @@ class AnnotationEditor {
         await this._editToolbar.addButton(name, tool);
       }
     }
-    this._editToolbar.addButton("comment", this.addCommentButton());
+    if (!this.hasComment) {
+      this._editToolbar.addButton("comment", this.addCommentButton());
+    }
     this._editToolbar.addButton("delete");
     return this._editToolbar;
   }
   addCommentButtonInToolbar() {
-    if (!this._editToolbar) {
-      return;
-    }
-    this._editToolbar.addButtonBefore("comment", this.addCommentButton(), ".deleteButton");
+    this._editToolbar?.addButtonBefore("comment", this.addCommentButton(), ".deleteButton");
+  }
+  removeCommentButtonFromToolbar() {
+    this._editToolbar?.removeButton("comment");
   }
   removeEditToolbar() {
-    if (!this._editToolbar) {
-      return;
-    }
-    this._editToolbar.remove();
+    this._editToolbar?.remove();
     this._editToolbar = null;
     this.#altText?.destroy();
   }
@@ -5451,19 +5608,22 @@ class AnnotationEditor {
     return this.#comment ||= new Comment(this);
   }
   addStandaloneCommentButton() {
-    this.#comment ||= new Comment(this);
     if (this.#commentStandaloneButton) {
+      this.#commentStandaloneButton.classList.remove("hidden");
+      return;
+    }
+    if (!this.hasComment) {
       return;
     }
     this.#commentStandaloneButton = this.#comment.renderForStandalone();
     this.div.append(this.#commentStandaloneButton);
   }
   removeStandaloneCommentButton() {
-    this.#commentStandaloneButton?.remove();
+    this.#comment.removeStandaloneCommentButton();
     this.#commentStandaloneButton = null;
   }
-  get commentColor() {
-    return null;
+  hideStandaloneCommentButton() {
+    this.#commentStandaloneButton?.classList.add("hidden");
   }
   get comment() {
     const {
@@ -5479,27 +5639,40 @@ class AnnotationEditor {
       richText,
       date,
       deleted,
-      color: this.commentColor
+      color: this.getNonHCMColor(),
+      opacity: this.opacity ?? 1
     };
   }
   set comment(text) {
     this.#comment ||= new Comment(this);
     this.#comment.data = text;
     if (this.hasComment) {
+      this.removeCommentButtonFromToolbar();
       this.addStandaloneCommentButton();
+      this._uiManager.updateComment(this);
     } else {
       this.addCommentButtonInToolbar();
       this.removeStandaloneCommentButton();
+      this._uiManager.removeComment(this);
     }
   }
   setCommentData({
     comment,
+    popupRef,
     richText
   }) {
-    if (!this.#comment) {
-      this.#comment = new Comment(this);
+    if (!popupRef) {
+      return;
     }
+    this.#comment ||= new Comment(this);
     this.#comment.setInitialText(comment, richText);
+    if (!this.annotationElementId) {
+      return;
+    }
+    const storedData = this._uiManager.getAndRemoveDataFromAnnotationStorage(this.annotationElementId);
+    if (storedData) {
+      this.updateFromAnnotationLayer(storedData);
+    }
   }
   get hasEditedComment() {
     return this.#comment?.hasBeenEdited();
@@ -5507,13 +5680,18 @@ class AnnotationEditor {
   get hasComment() {
     return !!this.#comment && !this.#comment.isEmpty() && !this.#comment.isDeleted();
   }
-  async editComment() {
-    if (!this.#comment) {
-      this.#comment = new Comment(this);
-    }
-    this.#comment.edit();
+  async editComment(options) {
+    this.#comment ||= new Comment(this);
+    this.#comment.edit(options);
   }
-  showComment() {}
+  toggleComment(isSelected, visibility = undefined) {
+    if (this.hasComment) {
+      this._uiManager.toggleComment(this, isSelected, visibility);
+    }
+  }
+  setSelectedCommentButton(selected) {
+    this.#comment.setSelectedButton(selected);
+  }
   addComment(serialized) {
     if (this.hasEditedComment) {
       const DEFAULT_POPUP_WIDTH = 180;
@@ -5530,6 +5708,17 @@ class AnnotationEditor {
         rect: [blX, blY, trX, trY]
       };
     }
+  }
+  updateFromAnnotationLayer({
+    popup: {
+      contents,
+      deleted
+    }
+  }) {
+    this.#comment.data = deleted ? null : contents;
+  }
+  get parentBoundingClientRect() {
+    return this.parent.boundingClientRect;
   }
   render() {
     const div = this.div = document.createElement("div");
@@ -5564,6 +5753,7 @@ class AnnotationEditor {
         signal: this._uiManager._signal
       });
     }
+    this.addStandaloneCommentButton();
     this._uiManager._editorUndoBar?.hide();
     return div;
   }
@@ -5673,6 +5863,7 @@ class AnnotationEditor {
       window.addEventListener("pointermove", e => {
         if (!hasDraggingStarted) {
           hasDraggingStarted = true;
+          this._uiManager.toggleComment(this, true, false);
           this._onStartDragging();
         }
         const {
@@ -5774,11 +5965,19 @@ class AnnotationEditor {
   getPDFRect() {
     return this.getRect(0, 0);
   }
+  getNonHCMColor() {
+    return this.color && AnnotationEditor._colorManager.convert(this._uiManager.getNonHCMColor(this.color));
+  }
+  onUpdatedColor() {
+    this.#comment?.onUpdatedColor();
+  }
   getData() {
     const {
       comment: {
         text: str,
+        color,
         date,
+        opacity,
         deleted,
         richText
       },
@@ -5797,7 +5996,9 @@ class AnnotationEditor {
       },
       creationDate,
       modificationDate: date || modificationDate,
-      popupRef: !deleted
+      popupRef: !deleted,
+      color,
+      opacity
     };
   }
   onceAdded(focus) {}
@@ -5944,11 +6145,25 @@ class AnnotationEditor {
     return this._uiManager.direction === "ltr" ? [1, 0] : [0, 0];
   }
   get commentButtonColor() {
-    if (!this.color) {
-      return null;
-    }
-    const [r, g, b] = AnnotationEditor._colorManager.convert(this._uiManager.getNonHCMColor(this.color));
-    return findContrastColor(applyOpacity(r, g, b, this.opacity), CSSConstants.commentForegroundColor);
+    return this._uiManager.makeCommentColor(this.getNonHCMColor(), this.opacity);
+  }
+  get commentPopupPosition() {
+    return this.#comment.commentPopupPositionInLayer;
+  }
+  set commentPopupPosition(pos) {
+    this.#comment.commentPopupPositionInLayer = pos;
+  }
+  hasDefaultPopupPosition() {
+    return this.#comment.hasDefaultPopupPosition();
+  }
+  get commentButtonWidth() {
+    return this.#comment.commentButtonWidth;
+  }
+  get elementBeforePopup() {
+    return this.div;
+  }
+  setCommentButtonStates(options) {
+    this.#comment.setCommentButtonStates(options);
   }
   keydown(event) {
     if (!this.isResizable || event.target !== this.div || event.key !== "Enter") {
@@ -6056,6 +6271,7 @@ class AnnotationEditor {
   }
   select() {
     if (this.isSelected && this._editToolbar) {
+      this._editToolbar.show();
       return;
     }
     this.isSelected = true;
@@ -6086,6 +6302,9 @@ class AnnotationEditor {
     }
     this._editToolbar?.hide();
     this.#altText?.toggleAltTextBadge(true);
+    if (this.hasComment) {
+      this._uiManager.toggleComment(this, false, false);
+    }
   }
   updateParams(type, value) {}
   disableEditing() {}
@@ -6101,6 +6320,9 @@ class AnnotationEditor {
     this.div.focus();
   }
   dblclick(event) {
+    if (event.target.nodeName === "BUTTON") {
+      return;
+    }
     this.enterInEditMode();
     this.parent.updateToolbar({
       mode: this.constructor._editorType,
@@ -6339,6 +6561,7 @@ const SerializableEmpty = Object.freeze({
 class AnnotationStorage {
   #modified = false;
   #modifiedIds = null;
+  #editorsMap = null;
   #storage = new Map();
   constructor() {
     this.onSetModified = null;
@@ -6356,6 +6579,13 @@ class AnnotationStorage {
     return this.#storage.get(key);
   }
   remove(key) {
+    const storedValue = this.#storage.get(key);
+    if (storedValue === undefined) {
+      return;
+    }
+    if (storedValue instanceof AnnotationEditor) {
+      this.#editorsMap.delete(storedValue.annotationElementId);
+    }
     this.#storage.delete(key);
     if (this.#storage.size === 0) {
       this.resetModified();
@@ -6386,8 +6616,11 @@ class AnnotationStorage {
     if (modified) {
       this.#setModified();
     }
-    if (value instanceof AnnotationEditor && typeof this.onAnnotationEditor === "function") {
-      this.onAnnotationEditor(value.constructor._type);
+    if (value instanceof AnnotationEditor) {
+      (this.#editorsMap ||= new Map()).set(value.annotationElementId, value);
+      if (typeof this.onAnnotationEditor === "function") {
+        this.onAnnotationEditor(value.constructor._type);
+      }
     }
   }
   has(key) {
@@ -6485,16 +6718,26 @@ class AnnotationStorage {
   resetModifiedIds() {
     this.#modifiedIds = null;
   }
+  updateEditor(annotationId, data) {
+    const value = this.#editorsMap?.get(annotationId);
+    if (value) {
+      value.updateFromAnnotationLayer(data);
+      return true;
+    }
+    return false;
+  }
   get modifiedIds() {
     if (this.#modifiedIds) {
       return this.#modifiedIds;
     }
     const ids = [];
-    for (const value of this.#storage.values()) {
-      if (!(value instanceof AnnotationEditor) || !value.annotationElementId || !value.serialize()) {
-        continue;
+    if (this.#editorsMap) {
+      for (const value of this.#editorsMap.values()) {
+        if (!value.serialize()) {
+          continue;
+        }
+        ids.push(value.annotationElementId);
       }
-      ids.push(value.annotationElementId);
     }
     return this.#modifiedIds = {
       ids: new Set(ids),
@@ -14946,7 +15189,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "2138ec1";
+const build = "33e638c";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -15438,7 +15681,7 @@ class AnnotationElement {
     return AnnotationElement._hasPopupData(this.data);
   }
   get hasCommentButton() {
-    return this.enableComment && this._isEditable && this.hasPopupElement;
+    return this.enableComment && this.hasPopupElement;
   }
   get commentButtonPosition() {
     const {
@@ -15463,12 +15706,6 @@ class AnnotationElement {
     }
     return null;
   }
-  get commentButtonColor() {
-    if (!this.data.color) {
-      return null;
-    }
-    return findContrastColor(applyOpacity(...this.data.color, this.data.opacity), CSSConstants.commentForegroundColor);
-  }
   _normalizePoint(point) {
     const {
       page: {
@@ -15488,6 +15725,16 @@ class AnnotationElement {
     point[1] = 100 * (point[1] - pageY) / pageHeight;
     return point;
   }
+  get commentText() {
+    const {
+      data
+    } = this;
+    return this.annotationStorage.getRawValue(`${AnnotationEditorPrefix}${data.id}`)?.popup?.contents || data.contentsObj?.str || "";
+  }
+  removePopup() {
+    (this.#popupElement?.popup || this.popup)?.remove();
+    this.#popupElement = this.popup = null;
+  }
   updateEdited(params) {
     if (!this.container) {
       return;
@@ -15506,8 +15753,10 @@ class AnnotationElement {
     }
     let popup = this.#popupElement?.popup || this.popup;
     if (!popup && newPopup?.text) {
-      this._createPopup(newPopup);
-      popup = this.#popupElement.popup;
+      if (!this.parent._commentManager) {
+        this._createPopup(newPopup);
+        popup = this.#popupElement.popup;
+      }
     }
     if (!popup) {
       return;
@@ -15851,6 +16100,9 @@ class AnnotationElement {
     this.container.style.clipPath = `url(#${id})`;
   }
   _createPopup(popupData = null) {
+    if (this.parent._commentManager) {
+      return;
+    }
     const {
       data
     } = this;
@@ -17128,21 +17380,25 @@ class PopupAnnotationElement extends AnnotationElement {
   constructor(parameters) {
     const {
       data,
-      elements
+      elements,
+      parent
     } = parameters;
+    const hasCommentManager = !!parent._commentManager;
     super(parameters, {
-      isRenderable: AnnotationElement._hasPopupData(data)
+      isRenderable: !hasCommentManager && AnnotationElement._hasPopupData(data)
     });
     this.elements = elements;
-    this.popup = null;
+    if (hasCommentManager && AnnotationElement._hasPopupData(data)) {
+      const popup = this.popup = this.#createPopup();
+      for (const element of elements) {
+        element.popup = popup;
+      }
+    } else {
+      this.popup = null;
+    }
   }
-  render() {
-    const {
-      container
-    } = this;
-    container.classList.add("popupAnnotation");
-    container.role = "comment";
-    const popup = this.popup = new PopupElement({
+  #createPopup() {
+    return new PopupElement({
       container: this.container,
       color: this.data.color,
       titleObj: this.data.titleObj,
@@ -17154,8 +17410,16 @@ class PopupAnnotationElement extends AnnotationElement {
       parent: this.parent,
       elements: this.elements,
       open: this.data.open,
-      eventBus: this.linkService.eventBus
+      commentManager: this.parent._commentManager
     });
+  }
+  render() {
+    const {
+      container
+    } = this;
+    container.classList.add("popupAnnotation");
+    container.role = "comment";
+    const popup = this.popup = this.#createPopup();
     const elementIds = [];
     for (const element of this.elements) {
       element.popup = popup;
@@ -17168,6 +17432,7 @@ class PopupAnnotationElement extends AnnotationElement {
   }
 }
 class PopupElement {
+  #commentManager = null;
   #boundKeyDown = this.#keyDown.bind(this);
   #boundHide = this.#hide.bind(this);
   #boundShow = this.#show.bind(this);
@@ -17177,7 +17442,6 @@ class PopupElement {
   #contentsObj = null;
   #dateObj = null;
   #elements = null;
-  #eventBus = null;
   #parent = null;
   #parentRect = null;
   #pinned = false;
@@ -17186,12 +17450,14 @@ class PopupElement {
   #position = null;
   #commentButton = null;
   #commentButtonPosition = null;
-  #commentButtonColor = null;
+  #popupPosition = null;
   #rect = null;
   #richText = null;
   #titleObj = null;
   #updates = null;
   #wasVisible = false;
+  #firstElement = null;
+  #commentText = null;
   constructor({
     container,
     color,
@@ -17204,7 +17470,7 @@ class PopupElement {
     rect,
     parentRect,
     open,
-    eventBus = null
+    commentManager = null
   }) {
     this.#container = container;
     this.#titleObj = titleObj;
@@ -17215,13 +17481,19 @@ class PopupElement {
     this.#rect = rect;
     this.#parentRect = parentRect;
     this.#elements = elements;
-    this.#eventBus = eventBus;
+    this.#commentManager = commentManager;
+    this.#firstElement = elements[0];
     this.#dateObj = PDFDateString.toDateObject(modificationDate);
-    this.trigger = elements.flatMap(e => e.getElementsToTriggerPopup());
-    this.#addEventListeners();
-    this.#container.hidden = true;
-    if (open) {
-      this.#toggle();
+    if (commentManager) {
+      this.#popupAbortController = new AbortController();
+      this.#renderCommentButton();
+    } else {
+      this.trigger = elements.flatMap(e => e.getElementsToTriggerPopup());
+      this.#addEventListeners();
+      this.#container.hidden = true;
+      if (open) {
+        this.#toggle();
+      }
     }
   }
   #addEventListeners() {
@@ -17249,7 +17521,6 @@ class PopupElement {
         signal
       });
     }
-    this.#renderCommentButton();
   }
   #setCommentButtonPosition() {
     const element = this.#elements.find(e => e.hasCommentButton);
@@ -17257,7 +17528,6 @@ class PopupElement {
       return;
     }
     this.#commentButtonPosition = element._normalizePoint(element.commentButtonPosition);
-    this.#commentButtonColor = element.commentButtonColor;
   }
   #renderCommentButton() {
     if (this.#commentButton) {
@@ -17271,31 +17541,29 @@ class PopupElement {
     }
     const button = this.#commentButton = document.createElement("button");
     button.className = "annotationCommentButton";
-    const parentContainer = this.#elements[0].container;
+    const parentContainer = this.#firstElement.container;
     button.style.zIndex = parentContainer.style.zIndex + 1;
     button.tabIndex = 0;
+    button.ariaHasPopup = "dialog";
+    button.ariaControls = "commentPopup";
     const {
       signal
     } = this.#popupAbortController;
-    button.addEventListener("hover", this.#boundToggle, {
-      signal
-    });
     button.addEventListener("keydown", this.#boundKeyDown, {
       signal
     });
     button.addEventListener("click", () => {
-      const [{
-        data: {
-          id: editId
-        },
-        annotationEditorType: mode
-      }] = this.#elements;
-      this.#eventBus?.dispatch("switchannotationeditormode", {
-        source: this,
-        editId,
-        mode,
-        editComment: true
-      });
+      this.#commentManager.toggleCommentPopup(this, true);
+    }, {
+      signal
+    });
+    button.addEventListener("pointerenter", () => {
+      this.#commentManager.toggleCommentPopup(this, false, true);
+    }, {
+      signal
+    });
+    button.addEventListener("pointerleave", () => {
+      this.#commentManager.toggleCommentPopup(this, false, false);
     }, {
       signal
     });
@@ -17304,10 +17572,136 @@ class PopupElement {
     } = button;
     style.left = `calc(${this.#commentButtonPosition[0]}%)`;
     style.top = `calc(${this.#commentButtonPosition[1]}% - var(--comment-button-dim))`;
-    if (this.#commentButtonColor) {
-      style.backgroundColor = this.#commentButtonColor;
+    if (this.commentButtonColor) {
+      style.backgroundColor = this.commentButtonColor;
     }
     parentContainer.after(button);
+  }
+  get commentButtonColor() {
+    const {
+      data: {
+        color,
+        opacity
+      }
+    } = this.#firstElement;
+    if (!color) {
+      return null;
+    }
+    return this.#parent._commentManager.makeCommentColor(color, opacity);
+  }
+  getData() {
+    const {
+      richText,
+      color,
+      opacity,
+      creationDate,
+      modificationDate
+    } = this.#firstElement.data;
+    return {
+      contentsObj: {
+        str: this.comment
+      },
+      richText,
+      color,
+      opacity,
+      creationDate,
+      modificationDate
+    };
+  }
+  get elementBeforePopup() {
+    return this.#commentButton;
+  }
+  get comment() {
+    this.#commentText ||= this.#firstElement.commentText;
+    return this.#commentText;
+  }
+  set comment(text) {
+    const element = this.#firstElement;
+    const {
+      data
+    } = element;
+    if (text === this.comment) {
+      return;
+    }
+    const popup = {
+      deleted: !text,
+      contents: text || ""
+    };
+    if (!element.annotationStorage.updateEditor(data.id, {
+      popup
+    })) {
+      element.annotationStorage.setValue(`${AnnotationEditorPrefix}${data.id}`, {
+        id: data.id,
+        annotationType: data.annotationType,
+        pageIndex: element.parent.page._pageIndex,
+        popup,
+        popupRef: data.popupRef,
+        modificationDate: new Date()
+      });
+    }
+    this.#commentText = text;
+    if (!text) {
+      element.removePopup();
+    }
+  }
+  get parentBoundingClientRect() {
+    return this.#firstElement.layer.getBoundingClientRect();
+  }
+  setCommentButtonStates({
+    selected,
+    hasPopup
+  }) {
+    if (!this.#commentButton) {
+      return;
+    }
+    this.#commentButton.classList.toggle("selected", selected);
+    this.#commentButton.ariaExpanded = hasPopup;
+  }
+  setSelectedCommentButton(selected) {
+    this.#commentButton.classList.toggle("selected", selected);
+  }
+  get commentPopupPosition() {
+    if (this.#popupPosition) {
+      return this.#popupPosition;
+    }
+    const {
+      x,
+      y,
+      height
+    } = this.#commentButton.getBoundingClientRect();
+    const {
+      x: parentX,
+      y: parentY,
+      width: parentWidth,
+      height: parentHeight
+    } = this.#firstElement.layer.getBoundingClientRect();
+    return [(x - parentX) / parentWidth, (y + height - parentY) / parentHeight];
+  }
+  set commentPopupPosition(pos) {
+    this.#popupPosition = pos;
+  }
+  hasDefaultPopupPosition() {
+    return this.#popupPosition === null;
+  }
+  get commentButtonPosition() {
+    return this.#commentButtonPosition;
+  }
+  get commentButtonWidth() {
+    return this.#commentButton.getBoundingClientRect().width / this.parentBoundingClientRect.width;
+  }
+  editComment(options) {
+    const [posX, posY] = this.#popupPosition || this.commentButtonPosition.map(x => x / 100);
+    const parentDimensions = this.parentBoundingClientRect;
+    const {
+      x: parentX,
+      y: parentY,
+      width: parentWidth,
+      height: parentHeight
+    } = parentDimensions;
+    this.#commentManager.showDialog(null, this, parentX + posX * parentWidth, parentY + posY * parentHeight, {
+      ...options,
+      parentDimensions
+    });
   }
   render() {
     if (this.#popup) {
@@ -17405,6 +17799,10 @@ class PopupElement {
     popup,
     deleted
   }) {
+    if (this.#commentManager) {
+      this.#commentText = deleted ? null : popup.text;
+      return;
+    }
     if (deleted || popup?.deleted) {
       this.remove();
       return;
@@ -17445,8 +17843,12 @@ class PopupElement {
     this.#popup = null;
     this.#wasVisible = false;
     this.#pinned = false;
-    for (const element of this.trigger) {
-      element.classList.remove("popupTriggerArea");
+    this.#commentButton?.remove();
+    this.#commentButton = null;
+    if (this.trigger) {
+      for (const element of this.trigger) {
+        element.classList.remove("popupTriggerArea");
+      }
     }
   }
   #setPosition() {
@@ -17488,6 +17890,10 @@ class PopupElement {
     style.top = `${this.#position[1]}%`;
   }
   #toggle() {
+    if (this.#commentManager) {
+      this.#commentManager.toggleCommentPopup(this, false);
+      return;
+    }
     this.#pinned = !this.#pinned;
     if (this.#pinned) {
       this.#show();
@@ -17527,6 +17933,9 @@ class PopupElement {
     this.#container.hidden = true;
   }
   maybeShow() {
+    if (this.#commentManager) {
+      return;
+    }
     this.#addEventListeners();
     if (!this.#wasVisible) {
       return;
@@ -17538,6 +17947,9 @@ class PopupElement {
     this.#container.hidden = false;
   }
   get isVisible() {
+    if (this.#commentManager) {
+      return false;
+    }
     return this.#container.hidden === false;
   }
 }
@@ -18105,7 +18517,8 @@ class AnnotationLayer {
     annotationEditorUIManager,
     page,
     viewport,
-    structTreeLayer
+    structTreeLayer,
+    commentManager
   }) {
     this.div = div;
     this.#accessibilityManager = accessibilityManager;
@@ -18115,6 +18528,7 @@ class AnnotationLayer {
     this.viewport = viewport;
     this.zIndex = 0;
     this._annotationEditorUIManager = annotationEditorUIManager;
+    this._commentManager = commentManager || null;
   }
   hasEditableAnnotations() {
     return this.#editableAnnotations.size > 0;
@@ -18402,10 +18816,15 @@ class FreeTextEditor extends AnnotationEditor {
       keepUndo: true
     });
   }
+  onUpdatedColor() {
+    this.editorDiv.style.color = this.color;
+    this._colorPicker?.update(this.color);
+    super.onUpdatedColor();
+  }
   #updateColor(color) {
     const setColor = col => {
-      this.color = this.editorDiv.style.color = col;
-      this._colorPicker?.update(col);
+      this.color = col;
+      this.onUpdatedColor();
     };
     const savedColor = this.color;
     this.addCommands({
@@ -19846,17 +20265,21 @@ class HighlightEditor extends AnnotationEditor {
   get propertiesToUpdate() {
     return [[AnnotationEditorParamsType.HIGHLIGHT_COLOR, this.color || HighlightEditor._defaultColor], [AnnotationEditorParamsType.HIGHLIGHT_THICKNESS, this.#thickness || HighlightEditor._defaultThickness], [AnnotationEditorParamsType.HIGHLIGHT_FREE, this.#isFreeHighlight]];
   }
+  onUpdatedColor() {
+    this.parent?.drawLayer.updateProperties(this.#id, {
+      root: {
+        fill: this.color,
+        "fill-opacity": this.opacity
+      }
+    });
+    this.#colorPicker?.updateColor(this.color);
+    super.onUpdatedColor();
+  }
   #updateColor(color) {
     const setColorAndOpacity = (col, opa) => {
       this.color = col;
       this.opacity = opa;
-      this.parent?.drawLayer.updateProperties(this.#id, {
-        root: {
-          fill: col,
-          "fill-opacity": opa
-        }
-      });
-      this.#colorPicker?.updateColor(col);
+      this.onUpdatedColor();
     };
     const savedColor = this.color;
     const savedOpacity = this.opacity;
@@ -20544,6 +20967,10 @@ class DrawingEditor extends AnnotationEditor {
     this.#mustBeCommitted = params.mustBeCommitted || false;
     this._addOutlines(params);
   }
+  onUpdatedColor() {
+    this._colorPicker?.update(this.color);
+    super.onUpdatedColor();
+  }
   _addOutlines(params) {
     if (params.drawOutlines) {
       this.#createDrawOutlines(params);
@@ -20642,7 +21069,7 @@ class DrawingEditor extends AnnotationEditor {
       }
       this.parent?.drawLayer.updateProperties(this._drawId, options.toSVGProperties());
       if (type === this.colorType) {
-        this._colorPicker?.update(val);
+        this.onUpdatedColor();
       }
     };
     this.addCommands({
@@ -23842,6 +24269,9 @@ class AnnotationEditorLayer {
   toggleAnnotationLayerPointerEvents(enabled = false) {
     this.#annotationLayer?.div.classList.toggle("disabled", !enabled);
   }
+  get #allEditorsIterator() {
+    return this.#editors.size !== 0 ? this.#editors.values() : this.#uiManager.getEditors(this.pageIndex);
+  }
   async enable() {
     this.#isEnabling = true;
     this.div.tabIndex = 0;
@@ -23849,7 +24279,7 @@ class AnnotationEditorLayer {
     this.#textLayerDblClickAC?.abort();
     this.#textLayerDblClickAC = null;
     const annotationElementIds = new Set();
-    for (const editor of this.#editors.values()) {
+    for (const editor of this.#allEditorsIterator) {
       editor.enableEditing();
       editor.show(true);
       if (editor.annotationElementId) {
@@ -23927,7 +24357,7 @@ class AnnotationEditorLayer {
         if (editor?.annotationElementId === null) {
           e.stopPropagation();
           e.preventDefault();
-          editor.dblclick();
+          editor.dblclick(e);
         }
       }, {
         signal,
@@ -23936,7 +24366,7 @@ class AnnotationEditorLayer {
     }
     const changedAnnotations = new Map();
     const resetAnnotations = new Map();
-    for (const editor of this.#editors.values()) {
+    for (const editor of this.#allEditorsIterator) {
       editor.disableEditing();
       if (!editor.annotationElementId) {
         continue;
