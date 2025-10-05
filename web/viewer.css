@@ -3813,6 +3813,13 @@
       cursor:var(--editorFreeHighlight-editing-cursor);
     }
 
+.page:has(.annotationEditorLayer.nonEditing)
+  .annotationLayer
+  .editorAnnotation{
+  position:absolute;
+  pointer-events:none;
+}
+
 :is(#viewerContainer.pdfPresentationMode:fullscreen,.annotationEditorLayer.disabled) .noAltTextBadge{
     display:none !important;
   }
@@ -5281,6 +5288,9 @@
   --sidebar-min-width:180px;
   --sidebar-max-width:632px;
   --sidebar-width:239px;
+  --resizer-width:4px;
+  --csstools-light-dark-toggle--127:var(--csstools-color-scheme--light) #00cadb;
+  --resizer-hover-bg-color:var(--csstools-light-dark-toggle--127, #0062fa);
 }
 
 @supports (color: light-dark(red, red)){
@@ -5299,6 +5309,12 @@
 }
 }
 
+@supports (color: light-dark(red, red)){
+.sidebar{
+  --resizer-hover-bg-color:light-dark(#0062fa, #00cadb);
+}
+}
+
 @supports not (color: light-dark(tan, tan)){
 
 .sidebar *{
@@ -5309,6 +5325,8 @@
   --csstools-light-dark-toggle--125:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.2);
   --csstools-light-dark-toggle--126:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.4);
   --sidebar-box-shadow:0 0.25px 0.75px var(--csstools-light-dark-toggle--125, rgb(0 0 0 / 0.05)), 0 2px 6px 0 var(--csstools-light-dark-toggle--126, rgb(0 0 0 / 0.1));
+  --csstools-light-dark-toggle--127:var(--csstools-color-scheme--light) #00cadb;
+  --resizer-hover-bg-color:var(--csstools-light-dark-toggle--127, #0062fa);
   }
 }
 
@@ -5318,6 +5336,7 @@
     --sidebar-bg-color:Canvas;
     --sidebar-border-color:CanvasText;
     --sidebar-box-shadow:none;
+    --resizer-hover-bg-color:CanvasText;
 }
   }
 
@@ -5335,13 +5354,23 @@
 }
 
 .sidebar .sidebarResizer{
-    width:4px;
+    width:var(--resizer-width);
     background-color:transparent;
     forced-color-adjust:none;
     cursor:ew-resize;
     position:absolute;
     inset-block:calc(var(--sidebar-padding) + var(--sidebar-border-radius));
+    inset-inline-start:calc(0px - var(--resizer-width) / 2);
+    transition:background-color 0.5s ease-in-out;
+    box-sizing:border-box;
+    border:1px solid transparent;
+    border-block-width:0;
+    background-clip:content-box;
   }
+
+:is(.sidebar .sidebarResizer):hover{
+      background-color:var(--resizer-hover-bg-color);
+    }
 
 .sidebar.resizing{
     cursor:ew-resize;
@@ -5364,8 +5393,8 @@
   --page-border:9px solid transparent;
   --spreadHorizontalWrapped-margin-LR:-3.5px;
   --loading-icon-delay:400ms;
-  --csstools-light-dark-toggle--127:var(--csstools-color-scheme--light) #0df;
-  --focus-ring-color:var(--csstools-light-dark-toggle--127, #0060df);
+  --csstools-light-dark-toggle--128:var(--csstools-color-scheme--light) #0df;
+  --focus-ring-color:var(--csstools-light-dark-toggle--128, #0060df);
   --focus-ring-outline:2px solid var(--focus-ring-color);
 }
 
@@ -5378,8 +5407,8 @@
 @supports not (color: light-dark(tan, tan)){
 
 :root *{
-  --csstools-light-dark-toggle--127:var(--csstools-color-scheme--light) #0df;
-  --focus-ring-color:var(--csstools-light-dark-toggle--127, #0060df);
+  --csstools-light-dark-toggle--128:var(--csstools-color-scheme--light) #0df;
+  --focus-ring-color:var(--csstools-light-dark-toggle--128, #0060df);
   }
 }
 
@@ -5461,6 +5490,10 @@
 
 :is(:is(.pdfViewer .canvasWrapper) canvas) .structTree{
         contain:strict;
+      }
+
+.detailView:is(:is(.pdfViewer .canvasWrapper) canvas){
+        image-rendering:pixelated;
       }
 
 .pdfViewer .page{

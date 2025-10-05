@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = ec4f616
+ * pdfjsBuild = f56dc86
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -4017,6 +4017,9 @@ class AnnotationEditorUIManager {
   getMode() {
     return this.#mode;
   }
+  isEditingMode() {
+    return this.#mode !== AnnotationEditorType.NONE;
+  }
   get imageManager() {
     return shadow(this, "imageManager", new ImageManager());
   }
@@ -4852,6 +4855,7 @@ class AnnotationEditor {
   #resizersDiv = null;
   #lastPointerCoords = null;
   #savedDimensions = null;
+  #fakeAnnotation = null;
   #focusAC = null;
   #focusedResizerName = "";
   #hasBeenClicked = false;
@@ -5042,6 +5046,8 @@ class AnnotationEditor {
       this.pageDimensions = parent.pageDimensions;
     } else {
       this.#stopResizing();
+      this.#fakeAnnotation?.remove();
+      this.#fakeAnnotation = null;
     }
     this.parent = parent;
   }
@@ -5598,7 +5604,9 @@ class AnnotationEditor {
   }
   addStandaloneCommentButton() {
     if (this.#commentStandaloneButton) {
-      this.#commentStandaloneButton.classList.remove("hidden");
+      if (this._uiManager.isEditingMode()) {
+        this.#commentStandaloneButton.classList.remove("hidden");
+      }
       return;
     }
     if (!this.hasComment) {
@@ -6415,6 +6423,23 @@ class AnnotationEditor {
     }
     this.#disabled = true;
   }
+  updateFakeAnnotationElement(annotationLayer) {
+    if (!this.#fakeAnnotation && !this.deleted) {
+      this.#fakeAnnotation = annotationLayer.addFakeAnnotation(this);
+      return;
+    }
+    if (this.deleted) {
+      this.#fakeAnnotation.remove();
+      this.#fakeAnnotation = null;
+      return;
+    }
+    if (this.hasEditedComment || this._hasBeenMoved || this._hasBeenResized) {
+      this.#fakeAnnotation.updateEdited({
+        rect: this.getPDFRect(),
+        popup: this.comment
+      });
+    }
+  }
   renderAnnotationElement(annotation) {
     if (this.deleted) {
       annotation.hide();
@@ -6682,10 +6707,12 @@ class AnnotationStorage {
     let numberOfDeletedComments = 0;
     for (const value of this.#storage.values()) {
       if (!(value instanceof AnnotationEditor)) {
-        if (value.popup.deleted) {
-          numberOfDeletedComments += 1;
-        } else if (value.popup) {
-          numberOfEditedComments += 1;
+        if (value.popup) {
+          if (value.popup.deleted) {
+            numberOfDeletedComments += 1;
+          } else {
+            numberOfEditedComments += 1;
+          }
         }
         continue;
       }
@@ -15740,7 +15767,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "ec4f616";
+const build = "f56dc86";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -16312,6 +16339,30 @@ class AnnotationElement {
     } = this;
     return this.annotationStorage.getRawValue(`${AnnotationEditorPrefix}${data.id}`)?.popup?.contents || data.contentsObj?.str || "";
   }
+  set commentText(text) {
+    const {
+      data
+    } = this;
+    const popup = {
+      deleted: !text,
+      contents: text || ""
+    };
+    if (!this.annotationStorage.updateEditor(data.id, {
+      popup
+    })) {
+      this.annotationStorage.setValue(`${AnnotationEditorPrefix}${data.id}`, {
+        id: data.id,
+        annotationType: data.annotationType,
+        pageIndex: this.parent.page._pageIndex,
+        popup,
+        popupRef: data.popupRef,
+        modificationDate: new Date()
+      });
+    }
+    if (!text) {
+      this.removePopup();
+    }
+  }
   removePopup() {
     (this.#popupElement?.popup || this.popup)?.remove();
     this.#popupElement = this.popup = null;
@@ -16334,10 +16385,8 @@ class AnnotationElement {
     }
     let popup = this.#popupElement?.popup || this.popup;
     if (!popup && newPopup?.text) {
-      if (!this.parent._commentManager) {
-        this._createPopup(newPopup);
-        popup = this.#popupElement.popup;
-      }
+      this._createPopup(newPopup);
+      popup = this.#popupElement.popup;
     }
     if (!popup) {
       return;
@@ -16823,6 +16872,52 @@ class AnnotationElement {
   }
   get height() {
     return this.data.rect[3] - this.data.rect[1];
+  }
+}
+class EditorAnnotationElement extends AnnotationElement {
+  constructor(parameters) {
+    super(parameters, {
+      isRenderable: true,
+      ignoreBorder: true
+    });
+    this.editor = parameters.editor;
+  }
+  render() {
+    this.container.className = "editorAnnotation";
+    return this.container;
+  }
+  createOrUpdatePopup() {
+    const {
+      editor
+    } = this;
+    if (!editor.hasComment) {
+      return;
+    }
+    this._createPopup(editor.comment);
+    this.extraPopupElement.popup.renderCommentButton();
+  }
+  get hasCommentButton() {
+    return this.enableComment && this.editor.hasComment;
+  }
+  get commentButtonPosition() {
+    return this.editor.commentButtonPositionInPage;
+  }
+  get commentText() {
+    return this.editor.comment.text;
+  }
+  set commentText(text) {
+    this.editor.comment = text;
+    if (!text) {
+      this.removePopup();
+    }
+  }
+  get commentData() {
+    return this.editor.getData();
+  }
+  remove() {
+    this.container.remove();
+    this.container = null;
+    this.removePopup();
   }
 }
 class LinkAnnotationElement extends AnnotationElement {
@@ -17449,6 +17544,9 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
               value = new Date(2000, 0, 1, parts[0], parts[1], parts[2] || 0).valueOf();
               target.step = "";
             } else {
+              if (!value.includes("T")) {
+                value = `${value}T00:00`;
+              }
               value = new Date(value).valueOf();
             }
             target.type = "text";
@@ -18180,7 +18278,7 @@ class PopupElement {
     }
   }
   #updateCommentButtonPosition() {
-    if (this.#firstElement.extraPopupElement) {
+    if (this.#firstElement.extraPopupElement && !this.#firstElement.editor) {
       return;
     }
     this.renderCommentButton();
@@ -18240,33 +18338,10 @@ class PopupElement {
     return this.#commentText;
   }
   set comment(text) {
-    const element = this.#firstElement;
-    const {
-      data
-    } = element;
     if (text === this.comment) {
       return;
     }
-    const popup = {
-      deleted: !text,
-      contents: text || ""
-    };
-    if (!element.annotationStorage.updateEditor(data.id, {
-      popup
-    })) {
-      element.annotationStorage.setValue(`${AnnotationEditorPrefix}${data.id}`, {
-        id: data.id,
-        annotationType: data.annotationType,
-        pageIndex: element.parent.page._pageIndex,
-        popup,
-        popupRef: data.popupRef,
-        modificationDate: new Date()
-      });
-    }
-    this.#commentText = text;
-    if (!text) {
-      element.removePopup();
-    }
+    this.#firstElement.commentText = this.#commentText = text;
   }
   get parentBoundingClientRect() {
     return this.#firstElement.layer.getBoundingClientRect();
@@ -19120,8 +19195,10 @@ class FileAttachmentAnnotationElement extends AnnotationElement {
 class AnnotationLayer {
   #accessibilityManager = null;
   #annotationCanvasMap = null;
+  #annotationStorage = null;
   #editableAnnotations = new Map();
   #structTreeLayer = null;
+  #linkService = null;
   constructor({
     div,
     accessibilityManager,
@@ -19130,12 +19207,16 @@ class AnnotationLayer {
     page,
     viewport,
     structTreeLayer,
-    commentManager
+    commentManager,
+    linkService,
+    annotationStorage
   }) {
     this.div = div;
     this.#accessibilityManager = accessibilityManager;
     this.#annotationCanvasMap = annotationCanvasMap;
     this.#structTreeLayer = structTreeLayer || null;
+    this.#linkService = linkService || null;
+    this.#annotationStorage = annotationStorage || new AnnotationStorage();
     this.page = page;
     this.viewport = viewport;
     this.zIndex = 0;
@@ -19171,12 +19252,12 @@ class AnnotationLayer {
     const elementParams = {
       data: null,
       layer,
-      linkService: params.linkService,
+      linkService: this.#linkService,
       downloadManager: params.downloadManager,
       imageResourcesPath: params.imageResourcesPath || "",
       renderForms: params.renderForms !== false,
       svgFactory: new DOMSVGFactory(),
-      annotationStorage: params.annotationStorage || new AnnotationStorage(),
+      annotationStorage: this.#annotationStorage,
       enableComment: params.enableComment === true,
       enableScripting: params.enableScripting === true,
       hasJSActions: params.hasJSActions,
@@ -19226,11 +19307,11 @@ class AnnotationLayer {
     }
     this.#setAnnotationCanvasMap();
   }
-  async addLinkAnnotations(annotations, linkService) {
+  async addLinkAnnotations(annotations) {
     const elementParams = {
       data: null,
       layer: this.div,
-      linkService,
+      linkService: this.#linkService,
       svgFactory: new DOMSVGFactory(),
       parent: this
     };
@@ -19297,6 +19378,33 @@ class AnnotationLayer {
   }
   getEditableAnnotation(id) {
     return this.#editableAnnotations.get(id);
+  }
+  addFakeAnnotation(editor) {
+    const {
+      div
+    } = this;
+    const {
+      id,
+      rotation
+    } = editor;
+    const element = new EditorAnnotationElement({
+      data: {
+        id,
+        rect: editor.getPDFRect(),
+        rotation
+      },
+      editor,
+      layer: div,
+      parent: this,
+      enableComment: !!this._commentManager,
+      linkService: this.#linkService,
+      annotationStorage: this.#annotationStorage
+    });
+    const htmlElement = element.render();
+    div.append(htmlElement);
+    this.#accessibilityManager?.moveElementInDOM(div, htmlElement, htmlElement, false);
+    element.createOrUpdatePopup();
+    return element;
   }
   static get _defaultBorderStyle() {
     return shadow(this, "_defaultBorderStyle", Object.freeze({
@@ -24820,6 +24928,7 @@ class AnnotationEditorLayer {
     this.#cleanup();
     switch (mode) {
       case AnnotationEditorType.NONE:
+        this.div.classList.toggle("nonEditing", true);
         this.disableTextSelection();
         this.togglePointerEvents(false);
         this.toggleAnnotationLayerPointerEvents(true);
@@ -24844,6 +24953,7 @@ class AnnotationEditorLayer {
     const {
       classList
     } = this.div;
+    classList.toggle("nonEditing", false);
     if (mode === AnnotationEditorType.POPUP) {
       classList.toggle("commentEditing", true);
     } else {
@@ -24882,6 +24992,7 @@ class AnnotationEditorLayer {
     this.#isEnabling = true;
     this.div.tabIndex = 0;
     this.togglePointerEvents(true);
+    this.div.classList.toggle("nonEditing", false);
     this.#textLayerDblClickAC?.abort();
     this.#textLayerDblClickAC = null;
     const annotationElementIds = new Set();
@@ -24893,25 +25004,23 @@ class AnnotationEditorLayer {
         annotationElementIds.add(editor.annotationElementId);
       }
     }
-    if (!this.#annotationLayer) {
-      this.#isEnabling = false;
-      return;
-    }
-    const editables = this.#annotationLayer.getEditableAnnotations();
-    for (const editable of editables) {
-      editable.hide();
-      if (this.#uiManager.isDeletedAnnotationElement(editable.data.id)) {
-        continue;
+    const annotationLayer = this.#annotationLayer;
+    if (annotationLayer) {
+      for (const editable of annotationLayer.getEditableAnnotations()) {
+        editable.hide();
+        if (this.#uiManager.isDeletedAnnotationElement(editable.data.id)) {
+          continue;
+        }
+        if (annotationElementIds.has(editable.data.id)) {
+          continue;
+        }
+        const editor = await this.deserialize(editable);
+        if (!editor) {
+          continue;
+        }
+        this.addOrRebuild(editor);
+        editor.enableEditing();
       }
-      if (annotationElementIds.has(editable.data.id)) {
-        continue;
-      }
-      const editor = await this.deserialize(editable);
-      if (!editor) {
-        continue;
-      }
-      this.addOrRebuild(editor);
-      editor.enableEditing();
     }
     this.#isEnabling = false;
     this.#uiManager._eventBus.dispatch("editorsrendered", {
@@ -24923,6 +25032,7 @@ class AnnotationEditorLayer {
     this.#isDisabling = true;
     this.div.tabIndex = -1;
     this.togglePointerEvents(false);
+    this.div.classList.toggle("nonEditing", true);
     if (this.#textLayer && !this.#textLayerDblClickAC) {
       this.#textLayerDblClickAC = new AbortController();
       const signal = this.#uiManager.combinedSignal(this.#textLayerDblClickAC);
@@ -24970,24 +25080,26 @@ class AnnotationEditorLayer {
         capture: true
       });
     }
-    const changedAnnotations = new Map();
-    const resetAnnotations = new Map();
-    for (const editor of this.#allEditorsIterator) {
-      editor.disableEditing();
-      if (!editor.annotationElementId) {
-        continue;
+    const annotationLayer = this.#annotationLayer;
+    if (annotationLayer) {
+      const changedAnnotations = new Map();
+      const resetAnnotations = new Map();
+      for (const editor of this.#allEditorsIterator) {
+        editor.disableEditing();
+        if (!editor.annotationElementId) {
+          editor.updateFakeAnnotationElement(annotationLayer);
+          continue;
+        }
+        if (editor.serialize() !== null) {
+          changedAnnotations.set(editor.annotationElementId, editor);
+          continue;
+        } else {
+          resetAnnotations.set(editor.annotationElementId, editor);
+        }
+        this.getEditableAnnotation(editor.annotationElementId)?.show();
+        editor.remove();
       }
-      if (editor.serialize() !== null) {
-        changedAnnotations.set(editor.annotationElementId, editor);
-        continue;
-      } else {
-        resetAnnotations.set(editor.annotationElementId, editor);
-      }
-      this.getEditableAnnotation(editor.annotationElementId)?.show();
-      editor.remove();
-    }
-    if (this.#annotationLayer) {
-      const editables = this.#annotationLayer.getEditableAnnotations();
+      const editables = annotationLayer.getEditableAnnotations();
       for (const editable of editables) {
         const {
           id
