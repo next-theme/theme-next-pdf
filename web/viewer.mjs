@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = f56dc86
+ * pdfjsBuild = 30fdf16
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -5272,6 +5272,7 @@ class CommentPopup {
         }
       });
       this.#editor.comment = null;
+      this.#editor.focus();
       this.destroy();
     });
     del.addEventListener("contextmenu", noContextMenu);
@@ -11472,8 +11473,7 @@ class TextAccessibilityManager {
     if (children.length === 0) {
       return id;
     }
-    const elementToCompare = contentElement || element;
-    const index = binarySearchFirstItem(children, node => TextAccessibilityManager.#compareElementPositions(elementToCompare, node) < 0);
+    const index = binarySearchFirstItem(children, node => TextAccessibilityManager.#compareElementPositions(element, node) < 0);
     if (index === 0) {
       children[0].before(element);
     } else {
