@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 30fdf16
+ * pdfjsBuild = b0e8c39
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -331,7 +331,8 @@ const DrawOPS = {
   moveTo: 0,
   lineTo: 1,
   curveTo: 2,
-  closePath: 3
+  quadraticCurveTo: 3,
+  closePath: 4
 };
 const PasswordResponses = {
   NEED_PASSWORD: 1,
@@ -519,6 +520,9 @@ class FeatureTest {
   }
   static get isImageDecoderSupported() {
     return shadow(this, "isImageDecoderSupported", typeof ImageDecoder !== "undefined");
+  }
+  static get isFloat16ArraySupported() {
+    return shadow(this, "isFloat16ArraySupported", typeof Float16Array !== "undefined");
   }
   static get platform() {
     const {
@@ -1297,6 +1301,9 @@ class BaseStream {
   }
   getBaseStreams() {
     return null;
+  }
+  getOriginalStream() {
+    return this.stream?.getOriginalStream() || this;
   }
 }
 
@@ -3903,7 +3910,7 @@ class DecodeStream extends BaseStream {
     return new Stream(this.buffer, start, length, dict);
   }
   getBaseStreams() {
-    return this.str ? this.str.getBaseStreams() : null;
+    return this.stream ? this.stream.getBaseStreams() : null;
   }
 }
 class StreamsSequenceStream extends DecodeStream {
@@ -6984,7 +6991,7 @@ class Ascii85Stream extends DecodeStream {
       maybeLength *= 0.8;
     }
     super(maybeLength);
-    this.str = str;
+    this.stream = str;
     this.dict = str.dict;
     this.input = new Uint8Array(5);
   }
@@ -6992,7 +6999,7 @@ class Ascii85Stream extends DecodeStream {
     const TILDA_CHAR = 0x7e;
     const Z_LOWER_CHAR = 0x7a;
     const EOF = -1;
-    const str = this.str;
+    const str = this.stream;
     let c = str.getByte();
     while (isWhiteSpace(c)) {
       c = str.getByte();
@@ -7050,13 +7057,13 @@ class AsciiHexStream extends DecodeStream {
       maybeLength *= 0.5;
     }
     super(maybeLength);
-    this.str = str;
+    this.stream = str;
     this.dict = str.dict;
     this.firstDigit = -1;
   }
   readBlock() {
     const UPSTREAM_BLOCK_SIZE = 8000;
-    const bytes = this.str.getBytes(UPSTREAM_BLOCK_SIZE);
+    const bytes = this.stream.getBytes(UPSTREAM_BLOCK_SIZE);
     if (!bytes.length) {
       this.eof = true;
       return;
@@ -7610,7 +7617,7 @@ class CCITTFaxDecoder {
 class CCITTFaxStream extends DecodeStream {
   constructor(str, maybeLength, params) {
     super(maybeLength);
-    this.str = str;
+    this.stream = str;
     this.dict = str.dict;
     if (!(params instanceof Dict)) {
       params = Dict.empty;
@@ -7655,7 +7662,7 @@ const fixedDistCodeTab = [new Int32Array([0x50000, 0x50010, 0x50008, 0x50018, 0x
 class FlateStream extends DecodeStream {
   constructor(str, maybeLength) {
     super(maybeLength);
-    this.str = str;
+    this.stream = str;
     this.dict = str.dict;
     const cmf = str.getByte();
     const flg = str.getByte();
@@ -7685,8 +7692,8 @@ class FlateStream extends DecodeStream {
     return data.subarray(0, length);
   }
   async asyncGetBytes() {
-    this.str.reset();
-    const bytes = this.str.getBytes();
+    this.stream.reset();
+    const bytes = this.stream.getBytes();
     try {
       const {
         readable,
@@ -7712,7 +7719,7 @@ class FlateStream extends DecodeStream {
       }
       return data;
     } catch {
-      this.str = new Stream(bytes, 2, bytes.length, this.str.dict);
+      this.stream = new Stream(bytes, 2, bytes.length, this.stream.dict);
       this.reset();
       return null;
     }
@@ -7721,7 +7728,7 @@ class FlateStream extends DecodeStream {
     return true;
   }
   getBits(bits) {
-    const str = this.str;
+    const str = this.stream;
     let codeSize = this.codeSize;
     let codeBuf = this.codeBuf;
     let b;
@@ -7738,7 +7745,7 @@ class FlateStream extends DecodeStream {
     return b;
   }
   getCode(table) {
-    const str = this.str;
+    const str = this.stream;
     const codes = table[0];
     const maxLen = table[1];
     let codeSize = this.codeSize;
@@ -7796,7 +7803,7 @@ class FlateStream extends DecodeStream {
   }
   readBlock() {
     let buffer, hdr, len;
-    const str = this.str;
+    const str = this.stream;
     try {
       hdr = this.getBits(3);
     } catch (ex) {
@@ -10108,7 +10115,7 @@ class JpxStream extends DecodeStream {
 class LZWStream extends DecodeStream {
   constructor(str, maybeLength, earlyChange) {
     super(maybeLength);
-    this.str = str;
+    this.stream = str;
     this.dict = str.dict;
     this.cachedData = 0;
     this.bitsCached = 0;
@@ -10133,7 +10140,7 @@ class LZWStream extends DecodeStream {
     let bitsCached = this.bitsCached;
     let cachedData = this.cachedData;
     while (bitsCached < n) {
-      const c = this.str.getByte();
+      const c = this.stream.getByte();
       if (c === -1) {
         this.eof = true;
         return null;
@@ -10238,7 +10245,7 @@ class PredictorStream extends DecodeStream {
       throw new FormatError(`Unsupported predictor: ${predictor}`);
     }
     this.readBlock = predictor === 2 ? this.readBlockTiff : this.readBlockPng;
-    this.str = str;
+    this.stream = str;
     this.dict = str.dict;
     const colors = this.colors = params.get("Colors") || 1;
     const bits = this.bits = params.get("BPC", "BitsPerComponent") || 8;
@@ -10253,7 +10260,7 @@ class PredictorStream extends DecodeStream {
     const buffer = this.ensureBuffer(bufferLength + rowBytes);
     const bits = this.bits;
     const colors = this.colors;
-    const rawBytes = this.str.getBytes(rowBytes);
+    const rawBytes = this.stream.getBytes(rowBytes);
     this.eof = !rawBytes.length;
     if (this.eof) {
       return;
@@ -10322,8 +10329,8 @@ class PredictorStream extends DecodeStream {
   readBlockPng() {
     const rowBytes = this.rowBytes;
     const pixBytes = this.pixBytes;
-    const predictor = this.str.getByte();
-    const rawBytes = this.str.getBytes(rowBytes);
+    const predictor = this.stream.getByte();
+    const rawBytes = this.stream.getBytes(rowBytes);
     this.eof = !rawBytes.length;
     if (this.eof) {
       return;
@@ -10412,11 +10419,11 @@ class PredictorStream extends DecodeStream {
 class RunLengthStream extends DecodeStream {
   constructor(str, maybeLength) {
     super(maybeLength);
-    this.str = str;
+    this.stream = str;
     this.dict = str.dict;
   }
   readBlock() {
-    const repeatHeader = this.str.getBytes(2);
+    const repeatHeader = this.stream.getBytes(2);
     if (!repeatHeader || repeatHeader.length < 2 || repeatHeader[0] === 128) {
       this.eof = true;
       return;
@@ -10428,7 +10435,7 @@ class RunLengthStream extends DecodeStream {
       buffer = this.ensureBuffer(bufferLength + n + 1);
       buffer[bufferLength++] = repeatHeader[1];
       if (n > 0) {
-        const source = this.str.getBytes(n);
+        const source = this.stream.getBytes(n);
         buffer.set(source, bufferLength);
         bufferLength += n;
       }
@@ -19539,16 +19546,16 @@ function lookupCmap(ranges, unicode) {
 function compileGlyf(code, cmds, font) {
   function moveTo(x, y) {
     if (firstPoint) {
-      cmds.add("L", firstPoint);
+      cmds.add(DrawOPS.lineTo, firstPoint);
     }
     firstPoint = [x, y];
-    cmds.add("M", [x, y]);
+    cmds.add(DrawOPS.moveTo, [x, y]);
   }
   function lineTo(x, y) {
-    cmds.add("L", [x, y]);
+    cmds.add(DrawOPS.lineTo, [x, y]);
   }
   function quadraticCurveTo(xa, ya, x, y) {
-    cmds.add("Q", [xa, ya, x, y]);
+    cmds.add(DrawOPS.quadraticCurveTo, [xa, ya, x, y]);
   }
   let i = 0;
   const numberOfContours = readInt16(code, i);
@@ -19701,16 +19708,16 @@ function compileGlyf(code, cmds, font) {
 function compileCharString(charStringCode, cmds, font, glyphId) {
   function moveTo(x, y) {
     if (firstPoint) {
-      cmds.add("L", firstPoint);
+      cmds.add(DrawOPS.lineTo, firstPoint);
     }
     firstPoint = [x, y];
-    cmds.add("M", [x, y]);
+    cmds.add(DrawOPS.moveTo, [x, y]);
   }
   function lineTo(x, y) {
-    cmds.add("L", [x, y]);
+    cmds.add(DrawOPS.lineTo, [x, y]);
   }
   function bezierCurveTo(x1, y1, x2, y2, x, y) {
-    cmds.add("C", [x1, y1, x2, y2, x, y]);
+    cmds.add(DrawOPS.curveTo, [x1, y1, x2, y2, x, y]);
   }
   const stack = [];
   let x = 0,
@@ -20064,7 +20071,7 @@ class Commands {
       for (let i = 0, ii = args.length; i < ii; i += 2) {
         Util.applyTransform(args, currentTransform, i);
       }
-      this.cmds.push(`${cmd}${args.join(" ")}`);
+      this.cmds.push(cmd, ...args);
     } else {
       this.cmds.push(cmd);
     }
@@ -20081,8 +20088,8 @@ class Commands {
   restore() {
     this.currentTransform = this.transformStack.pop() || [1, 0, 0, 1, 0, 0];
   }
-  getSVG() {
-    return this.cmds.join("");
+  getPath() {
+    return new (FeatureTest.isFloat16ArraySupported ? Float16Array : Float32Array)(this.cmds);
   }
 }
 class CompiledFont {
@@ -20131,8 +20138,8 @@ class CompiledFont {
     const cmds = new Commands();
     cmds.transform(fontMatrix.slice());
     this.compileGlyphImpl(code, cmds, glyphId);
-    cmds.add("Z");
-    return cmds.getSVG();
+    cmds.add(DrawOPS.closePath);
+    return cmds.getPath();
   }
   compileGlyphImpl() {
     unreachable("Children classes should implement this.");
@@ -53606,7 +53613,9 @@ class Intersector {
   #intersectors = [];
   #grid = [];
   #minX;
+  #maxX;
   #minY;
+  #maxY;
   #invXRatio;
   #invYRatio;
   constructor(annotations) {
@@ -53628,6 +53637,8 @@ class Intersector {
     }
     this.#minX = minX;
     this.#minY = minY;
+    this.#maxX = maxX;
+    this.#maxY = maxY;
     this.#invXRatio = (STEPS - 1) / (maxX - minX);
     this.#invYRatio = (STEPS - 1) / (maxY - minY);
     for (const intersector of intersectors) {
@@ -53649,16 +53660,15 @@ class Intersector {
   #getGridIndex(x, y) {
     const i = Math.floor((x - this.#minX) * this.#invXRatio);
     const j = Math.floor((y - this.#minY) * this.#invYRatio);
-    return i >= 0 && i < STEPS && j >= 0 && j < STEPS ? i + j * STEPS : -1;
+    return i + j * STEPS;
   }
   addGlyph(transform, width, height, glyph) {
     const x = transform[4] + width / 2;
     const y = transform[5] + height / 2;
-    const index = this.#getGridIndex(x, y);
-    if (index < 0) {
+    if (x < this.#minX || y < this.#minY || x > this.#maxX || y > this.#maxY) {
       return;
     }
-    const intersectors = this.#grid[index];
+    const intersectors = this.#grid[this.#getGridIndex(x, y)];
     if (!intersectors) {
       return;
     }
@@ -54051,7 +54061,7 @@ const chunkSize = 512;
 class DecryptStream extends DecodeStream {
   constructor(str, maybeLength, decrypt) {
     super(maybeLength);
-    this.str = str;
+    this.stream = str;
     this.dict = str.dict;
     this.decrypt = decrypt;
     this.nextChunk = null;
@@ -54062,14 +54072,14 @@ class DecryptStream extends DecodeStream {
     if (this.initialized) {
       chunk = this.nextChunk;
     } else {
-      chunk = this.str.getBytes(chunkSize);
+      chunk = this.stream.getBytes(chunkSize);
       this.initialized = true;
     }
     if (!chunk?.length) {
       this.eof = true;
       return;
     }
-    this.nextChunk = this.str.getBytes(chunkSize);
+    this.nextChunk = this.stream.getBytes(chunkSize);
     const hasMoreData = this.nextChunk?.length > 0;
     const decrypt = this.decrypt;
     chunk = decrypt(chunk, !hasMoreData);

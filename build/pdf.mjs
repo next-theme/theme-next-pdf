@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 30fdf16
+ * pdfjsBuild = b0e8c39
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -331,7 +331,8 @@ const DrawOPS = {
   moveTo: 0,
   lineTo: 1,
   curveTo: 2,
-  closePath: 3
+  quadraticCurveTo: 3,
+  closePath: 4
 };
 const PasswordResponses = {
   NEED_PASSWORD: 1,
@@ -519,6 +520,9 @@ class util_FeatureTest {
   }
   static get isImageDecoderSupported() {
     return shadow(this, "isImageDecoderSupported", typeof ImageDecoder !== "undefined");
+  }
+  static get isFloat16ArraySupported() {
+    return shadow(this, "isFloat16ArraySupported", typeof Float16Array !== "undefined");
   }
   static get platform() {
     const {
@@ -1843,6 +1847,35 @@ function renderRichText({
   fragment.firstChild.classList.add("richText", className);
   container.append(fragment);
 }
+function makePathFromDrawOPS(data) {
+  const path = new Path2D();
+  if (!data) {
+    return path;
+  }
+  for (let i = 0, ii = data.length; i < ii;) {
+    switch (data[i++]) {
+      case DrawOPS.moveTo:
+        path.moveTo(data[i++], data[i++]);
+        break;
+      case DrawOPS.lineTo:
+        path.lineTo(data[i++], data[i++]);
+        break;
+      case DrawOPS.curveTo:
+        path.bezierCurveTo(data[i++], data[i++], data[i++], data[i++], data[i++], data[i++]);
+        break;
+      case DrawOPS.quadraticCurveTo:
+        path.quadraticCurveTo(data[i++], data[i++], data[i++], data[i++]);
+        break;
+      case DrawOPS.closePath:
+        path.closePath();
+        break;
+      default:
+        warn(`Unrecognized drawing path operator: ${data[i - 1]}`);
+        break;
+    }
+  }
+  return path;
+}
 
 ;// ./src/display/editor/toolbar.js
 
@@ -2009,23 +2042,34 @@ class EditorToolbar {
   async addButton(name, tool) {
     switch (name) {
       case "colorPicker":
-        this.addColorPicker(tool);
+        if (tool) {
+          this.addColorPicker(tool);
+        }
         break;
       case "altText":
-        await this.addAltText(tool);
+        if (tool) {
+          await this.addAltText(tool);
+        }
         break;
       case "editSignature":
-        await this.addEditSignatureButton(tool);
+        if (tool) {
+          await this.addEditSignatureButton(tool);
+        }
         break;
       case "delete":
         this.addDeleteButton();
         break;
       case "comment":
-        this.addComment(tool);
+        if (tool) {
+          this.addComment(tool);
+        }
         break;
     }
   }
   async addButtonBefore(name, tool, beforeSelector) {
+    if (!tool && name === "comment") {
+      return;
+    }
     const beforeElement = this.#buttons.querySelector(beforeSelector);
     if (!beforeElement) {
       return;
@@ -4513,7 +4557,7 @@ class Comment {
       comment.setAttribute("data-l10n-id", "pdfjs-show-comment-button");
     } else {
       comment.ariaControlsElements = [this.#editor._uiManager.getCommentDialogElement()];
-      comment.setAttribute("data-l10n-id", "pdfjs-editor-edit-comment-button");
+      comment.setAttribute("data-l10n-id", "pdfjs-editor-add-comment-button");
     }
     const signal = this.#editor._uiManager._signal;
     if (!(signal instanceof AbortSignal) || signal.aborted) {
@@ -4926,6 +4970,7 @@ class AnnotationEditor {
     this.annotationElementId = parameters.annotationElementId || null;
     this.creationDate = parameters.creationDate || new Date();
     this.modificationDate = parameters.modificationDate || null;
+    this.canAddComment = true;
     const {
       rotation,
       rawDims: {
@@ -5605,7 +5650,7 @@ class AnnotationEditor {
     this.#comment?.focusButton();
   }
   addCommentButton() {
-    return this.#comment ||= new Comment(this);
+    return this.canAddComment ? this.#comment ||= new Comment(this) : null;
   }
   addStandaloneCommentButton() {
     if (!this._uiManager.hasCommentManager()) {
@@ -6181,7 +6226,7 @@ class AnnotationEditor {
     return this.div;
   }
   setCommentButtonStates(options) {
-    this.#comment.setCommentButtonStates(options);
+    this.#comment?.setCommentButtonStates(options);
   }
   keydown(event) {
     if (!this.isResizable || event.target !== this.div || event.key !== "Enter") {
@@ -6845,6 +6890,7 @@ class PrintAnnotationStorage extends AnnotationStorage {
 
 ;// ./src/display/font_loader.js
 
+
 class FontLoader {
   #systemFonts = new Set();
   constructor({
@@ -7105,7 +7151,7 @@ class FontFaceObject {
     } catch (ex) {
       warn(`getPathGenerator - ignoring character: "${ex}".`);
     }
-    const path = new Path2D(cmds || "");
+    const path = makePathFromDrawOPS(cmds);
     if (!this.fontExtraProperties) {
       objs.delete(objId);
     }
@@ -10315,27 +10361,7 @@ class CanvasGraphics {
       this.dependencyTracker.resetBBox(opIdx).recordBBox(opIdx, this.ctx, minMax[0] - outerExtraSize, minMax[2] + outerExtraSize, minMax[1] - outerExtraSize, minMax[3] + outerExtraSize).recordDependencies(opIdx, ["transform"]);
     }
     if (!(path instanceof Path2D)) {
-      const path2d = data[0] = new Path2D();
-      for (let i = 0, ii = path.length; i < ii;) {
-        switch (path[i++]) {
-          case DrawOPS.moveTo:
-            path2d.moveTo(path[i++], path[i++]);
-            break;
-          case DrawOPS.lineTo:
-            path2d.lineTo(path[i++], path[i++]);
-            break;
-          case DrawOPS.curveTo:
-            path2d.bezierCurveTo(path[i++], path[i++], path[i++], path[i++], path[i++], path[i++]);
-            break;
-          case DrawOPS.closePath:
-            path2d.closePath();
-            break;
-          default:
-            warn(`Unrecognized drawing path operator: ${path[i - 1]}`);
-            break;
-        }
-      }
-      path = path2d;
+      path = data[0] = makePathFromDrawOPS(path);
     }
     Util.axialAlignedBoundingBox(minMax, getCurrentTransform(this.ctx), this.current.minMax);
     this[op](opIdx, path);
@@ -10555,7 +10581,7 @@ class CanvasGraphics {
     this.moveText(opIdx, x, y);
   }
   setTextMatrix(opIdx, matrix) {
-    this.dependencyTracker?.recordSimpleData("textMatrix", opIdx);
+    this.dependencyTracker?.resetIncrementalData("sameLineText").recordSimpleData("textMatrix", opIdx);
     const {
       current
     } = this;
@@ -15781,7 +15807,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "30fdf16";
+const build = "b0e8c39";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -16037,11 +16063,11 @@ class BasicColorPicker {
     const {
       editorType,
       colorType,
-      colorValue
+      color
     } = this.#editor;
     const input = this.#input = document.createElement("input");
     input.type = "color";
-    input.value = colorValue || "#000000";
+    input.value = color || "#000000";
     input.className = "basicColorPicker";
     input.tabIndex = 0;
     input.setAttribute("data-l10n-id", BasicColorPicker.#l10nColor[editorType]);
@@ -18363,6 +18389,9 @@ class PopupElement {
     }
     this.#firstElement.commentText = this.#commentText = text;
   }
+  focus() {
+    this.#firstElement.container?.focus();
+  }
   get parentBoundingClientRect() {
     return this.#firstElement.layer.getBoundingClientRect();
   }
@@ -19614,6 +19643,7 @@ class FreeTextEditor extends AnnotationEditor {
     if (!this.annotationElementId) {
       this._uiManager.a11yAlert("pdfjs-editor-freetext-added-alert");
     }
+    this.canAddComment = false;
   }
   static initialize(l10n, uiManager) {
     AnnotationEditor.initialize(l10n, uiManager);
