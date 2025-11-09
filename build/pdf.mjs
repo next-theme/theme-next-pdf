@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 2cc809a
+ * pdfjsBuild = 57334bd
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -14666,6 +14666,9 @@ class PDFDocumentProxy {
   saveDocument() {
     return this._transport.saveDocument();
   }
+  extractPages(pageInfos) {
+    return this._transport.extractPages(pageInfos);
+  }
   getDownloadInfo() {
     return this._transport.downloadInfoCapability.promise;
   }
@@ -15734,6 +15737,11 @@ class WorkerTransport {
       this.annotationStorage.resetModified();
     });
   }
+  extractPages(pageInfos) {
+    return this.messageHandler.sendWithPromise("ExtractPages", {
+      pageInfos
+    });
+  }
   getPage(pageNumber) {
     if (!Number.isInteger(pageNumber) || pageNumber <= 0 || pageNumber > this._numPages) {
       return Promise.reject(new Error("Invalid page request."));
@@ -16065,7 +16073,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "2cc809a";
+const build = "57334bd";
 
 ;// ./src/display/editor/color_picker.js
 
