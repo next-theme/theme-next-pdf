@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 57334bd
+ * pdfjsBuild = e7288dc
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -1213,6 +1213,11 @@ class RefSetCache {
   *items() {
     for (const [ref, value] of this._map) {
       yield [Ref.fromString(ref), value];
+    }
+  }
+  *keys() {
+    for (const ref of this._map.keys()) {
+      yield Ref.fromString(ref);
     }
   }
 }
@@ -58323,15 +58328,28 @@ class PageData {
     this.page = page;
     this.documentData = documentData;
     this.annotations = null;
+    this.pointingNamedDestinations = null;
     documentData.pagesMap.put(page.ref, this);
   }
 }
 class DocumentData {
   constructor(document) {
     this.document = document;
+    this.destinations = null;
     this.pageLabels = null;
     this.pagesMap = new RefSetCache();
     this.oldRefMapping = new RefSetCache();
+    this.dedupNamedDestinations = new Map();
+    this.usedNamedDestinations = new Set();
+    this.postponedRefCopies = new RefSetCache();
+  }
+}
+class XRefWrapper {
+  constructor(entries) {
+    this.entries = entries;
+  }
+  fetch(ref) {
+    return ref instanceof Ref ? this.entries[ref.num] : ref;
   }
 }
 class PDFEditor {
@@ -58345,6 +58363,7 @@ class PDFEditor {
     this.oldPages = [];
     this.newPages = [];
     this.xref = [null];
+    this.xrefWrapper = new XRefWrapper(this.xref);
     this.newRefCount = 1;
     [this.rootRef, this.rootDict] = this.newDict;
     [this.infoRef, this.infoDict] = this.newDict;
@@ -58356,6 +58375,7 @@ class PDFEditor {
     this.title = title;
     this.author = author;
     this.pageLabels = null;
+    this.namedDestinations = new Map();
   }
   get newRef() {
     const ref = Ref.get(this.newRefCount++, 0);
@@ -58382,18 +58402,32 @@ class PDFEditor {
       if (newRef) {
         return newRef;
       }
+      const oldRef = obj;
+      obj = await xref.fetchAsync(oldRef);
+      if (typeof obj === "number") {
+        return obj;
+      }
       newRef = this.newRef;
-      oldRefMapping.put(obj, newRef);
-      obj = await xref.fetchAsync(obj);
+      oldRefMapping.put(oldRef, newRef);
       this.xref[newRef.num] = await this.#collectDependencies(obj, true, xref);
       return newRef;
     }
     const promises = [];
+    const {
+      currentDocument: {
+        postponedRefCopies
+      }
+    } = this;
     if (Array.isArray(obj)) {
       if (mustClone) {
         obj = obj.slice();
       }
       for (let i = 0, ii = obj.length; i < ii; i++) {
+        const postponedActions = postponedRefCopies.get(obj[i]);
+        if (postponedActions) {
+          postponedActions.push(ref => obj[i] = ref);
+          continue;
+        }
         promises.push(this.#collectDependencies(obj[i], true, xref).then(newObj => obj[i] = newObj));
       }
       await Promise.all(promises);
@@ -58404,14 +58438,21 @@ class PDFEditor {
       ({
         dict
       } = obj = obj.getOriginalStream().clone());
+      dict.xref = this.xrefWrapper;
     } else if (obj instanceof Dict) {
       if (mustClone) {
         obj = obj.clone();
+        obj.xref = this.xrefWrapper;
       }
       dict = obj;
     }
     if (dict) {
       for (const [key, rawObj] of dict.getRawEntries()) {
+        const postponedActions = postponedRefCopies.get(rawObj);
+        if (postponedActions) {
+          postponedActions.push(ref => dict.set(key, ref));
+          continue;
+        }
         promises.push(this.#collectDependencies(rawObj, true, xref).then(newObj => dict.set(key, newObj)));
       }
       await Promise.all(promises);
@@ -58422,6 +58463,7 @@ class PDFEditor {
     const promises = [];
     let newIndex = 0;
     this.hasSingleFile = pageInfos.length === 1;
+    const allDocumentData = [];
     for (const {
       document,
       includePages,
@@ -58431,6 +58473,7 @@ class PDFEditor {
         continue;
       }
       const documentData = new DocumentData(document);
+      allDocumentData.push(documentData);
       promises.push(this.#collectDocumentData(documentData));
       let keptIndices, keptRanges, deletedIndices, deletedRanges;
       for (const page of includePages || []) {
@@ -58489,27 +58532,38 @@ class PDFEditor {
     }
     await Promise.all(promises);
     promises.length = 0;
+    this.#collectValidDestinations(allDocumentData);
     this.#collectPageLabels();
     for (const page of this.oldPages) {
       promises.push(this.#postCollectPageData(page));
     }
     await Promise.all(promises);
+    this.#findDuplicateNamedDestinations();
+    this.#setPostponedRefCopies(allDocumentData);
     for (let i = 0, ii = this.oldPages.length; i < ii; i++) {
       this.newPages[i] = await this.#makePageCopy(i, null);
     }
+    this.#fixPostponedRefCopies(allDocumentData);
     return this.writePDF();
   }
   async #collectDocumentData(documentData) {
     const {
-      document
+      document: {
+        pdfManager
+      }
     } = documentData;
-    await document.pdfManager.ensureCatalog("rawPageLabels").then(pageLabels => documentData.pageLabels = pageLabels);
+    await Promise.all([pdfManager.ensureCatalog("destinations").then(destinations => documentData.destinations = destinations), pdfManager.ensureCatalog("rawPageLabels").then(pageLabels => documentData.pageLabels = pageLabels)]);
   }
   async #postCollectPageData(pageData) {
     const {
       page: {
         xref,
         annotations
+      },
+      documentData: {
+        pagesMap,
+        destinations,
+        usedNamedDestinations
       }
     } = pageData;
     if (!annotations) {
@@ -58523,12 +58577,128 @@ class PDFEditor {
       promises.push(xref.fetchIfRefAsync(annotationRef).then(async annotationDict => {
         if (!isName(annotationDict.get("Subtype"), "Link")) {
           newAnnotations[newAnnotationIndex] = annotationRef;
+          return;
+        }
+        const action = annotationDict.get("A");
+        const dest = action instanceof Dict ? action.get("D") : annotationDict.get("Dest");
+        if (!dest || Array.isArray(dest) && (!(dest[0] instanceof Ref) || pagesMap.has(dest[0]))) {
+          newAnnotations[newAnnotationIndex] = annotationRef;
+        } else if (typeof dest === "string") {
+          const destString = stringToPDFString(dest, true);
+          if (destinations.has(destString)) {
+            newAnnotations[newAnnotationIndex] = annotationRef;
+            usedNamedDestinations.add(destString);
+          }
         }
       }));
     }
     await Promise.all(promises);
     newAnnotations = newAnnotations.filter(annot => !!annot);
     pageData.annotations = newAnnotations.length > 0 ? newAnnotations : null;
+  }
+  #setPostponedRefCopies(allDocumentData) {
+    for (const {
+      postponedRefCopies,
+      pagesMap
+    } of allDocumentData) {
+      for (const oldPageRef of pagesMap.keys()) {
+        postponedRefCopies.put(oldPageRef, []);
+      }
+    }
+  }
+  #fixPostponedRefCopies(allDocumentData) {
+    for (const {
+      postponedRefCopies,
+      oldRefMapping
+    } of allDocumentData) {
+      for (const [oldRef, actions] of postponedRefCopies.items()) {
+        const newRef = oldRefMapping.get(oldRef);
+        for (const action of actions) {
+          action(newRef);
+        }
+      }
+      postponedRefCopies.clear();
+    }
+  }
+  #collectValidDestinations(allDocumentData) {
+    for (const documentData of allDocumentData) {
+      if (!documentData.destinations) {
+        continue;
+      }
+      const {
+        destinations,
+        pagesMap
+      } = documentData;
+      const newDestinations = documentData.destinations = new Map();
+      for (const [key, dest] of Object.entries(destinations)) {
+        const pageRef = dest[0];
+        const pageData = pagesMap.get(pageRef);
+        if (!pageData) {
+          continue;
+        }
+        (pageData.pointingNamedDestinations ||= new Set()).add(key);
+        newDestinations.set(key, dest);
+      }
+    }
+  }
+  #findDuplicateNamedDestinations() {
+    const {
+      namedDestinations
+    } = this;
+    for (let i = 0, ii = this.oldPages.length; i < ii; i++) {
+      const page = this.oldPages[i];
+      const {
+        documentData: {
+          destinations,
+          dedupNamedDestinations,
+          usedNamedDestinations
+        }
+      } = page;
+      let {
+        pointingNamedDestinations
+      } = page;
+      if (!pointingNamedDestinations) {
+        continue;
+      }
+      page.pointingNamedDestinations = pointingNamedDestinations = pointingNamedDestinations.intersection(usedNamedDestinations);
+      for (const pointingDest of pointingNamedDestinations) {
+        if (!usedNamedDestinations.has(pointingDest)) {
+          continue;
+        }
+        const dest = destinations.get(pointingDest).slice();
+        if (!namedDestinations.has(pointingDest)) {
+          namedDestinations.set(pointingDest, dest);
+          continue;
+        }
+        const newName = `${pointingDest}_p${i + 1}`;
+        dedupNamedDestinations.set(pointingDest, newName);
+        namedDestinations.set(newName, dest);
+      }
+    }
+  }
+  #fixNamedDestinations(annotations, dedupNamedDestinations) {
+    if (dedupNamedDestinations.size === 0) {
+      return;
+    }
+    const fixDestination = (dict, key, dest) => {
+      if (typeof dest === "string") {
+        dict.set(key, dedupNamedDestinations.get(stringToPDFString(dest, true)) || dest);
+      }
+    };
+    for (const annotRef of annotations) {
+      const annotDict = this.xref[annotRef.num];
+      if (!isName(annotDict.get("Subtype"), "Link")) {
+        continue;
+      }
+      const action = annotDict.get("A");
+      if (action instanceof Dict && action.has("D")) {
+        const dest = action.get("D");
+        fixDestination(action, "D", dest);
+        continue;
+      }
+      const dest = annotDict.get("Dest");
+      fixDestination(annotDict, "Dest", dest);
+    }
   }
   async #collectPageLabels() {
     if (!this.hasSingleFile) {
@@ -58586,10 +58756,12 @@ class PDFEditor {
     const {
       page,
       documentData,
-      annotations
+      annotations,
+      pointingNamedDestinations
     } = this.oldPages[pageIndex];
     this.currentDocument = documentData;
     const {
+      dedupNamedDestinations,
       oldRefMapping
     } = documentData;
     const {
@@ -58602,6 +58774,13 @@ class PDFEditor {
     const pageRef = this.newRef;
     const pageDict = this.xref[pageRef.num] = page.pageDict.clone();
     oldRefMapping.put(oldPageRef, pageRef);
+    if (pointingNamedDestinations) {
+      for (const pointingDest of pointingNamedDestinations) {
+        const name = dedupNamedDestinations.get(pointingDest) || pointingDest;
+        const dest = this.namedDestinations.get(name);
+        dest[0] = pageRef;
+      }
+    }
     for (const key of ["Rotate", "MediaBox", "CropBox", "BleedBox", "TrimBox", "ArtBox", "Resources", "Annots", "Parent", "UserUnit"]) {
       pageDict.delete(key);
     }
@@ -58620,7 +58799,11 @@ class PDFEditor {
       pageDict.set("UserUnit", userUnit);
     }
     pageDict.setIfDict("Resources", await this.#collectDependencies(resources, true, xref));
-    pageDict.setIfArray("Annots", await this.#collectDependencies(annotations, true, xref));
+    if (annotations) {
+      const newAnnotations = await this.#collectDependencies(annotations, true, xref);
+      this.#fixNamedDestinations(newAnnotations, dedupNamedDestinations);
+      pageDict.setIfArray("Annots", newAnnotations);
+    }
     if (this.useObjectStreams) {
       const newLastRef = this.newRefCount;
       const pageObjectRefs = [];
@@ -58741,14 +58924,28 @@ class PDFEditor {
     const pageLabelsRef = this.#makeNameNumTree(this.pageLabels, false);
     rootDict.set("PageLabels", pageLabelsRef);
   }
+  #makeDestinationsTree() {
+    const {
+      namedDestinations
+    } = this;
+    if (namedDestinations.size === 0) {
+      return;
+    }
+    if (!this.namesDict) {
+      [this.namesRef, this.namesDict] = this.newDict;
+      this.rootDict.set("Names", this.namesRef);
+    }
+    this.namesDict.set("Dests", this.#makeNameNumTree(Array.from(namedDestinations.entries()), true));
+  }
   async #makeRoot() {
     const {
       rootDict
     } = this;
     rootDict.setIfName("Type", "Catalog");
-    rootDict.set("Version", this.version);
+    rootDict.setIfName("Version", this.version);
     this.#makePageTree();
     this.#makePageLabelsTree();
+    this.#makeDestinationsTree();
   }
   #makeInfo() {
     const infoMap = new Map();
