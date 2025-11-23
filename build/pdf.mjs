@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = e7288dc
+ * pdfjsBuild = ec71e4e
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -7217,6 +7217,9 @@ class FontFaceObject {
   get disableFontFace() {
     return this.#fontData.disableFontFace ?? false;
   }
+  set disableFontFace(value) {
+    shadow(this, "disableFontFace", !!value);
+  }
   get fontExtraProperties() {
     return this.#fontData.fontExtraProperties ?? false;
   }
@@ -7249,6 +7252,9 @@ class FontFaceObject {
   }
   get bbox() {
     return this.#fontData.bbox;
+  }
+  set bbox(bbox) {
+    shadow(this, "bbox", bbox);
   }
   get fontMatrix() {
     return this.#fontData.fontMatrix;
@@ -15858,7 +15864,8 @@ class WorkerTransport {
       info: results[0],
       metadata: results[1] ? new Metadata(results[1]) : null,
       contentDispositionFilename: this._fullReader?.filename ?? null,
-      contentLength: this._fullReader?.contentLength ?? null
+      contentLength: this._fullReader?.contentLength ?? null,
+      hasStructTree: results[2]
     }));
     this.#methodPromises.set(name, promise);
     return promise;
@@ -16073,7 +16080,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "e7288dc";
+const build = "ec71e4e";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -25671,7 +25678,7 @@ class AnnotationEditorLayer {
       return;
     }
     if (editor.parent && editor.annotationElementId) {
-      this.#uiManager.addDeletedAnnotationElement(editor.annotationElementId);
+      this.#uiManager.addDeletedAnnotationElement(editor);
       AnnotationEditor.deleteAnnotationElement(editor);
       editor.annotationElementId = null;
     }
