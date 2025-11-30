@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = ec71e4e
+ * pdfjsBuild = 4aca13e
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -1847,7 +1847,7 @@ function renderRichText({
       intent: "richText"
     });
   }
-  fragment.firstChild.classList.add("richText", className);
+  fragment.firstElementChild.classList.add("richText", className);
   container.append(fragment);
 }
 function makePathFromDrawOPS(data) {
@@ -6323,11 +6323,11 @@ class AnnotationEditor {
     if (nextFirstPosition !== firstPosition) {
       if (nextFirstPosition < firstPosition) {
         for (let i = 0; i < firstPosition - nextFirstPosition; i++) {
-          this.#resizersDiv.append(this.#resizersDiv.firstChild);
+          this.#resizersDiv.append(this.#resizersDiv.firstElementChild);
         }
       } else if (nextFirstPosition > firstPosition) {
         for (let i = 0; i < nextFirstPosition - firstPosition; i++) {
-          this.#resizersDiv.firstChild.before(this.#resizersDiv.lastChild);
+          this.#resizersDiv.firstElementChild.before(this.#resizersDiv.lastElementChild);
         }
       }
       let i = 0;
@@ -6339,7 +6339,7 @@ class AnnotationEditor {
     }
     this.#setResizerTabIndex(0);
     this.#isResizerEnabledForKeyboard = true;
-    this.#resizersDiv.firstChild.focus({
+    this.#resizersDiv.firstElementChild.focus({
       focusVisible: true
     });
     event.preventDefault();
@@ -6570,10 +6570,10 @@ class AnnotationEditor {
   }
   resetAnnotationElement(annotation) {
     const {
-      firstChild
+      firstElementChild
     } = annotation.container;
-    if (firstChild?.nodeName === "DIV" && firstChild.classList.contains("annotationContent")) {
-      firstChild.remove();
+    if (firstElementChild?.nodeName === "DIV" && firstElementChild.classList.contains("annotationContent")) {
+      firstElementChild.remove();
     }
   }
 }
@@ -16080,7 +16080,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "ec71e4e";
+const build = "4aca13e";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -16213,13 +16213,13 @@ class ColorPicker {
       return;
     }
     if (event.target === this.#button) {
-      this.#dropdown.firstChild?.focus();
+      this.#dropdown.firstElementChild?.focus();
       return;
     }
     event.target.nextSibling?.focus();
   }
   _moveToPrevious(event) {
-    if (event.target === this.#dropdown?.firstChild || event.target === this.#button) {
+    if (event.target === this.#dropdown?.firstElementChild || event.target === this.#button) {
       if (this.#isDropdownVisible) {
         this._hideDropdownFromKeyboard();
       }
@@ -16235,14 +16235,14 @@ class ColorPicker {
       this.#openDropdown(event);
       return;
     }
-    this.#dropdown.firstChild?.focus();
+    this.#dropdown.firstElementChild?.focus();
   }
   _moveToEnd(event) {
     if (!this.#isDropdownVisible) {
       this.#openDropdown(event);
       return;
     }
-    this.#dropdown.lastChild?.focus();
+    this.#dropdown.lastElementChild?.focus();
   }
   #keyDown(event) {
     ColorPicker._keyboardManager.exec(this, event);
@@ -26210,8 +26210,8 @@ class DrawLayer {
       }
     }
     if (path) {
-      const defs = element.firstChild;
-      const pathElement = defs.firstChild;
+      const defs = element.firstElementChild;
+      const pathElement = defs.firstElementChild;
       this.#updateProperties(pathElement, path);
     }
   }
