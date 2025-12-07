@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 4aca13e
+ * pdfjsBuild = 36de2d9
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -3535,7 +3535,7 @@ class AnnotationEditorUIManager {
   removeLayer(layer) {
     this.#allLayers.delete(layer.pageIndex);
   }
-  async updateMode(mode, editId = null, isFromKeyboard = false, mustEnterInEditMode = false, editComment = false) {
+  async updateMode(mode, editId = null, isFromUser = false, isFromKeyboard = false, mustEnterInEditMode = false, editComment = false) {
     if (this.#mode === mode) {
       return;
     }
@@ -3568,6 +3568,9 @@ class AnnotationEditorUIManager {
     }
     if (mode === AnnotationEditorType.SIGNATURE) {
       await this.#signatureManager?.loadSignatures();
+    }
+    if (isFromUser) {
+      CurrentPointers.clearPointerType();
     }
     this.setEditingState(true);
     await this.#enableAll();
@@ -16080,7 +16083,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "4aca13e";
+const build = "36de2d9";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -22593,7 +22596,6 @@ class DrawingEditor extends AnnotationEditor {
       this._currentParent = null;
       DrawingEditor.#currentDraw = null;
       DrawingEditor.#currentDrawingOptions = null;
-      CurrentPointers.clearPointerType();
       CurrentPointers.clearTimeStamp();
     }
     if (DrawingEditor.#currentDrawingAC) {
