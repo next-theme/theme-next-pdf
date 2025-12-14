@@ -19,12 +19,12 @@
   --message-bar-close-button-color-hover:var(--text-primary-color);
   --message-bar-close-button-border-radius:4px;
   --message-bar-close-button-border:none;
-  --csstools-light-dark-toggle--31:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.14);
-  --message-bar-close-button-hover-bg-color:var(--csstools-light-dark-toggle--31, rgb(21 20 26 / 0.14));
-  --csstools-light-dark-toggle--32:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.21);
-  --message-bar-close-button-active-bg-color:var(--csstools-light-dark-toggle--32, rgb(21 20 26 / 0.21));
-  --csstools-light-dark-toggle--33:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.07);
-  --message-bar-close-button-focus-bg-color:var(--csstools-light-dark-toggle--33, rgb(21 20 26 / 0.07));
+  --csstools-light-dark-toggle--26:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.14);
+  --message-bar-close-button-hover-bg-color:var(--csstools-light-dark-toggle--26, rgb(21 20 26 / 0.14));
+  --csstools-light-dark-toggle--27:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.21);
+  --message-bar-close-button-active-bg-color:var(--csstools-light-dark-toggle--27, rgb(21 20 26 / 0.21));
+  --csstools-light-dark-toggle--28:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.07);
+  --message-bar-close-button-focus-bg-color:var(--csstools-light-dark-toggle--28, rgb(21 20 26 / 0.07));
 }
 
 @supports (color: light-dark(red, red)) and (color: rgb(0 0 0 / 0)){
@@ -47,12 +47,12 @@
 @supports not (color: light-dark(tan, tan)){
 
 .messageBar *{
-  --csstools-light-dark-toggle--31:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.14);
-  --message-bar-close-button-hover-bg-color:var(--csstools-light-dark-toggle--31, rgb(21 20 26 / 0.14));
-  --csstools-light-dark-toggle--32:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.21);
-  --message-bar-close-button-active-bg-color:var(--csstools-light-dark-toggle--32, rgb(21 20 26 / 0.21));
-  --csstools-light-dark-toggle--33:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.07);
-  --message-bar-close-button-focus-bg-color:var(--csstools-light-dark-toggle--33, rgb(21 20 26 / 0.07));
+  --csstools-light-dark-toggle--26:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.14);
+  --message-bar-close-button-hover-bg-color:var(--csstools-light-dark-toggle--26, rgb(21 20 26 / 0.14));
+  --csstools-light-dark-toggle--27:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.21);
+  --message-bar-close-button-active-bg-color:var(--csstools-light-dark-toggle--27, rgb(21 20 26 / 0.21));
+  --csstools-light-dark-toggle--28:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.07);
+  --message-bar-close-button-focus-bg-color:var(--csstools-light-dark-toggle--28, rgb(21 20 26 / 0.07));
   }
 }
 
@@ -165,29 +165,29 @@
     }
 
 #editorUndoBar{
-  --csstools-light-dark-toggle--34:var(--csstools-color-scheme--light) #fbfbfe;
-  --text-primary-color:var(--csstools-light-dark-toggle--34, #15141a);
+  --csstools-light-dark-toggle--29:var(--csstools-color-scheme--light) #fbfbfe;
+  --text-primary-color:var(--csstools-light-dark-toggle--29, #15141a);
 
   --message-bar-icon:url(images/messageBar_info.svg);
-  --csstools-light-dark-toggle--35:var(--csstools-color-scheme--light) #73a7f3;
-  --message-bar-icon-color:var(--csstools-light-dark-toggle--35, #0060df);
-  --csstools-light-dark-toggle--36:var(--csstools-color-scheme--light) #003070;
-  --message-bar-bg-color:var(--csstools-light-dark-toggle--36, #deeafc);
+  --csstools-light-dark-toggle--30:var(--csstools-color-scheme--light) #73a7f3;
+  --message-bar-icon-color:var(--csstools-light-dark-toggle--30, #0060df);
+  --csstools-light-dark-toggle--31:var(--csstools-color-scheme--light) #003070;
+  --message-bar-bg-color:var(--csstools-light-dark-toggle--31, #deeafc);
   --message-bar-fg-color:var(--text-primary-color);
-  --csstools-light-dark-toggle--37:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.08);
-  --message-bar-border-color:var(--csstools-light-dark-toggle--37, rgb(0 0 0 / 0.08));
+  --csstools-light-dark-toggle--32:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.08);
+  --message-bar-border-color:var(--csstools-light-dark-toggle--32, rgb(0 0 0 / 0.08));
 
-  --csstools-light-dark-toggle--38:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.08);
+  --csstools-light-dark-toggle--33:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.08);
 
-  --undo-button-bg-color:var(--csstools-light-dark-toggle--38, rgb(21 20 26 / 0.07));
-  --csstools-light-dark-toggle--39:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.14);
-  --undo-button-bg-color-hover:var(--csstools-light-dark-toggle--39, rgb(21 20 26 / 0.14));
-  --csstools-light-dark-toggle--40:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.21);
-  --undo-button-bg-color-active:var(--csstools-light-dark-toggle--40, rgb(21 20 26 / 0.21));
+  --undo-button-bg-color:var(--csstools-light-dark-toggle--33, rgb(21 20 26 / 0.07));
+  --csstools-light-dark-toggle--34:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.14);
+  --undo-button-bg-color-hover:var(--csstools-light-dark-toggle--34, rgb(21 20 26 / 0.14));
+  --csstools-light-dark-toggle--35:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.21);
+  --undo-button-bg-color-active:var(--csstools-light-dark-toggle--35, rgb(21 20 26 / 0.21));
 
-  --csstools-light-dark-toggle--41:var(--csstools-color-scheme--light) #0df;
+  --csstools-light-dark-toggle--36:var(--csstools-color-scheme--light) #0df;
 
-  --undo-button-border:1px solid var(--csstools-light-dark-toggle--41, #0060df);
+  --undo-button-border:1px solid var(--csstools-light-dark-toggle--36, #0060df);
 
   --undo-button-fg-color:var(--message-bar-fg-color);
   --undo-button-fg-color-hover:var(--undo-button-fg-color);
@@ -234,26 +234,26 @@
 @supports not (color: light-dark(tan, tan)){
 
 #editorUndoBar *{
-  --csstools-light-dark-toggle--34:var(--csstools-color-scheme--light) #fbfbfe;
-  --text-primary-color:var(--csstools-light-dark-toggle--34, #15141a);
-  --csstools-light-dark-toggle--35:var(--csstools-color-scheme--light) #73a7f3;
-  --message-bar-icon-color:var(--csstools-light-dark-toggle--35, #0060df);
-  --csstools-light-dark-toggle--36:var(--csstools-color-scheme--light) #003070;
-  --message-bar-bg-color:var(--csstools-light-dark-toggle--36, #deeafc);
-  --csstools-light-dark-toggle--37:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.08);
-  --message-bar-border-color:var(--csstools-light-dark-toggle--37, rgb(0 0 0 / 0.08));
+  --csstools-light-dark-toggle--29:var(--csstools-color-scheme--light) #fbfbfe;
+  --text-primary-color:var(--csstools-light-dark-toggle--29, #15141a);
+  --csstools-light-dark-toggle--30:var(--csstools-color-scheme--light) #73a7f3;
+  --message-bar-icon-color:var(--csstools-light-dark-toggle--30, #0060df);
+  --csstools-light-dark-toggle--31:var(--csstools-color-scheme--light) #003070;
+  --message-bar-bg-color:var(--csstools-light-dark-toggle--31, #deeafc);
+  --csstools-light-dark-toggle--32:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.08);
+  --message-bar-border-color:var(--csstools-light-dark-toggle--32, rgb(0 0 0 / 0.08));
 
-  --csstools-light-dark-toggle--38:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.08);
+  --csstools-light-dark-toggle--33:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.08);
 
-  --undo-button-bg-color:var(--csstools-light-dark-toggle--38, rgb(21 20 26 / 0.07));
-  --csstools-light-dark-toggle--39:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.14);
-  --undo-button-bg-color-hover:var(--csstools-light-dark-toggle--39, rgb(21 20 26 / 0.14));
-  --csstools-light-dark-toggle--40:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.21);
-  --undo-button-bg-color-active:var(--csstools-light-dark-toggle--40, rgb(21 20 26 / 0.21));
+  --undo-button-bg-color:var(--csstools-light-dark-toggle--33, rgb(21 20 26 / 0.07));
+  --csstools-light-dark-toggle--34:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.14);
+  --undo-button-bg-color-hover:var(--csstools-light-dark-toggle--34, rgb(21 20 26 / 0.14));
+  --csstools-light-dark-toggle--35:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.21);
+  --undo-button-bg-color-active:var(--csstools-light-dark-toggle--35, rgb(21 20 26 / 0.21));
 
-  --csstools-light-dark-toggle--41:var(--csstools-color-scheme--light) #0df;
+  --csstools-light-dark-toggle--36:var(--csstools-color-scheme--light) #0df;
 
-  --undo-button-border:1px solid var(--csstools-light-dark-toggle--41, #0060df);
+  --undo-button-border:1px solid var(--csstools-light-dark-toggle--36, #0060df);
   }
 }
 
@@ -327,49 +327,49 @@
   }
 
 .dialog{
-  --csstools-light-dark-toggle--42:var(--csstools-color-scheme--light) #1c1b22;
-  --dialog-bg-color:var(--csstools-light-dark-toggle--42, white);
-  --csstools-light-dark-toggle--43:var(--csstools-color-scheme--light) #1c1b22;
-  --dialog-border-color:var(--csstools-light-dark-toggle--43, white);
-  --csstools-light-dark-toggle--44:var(--csstools-color-scheme--light) #15141a;
-  --dialog-shadow:0 2px 14px 0 var(--csstools-light-dark-toggle--44, rgb(58 57 68 / 0.2));
-  --csstools-light-dark-toggle--45:var(--csstools-color-scheme--light) #fbfbfe;
-  --text-primary-color:var(--csstools-light-dark-toggle--45, #15141a);
-  --csstools-light-dark-toggle--46:var(--csstools-color-scheme--light) #cfcfd8;
-  --text-secondary-color:var(--csstools-light-dark-toggle--46, #5b5b66);
+  --csstools-light-dark-toggle--37:var(--csstools-color-scheme--light) #1c1b22;
+  --dialog-bg-color:var(--csstools-light-dark-toggle--37, white);
+  --csstools-light-dark-toggle--38:var(--csstools-color-scheme--light) #1c1b22;
+  --dialog-border-color:var(--csstools-light-dark-toggle--38, white);
+  --csstools-light-dark-toggle--39:var(--csstools-color-scheme--light) #15141a;
+  --dialog-shadow:0 2px 14px 0 var(--csstools-light-dark-toggle--39, rgb(58 57 68 / 0.2));
+  --csstools-light-dark-toggle--40:var(--csstools-color-scheme--light) #fbfbfe;
+  --text-primary-color:var(--csstools-light-dark-toggle--40, #15141a);
+  --csstools-light-dark-toggle--41:var(--csstools-color-scheme--light) #cfcfd8;
+  --text-secondary-color:var(--csstools-light-dark-toggle--41, #5b5b66);
   --hover-filter:brightness(0.9);
-  --csstools-light-dark-toggle--47:var(--csstools-color-scheme--light) #0df;
-  --link-fg-color:var(--csstools-light-dark-toggle--47, #0060df);
-  --csstools-light-dark-toggle--48:var(--csstools-color-scheme--light) #80ebff;
-  --link-hover-fg-color:var(--csstools-light-dark-toggle--48, #0250bb);
-  --csstools-light-dark-toggle--49:var(--csstools-color-scheme--light) #52525e;
-  --separator-color:var(--csstools-light-dark-toggle--49, #f0f0f4);
+  --csstools-light-dark-toggle--42:var(--csstools-color-scheme--light) #0df;
+  --link-fg-color:var(--csstools-light-dark-toggle--42, #0060df);
+  --csstools-light-dark-toggle--43:var(--csstools-color-scheme--light) #80ebff;
+  --link-hover-fg-color:var(--csstools-light-dark-toggle--43, #0250bb);
+  --csstools-light-dark-toggle--44:var(--csstools-color-scheme--light) #52525e;
+  --separator-color:var(--csstools-light-dark-toggle--44, #f0f0f4);
 
   --textarea-border-color:#8f8f9d;
-  --csstools-light-dark-toggle--50:var(--csstools-color-scheme--light) #42414d;
-  --textarea-bg-color:var(--csstools-light-dark-toggle--50, white);
+  --csstools-light-dark-toggle--45:var(--csstools-color-scheme--light) #42414d;
+  --textarea-bg-color:var(--csstools-light-dark-toggle--45, white);
   --textarea-fg-color:var(--text-secondary-color);
 
-  --csstools-light-dark-toggle--51:var(--csstools-color-scheme--light) #2b2a33;
+  --csstools-light-dark-toggle--46:var(--csstools-color-scheme--light) #2b2a33;
 
-  --radio-bg-color:var(--csstools-light-dark-toggle--51, #f0f0f4);
-  --csstools-light-dark-toggle--52:var(--csstools-color-scheme--light) #15141a;
-  --radio-checked-bg-color:var(--csstools-light-dark-toggle--52, #fbfbfe);
+  --radio-bg-color:var(--csstools-light-dark-toggle--46, #f0f0f4);
+  --csstools-light-dark-toggle--47:var(--csstools-color-scheme--light) #15141a;
+  --radio-checked-bg-color:var(--csstools-light-dark-toggle--47, #fbfbfe);
   --radio-border-color:#8f8f9d;
-  --csstools-light-dark-toggle--53:var(--csstools-color-scheme--light) #0df;
-  --radio-checked-border-color:var(--csstools-light-dark-toggle--53, #0060df);
+  --csstools-light-dark-toggle--48:var(--csstools-color-scheme--light) #0df;
+  --radio-checked-border-color:var(--csstools-light-dark-toggle--48, #0060df);
 
-  --csstools-light-dark-toggle--54:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.07);
+  --csstools-light-dark-toggle--49:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.07);
 
-  --button-secondary-bg-color:var(--csstools-light-dark-toggle--54, rgb(21 20 26 / 0.07));
+  --button-secondary-bg-color:var(--csstools-light-dark-toggle--49, rgb(21 20 26 / 0.07));
   --button-secondary-fg-color:var(--text-primary-color);
   --button-secondary-border-color:var(--button-secondary-bg-color);
-  --csstools-light-dark-toggle--55:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.21);
-  --button-secondary-active-bg-color:var(--csstools-light-dark-toggle--55, rgb(21 20 26 / 0.21));
+  --csstools-light-dark-toggle--50:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.21);
+  --button-secondary-active-bg-color:var(--csstools-light-dark-toggle--50, rgb(21 20 26 / 0.21));
   --button-secondary-active-fg-color:var(--button-secondary-fg-color);
   --button-secondary-active-border-color:var(--button-secondary-bg-color);
-  --csstools-light-dark-toggle--56:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.14);
-  --button-secondary-hover-bg-color:var(--csstools-light-dark-toggle--56, rgb(21 20 26 / 0.14));
+  --csstools-light-dark-toggle--51:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.14);
+  --button-secondary-hover-bg-color:var(--csstools-light-dark-toggle--51, rgb(21 20 26 / 0.14));
   --button-secondary-hover-fg-color:var(--button-secondary-fg-color);
   --button-secondary-hover-border-color:var(--button-secondary-hover-bg-color);
   --button-secondary-disabled-bg-color:var(--button-secondary-bg-color);
@@ -378,18 +378,18 @@
   );
   --button-secondary-disabled-fg-color:var(--button-secondary-fg-color);
 
-  --csstools-light-dark-toggle--57:var(--csstools-color-scheme--light) #0df;
+  --csstools-light-dark-toggle--52:var(--csstools-color-scheme--light) #0df;
 
-  --button-primary-bg-color:var(--csstools-light-dark-toggle--57, #0060df);
-  --csstools-light-dark-toggle--58:var(--csstools-color-scheme--light) #15141a;
-  --button-primary-fg-color:var(--csstools-light-dark-toggle--58, #fbfbfe);
+  --button-primary-bg-color:var(--csstools-light-dark-toggle--52, #0060df);
+  --csstools-light-dark-toggle--53:var(--csstools-color-scheme--light) #15141a;
+  --button-primary-fg-color:var(--csstools-light-dark-toggle--53, #fbfbfe);
   --button-primary-border-color:var(--button-primary-bg-color);
-  --csstools-light-dark-toggle--59:var(--csstools-color-scheme--light) #aaf2ff;
-  --button-primary-active-bg-color:var(--csstools-light-dark-toggle--59, #054096);
+  --csstools-light-dark-toggle--54:var(--csstools-color-scheme--light) #aaf2ff;
+  --button-primary-active-bg-color:var(--csstools-light-dark-toggle--54, #054096);
   --button-primary-active-fg-color:var(--button-primary-fg-color);
   --button-primary-active-border-color:var(--button-primary-active-bg-color);
-  --csstools-light-dark-toggle--60:var(--csstools-color-scheme--light) #80ebff;
-  --button-primary-hover-bg-color:var(--csstools-light-dark-toggle--60, #0250bb);
+  --csstools-light-dark-toggle--55:var(--csstools-color-scheme--light) #80ebff;
+  --button-primary-hover-bg-color:var(--csstools-light-dark-toggle--55, #0250bb);
   --button-primary-hover-fg-color:var(--button-primary-fg-color);
   --button-primary-hover-border-color:var(--button-primary-hover-bg-color);
   --button-primary-disabled-bg-color:var(--button-primary-bg-color);
@@ -397,9 +397,9 @@
   --button-primary-disabled-fg-color:var(--button-primary-fg-color);
   --button-disabled-opacity:0.4;
 
-  --csstools-light-dark-toggle--61:var(--csstools-color-scheme--light) #42414d;
+  --csstools-light-dark-toggle--56:var(--csstools-color-scheme--light) #42414d;
 
-  --input-text-bg-color:var(--csstools-light-dark-toggle--61, white);
+  --input-text-bg-color:var(--csstools-light-dark-toggle--56, white);
   --input-text-fg-color:var(--text-primary-color);
 }
 
@@ -464,54 +464,54 @@
 @supports not (color: light-dark(tan, tan)){
 
 .dialog *{
-  --csstools-light-dark-toggle--42:var(--csstools-color-scheme--light) #1c1b22;
-  --dialog-bg-color:var(--csstools-light-dark-toggle--42, white);
-  --csstools-light-dark-toggle--43:var(--csstools-color-scheme--light) #1c1b22;
-  --dialog-border-color:var(--csstools-light-dark-toggle--43, white);
-  --csstools-light-dark-toggle--44:var(--csstools-color-scheme--light) #15141a;
-  --dialog-shadow:0 2px 14px 0 var(--csstools-light-dark-toggle--44, rgb(58 57 68 / 0.2));
-  --csstools-light-dark-toggle--45:var(--csstools-color-scheme--light) #fbfbfe;
-  --text-primary-color:var(--csstools-light-dark-toggle--45, #15141a);
-  --csstools-light-dark-toggle--46:var(--csstools-color-scheme--light) #cfcfd8;
-  --text-secondary-color:var(--csstools-light-dark-toggle--46, #5b5b66);
-  --csstools-light-dark-toggle--47:var(--csstools-color-scheme--light) #0df;
-  --link-fg-color:var(--csstools-light-dark-toggle--47, #0060df);
-  --csstools-light-dark-toggle--48:var(--csstools-color-scheme--light) #80ebff;
-  --link-hover-fg-color:var(--csstools-light-dark-toggle--48, #0250bb);
-  --csstools-light-dark-toggle--49:var(--csstools-color-scheme--light) #52525e;
-  --separator-color:var(--csstools-light-dark-toggle--49, #f0f0f4);
-  --csstools-light-dark-toggle--50:var(--csstools-color-scheme--light) #42414d;
-  --textarea-bg-color:var(--csstools-light-dark-toggle--50, white);
+  --csstools-light-dark-toggle--37:var(--csstools-color-scheme--light) #1c1b22;
+  --dialog-bg-color:var(--csstools-light-dark-toggle--37, white);
+  --csstools-light-dark-toggle--38:var(--csstools-color-scheme--light) #1c1b22;
+  --dialog-border-color:var(--csstools-light-dark-toggle--38, white);
+  --csstools-light-dark-toggle--39:var(--csstools-color-scheme--light) #15141a;
+  --dialog-shadow:0 2px 14px 0 var(--csstools-light-dark-toggle--39, rgb(58 57 68 / 0.2));
+  --csstools-light-dark-toggle--40:var(--csstools-color-scheme--light) #fbfbfe;
+  --text-primary-color:var(--csstools-light-dark-toggle--40, #15141a);
+  --csstools-light-dark-toggle--41:var(--csstools-color-scheme--light) #cfcfd8;
+  --text-secondary-color:var(--csstools-light-dark-toggle--41, #5b5b66);
+  --csstools-light-dark-toggle--42:var(--csstools-color-scheme--light) #0df;
+  --link-fg-color:var(--csstools-light-dark-toggle--42, #0060df);
+  --csstools-light-dark-toggle--43:var(--csstools-color-scheme--light) #80ebff;
+  --link-hover-fg-color:var(--csstools-light-dark-toggle--43, #0250bb);
+  --csstools-light-dark-toggle--44:var(--csstools-color-scheme--light) #52525e;
+  --separator-color:var(--csstools-light-dark-toggle--44, #f0f0f4);
+  --csstools-light-dark-toggle--45:var(--csstools-color-scheme--light) #42414d;
+  --textarea-bg-color:var(--csstools-light-dark-toggle--45, white);
 
-  --csstools-light-dark-toggle--51:var(--csstools-color-scheme--light) #2b2a33;
+  --csstools-light-dark-toggle--46:var(--csstools-color-scheme--light) #2b2a33;
 
-  --radio-bg-color:var(--csstools-light-dark-toggle--51, #f0f0f4);
-  --csstools-light-dark-toggle--52:var(--csstools-color-scheme--light) #15141a;
-  --radio-checked-bg-color:var(--csstools-light-dark-toggle--52, #fbfbfe);
-  --csstools-light-dark-toggle--53:var(--csstools-color-scheme--light) #0df;
-  --radio-checked-border-color:var(--csstools-light-dark-toggle--53, #0060df);
+  --radio-bg-color:var(--csstools-light-dark-toggle--46, #f0f0f4);
+  --csstools-light-dark-toggle--47:var(--csstools-color-scheme--light) #15141a;
+  --radio-checked-bg-color:var(--csstools-light-dark-toggle--47, #fbfbfe);
+  --csstools-light-dark-toggle--48:var(--csstools-color-scheme--light) #0df;
+  --radio-checked-border-color:var(--csstools-light-dark-toggle--48, #0060df);
 
-  --csstools-light-dark-toggle--54:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.07);
+  --csstools-light-dark-toggle--49:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.07);
 
-  --button-secondary-bg-color:var(--csstools-light-dark-toggle--54, rgb(21 20 26 / 0.07));
-  --csstools-light-dark-toggle--55:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.21);
-  --button-secondary-active-bg-color:var(--csstools-light-dark-toggle--55, rgb(21 20 26 / 0.21));
-  --csstools-light-dark-toggle--56:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.14);
-  --button-secondary-hover-bg-color:var(--csstools-light-dark-toggle--56, rgb(21 20 26 / 0.14));
+  --button-secondary-bg-color:var(--csstools-light-dark-toggle--49, rgb(21 20 26 / 0.07));
+  --csstools-light-dark-toggle--50:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.21);
+  --button-secondary-active-bg-color:var(--csstools-light-dark-toggle--50, rgb(21 20 26 / 0.21));
+  --csstools-light-dark-toggle--51:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.14);
+  --button-secondary-hover-bg-color:var(--csstools-light-dark-toggle--51, rgb(21 20 26 / 0.14));
 
-  --csstools-light-dark-toggle--57:var(--csstools-color-scheme--light) #0df;
+  --csstools-light-dark-toggle--52:var(--csstools-color-scheme--light) #0df;
 
-  --button-primary-bg-color:var(--csstools-light-dark-toggle--57, #0060df);
-  --csstools-light-dark-toggle--58:var(--csstools-color-scheme--light) #15141a;
-  --button-primary-fg-color:var(--csstools-light-dark-toggle--58, #fbfbfe);
-  --csstools-light-dark-toggle--59:var(--csstools-color-scheme--light) #aaf2ff;
-  --button-primary-active-bg-color:var(--csstools-light-dark-toggle--59, #054096);
-  --csstools-light-dark-toggle--60:var(--csstools-color-scheme--light) #80ebff;
-  --button-primary-hover-bg-color:var(--csstools-light-dark-toggle--60, #0250bb);
+  --button-primary-bg-color:var(--csstools-light-dark-toggle--52, #0060df);
+  --csstools-light-dark-toggle--53:var(--csstools-color-scheme--light) #15141a;
+  --button-primary-fg-color:var(--csstools-light-dark-toggle--53, #fbfbfe);
+  --csstools-light-dark-toggle--54:var(--csstools-color-scheme--light) #aaf2ff;
+  --button-primary-active-bg-color:var(--csstools-light-dark-toggle--54, #054096);
+  --csstools-light-dark-toggle--55:var(--csstools-color-scheme--light) #80ebff;
+  --button-primary-hover-bg-color:var(--csstools-light-dark-toggle--55, #0250bb);
 
-  --csstools-light-dark-toggle--61:var(--csstools-color-scheme--light) #42414d;
+  --csstools-light-dark-toggle--56:var(--csstools-color-scheme--light) #42414d;
 
-  --input-text-bg-color:var(--csstools-light-dark-toggle--61, white);
+  --input-text-bg-color:var(--csstools-light-dark-toggle--56, white);
   }
 }
 
@@ -786,15 +786,15 @@
     }
 
 :is(.dialog .mainContainer) .messageBar{
-      --csstools-light-dark-toggle--62:var(--csstools-color-scheme--light) #5a3100;
-      --message-bar-bg-color:var(--csstools-light-dark-toggle--62, #ffebcd);
-      --csstools-light-dark-toggle--63:var(--csstools-color-scheme--light) #fbfbfe;
-      --message-bar-fg-color:var(--csstools-light-dark-toggle--63, #15141a);
-      --csstools-light-dark-toggle--64:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.08);
-      --message-bar-border-color:var(--csstools-light-dark-toggle--64, rgb(0 0 0 / 0.08));
+      --csstools-light-dark-toggle--57:var(--csstools-color-scheme--light) #5a3100;
+      --message-bar-bg-color:var(--csstools-light-dark-toggle--57, #ffebcd);
+      --csstools-light-dark-toggle--58:var(--csstools-color-scheme--light) #fbfbfe;
+      --message-bar-fg-color:var(--csstools-light-dark-toggle--58, #15141a);
+      --csstools-light-dark-toggle--59:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.08);
+      --message-bar-border-color:var(--csstools-light-dark-toggle--59, rgb(0 0 0 / 0.08));
       --message-bar-icon:url(images/messageBar_warning.svg);
-      --csstools-light-dark-toggle--65:var(--csstools-color-scheme--light) #e49c49;
-      --message-bar-icon-color:var(--csstools-light-dark-toggle--65, #cd411e);
+      --csstools-light-dark-toggle--60:var(--csstools-color-scheme--light) #e49c49;
+      --message-bar-icon-color:var(--csstools-light-dark-toggle--60, #cd411e);
     }
 
 @supports (color: light-dark(red, red)){
@@ -822,14 +822,14 @@
 @supports not (color: light-dark(tan, tan)){
 
 :is(:is(.dialog .mainContainer) .messageBar) *{
-      --csstools-light-dark-toggle--62:var(--csstools-color-scheme--light) #5a3100;
-      --message-bar-bg-color:var(--csstools-light-dark-toggle--62, #ffebcd);
-      --csstools-light-dark-toggle--63:var(--csstools-color-scheme--light) #fbfbfe;
-      --message-bar-fg-color:var(--csstools-light-dark-toggle--63, #15141a);
-      --csstools-light-dark-toggle--64:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.08);
-      --message-bar-border-color:var(--csstools-light-dark-toggle--64, rgb(0 0 0 / 0.08));
-      --csstools-light-dark-toggle--65:var(--csstools-color-scheme--light) #e49c49;
-      --message-bar-icon-color:var(--csstools-light-dark-toggle--65, #cd411e);
+      --csstools-light-dark-toggle--57:var(--csstools-color-scheme--light) #5a3100;
+      --message-bar-bg-color:var(--csstools-light-dark-toggle--57, #ffebcd);
+      --csstools-light-dark-toggle--58:var(--csstools-color-scheme--light) #fbfbfe;
+      --message-bar-fg-color:var(--csstools-light-dark-toggle--58, #15141a);
+      --csstools-light-dark-toggle--59:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.08);
+      --message-bar-border-color:var(--csstools-light-dark-toggle--59, rgb(0 0 0 / 0.08));
+      --csstools-light-dark-toggle--60:var(--csstools-color-scheme--light) #e49c49;
+      --message-bar-icon-color:var(--csstools-light-dark-toggle--60, #cd411e);
   }
 }
 
@@ -910,13 +910,25 @@
     transform-origin:0% 0%;
   }
 
+.textLayer{
+  --min-font-size:1;
+  --text-scale-factor:calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv:calc(1 / var(--min-font-size));
+}
+
 .textLayer  > :not(.markedContent),.textLayer .markedContent span:not(.markedContent){
     z-index:1;
+
+    --font-height:0;
+    font-size:calc(var(--text-scale-factor) * var(--font-height));
+
+    --scale-x:1;
+    --rotate:0deg;
+    transform:rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
   }
 
-.textLayer span.markedContent{
-    top:0;
-    height:0;
+.textLayer .markedContent{
+    display:contents;
   }
 
 .textLayer span[role="img"]{
@@ -1829,23 +1841,24 @@
     currentColor 21%,
     transparent
   );
-  --csstools-light-dark-toggle--66:var(--csstools-color-scheme--light) #0df;
-  --color-accent-primary:var(--csstools-light-dark-toggle--66, #0060df);
-  --csstools-light-dark-toggle--67:var(--csstools-color-scheme--light) #80ebff;
-  --color-accent-primary-hover:var(--csstools-light-dark-toggle--67, #0250bb);
-  --csstools-light-dark-toggle--68:var(--csstools-color-scheme--light) #aaf2ff;
-  --color-accent-primary-active:var(--csstools-light-dark-toggle--68, #054096);
+  --csstools-light-dark-toggle--61:var(--csstools-color-scheme--light) #0df;
+  --color-accent-primary:var(--csstools-light-dark-toggle--61, #0060df);
+  --csstools-light-dark-toggle--62:var(--csstools-color-scheme--light) #80ebff;
+  --color-accent-primary-hover:var(--csstools-light-dark-toggle--62, #0250bb);
+  --csstools-light-dark-toggle--63:var(--csstools-color-scheme--light) #aaf2ff;
+  --color-accent-primary-active:var(--csstools-light-dark-toggle--63, #054096);
   --border-radius-circle:9999px;
   --border-width:1px;
   --size-item-small:16px;
   --size-item-large:32px;
-  --csstools-light-dark-toggle--69:var(--csstools-color-scheme--light) #1c1b22;
-  --color-canvas:var(--csstools-light-dark-toggle--69, white);
+  --csstools-light-dark-toggle--64:var(--csstools-color-scheme--light) #1c1b22;
+  --color-canvas:var(--csstools-light-dark-toggle--64, white);
   --background-color-canvas:var(--color-canvas);
-  --csstools-light-dark-toggle--70:var(--csstools-color-scheme--light) #f9f9fa;
-  --border-color-interactive:var(--csstools-light-dark-toggle--70, #8f8f9d);
+  --csstools-light-dark-toggle--65:var(--csstools-color-scheme--light) #f9f9fa;
+  --border-color-interactive:var(--csstools-light-dark-toggle--65, #8f8f9d);
   --border-color-interactive-hover:var(--border-color-interactive);
   --border-color-interactive-active:var(--border-color-interactive);
+  --focus-outline-offset:2px;
 }
 
 @supports (color: light-dark(red, red)){
@@ -1861,16 +1874,16 @@
 @supports not (color: light-dark(tan, tan)){
 
 .toggle-button *{
-  --csstools-light-dark-toggle--66:var(--csstools-color-scheme--light) #0df;
-  --color-accent-primary:var(--csstools-light-dark-toggle--66, #0060df);
-  --csstools-light-dark-toggle--67:var(--csstools-color-scheme--light) #80ebff;
-  --color-accent-primary-hover:var(--csstools-light-dark-toggle--67, #0250bb);
-  --csstools-light-dark-toggle--68:var(--csstools-color-scheme--light) #aaf2ff;
-  --color-accent-primary-active:var(--csstools-light-dark-toggle--68, #054096);
-  --csstools-light-dark-toggle--69:var(--csstools-color-scheme--light) #1c1b22;
-  --color-canvas:var(--csstools-light-dark-toggle--69, white);
-  --csstools-light-dark-toggle--70:var(--csstools-color-scheme--light) #f9f9fa;
-  --border-color-interactive:var(--csstools-light-dark-toggle--70, #8f8f9d);
+  --csstools-light-dark-toggle--61:var(--csstools-color-scheme--light) #0df;
+  --color-accent-primary:var(--csstools-light-dark-toggle--61, #0060df);
+  --csstools-light-dark-toggle--62:var(--csstools-color-scheme--light) #80ebff;
+  --color-accent-primary-hover:var(--csstools-light-dark-toggle--62, #0250bb);
+  --csstools-light-dark-toggle--63:var(--csstools-color-scheme--light) #aaf2ff;
+  --color-accent-primary-active:var(--csstools-light-dark-toggle--63, #054096);
+  --csstools-light-dark-toggle--64:var(--csstools-color-scheme--light) #1c1b22;
+  --color-canvas:var(--csstools-light-dark-toggle--64, white);
+  --csstools-light-dark-toggle--65:var(--csstools-color-scheme--light) #f9f9fa;
+  --border-color-interactive:var(--csstools-light-dark-toggle--65, #8f8f9d);
   }
 }
 
@@ -2049,19 +2062,19 @@
 
 :root{
   --clear-signature-button-icon:url(images/editor-toolbar-delete.svg);
-  --csstools-light-dark-toggle--71:var(--csstools-color-scheme--light) #2b2a33;
-  --signature-bg:var(--csstools-light-dark-toggle--71, #f9f9fb);
-  --csstools-light-dark-toggle--72:var(--csstools-color-scheme--light) var(--signature-bg);
-  --signature-hover-bg:var(--csstools-light-dark-toggle--72, #f0f0f4);
+  --csstools-light-dark-toggle--66:var(--csstools-color-scheme--light) #2b2a33;
+  --signature-bg:var(--csstools-light-dark-toggle--66, #f9f9fb);
+  --csstools-light-dark-toggle--67:var(--csstools-color-scheme--light) var(--signature-bg);
+  --signature-hover-bg:var(--csstools-light-dark-toggle--67, #f0f0f4);
   --button-signature-bg:transparent;
   --button-signature-color:var(--main-color);
-  --csstools-light-dark-toggle--73:var(--csstools-color-scheme--light) #5b5b66;
-  --button-signature-active-bg:var(--csstools-light-dark-toggle--73, #cfcfd8);
+  --csstools-light-dark-toggle--68:var(--csstools-color-scheme--light) #5b5b66;
+  --button-signature-active-bg:var(--csstools-light-dark-toggle--68, #cfcfd8);
   --button-signature-active-border:none;
   --button-signature-active-color:var(--button-signature-color);
   --button-signature-border:none;
-  --csstools-light-dark-toggle--74:var(--csstools-color-scheme--light) #52525e;
-  --button-signature-hover-bg:var(--csstools-light-dark-toggle--74, #e0e0e6);
+  --csstools-light-dark-toggle--69:var(--csstools-color-scheme--light) #52525e;
+  --button-signature-hover-bg:var(--csstools-light-dark-toggle--69, #e0e0e6);
   --button-signature-hover-color:var(--button-signature-color);
 }
 
@@ -2077,14 +2090,14 @@
 @supports not (color: light-dark(tan, tan)){
 
 :root *{
-  --csstools-light-dark-toggle--71:var(--csstools-color-scheme--light) #2b2a33;
-  --signature-bg:var(--csstools-light-dark-toggle--71, #f9f9fb);
-  --csstools-light-dark-toggle--72:var(--csstools-color-scheme--light) var(--signature-bg);
-  --signature-hover-bg:var(--csstools-light-dark-toggle--72, #f0f0f4);
-  --csstools-light-dark-toggle--73:var(--csstools-color-scheme--light) #5b5b66;
-  --button-signature-active-bg:var(--csstools-light-dark-toggle--73, #cfcfd8);
-  --csstools-light-dark-toggle--74:var(--csstools-color-scheme--light) #52525e;
-  --button-signature-hover-bg:var(--csstools-light-dark-toggle--74, #e0e0e6);
+  --csstools-light-dark-toggle--66:var(--csstools-color-scheme--light) #2b2a33;
+  --signature-bg:var(--csstools-light-dark-toggle--66, #f9f9fb);
+  --csstools-light-dark-toggle--67:var(--csstools-color-scheme--light) var(--signature-bg);
+  --signature-hover-bg:var(--csstools-light-dark-toggle--67, #f0f0f4);
+  --csstools-light-dark-toggle--68:var(--csstools-color-scheme--light) #5b5b66;
+  --button-signature-active-bg:var(--csstools-light-dark-toggle--68, #cfcfd8);
+  --csstools-light-dark-toggle--69:var(--csstools-color-scheme--light) #52525e;
+  --button-signature-hover-bg:var(--csstools-light-dark-toggle--69, #e0e0e6);
   }
 }
 
@@ -2972,35 +2985,35 @@
 :is(.annotationLayer,.annotationEditorLayer) .annotationCommentButton{
     --csstools-color-scheme--light:initial;
     color-scheme:light dark;
-    --csstools-light-dark-toggle--75:var(--csstools-color-scheme--light) #1c1b22;
-    --comment-button-bg:var(--csstools-light-dark-toggle--75, white);
-    --csstools-light-dark-toggle--76:var(--csstools-color-scheme--light) #fbfbfe;
-    --comment-button-fg:var(--csstools-light-dark-toggle--76, #5b5b66);
-    --csstools-light-dark-toggle--77:var(--csstools-color-scheme--light) #a6ecf4;
-    --comment-button-active-bg:var(--csstools-light-dark-toggle--77, #0041a4);
-    --csstools-light-dark-toggle--78:var(--csstools-color-scheme--light) #15141a;
-    --comment-button-active-fg:var(--csstools-light-dark-toggle--78, white);
-    --csstools-light-dark-toggle--79:var(--csstools-color-scheme--light) #61dce9;
-    --comment-button-hover-bg:var(--csstools-light-dark-toggle--79, #0053cb);
-    --csstools-light-dark-toggle--80:var(--csstools-color-scheme--light) #15141a;
-    --comment-button-hover-fg:var(--csstools-light-dark-toggle--80, white);
-    --csstools-light-dark-toggle--81:var(--csstools-color-scheme--light) #00cadb;
-    --comment-button-selected-bg:var(--csstools-light-dark-toggle--81, #0062fa);
-    --csstools-light-dark-toggle--82:var(--csstools-color-scheme--light) #bfbfc9;
-    --comment-button-border-color:var(--csstools-light-dark-toggle--82, #8f8f9d);
+    --csstools-light-dark-toggle--70:var(--csstools-color-scheme--light) #1c1b22;
+    --comment-button-bg:var(--csstools-light-dark-toggle--70, white);
+    --csstools-light-dark-toggle--71:var(--csstools-color-scheme--light) #fbfbfe;
+    --comment-button-fg:var(--csstools-light-dark-toggle--71, #5b5b66);
+    --csstools-light-dark-toggle--72:var(--csstools-color-scheme--light) #a6ecf4;
+    --comment-button-active-bg:var(--csstools-light-dark-toggle--72, #0041a4);
+    --csstools-light-dark-toggle--73:var(--csstools-color-scheme--light) #15141a;
+    --comment-button-active-fg:var(--csstools-light-dark-toggle--73, white);
+    --csstools-light-dark-toggle--74:var(--csstools-color-scheme--light) #61dce9;
+    --comment-button-hover-bg:var(--csstools-light-dark-toggle--74, #0053cb);
+    --csstools-light-dark-toggle--75:var(--csstools-color-scheme--light) #15141a;
+    --comment-button-hover-fg:var(--csstools-light-dark-toggle--75, white);
+    --csstools-light-dark-toggle--76:var(--csstools-color-scheme--light) #00cadb;
+    --comment-button-selected-bg:var(--csstools-light-dark-toggle--76, #0062fa);
+    --csstools-light-dark-toggle--77:var(--csstools-color-scheme--light) #bfbfc9;
+    --comment-button-border-color:var(--csstools-light-dark-toggle--77, #8f8f9d);
     --comment-button-active-border-color:var(--comment-button-active-bg);
-    --csstools-light-dark-toggle--83:var(--csstools-color-scheme--light) #3a3944;
-    --comment-button-focus-border-color:var(--csstools-light-dark-toggle--83, #cfcfd8);
+    --csstools-light-dark-toggle--78:var(--csstools-color-scheme--light) #3a3944;
+    --comment-button-focus-border-color:var(--csstools-light-dark-toggle--78, #cfcfd8);
     --comment-button-hover-border-color:var(--comment-button-hover-bg);
     --comment-button-selected-border-color:var(--comment-button-selected-bg);
-    --csstools-light-dark-toggle--84:var(--csstools-color-scheme--light) #15141a;
-    --comment-button-selected-fg:var(--csstools-light-dark-toggle--84, white);
+    --csstools-light-dark-toggle--79:var(--csstools-color-scheme--light) #15141a;
+    --comment-button-selected-fg:var(--csstools-light-dark-toggle--79, white);
     --comment-button-dim:24px;
-    --csstools-light-dark-toggle--85:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.2);
-    --csstools-light-dark-toggle--86:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.4);
-    --comment-button-box-shadow:0 0.25px 0.75px 0 var(--csstools-light-dark-toggle--85, rgb(0 0 0 / 0.05)), 0 2px 6px 0 var(--csstools-light-dark-toggle--86, rgb(0 0 0 / 0.1));
-    --csstools-light-dark-toggle--87:var(--csstools-color-scheme--light) #00cadb;
-    --comment-button-focus-outline-color:var(--csstools-light-dark-toggle--87, #0062fa);
+    --csstools-light-dark-toggle--80:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.2);
+    --csstools-light-dark-toggle--81:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.4);
+    --comment-button-box-shadow:0 0.25px 0.75px 0 var(--csstools-light-dark-toggle--80, rgb(0 0 0 / 0.05)), 0 2px 6px 0 var(--csstools-light-dark-toggle--81, rgb(0 0 0 / 0.1));
+    --csstools-light-dark-toggle--82:var(--csstools-color-scheme--light) #00cadb;
+    --comment-button-focus-outline-color:var(--csstools-light-dark-toggle--82, #0062fa);
   }
 
 @supports (color: light-dark(red, red)){
@@ -3033,31 +3046,31 @@
 @supports not (color: light-dark(tan, tan)){
 
 :is(:is(.annotationLayer,.annotationEditorLayer) .annotationCommentButton) *{
-    --csstools-light-dark-toggle--75:var(--csstools-color-scheme--light) #1c1b22;
-    --comment-button-bg:var(--csstools-light-dark-toggle--75, white);
-    --csstools-light-dark-toggle--76:var(--csstools-color-scheme--light) #fbfbfe;
-    --comment-button-fg:var(--csstools-light-dark-toggle--76, #5b5b66);
-    --csstools-light-dark-toggle--77:var(--csstools-color-scheme--light) #a6ecf4;
-    --comment-button-active-bg:var(--csstools-light-dark-toggle--77, #0041a4);
-    --csstools-light-dark-toggle--78:var(--csstools-color-scheme--light) #15141a;
-    --comment-button-active-fg:var(--csstools-light-dark-toggle--78, white);
-    --csstools-light-dark-toggle--79:var(--csstools-color-scheme--light) #61dce9;
-    --comment-button-hover-bg:var(--csstools-light-dark-toggle--79, #0053cb);
-    --csstools-light-dark-toggle--80:var(--csstools-color-scheme--light) #15141a;
-    --comment-button-hover-fg:var(--csstools-light-dark-toggle--80, white);
-    --csstools-light-dark-toggle--81:var(--csstools-color-scheme--light) #00cadb;
-    --comment-button-selected-bg:var(--csstools-light-dark-toggle--81, #0062fa);
-    --csstools-light-dark-toggle--82:var(--csstools-color-scheme--light) #bfbfc9;
-    --comment-button-border-color:var(--csstools-light-dark-toggle--82, #8f8f9d);
-    --csstools-light-dark-toggle--83:var(--csstools-color-scheme--light) #3a3944;
-    --comment-button-focus-border-color:var(--csstools-light-dark-toggle--83, #cfcfd8);
-    --csstools-light-dark-toggle--84:var(--csstools-color-scheme--light) #15141a;
-    --comment-button-selected-fg:var(--csstools-light-dark-toggle--84, white);
-    --csstools-light-dark-toggle--85:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.2);
-    --csstools-light-dark-toggle--86:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.4);
-    --comment-button-box-shadow:0 0.25px 0.75px 0 var(--csstools-light-dark-toggle--85, rgb(0 0 0 / 0.05)), 0 2px 6px 0 var(--csstools-light-dark-toggle--86, rgb(0 0 0 / 0.1));
-    --csstools-light-dark-toggle--87:var(--csstools-color-scheme--light) #00cadb;
-    --comment-button-focus-outline-color:var(--csstools-light-dark-toggle--87, #0062fa);
+    --csstools-light-dark-toggle--70:var(--csstools-color-scheme--light) #1c1b22;
+    --comment-button-bg:var(--csstools-light-dark-toggle--70, white);
+    --csstools-light-dark-toggle--71:var(--csstools-color-scheme--light) #fbfbfe;
+    --comment-button-fg:var(--csstools-light-dark-toggle--71, #5b5b66);
+    --csstools-light-dark-toggle--72:var(--csstools-color-scheme--light) #a6ecf4;
+    --comment-button-active-bg:var(--csstools-light-dark-toggle--72, #0041a4);
+    --csstools-light-dark-toggle--73:var(--csstools-color-scheme--light) #15141a;
+    --comment-button-active-fg:var(--csstools-light-dark-toggle--73, white);
+    --csstools-light-dark-toggle--74:var(--csstools-color-scheme--light) #61dce9;
+    --comment-button-hover-bg:var(--csstools-light-dark-toggle--74, #0053cb);
+    --csstools-light-dark-toggle--75:var(--csstools-color-scheme--light) #15141a;
+    --comment-button-hover-fg:var(--csstools-light-dark-toggle--75, white);
+    --csstools-light-dark-toggle--76:var(--csstools-color-scheme--light) #00cadb;
+    --comment-button-selected-bg:var(--csstools-light-dark-toggle--76, #0062fa);
+    --csstools-light-dark-toggle--77:var(--csstools-color-scheme--light) #bfbfc9;
+    --comment-button-border-color:var(--csstools-light-dark-toggle--77, #8f8f9d);
+    --csstools-light-dark-toggle--78:var(--csstools-color-scheme--light) #3a3944;
+    --comment-button-focus-border-color:var(--csstools-light-dark-toggle--78, #cfcfd8);
+    --csstools-light-dark-toggle--79:var(--csstools-color-scheme--light) #15141a;
+    --comment-button-selected-fg:var(--csstools-light-dark-toggle--79, white);
+    --csstools-light-dark-toggle--80:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.2);
+    --csstools-light-dark-toggle--81:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.4);
+    --comment-button-box-shadow:0 0.25px 0.75px 0 var(--csstools-light-dark-toggle--80, rgb(0 0 0 / 0.05)), 0 2px 6px 0 var(--csstools-light-dark-toggle--81, rgb(0 0 0 / 0.1));
+    --csstools-light-dark-toggle--82:var(--csstools-color-scheme--light) #00cadb;
+    --comment-button-focus-outline-color:var(--csstools-light-dark-toggle--82, #0062fa);
   }
 }
 
@@ -3164,58 +3177,58 @@
   --comment-popup-edit-button-icon:url(images/comment-popup-editButton.svg);
   --comment-popup-delete-button-icon:url(images/editor-toolbar-delete.svg);
 
-  --csstools-light-dark-toggle--88:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.69);
+  --csstools-light-dark-toggle--83:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.69);
 
-  --comment-date-fg-color:var(--csstools-light-dark-toggle--88, rgb(21 20 26 / 0.69));
-  --csstools-light-dark-toggle--89:var(--csstools-color-scheme--light) #1c1b22;
-  --comment-bg-color:var(--csstools-light-dark-toggle--89, #f9f9fb);
-  --csstools-light-dark-toggle--90:var(--csstools-color-scheme--light) #2c2b33;
-  --comment-hover-bg-color:var(--csstools-light-dark-toggle--90, #e0e0e6);
-  --csstools-light-dark-toggle--91:var(--csstools-color-scheme--light) #3a3944;
-  --comment-active-bg-color:var(--csstools-light-dark-toggle--91, #d1d1d9);
+  --comment-date-fg-color:var(--csstools-light-dark-toggle--83, rgb(21 20 26 / 0.69));
+  --csstools-light-dark-toggle--84:var(--csstools-color-scheme--light) #1c1b22;
+  --comment-bg-color:var(--csstools-light-dark-toggle--84, #f9f9fb);
+  --csstools-light-dark-toggle--85:var(--csstools-color-scheme--light) #2c2b33;
+  --comment-hover-bg-color:var(--csstools-light-dark-toggle--85, #e0e0e6);
+  --csstools-light-dark-toggle--86:var(--csstools-color-scheme--light) #3a3944;
+  --comment-active-bg-color:var(--csstools-light-dark-toggle--86, #d1d1d9);
   --comment-hover-brightness:0.89;
   --comment-hover-filter:brightness(var(--comment-hover-brightness));
   --comment-active-brightness:0.825;
   --comment-active-filter:brightness(var(--comment-active-brightness));
-  --csstools-light-dark-toggle--92:var(--csstools-color-scheme--light) #52525e;
-  --comment-border-color:var(--csstools-light-dark-toggle--92, #f0f0f4);
-  --csstools-light-dark-toggle--93:var(--csstools-color-scheme--light) #00cadb;
-  --comment-focus-outline-color:var(--csstools-light-dark-toggle--93, #0062fa);
-  --csstools-light-dark-toggle--94:var(--csstools-color-scheme--light) #fbfbfe;
-  --comment-fg-color:var(--csstools-light-dark-toggle--94, #15141a);
-  --csstools-light-dark-toggle--95:var(--csstools-color-scheme--light) #00317e;
-  --comment-count-bg-color:var(--csstools-light-dark-toggle--95, #e2f7ff);
-  --csstools-light-dark-toggle--96:var(--csstools-color-scheme--light) #a6ecf4;
-  --comment-indicator-active-fg-color:var(--csstools-light-dark-toggle--96, #0041a4);
+  --csstools-light-dark-toggle--87:var(--csstools-color-scheme--light) #52525e;
+  --comment-border-color:var(--csstools-light-dark-toggle--87, #f0f0f4);
+  --csstools-light-dark-toggle--88:var(--csstools-color-scheme--light) #00cadb;
+  --comment-focus-outline-color:var(--csstools-light-dark-toggle--88, #0062fa);
+  --csstools-light-dark-toggle--89:var(--csstools-color-scheme--light) #fbfbfe;
+  --comment-fg-color:var(--csstools-light-dark-toggle--89, #15141a);
+  --csstools-light-dark-toggle--90:var(--csstools-color-scheme--light) #00317e;
+  --comment-count-bg-color:var(--csstools-light-dark-toggle--90, #e2f7ff);
+  --csstools-light-dark-toggle--91:var(--csstools-color-scheme--light) #a6ecf4;
+  --comment-indicator-active-fg-color:var(--csstools-light-dark-toggle--91, #0041a4);
   --comment-indicator-active-filter:brightness(
     calc(1 / var(--comment-active-brightness))
   );
-  --csstools-light-dark-toggle--97:var(--csstools-color-scheme--light) #fbfbfe;
-  --comment-indicator-focus-fg-color:var(--csstools-light-dark-toggle--97, #5b5b66);
-  --csstools-light-dark-toggle--98:var(--csstools-color-scheme--light) #61dce9;
-  --comment-indicator-hover-fg-color:var(--csstools-light-dark-toggle--98, #0053cb);
+  --csstools-light-dark-toggle--92:var(--csstools-color-scheme--light) #fbfbfe;
+  --comment-indicator-focus-fg-color:var(--csstools-light-dark-toggle--92, #5b5b66);
+  --csstools-light-dark-toggle--93:var(--csstools-color-scheme--light) #61dce9;
+  --comment-indicator-hover-fg-color:var(--csstools-light-dark-toggle--93, #0053cb);
   --comment-indicator-hover-filter:brightness(
     calc(1 / var(--comment-hover-brightness))
   );
-  --csstools-light-dark-toggle--99:var(--csstools-color-scheme--light) #00cadb;
-  --comment-indicator-selected-fg-color:var(--csstools-light-dark-toggle--99, #0062fa);
+  --csstools-light-dark-toggle--94:var(--csstools-color-scheme--light) #00cadb;
+  --comment-indicator-selected-fg-color:var(--csstools-light-dark-toggle--94, #0062fa);
 
   --button-comment-bg:transparent;
   --button-comment-color:var(--main-color);
-  --csstools-light-dark-toggle--100:var(--csstools-color-scheme--light) #5b5b66;
-  --button-comment-active-bg:var(--csstools-light-dark-toggle--100, #cfcfd8);
+  --csstools-light-dark-toggle--95:var(--csstools-color-scheme--light) #5b5b66;
+  --button-comment-active-bg:var(--csstools-light-dark-toggle--95, #cfcfd8);
   --button-comment-active-border:none;
   --button-comment-active-color:var(--button-comment-color);
   --button-comment-border:none;
-  --csstools-light-dark-toggle--101:var(--csstools-color-scheme--light) #52525e;
-  --button-comment-hover-bg:var(--csstools-light-dark-toggle--101, #e0e0e6);
+  --csstools-light-dark-toggle--96:var(--csstools-color-scheme--light) #52525e;
+  --button-comment-hover-bg:var(--csstools-light-dark-toggle--96, #e0e0e6);
   --button-comment-hover-color:var(--button-comment-color);
 
-  --csstools-light-dark-toggle--102:var(--csstools-color-scheme--light) #0df;
+  --csstools-light-dark-toggle--97:var(--csstools-color-scheme--light) #0df;
 
-  --link-fg-color:var(--csstools-light-dark-toggle--102, #0060df);
-  --csstools-light-dark-toggle--103:var(--csstools-color-scheme--light) #80ebff;
-  --link-hover-fg-color:var(--csstools-light-dark-toggle--103, #0250bb);
+  --link-fg-color:var(--csstools-light-dark-toggle--97, #0060df);
+  --csstools-light-dark-toggle--98:var(--csstools-color-scheme--light) #80ebff;
+  --link-hover-fg-color:var(--csstools-light-dark-toggle--98, #0250bb);
 }
 
 @supports (color: light-dark(red, red)) and (color: rgb(0 0 0 / 0)){
@@ -3255,41 +3268,41 @@
 
 :is(#editorCommentsSidebar,.commentPopup) *{
 
-  --csstools-light-dark-toggle--88:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.69);
+  --csstools-light-dark-toggle--83:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.69);
 
-  --comment-date-fg-color:var(--csstools-light-dark-toggle--88, rgb(21 20 26 / 0.69));
-  --csstools-light-dark-toggle--89:var(--csstools-color-scheme--light) #1c1b22;
-  --comment-bg-color:var(--csstools-light-dark-toggle--89, #f9f9fb);
-  --csstools-light-dark-toggle--90:var(--csstools-color-scheme--light) #2c2b33;
-  --comment-hover-bg-color:var(--csstools-light-dark-toggle--90, #e0e0e6);
-  --csstools-light-dark-toggle--91:var(--csstools-color-scheme--light) #3a3944;
-  --comment-active-bg-color:var(--csstools-light-dark-toggle--91, #d1d1d9);
-  --csstools-light-dark-toggle--92:var(--csstools-color-scheme--light) #52525e;
-  --comment-border-color:var(--csstools-light-dark-toggle--92, #f0f0f4);
-  --csstools-light-dark-toggle--93:var(--csstools-color-scheme--light) #00cadb;
-  --comment-focus-outline-color:var(--csstools-light-dark-toggle--93, #0062fa);
-  --csstools-light-dark-toggle--94:var(--csstools-color-scheme--light) #fbfbfe;
-  --comment-fg-color:var(--csstools-light-dark-toggle--94, #15141a);
-  --csstools-light-dark-toggle--95:var(--csstools-color-scheme--light) #00317e;
-  --comment-count-bg-color:var(--csstools-light-dark-toggle--95, #e2f7ff);
-  --csstools-light-dark-toggle--96:var(--csstools-color-scheme--light) #a6ecf4;
-  --comment-indicator-active-fg-color:var(--csstools-light-dark-toggle--96, #0041a4);
-  --csstools-light-dark-toggle--97:var(--csstools-color-scheme--light) #fbfbfe;
-  --comment-indicator-focus-fg-color:var(--csstools-light-dark-toggle--97, #5b5b66);
-  --csstools-light-dark-toggle--98:var(--csstools-color-scheme--light) #61dce9;
-  --comment-indicator-hover-fg-color:var(--csstools-light-dark-toggle--98, #0053cb);
-  --csstools-light-dark-toggle--99:var(--csstools-color-scheme--light) #00cadb;
-  --comment-indicator-selected-fg-color:var(--csstools-light-dark-toggle--99, #0062fa);
-  --csstools-light-dark-toggle--100:var(--csstools-color-scheme--light) #5b5b66;
-  --button-comment-active-bg:var(--csstools-light-dark-toggle--100, #cfcfd8);
-  --csstools-light-dark-toggle--101:var(--csstools-color-scheme--light) #52525e;
-  --button-comment-hover-bg:var(--csstools-light-dark-toggle--101, #e0e0e6);
+  --comment-date-fg-color:var(--csstools-light-dark-toggle--83, rgb(21 20 26 / 0.69));
+  --csstools-light-dark-toggle--84:var(--csstools-color-scheme--light) #1c1b22;
+  --comment-bg-color:var(--csstools-light-dark-toggle--84, #f9f9fb);
+  --csstools-light-dark-toggle--85:var(--csstools-color-scheme--light) #2c2b33;
+  --comment-hover-bg-color:var(--csstools-light-dark-toggle--85, #e0e0e6);
+  --csstools-light-dark-toggle--86:var(--csstools-color-scheme--light) #3a3944;
+  --comment-active-bg-color:var(--csstools-light-dark-toggle--86, #d1d1d9);
+  --csstools-light-dark-toggle--87:var(--csstools-color-scheme--light) #52525e;
+  --comment-border-color:var(--csstools-light-dark-toggle--87, #f0f0f4);
+  --csstools-light-dark-toggle--88:var(--csstools-color-scheme--light) #00cadb;
+  --comment-focus-outline-color:var(--csstools-light-dark-toggle--88, #0062fa);
+  --csstools-light-dark-toggle--89:var(--csstools-color-scheme--light) #fbfbfe;
+  --comment-fg-color:var(--csstools-light-dark-toggle--89, #15141a);
+  --csstools-light-dark-toggle--90:var(--csstools-color-scheme--light) #00317e;
+  --comment-count-bg-color:var(--csstools-light-dark-toggle--90, #e2f7ff);
+  --csstools-light-dark-toggle--91:var(--csstools-color-scheme--light) #a6ecf4;
+  --comment-indicator-active-fg-color:var(--csstools-light-dark-toggle--91, #0041a4);
+  --csstools-light-dark-toggle--92:var(--csstools-color-scheme--light) #fbfbfe;
+  --comment-indicator-focus-fg-color:var(--csstools-light-dark-toggle--92, #5b5b66);
+  --csstools-light-dark-toggle--93:var(--csstools-color-scheme--light) #61dce9;
+  --comment-indicator-hover-fg-color:var(--csstools-light-dark-toggle--93, #0053cb);
+  --csstools-light-dark-toggle--94:var(--csstools-color-scheme--light) #00cadb;
+  --comment-indicator-selected-fg-color:var(--csstools-light-dark-toggle--94, #0062fa);
+  --csstools-light-dark-toggle--95:var(--csstools-color-scheme--light) #5b5b66;
+  --button-comment-active-bg:var(--csstools-light-dark-toggle--95, #cfcfd8);
+  --csstools-light-dark-toggle--96:var(--csstools-color-scheme--light) #52525e;
+  --button-comment-hover-bg:var(--csstools-light-dark-toggle--96, #e0e0e6);
 
-  --csstools-light-dark-toggle--102:var(--csstools-color-scheme--light) #0df;
+  --csstools-light-dark-toggle--97:var(--csstools-color-scheme--light) #0df;
 
-  --link-fg-color:var(--csstools-light-dark-toggle--102, #0060df);
-  --csstools-light-dark-toggle--103:var(--csstools-color-scheme--light) #80ebff;
-  --link-hover-fg-color:var(--csstools-light-dark-toggle--103, #0250bb);
+  --link-fg-color:var(--csstools-light-dark-toggle--97, #0060df);
+  --csstools-light-dark-toggle--98:var(--csstools-color-scheme--light) #80ebff;
+  --link-hover-fg-color:var(--csstools-light-dark-toggle--98, #0250bb);
   }
 }
 
@@ -3590,12 +3603,12 @@
   --csstools-color-scheme--light:initial;
   color-scheme:light dark;
 
-  --csstools-light-dark-toggle--104:var(--csstools-color-scheme--light) #3a3944;
+  --csstools-light-dark-toggle--99:var(--csstools-color-scheme--light) #3a3944;
 
-  --divider-color:var(--csstools-light-dark-toggle--104, #cfcfd8);
-  --csstools-light-dark-toggle--105:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.2);
-  --csstools-light-dark-toggle--106:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.4);
-  --comment-shadow:0 0.5px 2px 0 var(--csstools-light-dark-toggle--105, rgb(0 0 0 / 0.05)), 0 4px 16px 0 var(--csstools-light-dark-toggle--106, rgb(0 0 0 / 0.1));
+  --divider-color:var(--csstools-light-dark-toggle--99, #cfcfd8);
+  --csstools-light-dark-toggle--100:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.2);
+  --csstools-light-dark-toggle--101:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.4);
+  --comment-shadow:0 0.5px 2px 0 var(--csstools-light-dark-toggle--100, rgb(0 0 0 / 0.05)), 0 4px 16px 0 var(--csstools-light-dark-toggle--101, rgb(0 0 0 / 0.1));
 }
 
 @supports (color: light-dark(red, red)){
@@ -3615,12 +3628,12 @@
 
 .commentPopup *{
 
-  --csstools-light-dark-toggle--104:var(--csstools-color-scheme--light) #3a3944;
+  --csstools-light-dark-toggle--99:var(--csstools-color-scheme--light) #3a3944;
 
-  --divider-color:var(--csstools-light-dark-toggle--104, #cfcfd8);
-  --csstools-light-dark-toggle--105:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.2);
-  --csstools-light-dark-toggle--106:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.4);
-  --comment-shadow:0 0.5px 2px 0 var(--csstools-light-dark-toggle--105, rgb(0 0 0 / 0.05)), 0 4px 16px 0 var(--csstools-light-dark-toggle--106, rgb(0 0 0 / 0.1));
+  --divider-color:var(--csstools-light-dark-toggle--99, #cfcfd8);
+  --csstools-light-dark-toggle--100:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.2);
+  --csstools-light-dark-toggle--101:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.4);
+  --comment-shadow:0 0.5px 2px 0 var(--csstools-light-dark-toggle--100, rgb(0 0 0 / 0.05)), 0 4px 16px 0 var(--csstools-light-dark-toggle--101, rgb(0 0 0 / 0.1));
   }
 }
 
@@ -3980,26 +3993,26 @@
 
 :is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar{
     --editor-toolbar-delete-image:url(images/editor-toolbar-delete.svg);
-    --csstools-light-dark-toggle--107:var(--csstools-color-scheme--light) #2b2a33;
-    --editor-toolbar-bg-color:var(--csstools-light-dark-toggle--107, #f0f0f4);
+    --csstools-light-dark-toggle--102:var(--csstools-color-scheme--light) #2b2a33;
+    --editor-toolbar-bg-color:var(--csstools-light-dark-toggle--102, #f0f0f4);
     --editor-toolbar-highlight-image:url(images/toolbarButton-editorHighlight.svg);
-    --csstools-light-dark-toggle--108:var(--csstools-color-scheme--light) #fbfbfe;
-    --editor-toolbar-fg-color:var(--csstools-light-dark-toggle--108, #2e2e56);
+    --csstools-light-dark-toggle--103:var(--csstools-color-scheme--light) #fbfbfe;
+    --editor-toolbar-fg-color:var(--csstools-light-dark-toggle--103, #2e2e56);
     --editor-toolbar-border-color:#8f8f9d;
     --editor-toolbar-hover-border-color:var(--editor-toolbar-border-color);
-    --csstools-light-dark-toggle--109:var(--csstools-color-scheme--light) #52525e;
-    --editor-toolbar-hover-bg-color:var(--csstools-light-dark-toggle--109, #e0e0e6);
+    --csstools-light-dark-toggle--104:var(--csstools-color-scheme--light) #52525e;
+    --editor-toolbar-hover-bg-color:var(--csstools-light-dark-toggle--104, #e0e0e6);
     --editor-toolbar-hover-fg-color:var(--editor-toolbar-fg-color);
     --editor-toolbar-hover-outline:none;
-    --csstools-light-dark-toggle--110:var(--csstools-color-scheme--light) #0df;
-    --editor-toolbar-focus-outline-color:var(--csstools-light-dark-toggle--110, #0060df);
+    --csstools-light-dark-toggle--105:var(--csstools-color-scheme--light) #0df;
+    --editor-toolbar-focus-outline-color:var(--csstools-light-dark-toggle--105, #0060df);
     --editor-toolbar-shadow:0 2px 6px 0 rgb(58 57 68 / 0.2);
     --editor-toolbar-height:28px;
     --editor-toolbar-padding:2px;
-    --csstools-light-dark-toggle--111:var(--csstools-color-scheme--light) #54ffbd;
-    --alt-text-done-color:var(--csstools-light-dark-toggle--111, #2ac3a2);
-    --csstools-light-dark-toggle--112:var(--csstools-color-scheme--light) #80ebff;
-    --alt-text-warning-color:var(--csstools-light-dark-toggle--112, #0090ed);
+    --csstools-light-dark-toggle--106:var(--csstools-color-scheme--light) #54ffbd;
+    --alt-text-done-color:var(--csstools-light-dark-toggle--106, #2ac3a2);
+    --csstools-light-dark-toggle--107:var(--csstools-color-scheme--light) #80ebff;
+    --alt-text-warning-color:var(--csstools-light-dark-toggle--107, #0090ed);
     --alt-text-hover-done-color:var(--alt-text-done-color);
     --alt-text-hover-warning-color:var(--alt-text-warning-color);
   }
@@ -4018,18 +4031,18 @@
 @supports not (color: light-dark(tan, tan)){
 
 :is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) *{
-    --csstools-light-dark-toggle--107:var(--csstools-color-scheme--light) #2b2a33;
-    --editor-toolbar-bg-color:var(--csstools-light-dark-toggle--107, #f0f0f4);
-    --csstools-light-dark-toggle--108:var(--csstools-color-scheme--light) #fbfbfe;
-    --editor-toolbar-fg-color:var(--csstools-light-dark-toggle--108, #2e2e56);
-    --csstools-light-dark-toggle--109:var(--csstools-color-scheme--light) #52525e;
-    --editor-toolbar-hover-bg-color:var(--csstools-light-dark-toggle--109, #e0e0e6);
-    --csstools-light-dark-toggle--110:var(--csstools-color-scheme--light) #0df;
-    --editor-toolbar-focus-outline-color:var(--csstools-light-dark-toggle--110, #0060df);
-    --csstools-light-dark-toggle--111:var(--csstools-color-scheme--light) #54ffbd;
-    --alt-text-done-color:var(--csstools-light-dark-toggle--111, #2ac3a2);
-    --csstools-light-dark-toggle--112:var(--csstools-color-scheme--light) #80ebff;
-    --alt-text-warning-color:var(--csstools-light-dark-toggle--112, #0090ed);
+    --csstools-light-dark-toggle--102:var(--csstools-color-scheme--light) #2b2a33;
+    --editor-toolbar-bg-color:var(--csstools-light-dark-toggle--102, #f0f0f4);
+    --csstools-light-dark-toggle--103:var(--csstools-color-scheme--light) #fbfbfe;
+    --editor-toolbar-fg-color:var(--csstools-light-dark-toggle--103, #2e2e56);
+    --csstools-light-dark-toggle--104:var(--csstools-color-scheme--light) #52525e;
+    --editor-toolbar-hover-bg-color:var(--csstools-light-dark-toggle--104, #e0e0e6);
+    --csstools-light-dark-toggle--105:var(--csstools-color-scheme--light) #0df;
+    --editor-toolbar-focus-outline-color:var(--csstools-light-dark-toggle--105, #0060df);
+    --csstools-light-dark-toggle--106:var(--csstools-color-scheme--light) #54ffbd;
+    --alt-text-done-color:var(--csstools-light-dark-toggle--106, #2ac3a2);
+    --csstools-light-dark-toggle--107:var(--csstools-color-scheme--light) #80ebff;
+    --alt-text-warning-color:var(--csstools-light-dark-toggle--107, #0090ed);
   }
 }
 
@@ -4252,13 +4265,13 @@
         }
 
 .show:is(:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText) .tooltip){
-            --csstools-light-dark-toggle--113:var(--csstools-color-scheme--light) #1c1b22;
-            --alt-text-tooltip-bg:var(--csstools-light-dark-toggle--113, #f0f0f4);
-            --csstools-light-dark-toggle--114:var(--csstools-color-scheme--light) #fbfbfe;
-            --alt-text-tooltip-fg:var(--csstools-light-dark-toggle--114, #15141a);
+            --csstools-light-dark-toggle--108:var(--csstools-color-scheme--light) #1c1b22;
+            --alt-text-tooltip-bg:var(--csstools-light-dark-toggle--108, #f0f0f4);
+            --csstools-light-dark-toggle--109:var(--csstools-color-scheme--light) #fbfbfe;
+            --alt-text-tooltip-fg:var(--csstools-light-dark-toggle--109, #15141a);
             --alt-text-tooltip-border:#8f8f9d;
-            --csstools-light-dark-toggle--115:var(--csstools-color-scheme--light) #15141a;
-            --alt-text-tooltip-shadow:0 2px 6px 0 var(--csstools-light-dark-toggle--115, rgb(58 57 68 / 0.2));
+            --csstools-light-dark-toggle--110:var(--csstools-color-scheme--light) #15141a;
+            --alt-text-tooltip-shadow:0 2px 6px 0 var(--csstools-light-dark-toggle--110, rgb(58 57 68 / 0.2));
           }
 
 @supports (color: light-dark(red, red)){
@@ -4277,12 +4290,12 @@
 @supports not (color: light-dark(tan, tan)){
 
 .show:is(:is(:is(:is(:is(.annotationEditorLayer :is(.freeTextEditor,.inkEditor,.stampEditor,.highlightEditor,.signatureEditor),.textLayer) .editToolbar) .buttons) .altText) .tooltip) *{
-            --csstools-light-dark-toggle--113:var(--csstools-color-scheme--light) #1c1b22;
-            --alt-text-tooltip-bg:var(--csstools-light-dark-toggle--113, #f0f0f4);
-            --csstools-light-dark-toggle--114:var(--csstools-color-scheme--light) #fbfbfe;
-            --alt-text-tooltip-fg:var(--csstools-light-dark-toggle--114, #15141a);
-            --csstools-light-dark-toggle--115:var(--csstools-color-scheme--light) #15141a;
-            --alt-text-tooltip-shadow:0 2px 6px 0 var(--csstools-light-dark-toggle--115, rgb(58 57 68 / 0.2));
+            --csstools-light-dark-toggle--108:var(--csstools-color-scheme--light) #1c1b22;
+            --alt-text-tooltip-bg:var(--csstools-light-dark-toggle--108, #f0f0f4);
+            --csstools-light-dark-toggle--109:var(--csstools-color-scheme--light) #fbfbfe;
+            --alt-text-tooltip-fg:var(--csstools-light-dark-toggle--109, #15141a);
+            --csstools-light-dark-toggle--110:var(--csstools-color-scheme--light) #15141a;
+            --alt-text-tooltip-shadow:0 2px 6px 0 var(--csstools-light-dark-toggle--110, rgb(58 57 68 / 0.2));
   }
 }
 
@@ -4417,12 +4430,12 @@
   }
 
 :is(.annotationEditorLayer .stampEditor) .noAltTextBadge{
-    --csstools-light-dark-toggle--116:var(--csstools-color-scheme--light) #52525e;
-    --no-alt-text-badge-border-color:var(--csstools-light-dark-toggle--116, #f0f0f4);
-    --csstools-light-dark-toggle--117:var(--csstools-color-scheme--light) #fbfbfe;
-    --no-alt-text-badge-bg-color:var(--csstools-light-dark-toggle--117, #cfcfd8);
-    --csstools-light-dark-toggle--118:var(--csstools-color-scheme--light) #15141a;
-    --no-alt-text-badge-fg-color:var(--csstools-light-dark-toggle--118, #5b5b66);
+    --csstools-light-dark-toggle--111:var(--csstools-color-scheme--light) #52525e;
+    --no-alt-text-badge-border-color:var(--csstools-light-dark-toggle--111, #f0f0f4);
+    --csstools-light-dark-toggle--112:var(--csstools-color-scheme--light) #fbfbfe;
+    --no-alt-text-badge-bg-color:var(--csstools-light-dark-toggle--112, #cfcfd8);
+    --csstools-light-dark-toggle--113:var(--csstools-color-scheme--light) #15141a;
+    --no-alt-text-badge-fg-color:var(--csstools-light-dark-toggle--113, #5b5b66);
   }
 
 @supports (color: light-dark(red, red)){
@@ -4436,12 +4449,12 @@
 @supports not (color: light-dark(tan, tan)){
 
 :is(:is(.annotationEditorLayer .stampEditor) .noAltTextBadge) *{
-    --csstools-light-dark-toggle--116:var(--csstools-color-scheme--light) #52525e;
-    --no-alt-text-badge-border-color:var(--csstools-light-dark-toggle--116, #f0f0f4);
-    --csstools-light-dark-toggle--117:var(--csstools-color-scheme--light) #fbfbfe;
-    --no-alt-text-badge-bg-color:var(--csstools-light-dark-toggle--117, #cfcfd8);
-    --csstools-light-dark-toggle--118:var(--csstools-color-scheme--light) #15141a;
-    --no-alt-text-badge-fg-color:var(--csstools-light-dark-toggle--118, #5b5b66);
+    --csstools-light-dark-toggle--111:var(--csstools-color-scheme--light) #52525e;
+    --no-alt-text-badge-border-color:var(--csstools-light-dark-toggle--111, #f0f0f4);
+    --csstools-light-dark-toggle--112:var(--csstools-color-scheme--light) #fbfbfe;
+    --no-alt-text-badge-bg-color:var(--csstools-light-dark-toggle--112, #cfcfd8);
+    --csstools-light-dark-toggle--113:var(--csstools-color-scheme--light) #15141a;
+    --no-alt-text-badge-fg-color:var(--csstools-light-dark-toggle--113, #5b5b66);
   }
 }
 
@@ -4675,8 +4688,8 @@
 .dialog.newAltText{
   --new-alt-text-ai-disclaimer-icon:url(images/altText_disclaimer.svg);
   --new-alt-text-spinner-icon:url(images/altText_spinner.svg);
-  --csstools-light-dark-toggle--119:var(--csstools-color-scheme--light) #2b2a33;
-  --preview-image-bg-color:var(--csstools-light-dark-toggle--119, #f0f0f4);
+  --csstools-light-dark-toggle--114:var(--csstools-color-scheme--light) #2b2a33;
+  --preview-image-bg-color:var(--csstools-light-dark-toggle--114, #f0f0f4);
   --preview-image-border:none;
 }
 
@@ -4689,8 +4702,8 @@
 @supports not (color: light-dark(tan, tan)){
 
 .dialog.newAltText *{
-  --csstools-light-dark-toggle--119:var(--csstools-color-scheme--light) #2b2a33;
-  --preview-image-bg-color:var(--csstools-light-dark-toggle--119, #f0f0f4);
+  --csstools-light-dark-toggle--114:var(--csstools-color-scheme--light) #2b2a33;
+  --preview-image-bg-color:var(--csstools-light-dark-toggle--114, #f0f0f4);
   }
 }
 
@@ -4881,12 +4894,12 @@
         }
 
 .colorPicker{
-  --csstools-light-dark-toggle--120:var(--csstools-color-scheme--light) #80ebff;
-  --hover-outline-color:var(--csstools-light-dark-toggle--120, #0250bb);
-  --csstools-light-dark-toggle--121:var(--csstools-color-scheme--light) #aaf2ff;
-  --selected-outline-color:var(--csstools-light-dark-toggle--121, #0060df);
-  --csstools-light-dark-toggle--122:var(--csstools-color-scheme--light) #52525e;
-  --swatch-border-color:var(--csstools-light-dark-toggle--122, #cfcfd8);
+  --csstools-light-dark-toggle--115:var(--csstools-color-scheme--light) #80ebff;
+  --hover-outline-color:var(--csstools-light-dark-toggle--115, #0250bb);
+  --csstools-light-dark-toggle--116:var(--csstools-color-scheme--light) #aaf2ff;
+  --selected-outline-color:var(--csstools-light-dark-toggle--116, #0060df);
+  --csstools-light-dark-toggle--117:var(--csstools-color-scheme--light) #52525e;
+  --swatch-border-color:var(--csstools-light-dark-toggle--117, #cfcfd8);
 }
 
 @supports (color: light-dark(red, red)){
@@ -4900,12 +4913,12 @@
 @supports not (color: light-dark(tan, tan)){
 
 .colorPicker *{
-  --csstools-light-dark-toggle--120:var(--csstools-color-scheme--light) #80ebff;
-  --hover-outline-color:var(--csstools-light-dark-toggle--120, #0250bb);
-  --csstools-light-dark-toggle--121:var(--csstools-color-scheme--light) #aaf2ff;
-  --selected-outline-color:var(--csstools-light-dark-toggle--121, #0060df);
-  --csstools-light-dark-toggle--122:var(--csstools-color-scheme--light) #52525e;
-  --swatch-border-color:var(--csstools-light-dark-toggle--122, #cfcfd8);
+  --csstools-light-dark-toggle--115:var(--csstools-color-scheme--light) #80ebff;
+  --hover-outline-color:var(--csstools-light-dark-toggle--115, #0250bb);
+  --csstools-light-dark-toggle--116:var(--csstools-color-scheme--light) #aaf2ff;
+  --selected-outline-color:var(--csstools-light-dark-toggle--116, #0060df);
+  --csstools-light-dark-toggle--117:var(--csstools-color-scheme--light) #52525e;
+  --swatch-border-color:var(--csstools-light-dark-toggle--117, #cfcfd8);
   }
 }
 
@@ -5152,9 +5165,9 @@
       align-items:center;
       align-self:stretch;
 
-      --csstools-light-dark-toggle--123:var(--csstools-color-scheme--light) #80808e;
+      --csstools-light-dark-toggle--118:var(--csstools-color-scheme--light) #80808e;
 
-      --example-color:var(--csstools-light-dark-toggle--123, #bfbfc9);
+      --example-color:var(--csstools-light-dark-toggle--118, #bfbfc9);
     }
 
 @supports (color: light-dark(red, red)){
@@ -5168,9 +5181,9 @@
 
 :is(:is(#highlightParamsToolbarContainer #editorHighlightThickness) .thicknessPicker) *{
 
-      --csstools-light-dark-toggle--123:var(--csstools-color-scheme--light) #80808e;
+      --csstools-light-dark-toggle--118:var(--csstools-color-scheme--light) #80808e;
 
-      --example-color:var(--csstools-light-dark-toggle--123, #bfbfc9);
+      --example-color:var(--csstools-light-dark-toggle--118, #bfbfc9);
   }
 }
 
@@ -5212,8 +5225,8 @@
   }
 
 :is(#highlightParamsToolbarContainer #editorHighlightVisibility) .divider{
-      --csstools-light-dark-toggle--124:var(--csstools-color-scheme--light) #8f8f9d;
-      --divider-color:var(--csstools-light-dark-toggle--124, #d7d7db);
+      --csstools-light-dark-toggle--119:var(--csstools-color-scheme--light) #8f8f9d;
+      --divider-color:var(--csstools-light-dark-toggle--119, #d7d7db);
     }
 
 @supports (color: light-dark(red, red)){
@@ -5225,8 +5238,8 @@
 @supports not (color: light-dark(tan, tan)){
 
 :is(:is(#highlightParamsToolbarContainer #editorHighlightVisibility) .divider) *{
-      --csstools-light-dark-toggle--124:var(--csstools-color-scheme--light) #8f8f9d;
-      --divider-color:var(--csstools-light-dark-toggle--124, #d7d7db);
+      --csstools-light-dark-toggle--119:var(--csstools-color-scheme--light) #8f8f9d;
+      --divider-color:var(--csstools-light-dark-toggle--119, #d7d7db);
   }
 }
 
@@ -5307,13 +5320,13 @@
     }
 
 .sidebar{
-  --csstools-light-dark-toggle--125:var(--csstools-color-scheme--light) #23222b;
-  --sidebar-bg-color:var(--csstools-light-dark-toggle--125, #fff);
-  --csstools-light-dark-toggle--126:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.1);
-  --sidebar-border-color:var(--csstools-light-dark-toggle--126, rgb(21 20 26 / 0.1));
-  --csstools-light-dark-toggle--127:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.2);
-  --csstools-light-dark-toggle--128:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.4);
-  --sidebar-box-shadow:0 0.25px 0.75px var(--csstools-light-dark-toggle--127, rgb(0 0 0 / 0.05)), 0 2px 6px 0 var(--csstools-light-dark-toggle--128, rgb(0 0 0 / 0.1));
+  --csstools-light-dark-toggle--120:var(--csstools-color-scheme--light) #23222b;
+  --sidebar-bg-color:var(--csstools-light-dark-toggle--120, #fff);
+  --csstools-light-dark-toggle--121:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.1);
+  --sidebar-border-color:var(--csstools-light-dark-toggle--121, rgb(21 20 26 / 0.1));
+  --csstools-light-dark-toggle--122:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.2);
+  --csstools-light-dark-toggle--123:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.4);
+  --sidebar-box-shadow:0 0.25px 0.75px var(--csstools-light-dark-toggle--122, rgb(0 0 0 / 0.05)), 0 2px 6px 0 var(--csstools-light-dark-toggle--123, rgb(0 0 0 / 0.1));
   --sidebar-backdrop-filter:none;
   --sidebar-border-radius:8px;
   --sidebar-padding:5px;
@@ -5321,8 +5334,8 @@
   --sidebar-max-width:632px;
   --sidebar-width:239px;
   --resizer-width:4px;
-  --csstools-light-dark-toggle--129:var(--csstools-color-scheme--light) #00cadb;
-  --resizer-hover-bg-color:var(--csstools-light-dark-toggle--129, #0062fa);
+  --csstools-light-dark-toggle--124:var(--csstools-color-scheme--light) #00cadb;
+  --resizer-hover-bg-color:var(--csstools-light-dark-toggle--124, #0062fa);
 }
 
 @supports (color: light-dark(red, red)){
@@ -5350,15 +5363,15 @@
 @supports not (color: light-dark(tan, tan)){
 
 .sidebar *{
-  --csstools-light-dark-toggle--125:var(--csstools-color-scheme--light) #23222b;
-  --sidebar-bg-color:var(--csstools-light-dark-toggle--125, #fff);
-  --csstools-light-dark-toggle--126:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.1);
-  --sidebar-border-color:var(--csstools-light-dark-toggle--126, rgb(21 20 26 / 0.1));
-  --csstools-light-dark-toggle--127:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.2);
-  --csstools-light-dark-toggle--128:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.4);
-  --sidebar-box-shadow:0 0.25px 0.75px var(--csstools-light-dark-toggle--127, rgb(0 0 0 / 0.05)), 0 2px 6px 0 var(--csstools-light-dark-toggle--128, rgb(0 0 0 / 0.1));
-  --csstools-light-dark-toggle--129:var(--csstools-color-scheme--light) #00cadb;
-  --resizer-hover-bg-color:var(--csstools-light-dark-toggle--129, #0062fa);
+  --csstools-light-dark-toggle--120:var(--csstools-color-scheme--light) #23222b;
+  --sidebar-bg-color:var(--csstools-light-dark-toggle--120, #fff);
+  --csstools-light-dark-toggle--121:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.1);
+  --sidebar-border-color:var(--csstools-light-dark-toggle--121, rgb(21 20 26 / 0.1));
+  --csstools-light-dark-toggle--122:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.2);
+  --csstools-light-dark-toggle--123:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.4);
+  --sidebar-box-shadow:0 0.25px 0.75px var(--csstools-light-dark-toggle--122, rgb(0 0 0 / 0.05)), 0 2px 6px 0 var(--csstools-light-dark-toggle--123, rgb(0 0 0 / 0.1));
+  --csstools-light-dark-toggle--124:var(--csstools-color-scheme--light) #00cadb;
+  --resizer-hover-bg-color:var(--csstools-light-dark-toggle--124, #0062fa);
   }
 }
 
@@ -5443,26 +5456,73 @@
     var(--menu-text-color),
     transparent 93%
   );
-  --csstools-light-dark-toggle--130:var(--csstools-color-scheme--light) #00cadb;
-  --menuitem-focus-outline-color:var(--csstools-light-dark-toggle--130, #0062fa);
-  --csstools-light-dark-toggle--131:var(--csstools-color-scheme--light) black;
-  --menuitem-focus-border-color:var(--csstools-light-dark-toggle--131, white);
+  --csstools-light-dark-toggle--125:var(--csstools-color-scheme--light) #00cadb;
+  --menuitem-focus-outline-color:var(--csstools-light-dark-toggle--125, #0062fa);
+  --csstools-light-dark-toggle--126:var(--csstools-color-scheme--light) black;
+  --menuitem-focus-border-color:var(--csstools-light-dark-toggle--126, white);
+
+  --csstools-light-dark-toggle--127:var(--csstools-color-scheme--light) #23222b;
+
+  --menu-bg:var(--csstools-light-dark-toggle--127, white);
+  --menu-background-blend-mode:normal;
+  --csstools-light-dark-toggle--128:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.2);
+  --csstools-light-dark-toggle--129:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.4);
+  --menu-box-shadow:0 0.375px 1.5px 0 var(--csstools-light-dark-toggle--128, rgb(0 0 0 / 0.05)), 0 3px 12px 0 var(--csstools-light-dark-toggle--129, rgb(0 0 0 / 0.1));
+  --csstools-light-dark-toggle--130:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.1);
+  --menu-border-color:var(--csstools-light-dark-toggle--130, rgb(21 20 26 / 0.1));
+  --menuitem-border-radius:8px;
+  --menu-backdrop-filter:none;
+  --csstools-light-dark-toggle--131:var(--csstools-color-scheme--light) #fbfbfe;
+  --menu-text-color:var(--csstools-light-dark-toggle--131, #15141a);
+  --menuitem-text-hover-fg:var(--menu-text-color);
+  --menuitem-hover-bg:color-mix(
+    in srgb,
+    var(--menu-text-color),
+    transparent 86%
+  );
+  --menuitem-hover-background-blend-mode:normal;
 }
 
 @supports (color: light-dark(red, red)){
 .popupMenu{
   --menuitem-focus-outline-color:light-dark(#0062fa, #00cadb);
   --menuitem-focus-border-color:light-dark(white, black);
+
+  --menu-bg:light-dark(white, #23222b);
+}
+}
+
+@supports (color: light-dark(red, red)) and (color: rgb(0 0 0 / 0)){
+.popupMenu{
+  --menu-box-shadow:0 0.375px 1.5px 0 light-dark(rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.2)), 0 3px 12px 0 light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4));
+  --menu-border-color:light-dark(rgb(21 20 26 / 0.1), rgb(251 251 254 / 0.1));
+}
+}
+
+@supports (color: light-dark(red, red)){
+.popupMenu{
+  --menu-text-color:light-dark(#15141a, #fbfbfe);
 }
 }
 
 @supports not (color: light-dark(tan, tan)){
 
 .popupMenu *{
-  --csstools-light-dark-toggle--130:var(--csstools-color-scheme--light) #00cadb;
-  --menuitem-focus-outline-color:var(--csstools-light-dark-toggle--130, #0062fa);
-  --csstools-light-dark-toggle--131:var(--csstools-color-scheme--light) black;
-  --menuitem-focus-border-color:var(--csstools-light-dark-toggle--131, white);
+  --csstools-light-dark-toggle--125:var(--csstools-color-scheme--light) #00cadb;
+  --menuitem-focus-outline-color:var(--csstools-light-dark-toggle--125, #0062fa);
+  --csstools-light-dark-toggle--126:var(--csstools-color-scheme--light) black;
+  --menuitem-focus-border-color:var(--csstools-light-dark-toggle--126, white);
+
+  --csstools-light-dark-toggle--127:var(--csstools-color-scheme--light) #23222b;
+
+  --menu-bg:var(--csstools-light-dark-toggle--127, white);
+  --csstools-light-dark-toggle--128:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.2);
+  --csstools-light-dark-toggle--129:var(--csstools-color-scheme--light) rgb(0 0 0 / 0.4);
+  --menu-box-shadow:0 0.375px 1.5px 0 var(--csstools-light-dark-toggle--128, rgb(0 0 0 / 0.05)), 0 3px 12px 0 var(--csstools-light-dark-toggle--129, rgb(0 0 0 / 0.1));
+  --csstools-light-dark-toggle--130:var(--csstools-color-scheme--light) rgb(251 251 254 / 0.1);
+  --menu-border-color:var(--csstools-light-dark-toggle--130, rgb(21 20 26 / 0.1));
+  --csstools-light-dark-toggle--131:var(--csstools-color-scheme--light) #fbfbfe;
+  --menu-text-color:var(--csstools-light-dark-toggle--131, #15141a);
   }
 }
 
@@ -5538,7 +5598,7 @@
               mask-image:var(--menuitem-checkmark-icon);
       background-color:var(--menu-text-color);
       position:absolute;
-      margin-left:-16px;
+      margin-inline-start:-16px;
     }
 
 :is(.popupMenu > li):has(button:disabled){
@@ -5611,7 +5671,7 @@
         width:-moz-max-content;
         width:max-content;
         height:auto;
-        text-align:left;
+        text-align:start;
         color:var(--menu-text-color);
         -webkit-user-select:none;
            -moz-user-select:none;
@@ -5625,6 +5685,144 @@
         line-height:normal;
       }
 
+.treeWithDeepNesting{
+  --csstools-light-dark-toggle--132:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.8);
+  --treeitem-color:var(--csstools-light-dark-toggle--132, rgb(0 0 0 / 0.8));
+  --csstools-light-dark-toggle--133:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.15);
+  --treeitem-bg-color:var(--csstools-light-dark-toggle--133, rgb(0 0 0 / 0.15));
+  --csstools-light-dark-toggle--134:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.9);
+  --treeitem-hover-color:var(--csstools-light-dark-toggle--134, rgb(0 0 0 / 0.9));
+  --csstools-light-dark-toggle--135:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.9);
+  --treeitem-selected-color:var(--csstools-light-dark-toggle--135, rgb(0 0 0 / 0.9));
+  --csstools-light-dark-toggle--136:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.25);
+  --treeitem-selected-bg-color:var(--csstools-light-dark-toggle--136, rgb(0 0 0 / 0.25));
+  --treeitem-expanded-icon:url(images/treeitem-expanded.svg);
+  --treeitem-collapsed-icon:url(images/treeitem-collapsed.svg);
+}
+
+@supports (color: light-dark(red, red)) and (color: rgb(0 0 0 / 0)){
+.treeWithDeepNesting{
+  --treeitem-color:light-dark(rgb(0 0 0 / 0.8), rgb(255 255 255 / 0.8));
+  --treeitem-bg-color:light-dark(rgb(0 0 0 / 0.15), rgb(255 255 255 / 0.15));
+  --treeitem-hover-color:light-dark(rgb(0 0 0 / 0.9), rgb(255 255 255 / 0.9));
+  --treeitem-selected-color:light-dark(
+    rgb(0 0 0 / 0.9),
+    rgb(255 255 255 / 0.9)
+  );
+  --treeitem-selected-bg-color:light-dark(
+    rgb(0 0 0 / 0.25),
+    rgb(255 255 255 / 0.25)
+  );
+}
+}
+
+@supports not (color: light-dark(tan, tan)){
+
+.treeWithDeepNesting *{
+  --csstools-light-dark-toggle--132:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.8);
+  --treeitem-color:var(--csstools-light-dark-toggle--132, rgb(0 0 0 / 0.8));
+  --csstools-light-dark-toggle--133:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.15);
+  --treeitem-bg-color:var(--csstools-light-dark-toggle--133, rgb(0 0 0 / 0.15));
+  --csstools-light-dark-toggle--134:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.9);
+  --treeitem-hover-color:var(--csstools-light-dark-toggle--134, rgb(0 0 0 / 0.9));
+  --csstools-light-dark-toggle--135:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.9);
+  --treeitem-selected-color:var(--csstools-light-dark-toggle--135, rgb(0 0 0 / 0.9));
+  --csstools-light-dark-toggle--136:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.25);
+  --treeitem-selected-bg-color:var(--csstools-light-dark-toggle--136, rgb(0 0 0 / 0.25));
+  }
+}
+
+.treeWithDeepNesting .treeItemToggler::before{
+    position:absolute;
+    display:inline-block;
+    width:16px;
+    height:16px;
+
+    content:"";
+    background-color:var(--toolbar-icon-bg-color);
+    -webkit-mask-size:cover;
+            mask-size:cover;
+  }
+
+:is(#layersView.treeWithDeepNesting .treeItem > a) *{
+      cursor:pointer;
+    }
+
+:is(#layersView.treeWithDeepNesting .treeItem > a)  > label{
+      padding-inline-start:4px;
+    }
+
+:is(:is(#layersView.treeWithDeepNesting .treeItem > a) > label)  > input{
+        float:var(--inline-start);
+        margin-top:1px;
+      }
+
+.treeWithDeepNesting  > .treeItem,.treeWithDeepNesting .treeItem > .treeItems{
+    margin-inline-start:20px;
+  }
+
+:is(.treeWithDeepNesting .treeItem)  > a{
+      text-decoration:none;
+      display:inline-block;
+      min-width:calc(100% - 4px);
+      height:auto;
+      margin-bottom:1px;
+      padding:2px 0 5px;
+      padding-inline-start:4px;
+      border-radius:2px;
+      color:var(--treeitem-color);
+      font-size:13px;
+      line-height:15px;
+      -webkit-user-select:none;
+         -moz-user-select:none;
+              user-select:none;
+      white-space:normal;
+      cursor:pointer;
+    }
+
+:is(:is(.treeWithDeepNesting .treeItem) > a):hover{
+        background-color:var(--treeitem-bg-color);
+        background-clip:padding-box;
+        border-radius:2px;
+        color:var(--treeitem-hover-color);
+      }
+
+.selected:is(.treeWithDeepNesting .treeItem) > a{
+      background-color:var(--treeitem-selected-bg-color);
+      color:var(--treeitem-selected-color);
+    }
+
+.treeWithDeepNesting .treeItemToggler{
+    position:relative;
+    float:var(--inline-start);
+    height:0;
+    width:0;
+    color:rgb(255 255 255 / 0.5);
+  }
+
+:is(.treeWithDeepNesting .treeItemToggler)::before{
+      inset-inline-end:4px;
+      -webkit-mask-image:var(--treeitem-expanded-icon);
+              mask-image:var(--treeitem-expanded-icon);
+    }
+
+.treeItemsHidden:is(.treeWithDeepNesting .treeItemToggler)::before{
+        -webkit-mask-image:var(--treeitem-collapsed-icon);
+                mask-image:var(--treeitem-collapsed-icon);
+        transform:scaleX(var(--dir-factor));
+      }
+
+.treeItemsHidden:is(.treeWithDeepNesting .treeItemToggler)  ~ .treeItems{
+        display:none;
+      }
+
+:is(.treeWithDeepNesting .treeItemToggler):hover:is( + a, ~ .treeItems){
+      background-color:var(--treeitem-bg-color);
+      background-clip:padding-box;
+      border-radius:2px;
+      color:var(--treeitem-hover-color);
+    }
+
 :root{
   --csstools-color-scheme--light:initial;
   color-scheme:light dark;
@@ -5635,8 +5833,8 @@
   --page-border:9px solid transparent;
   --spreadHorizontalWrapped-margin-LR:-3.5px;
   --loading-icon-delay:400ms;
-  --csstools-light-dark-toggle--132:var(--csstools-color-scheme--light) #0df;
-  --focus-ring-color:var(--csstools-light-dark-toggle--132, #0060df);
+  --csstools-light-dark-toggle--137:var(--csstools-color-scheme--light) #0df;
+  --focus-ring-color:var(--csstools-light-dark-toggle--137, #0060df);
   --focus-ring-outline:2px solid var(--focus-ring-color);
 }
 
@@ -5649,8 +5847,8 @@
 @supports not (color: light-dark(tan, tan)){
 
 :root *{
-  --csstools-light-dark-toggle--132:var(--csstools-color-scheme--light) #0df;
-  --focus-ring-color:var(--csstools-light-dark-toggle--132, #0060df);
+  --csstools-light-dark-toggle--137:var(--csstools-color-scheme--light) #0df;
+  --focus-ring-color:var(--csstools-light-dark-toggle--137, #0060df);
   }
 }
 
@@ -5908,37 +6106,25 @@
   --field-bg-color:var(--csstools-light-dark-toggle--16, rgb(255 255 255));
   --csstools-light-dark-toggle--17:var(--csstools-color-scheme--light) rgb(115 115 115);
   --field-border-color:var(--csstools-light-dark-toggle--17, rgb(187 187 188));
-  --csstools-light-dark-toggle--18:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.8);
-  --treeitem-color:var(--csstools-light-dark-toggle--18, rgb(0 0 0 / 0.8));
-  --csstools-light-dark-toggle--19:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.15);
-  --treeitem-bg-color:var(--csstools-light-dark-toggle--19, rgb(0 0 0 / 0.15));
-  --csstools-light-dark-toggle--20:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.9);
-  --treeitem-hover-color:var(--csstools-light-dark-toggle--20, rgb(0 0 0 / 0.9));
-  --csstools-light-dark-toggle--21:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.9);
-  --treeitem-selected-color:var(--csstools-light-dark-toggle--21, rgb(0 0 0 / 0.9));
-  --csstools-light-dark-toggle--22:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.25);
-  --treeitem-selected-bg-color:var(--csstools-light-dark-toggle--22, rgb(0 0 0 / 0.25));
-  --csstools-light-dark-toggle--23:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.1);
-  --thumbnail-hover-color:var(--csstools-light-dark-toggle--23, rgb(0 0 0 / 0.1));
-  --csstools-light-dark-toggle--24:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.2);
-  --thumbnail-selected-color:var(--csstools-light-dark-toggle--24, rgb(0 0 0 / 0.2));
-  --csstools-light-dark-toggle--25:var(--csstools-color-scheme--light) #42414d;
-  --doorhanger-bg-color:var(--csstools-light-dark-toggle--25, rgb(255 255 255));
-  --csstools-light-dark-toggle--26:var(--csstools-color-scheme--light) rgb(39 39 43);
-  --doorhanger-border-color:var(--csstools-light-dark-toggle--26, rgb(12 12 13 / 0.2));
-  --csstools-light-dark-toggle--27:var(--csstools-color-scheme--light) rgb(249 249 250);
-  --doorhanger-hover-color:var(--csstools-light-dark-toggle--27, rgb(12 12 13));
-  --csstools-light-dark-toggle--28:var(--csstools-color-scheme--light) rgb(92 92 97);
-  --doorhanger-separator-color:var(--csstools-light-dark-toggle--28, rgb(222 222 222));
+  --csstools-light-dark-toggle--18:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.1);
+  --thumbnail-hover-color:var(--csstools-light-dark-toggle--18, rgb(0 0 0 / 0.1));
+  --csstools-light-dark-toggle--19:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.2);
+  --thumbnail-selected-color:var(--csstools-light-dark-toggle--19, rgb(0 0 0 / 0.2));
+  --csstools-light-dark-toggle--20:var(--csstools-color-scheme--light) #42414d;
+  --doorhanger-bg-color:var(--csstools-light-dark-toggle--20, rgb(255 255 255));
+  --csstools-light-dark-toggle--21:var(--csstools-color-scheme--light) rgb(39 39 43);
+  --doorhanger-border-color:var(--csstools-light-dark-toggle--21, rgb(12 12 13 / 0.2));
+  --csstools-light-dark-toggle--22:var(--csstools-color-scheme--light) rgb(249 249 250);
+  --doorhanger-hover-color:var(--csstools-light-dark-toggle--22, rgb(12 12 13));
+  --csstools-light-dark-toggle--23:var(--csstools-color-scheme--light) rgb(92 92 97);
+  --doorhanger-separator-color:var(--csstools-light-dark-toggle--23, rgb(222 222 222));
   --dialog-button-border:none;
-  --csstools-light-dark-toggle--29:var(--csstools-color-scheme--light) rgb(92 92 97);
-  --dialog-button-bg-color:var(--csstools-light-dark-toggle--29, rgb(12 12 13 / 0.1));
-  --csstools-light-dark-toggle--30:var(--csstools-color-scheme--light) rgb(115 115 115);
-  --dialog-button-hover-bg-color:var(--csstools-light-dark-toggle--30, rgb(12 12 13 / 0.3));
+  --csstools-light-dark-toggle--24:var(--csstools-color-scheme--light) rgb(92 92 97);
+  --dialog-button-bg-color:var(--csstools-light-dark-toggle--24, rgb(12 12 13 / 0.1));
+  --csstools-light-dark-toggle--25:var(--csstools-color-scheme--light) rgb(115 115 115);
+  --dialog-button-hover-bg-color:var(--csstools-light-dark-toggle--25, rgb(12 12 13 / 0.3));
 
   --loading-icon:url(images/loading.svg);
-  --treeitem-expanded-icon:url(images/treeitem-expanded.svg);
-  --treeitem-collapsed-icon:url(images/treeitem-collapsed.svg);
   --toolbarButton-editorComment-icon:url(images/comment-editButton.svg);
   --toolbarButton-editorFreeText-icon:url(images/toolbarButton-editorFreeText.svg);
   --toolbarButton-editorHighlight-icon:url(images/toolbarButton-editorHighlight.svg);
@@ -6011,17 +6197,6 @@
   --field-color:light-dark(rgb(6 6 6), rgb(250 250 250));
   --field-bg-color:light-dark(rgb(255 255 255), rgb(64 64 68));
   --field-border-color:light-dark(rgb(187 187 188), rgb(115 115 115));
-  --treeitem-color:light-dark(rgb(0 0 0 / 0.8), rgb(255 255 255 / 0.8));
-  --treeitem-bg-color:light-dark(rgb(0 0 0 / 0.15), rgb(255 255 255 / 0.15));
-  --treeitem-hover-color:light-dark(rgb(0 0 0 / 0.9), rgb(255 255 255 / 0.9));
-  --treeitem-selected-color:light-dark(
-    rgb(0 0 0 / 0.9),
-    rgb(255 255 255 / 0.9)
-  );
-  --treeitem-selected-bg-color:light-dark(
-    rgb(0 0 0 / 0.25),
-    rgb(255 255 255 / 0.25)
-  );
   --thumbnail-hover-color:light-dark(rgb(0 0 0 / 0.1), rgb(255 255 255 / 0.1));
   --thumbnail-selected-color:light-dark(
     rgb(0 0 0 / 0.2),
@@ -6082,32 +6257,22 @@
   --field-bg-color:var(--csstools-light-dark-toggle--16, rgb(255 255 255));
   --csstools-light-dark-toggle--17:var(--csstools-color-scheme--light) rgb(115 115 115);
   --field-border-color:var(--csstools-light-dark-toggle--17, rgb(187 187 188));
-  --csstools-light-dark-toggle--18:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.8);
-  --treeitem-color:var(--csstools-light-dark-toggle--18, rgb(0 0 0 / 0.8));
-  --csstools-light-dark-toggle--19:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.15);
-  --treeitem-bg-color:var(--csstools-light-dark-toggle--19, rgb(0 0 0 / 0.15));
-  --csstools-light-dark-toggle--20:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.9);
-  --treeitem-hover-color:var(--csstools-light-dark-toggle--20, rgb(0 0 0 / 0.9));
-  --csstools-light-dark-toggle--21:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.9);
-  --treeitem-selected-color:var(--csstools-light-dark-toggle--21, rgb(0 0 0 / 0.9));
-  --csstools-light-dark-toggle--22:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.25);
-  --treeitem-selected-bg-color:var(--csstools-light-dark-toggle--22, rgb(0 0 0 / 0.25));
-  --csstools-light-dark-toggle--23:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.1);
-  --thumbnail-hover-color:var(--csstools-light-dark-toggle--23, rgb(0 0 0 / 0.1));
-  --csstools-light-dark-toggle--24:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.2);
-  --thumbnail-selected-color:var(--csstools-light-dark-toggle--24, rgb(0 0 0 / 0.2));
-  --csstools-light-dark-toggle--25:var(--csstools-color-scheme--light) #42414d;
-  --doorhanger-bg-color:var(--csstools-light-dark-toggle--25, rgb(255 255 255));
-  --csstools-light-dark-toggle--26:var(--csstools-color-scheme--light) rgb(39 39 43);
-  --doorhanger-border-color:var(--csstools-light-dark-toggle--26, rgb(12 12 13 / 0.2));
-  --csstools-light-dark-toggle--27:var(--csstools-color-scheme--light) rgb(249 249 250);
-  --doorhanger-hover-color:var(--csstools-light-dark-toggle--27, rgb(12 12 13));
-  --csstools-light-dark-toggle--28:var(--csstools-color-scheme--light) rgb(92 92 97);
-  --doorhanger-separator-color:var(--csstools-light-dark-toggle--28, rgb(222 222 222));
-  --csstools-light-dark-toggle--29:var(--csstools-color-scheme--light) rgb(92 92 97);
-  --dialog-button-bg-color:var(--csstools-light-dark-toggle--29, rgb(12 12 13 / 0.1));
-  --csstools-light-dark-toggle--30:var(--csstools-color-scheme--light) rgb(115 115 115);
-  --dialog-button-hover-bg-color:var(--csstools-light-dark-toggle--30, rgb(12 12 13 / 0.3));
+  --csstools-light-dark-toggle--18:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.1);
+  --thumbnail-hover-color:var(--csstools-light-dark-toggle--18, rgb(0 0 0 / 0.1));
+  --csstools-light-dark-toggle--19:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.2);
+  --thumbnail-selected-color:var(--csstools-light-dark-toggle--19, rgb(0 0 0 / 0.2));
+  --csstools-light-dark-toggle--20:var(--csstools-color-scheme--light) #42414d;
+  --doorhanger-bg-color:var(--csstools-light-dark-toggle--20, rgb(255 255 255));
+  --csstools-light-dark-toggle--21:var(--csstools-color-scheme--light) rgb(39 39 43);
+  --doorhanger-border-color:var(--csstools-light-dark-toggle--21, rgb(12 12 13 / 0.2));
+  --csstools-light-dark-toggle--22:var(--csstools-color-scheme--light) rgb(249 249 250);
+  --doorhanger-hover-color:var(--csstools-light-dark-toggle--22, rgb(12 12 13));
+  --csstools-light-dark-toggle--23:var(--csstools-color-scheme--light) rgb(92 92 97);
+  --doorhanger-separator-color:var(--csstools-light-dark-toggle--23, rgb(222 222 222));
+  --csstools-light-dark-toggle--24:var(--csstools-color-scheme--light) rgb(92 92 97);
+  --dialog-button-bg-color:var(--csstools-light-dark-toggle--24, rgb(12 12 13 / 0.1));
+  --csstools-light-dark-toggle--25:var(--csstools-color-scheme--light) rgb(115 115 115);
+  --dialog-button-hover-bg-color:var(--csstools-light-dark-toggle--25, rgb(12 12 13 / 0.3));
   }
 }
 
@@ -6464,18 +6629,6 @@ body.wait::before{
   box-sizing:border-box;
 }
 
-.treeItemToggler::before{
-  position:absolute;
-  display:inline-block;
-  width:16px;
-  height:16px;
-
-  content:"";
-  background-color:var(--toolbar-icon-bg-color);
-  -webkit-mask-size:cover;
-          mask-size:cover;
-}
-
 #sidebarToggleButton::before{
   -webkit-mask-image:var(--toolbarButton-sidebarToggle-icon);
           mask-image:var(--toolbarButton-sidebarToggle-icon);
@@ -6753,82 +6906,6 @@ body.wait::before{
 :is(:is(#thumbnailView > a):focus > .thumbnail,:is(#thumbnailView > a) .thumbnail:hover)  > .thumbnailImage{
         opacity:0.95;
       }
-
-.treeWithDeepNesting > .treeItem,
-.treeItem > .treeItems{
-  margin-inline-start:20px;
-}
-
-.treeItem > a{
-  text-decoration:none;
-  display:inline-block;
-  min-width:calc(100% - 4px);
-  height:auto;
-  margin-bottom:1px;
-  padding:2px 0 5px;
-  padding-inline-start:4px;
-  border-radius:2px;
-  color:var(--treeitem-color);
-  font-size:13px;
-  line-height:15px;
-  -webkit-user-select:none;
-     -moz-user-select:none;
-          user-select:none;
-  white-space:normal;
-  cursor:pointer;
-}
-
-#layersView .treeItem > a *{
-  cursor:pointer;
-}
-
-#layersView .treeItem > a > label{
-  padding-inline-start:4px;
-}
-
-#layersView .treeItem > a > label > input{
-  float:var(--inline-start);
-  margin-top:1px;
-}
-
-.treeItemToggler{
-  position:relative;
-  float:var(--inline-start);
-  height:0;
-  width:0;
-  color:rgb(255 255 255 / 0.5);
-}
-
-.treeItemToggler::before{
-  inset-inline-end:4px;
-  -webkit-mask-image:var(--treeitem-expanded-icon);
-          mask-image:var(--treeitem-expanded-icon);
-}
-
-.treeItemToggler.treeItemsHidden::before{
-  -webkit-mask-image:var(--treeitem-collapsed-icon);
-          mask-image:var(--treeitem-collapsed-icon);
-  transform:scaleX(var(--dir-factor));
-}
-
-.treeItemToggler.treeItemsHidden ~ .treeItems{
-  display:none;
-}
-
-.treeItem.selected > a{
-  background-color:var(--treeitem-selected-bg-color);
-  color:var(--treeitem-selected-color);
-}
-
-.treeItemToggler:hover,
-.treeItemToggler:hover + a,
-.treeItemToggler:hover ~ .treeItems,
-.treeItem > a:hover{
-  background-color:var(--treeitem-bg-color);
-  background-clip:padding-box;
-  border-radius:2px;
-  color:var(--treeitem-hover-color);
-}
 
 #outlineOptionsContainer{
   display:none;
