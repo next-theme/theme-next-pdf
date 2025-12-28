@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 010e52e
+ * pdfjsBuild = 33e8579
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -7205,7 +7205,7 @@ class FontFaceObject {
     } catch (ex) {
       warn(`getPathGenerator - ignoring character: "${ex}".`);
     }
-    const path = makePathFromDrawOPS(cmds.path);
+    const path = makePathFromDrawOPS(cmds?.path);
     if (!this.fontExtraProperties) {
       objs.delete(objId);
     }
@@ -9610,12 +9610,34 @@ class RadialAxialShadingPattern extends BaseShadingPattern {
     this._r1 = IR[7];
     this.matrix = null;
   }
-  _createGradient(ctx) {
+  isOriginBased() {
+    return this._p0[0] === 0 && this._p0[1] === 0 && (!this.isRadial() || this._p1[0] === 0 && this._p1[1] === 0);
+  }
+  isRadial() {
+    return this._type === "radial";
+  }
+  _createGradient(ctx, transform = null) {
     let grad;
+    let firstPoint = this._p0;
+    let secondPoint = this._p1;
+    if (transform) {
+      firstPoint = firstPoint.slice();
+      secondPoint = secondPoint.slice();
+      Util.applyTransform(firstPoint, transform);
+      Util.applyTransform(secondPoint, transform);
+    }
     if (this._type === "axial") {
-      grad = ctx.createLinearGradient(this._p0[0], this._p0[1], this._p1[0], this._p1[1]);
+      grad = ctx.createLinearGradient(firstPoint[0], firstPoint[1], secondPoint[0], secondPoint[1]);
     } else if (this._type === "radial") {
-      grad = ctx.createRadialGradient(this._p0[0], this._p0[1], this._r0, this._p1[0], this._p1[1], this._r1);
+      let r0 = this._r0;
+      let r1 = this._r1;
+      if (transform) {
+        const scale = new Float32Array(2);
+        Util.singularValueDecompose2dScale(transform, scale);
+        r0 *= scale[0];
+        r1 *= scale[0];
+      }
+      grad = ctx.createRadialGradient(firstPoint[0], firstPoint[1], r0, secondPoint[0], secondPoint[1], r1);
     }
     for (const colorStop of this._colorStops) {
       grad.addColorStop(colorStop[0], colorStop[1]);
@@ -9625,6 +9647,25 @@ class RadialAxialShadingPattern extends BaseShadingPattern {
   getPattern(ctx, owner, inverse, pathType) {
     let pattern;
     if (pathType === PathType.STROKE || pathType === PathType.FILL) {
+      if (this.isOriginBased()) {
+        let transf = Util.transform(inverse, owner.baseTransform);
+        if (this.matrix) {
+          transf = Util.transform(transf, this.matrix);
+        }
+        const precision = 1e-3;
+        const n1 = Math.hypot(transf[0], transf[1]);
+        const n2 = Math.hypot(transf[2], transf[3]);
+        const ps = (transf[0] * transf[2] + transf[1] * transf[3]) / (n1 * n2);
+        if (Math.abs(ps) < precision) {
+          if (this.isRadial()) {
+            if (Math.abs(n1 - n2) < precision) {
+              return this._createGradient(ctx, transf);
+            }
+          } else {
+            return this._createGradient(ctx, transf);
+          }
+        }
+      }
       const ownerBBox = owner.current.getClippedPathBoundingBox(pathType, getCurrentTransform(ctx)) || [0, 0, 0, 0];
       const width = Math.ceil(ownerBBox[2] - ownerBBox[0]) || 1;
       const height = Math.ceil(ownerBBox[3] - ownerBBox[1]) || 1;
@@ -16100,7 +16141,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "010e52e";
+const build = "33e8579";
 
 ;// ./src/display/editor/color_picker.js
 

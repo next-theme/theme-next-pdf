@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 010e52e
+ * pdfjsBuild = 33e8579
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -30789,6 +30789,32 @@ const substitutionMap = new Map([["Times-Roman", {
   alias: "Wingdings"
 }], ["Wingdings-Bold", {
   alias: "Wingdings"
+}], ["\xCB\xCE\xCC\xE5", {
+  local: ["SimSun", "SimSun Regular", "NSimSun"],
+  style: NORMAL,
+  ultimate: "serif"
+}], ["\xBA\xDA\xCC\xE5", {
+  local: ["SimHei", "SimHei Regular"],
+  style: NORMAL,
+  ultimate: "sans-serif"
+}], ["\xBF\xAC\xCC\xE5", {
+  local: ["KaiTi", "SimKai", "SimKai Regular"],
+  style: NORMAL,
+  ultimate: "sans-serif"
+}], ["\xB7\xC2\xCB\xCE", {
+  local: ["FangSong", "SimFang", "SimFang Regular"],
+  style: NORMAL,
+  ultimate: "serif"
+}], ["\xBF\xAC\xCC\xE5_GB2312", {
+  alias: "\xBF\xAC\xCC\xE5"
+}], ["\xB7\xC2\xCB\xCE_GB2312", {
+  alias: "\xB7\xC2\xCB\xCE"
+}], ["\xC1\xA5\xCA\xE9", {
+  local: ["SimLi", "SimLi Regular"],
+  style: NORMAL,
+  ultimate: "serif"
+}], ["\xD0\xC2\xCB\xCE", {
+  alias: "\xCB\xCE\xCC\xE5"
 }]]);
 const fontAliases = new Map([["Arial-Black", "ArialBlack"]]);
 function getStyleToAppend(style) {
@@ -34364,7 +34390,7 @@ class PartialEvaluator {
     const toUnicodePromise = this.readToUnicode(properties.toUnicode);
     if (properties.composite) {
       const cidSystemInfo = dict.get("CIDSystemInfo");
-      if (cidSystemInfo instanceof Dict) {
+      if (cidSystemInfo instanceof Dict && !properties.cidSystemInfo) {
         properties.cidSystemInfo = {
           registry: stringToPDFString(cidSystemInfo.get("Registry")),
           ordering: stringToPDFString(cidSystemInfo.get("Ordering")),
@@ -34422,6 +34448,28 @@ class PartialEvaluator {
       isSymbolsFontName = getSymbolsFonts()[properties.name];
     if (baseEncodingName && nonEmbeddedFont && isSymbolsFontName) {
       baseEncodingName = null;
+    }
+    if (baseEncodingName === "WinAnsiEncoding" && nonEmbeddedFont && properties.name?.charCodeAt(0) >= 0xb7) {
+      const fontName = properties.name;
+      const chineseFontNames = ["\xCB\xCE\xCC\xE5", "\xBA\xDA\xCC\xE5", "\xBF\xAC\xCC\xE5", "\xB7\xC2\xCB\xCE", "\xBF\xAC\xCC\xE5_GB2312", "\xB7\xC2\xCB\xCE_GB2312", "\xC1\xA5\xCA\xE9", "\xD0\xC2\xCB\xCE"];
+      if (chineseFontNames.includes(fontName)) {
+        baseEncodingName = null;
+        properties.defaultEncoding = "Adobe-GB1-UCS2";
+        properties.composite = true;
+        properties.cidEncoding = Name.get("GBK-EUC-H");
+        const cMap = await CMapFactory.create({
+          encoding: properties.cidEncoding,
+          fetchBuiltInCMap: this._fetchBuiltInCMapBound,
+          useCMap: null
+        });
+        properties.cMap = cMap;
+        properties.vertical = properties.cMap.vertical;
+        properties.cidSystemInfo = {
+          registry: "Adobe",
+          ordering: "GB1",
+          supplement: 0
+        };
+      }
     }
     if (baseEncodingName) {
       properties.defaultEncoding = getEncoding(baseEncodingName);
