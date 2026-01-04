@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 33e8579
+ * pdfjsBuild = cb36cbd
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -10585,8 +10585,9 @@ function createLinkAnnotation({
 class Autolinker {
   static #index = 0;
   static #regex;
+  static #numericTLDRegex;
   static findLinks(text) {
-    this.#regex ??= /\b(?:https?:\/\/|mailto:|www\.)(?:[\S--[\p{P}<>]]|\/|[\S--[\[\]]]+[\S--[\p{P}<>]])+|\b[\S--[@\p{Ps}\p{Pe}<>]]+@([\S--[\p{P}<>]]+(?:\.[\S--[\p{P}<>]]+)+)/gmv;
+    this.#regex ??= /\b(?:https?:\/\/|mailto:|www\.)(?:[\S--[\p{P}<>]]|\/|[\S--[\[\]]]+[\S--[\p{P}<>]])+|(?=\p{L})[\S--[@\p{Ps}\p{Pe}<>]]+@([\S--[\p{P}<>]]+(?:\.[\S--[\p{P}<>]]+)+)/gmv;
     const [normalizedText, diffs] = normalize(text, {
       ignoreDashEOL: true
     });
@@ -10597,11 +10598,17 @@ class Autolinker {
       let raw;
       if (url.startsWith("www.") || url.startsWith("http://") || url.startsWith("https://")) {
         raw = url;
-      } else if (URL.canParse(`http://${emailDomain}`)) {
-        raw = url.startsWith("mailto:") ? url : `mailto:${url}`;
-      } else {
-        continue;
+      } else if (emailDomain) {
+        const hostname = URL.parse(`http://${emailDomain}`)?.hostname;
+        if (!hostname) {
+          continue;
+        }
+        this.#numericTLDRegex ??= /\.\d+$/;
+        if (this.#numericTLDRegex.test(hostname)) {
+          continue;
+        }
       }
+      raw ??= url.startsWith("mailto:") ? url : `mailto:${url}`;
       const absoluteURL = createValidAbsoluteUrl(raw, null, {
         addDefaultProtocol: true
       });
