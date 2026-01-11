@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = cb36cbd
+ * pdfjsBuild = 6f5d5ac
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -4222,7 +4222,7 @@ class JBig2WasmImage {
       return successCallback(results.instance);
     } catch (reason) {
       warn(`JBig2Image#instantiateWasm: ${reason}`);
-      return null;
+      return fallbackCallback(null);
     } finally {
       this.#handler = null;
     }

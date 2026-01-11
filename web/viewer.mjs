@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = cb36cbd
+ * pdfjsBuild = 6f5d5ac
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -11321,9 +11321,11 @@ class StructTreeLayerBuilder {
               elem.ariaHidden = true;
             }
           }
+          delete node.alt;
         }
         if (!node.mathML && node.children.length === 1 && node.children[0].role !== "math") {
           element = document.createElementNS(MathMLNamespace, "math");
+          delete node.alt;
         }
       }
     }

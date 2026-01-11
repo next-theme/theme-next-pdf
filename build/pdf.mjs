@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = cb36cbd
+ * pdfjsBuild = 6f5d5ac
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -14170,6 +14170,9 @@ class TextLayer {
           if (item.id) {
             this.#container.setAttribute("id", `${item.id}`);
           }
+          if (item.tag === "Artifact") {
+            this.#container.ariaHidden = true;
+          }
           parent.append(this.#container);
         } else if (item.type === "endMarkedContent") {
           this.#container = this.#container.parentNode;
@@ -16141,7 +16144,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "cb36cbd";
+const build = "6f5d5ac";
 
 ;// ./src/display/editor/color_picker.js
 
