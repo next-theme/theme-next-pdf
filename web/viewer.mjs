@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 67673ea
+ * pdfjsBuild = 95f62f3
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -1126,6 +1126,7 @@ const LinkTarget = {
 };
 class PDFLinkService {
   externalLinkEnabled = true;
+  #pagesMapper = PagesMapper.instance;
   constructor({
     eventBus,
     externalLinkTarget = null,
@@ -1177,7 +1178,7 @@ class PDFLinkService {
     if (!this.pdfDocument) {
       return;
     }
-    let namedDest, explicitDest, pageNumber;
+    let namedDest, explicitDest, pageId;
     if (typeof dest === "string") {
       namedDest = dest;
       explicitDest = await this.pdfDocument.getDestination(dest);
@@ -1191,20 +1192,24 @@ class PDFLinkService {
     }
     const [destRef] = explicitDest;
     if (destRef && typeof destRef === "object") {
-      pageNumber = this.pdfDocument.cachedPageNumber(destRef);
-      if (!pageNumber) {
+      pageId = this.pdfDocument.cachedPageNumber(destRef);
+      if (!pageId) {
         try {
-          pageNumber = (await this.pdfDocument.getPageIndex(destRef)) + 1;
+          pageId = (await this.pdfDocument.getPageIndex(destRef)) + 1;
         } catch {
           console.error(`goToDestination: "${destRef}" is not a valid page reference, for dest="${dest}".`);
           return;
         }
       }
     } else if (Number.isInteger(destRef)) {
-      pageNumber = destRef + 1;
+      pageId = destRef + 1;
     }
-    if (!pageNumber || pageNumber < 1 || pageNumber > this.pagesCount) {
-      console.error(`goToDestination: "${pageNumber}" is not a valid page number, for dest="${dest}".`);
+    if (!pageId || pageId < 1 || pageId > this.pagesCount) {
+      console.error(`goToDestination: "${pageId}" is not a valid page number, for dest="${dest}".`);
+      return;
+    }
+    const pageNumber = this.#pagesMapper.getPageNumber(pageId);
+    if (pageNumber === null) {
       return;
     }
     if (this.pdfHistory) {
@@ -1212,7 +1217,7 @@ class PDFLinkService {
       this.pdfHistory.push({
         namedDest,
         explicitDest,
-        pageNumber
+        pageNumber: pageId
       });
     }
     this.pdfViewer.scrollPageIntoView({
@@ -1222,7 +1227,7 @@ class PDFLinkService {
     });
     const ac = new AbortController();
     this.eventBus._on("textlayerrendered", evt => {
-      if (evt.pageNumber === pageNumber) {
+      if (evt.pageNumber === pageId) {
         evt.source.textLayer.div.focus();
         ac.abort();
       }
@@ -6818,6 +6823,7 @@ class PDFFindController {
   #state = null;
   #updateMatchesCountOnProgress = true;
   #visitedPagesCount = 0;
+  #pagesMapper = PagesMapper.instance;
   constructor({
     linkService,
     eventBus,
@@ -6830,6 +6836,7 @@ class PDFFindController {
     this.#reset();
     eventBus._on("find", this.#onFind.bind(this));
     eventBus._on("findbarclose", this.#onFindBarClose.bind(this));
+    eventBus._on("pagesedited", this.#onPagesEdited.bind(this));
   }
   get highlightMatches() {
     return this._highlightMatches;
@@ -7073,11 +7080,12 @@ class PDFFindController {
     if (query.length === 0) {
       return;
     }
-    const pageContent = this._pageContents[pageIndex];
+    const pageId = this.getPageId(pageIndex);
+    const pageContent = this._pageContents[pageId];
     const matcherResult = this.match(query, pageContent, pageIndex);
     const matches = this._pageMatches[pageIndex] = [];
     const matchesLength = this._pageMatchesLength[pageIndex] = [];
-    const diffs = this._pageDiffs[pageIndex];
+    const diffs = this._pageDiffs[pageId];
     matcherResult?.forEach(({
       index,
       length
@@ -7106,7 +7114,7 @@ class PDFFindController {
     }
   }
   match(query, pageContent, pageIndex) {
-    const hasDiacritics = this._hasDiacritics[pageIndex];
+    const hasDiacritics = this._hasDiacritics[this.getPageId(pageIndex)];
     let isUnicode = false;
     if (typeof query === "string") {
       [isUnicode, query] = this.#convertToRegExpString(query, hasDiacritics);
@@ -7179,19 +7187,27 @@ class PDFFindController {
       });
     }
   }
+  getPageNumber(idx) {
+    return this.#pagesMapper.getPageNumber(idx + 1) - 1;
+  }
+  getPageId(pageNumber) {
+    return this.#pagesMapper.getPageId(pageNumber + 1) - 1;
+  }
   #updatePage(index) {
     if (this._scrollMatches && this._selected.pageIdx === index) {
       this._linkService.page = index + 1;
     }
     this._eventBus.dispatch("updatetextlayermatches", {
       source: this,
-      pageIndex: index
+      pageIndex: index,
+      pageId: this.getPageId(index)
     });
   }
   #updateAllPages() {
     this._eventBus.dispatch("updatetextlayermatches", {
       source: this,
-      pageIndex: -1
+      pageIndex: -1,
+      pageId: -1
     });
   }
   #nextMatch() {
@@ -7216,7 +7232,7 @@ class PDFFindController {
           continue;
         }
         this._pendingFindMatches.add(i);
-        this._extractTextPromises[i].then(() => {
+        this._extractTextPromises[this.getPageId(i)].then(() => {
           this._pendingFindMatches.delete(i);
           this.#calculateMatch(i);
         });
@@ -7305,6 +7321,13 @@ class PDFFindController {
       this._scrollMatches = true;
       this.#updatePage(this._selected.pageIdx);
     }
+  }
+  #onPagesEdited() {
+    if (this._extractTextPromises.length === 0) {
+      return;
+    }
+    this.#onFindBarClose();
+    this._dirtyMatch = true;
   }
   #onFindBarClose(evt) {
     const pdfDocument = this._pdfDocument;
@@ -10263,6 +10286,7 @@ class PDFThumbnailViewer {
       const N = thumbnails.length;
       pagesMapper.pagesNumber = N;
       const currentPageId = pagesMapper.getPageId(this._currentPageNumber);
+      const newCurrentPageId = pagesMapper.getPageId(isNaN(this.#pageNumberToRemove) ? pagesToMove[0] : this.#pageNumberToRemove);
       let thumbnail = thumbnails[pagesToMove[0] - 1];
       thumbnail.checkbox.checked = false;
       if (newIndex === 0) {
@@ -10299,6 +10323,10 @@ class PDFThumbnailViewer {
         index: newIndex,
         pagesToMove
       });
+      const newCurrentPageNumber = pagesMapper.getPageNumber(newCurrentPageId);
+      setTimeout(() => {
+        this.linkService.goToPage(newCurrentPageNumber);
+      }, 0);
     }
     if (!isNaN(this.#pageNumberToRemove)) {
       this.#selectPage(this.#pageNumberToRemove, false);
@@ -12051,7 +12079,7 @@ class TextHighlighter {
     if (!this.#eventAbortController) {
       this.#eventAbortController = new AbortController();
       this.eventBus._on("updatetextlayermatches", evt => {
-        if (evt.pageIndex === this.pageIdx || evt.pageIndex === -1) {
+        if (evt.pageId === this.pageIdx || evt.pageId === -1) {
           this._updateMatches();
         }
       }, {
@@ -12120,7 +12148,7 @@ class TextHighlighter {
       textContentItemsStr,
       textDivs
     } = this;
-    const isSelectedPage = pageIdx === findController.selected.pageIdx;
+    const isSelectedPage = findController.getPageNumber(pageIdx) === findController.selected.pageIdx;
     const selectedMatchIdx = findController.selected.matchIdx;
     const highlightAll = findController.state.highlightAll;
     let prevEnd = null;
@@ -12205,7 +12233,7 @@ class TextHighlighter {
         findController.scrollMatchIntoView({
           element: textDivs[begin.divIdx],
           selectedLeft,
-          pageIndex: pageIdx,
+          pageIndex: findController.getPageNumber(pageIdx),
           matchIndex: selectedMatchIdx
         });
       }
@@ -12240,8 +12268,9 @@ class TextHighlighter {
     if (!findController?.highlightMatches || reset) {
       return;
     }
-    const pageMatches = findController.pageMatches[pageIdx] || null;
-    const pageMatchesLength = findController.pageMatchesLength[pageIdx] || null;
+    const pageNumber = findController.getPageNumber(pageIdx);
+    const pageMatches = findController.pageMatches[pageNumber] || null;
+    const pageMatchesLength = findController.pageMatchesLength[pageNumber] || null;
     this.matches = this._convertMatches(pageMatches, pageMatchesLength);
     this._renderMatches(this.matches);
   }
@@ -16564,7 +16593,6 @@ class Menu {
       return;
     }
     const menu = this.#menu;
-    menu.classList.toggle("hidden", true);
     this.#triggeringButton.ariaExpanded = "false";
     this.#openMenuAC.abort();
     this.#openMenuAC = null;
@@ -16584,7 +16612,6 @@ class Menu {
         return;
       }
       const menu = this.#menu;
-      menu.classList.toggle("hidden", false);
       this.#triggeringButton.ariaExpanded = "true";
       this.#openMenuAC = new AbortController();
       const signal = AbortSignal.any([this.#menuAC.signal, this.#openMenuAC.signal]);
@@ -16628,6 +16655,11 @@ class Menu {
           this.#menuItems.findLast(item => !item.disabled && !item.classList.contains("hidden")).focus();
           stopEvent(e);
           break;
+        default:
+          const char = e.key.toLocaleLowerCase();
+          this.#goToNextItem(e.target, true, item => item.textContent.trim().toLowerCase().startsWith(char));
+          stopEvent(e);
+          break;
       }
     }, {
       signal,
@@ -16640,36 +16672,42 @@ class Menu {
       signal,
       capture: true
     });
-    this.#triggeringButton.addEventListener("keydown", ev => {
-      if (!this.#openMenuAC) {
-        return;
-      }
-      switch (ev.key) {
+    this.#triggeringButton.addEventListener("keydown", e => {
+      switch (e.key) {
+        case " ":
+        case "Enter":
         case "ArrowDown":
         case "Home":
+          if (!this.#openMenuAC) {
+            this.#triggeringButton.click();
+          }
           this.#menuItems.find(item => !item.disabled && !item.classList.contains("hidden")).focus();
-          stopEvent(ev);
+          stopEvent(e);
           break;
         case "ArrowUp":
         case "End":
+          if (!this.#openMenuAC) {
+            this.#triggeringButton.click();
+          }
           this.#menuItems.findLast(item => !item.disabled && !item.classList.contains("hidden")).focus();
-          stopEvent(ev);
+          stopEvent(e);
           break;
         case "Escape":
           this.#closeMenu();
-          stopEvent(ev);
+          stopEvent(e);
+          break;
       }
     }, {
       signal
     });
   }
-  #goToNextItem(element, forward) {
+  #goToNextItem(element, forward, check = () => true) {
     const index = this.#lastIndex === -1 ? this.#menuItems.indexOf(element) : this.#lastIndex;
     const len = this.#menuItems.length;
     const increment = forward ? 1 : len - 1;
     for (let i = (index + increment) % len; i !== index; i = (i + increment) % len) {
       const menuItem = this.#menuItems[i];
-      if (!menuItem.disabled && !menuItem.classList.contains("hidden")) {
+      if (!menuItem.disabled && !menuItem.classList.contains("hidden") && check(menuItem)) {
         menuItem.focus();
         this.#lastIndex = i;
         break;

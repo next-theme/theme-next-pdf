@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 67673ea
+ * pdfjsBuild = 95f62f3
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -5730,6 +5730,9 @@ class AnnotationEditor {
     this.#commentStandaloneButton?.classList.add("hidden");
   }
   get comment() {
+    if (!this.#comment) {
+      return null;
+    }
     const {
       data: {
         richText,
@@ -16144,7 +16147,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "67673ea";
+const build = "95f62f3";
 
 ;// ./src/display/editor/color_picker.js
 

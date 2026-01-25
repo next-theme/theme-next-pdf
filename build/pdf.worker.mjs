@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 67673ea
+ * pdfjsBuild = 95f62f3
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -59227,10 +59227,14 @@ class PDFEditor {
     for (const {
       document,
       includePages,
-      excludePages
+      excludePages,
+      pageIndices
     } of pageInfos) {
       if (!document) {
         continue;
+      }
+      if (pageIndices) {
+        newIndex = -1;
       }
       const documentData = new DocumentData(document);
       allDocumentData.push(documentData);
@@ -59250,6 +59254,7 @@ class PDFEditor {
           (deletedIndices ||= new Set()).add(page);
         }
       }
+      let pageIndex = 0;
       for (let i = 0, ii = document.numPages; i < ii; i++) {
         if (deletedIndices?.has(i)) {
           continue;
@@ -59284,7 +59289,17 @@ class PDFEditor {
         if (!takePage) {
           continue;
         }
-        const newPageIndex = newIndex++;
+        let newPageIndex;
+        if (pageIndices) {
+          newPageIndex = pageIndices[pageIndex++];
+        }
+        if (newPageIndex === undefined) {
+          if (newIndex !== -1) {
+            newPageIndex = newIndex++;
+          } else {
+            for (newPageIndex = 0; this.oldPages[newPageIndex] === undefined; newPageIndex++) {}
+          }
+        }
         promises.push(document.getPage(i).then(page => {
           this.oldPages[newPageIndex] = new PageData(page, documentData);
         }));

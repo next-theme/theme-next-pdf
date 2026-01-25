@@ -5322,6 +5322,14 @@
       gap:16px;
     }
 
+button.hasPopupMenu[aria-expanded="true"] + menu{
+    visibility:visible;
+  }
+
+button.hasPopupMenu[aria-expanded="false"] + menu{
+    visibility:hidden;
+  }
+
 .popupMenu{
   --menuitem-checkmark-icon:url(images/checkmark.svg);
   --menu-mark-icon-size:0;
@@ -5440,6 +5448,7 @@
   top:1px;
   margin:0;
   padding:5px;
+  box-sizing:border-box;
 
   background:var(--menu-bg);
   background-blend-mode:var(--menu-background-blend-mode);
@@ -6254,6 +6263,7 @@
 
 :is(:is(:is(#viewsManager #viewsManagerHeader) #viewsManagerStatus) #viewsManagerStatusAction) #actionSelector{
           height:32px;
+          min-width:115px;
           width:auto;
           display:block;
         }
@@ -6290,8 +6300,9 @@
                 background-color:var(--button-active-fg) !important;
               }
 
-:is(:is(:is(:is(#viewsManager #viewsManagerHeader) #viewsManagerStatus) #viewsManagerStatusAction) #actionSelector)  > .contextMenu{
-            min-width:115px;
+:is(:is(:is(:is(#viewsManager #viewsManagerHeader) #viewsManagerStatus) #viewsManagerStatusAction) #actionSelector)  > .popupMenu{
+            width:auto;
+            z-index:1;
           }
 
 :is(:is(#viewsManager #viewsManagerHeader) #viewsManagerStatus) #viewsManagerStatusUndo{
