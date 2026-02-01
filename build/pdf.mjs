@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 95f62f3
+ * pdfjsBuild = 814df09
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -896,31 +896,6 @@ function _isValidExplicitDest(validRef, validName, dest) {
 }
 function MathClamp(v, min, max) {
   return Math.min(Math.max(v, min), max);
-}
-function toHexUtil(arr) {
-  if (Uint8Array.prototype.toHex) {
-    return arr.toHex();
-  }
-  return Array.from(arr, num => hexNumbers[num]).join("");
-}
-function toBase64Util(arr) {
-  if (Uint8Array.prototype.toBase64) {
-    return arr.toBase64();
-  }
-  return btoa(bytesToString(arr));
-}
-function fromBase64Util(str) {
-  if (Uint8Array.fromBase64) {
-    return Uint8Array.fromBase64(str);
-  }
-  return stringToBytes(atob(str));
-}
-if (typeof Promise.try !== "function") {
-  Promise.try = function (fn, ...args) {
-    return new Promise(resolve => {
-      resolve(fn(...args));
-    });
-  };
 }
 if (typeof Math.sumPrecise !== "function") {
   Math.sumPrecise = function (numbers) {
@@ -1879,6 +1854,115 @@ function makePathFromDrawOPS(data) {
   }
   return path;
 }
+class PagesMapper {
+  static #idToPageNumber = null;
+  static #pageNumberToId = null;
+  static #prevIdToPageNumber = null;
+  static #pagesNumber = 0;
+  static #listeners = [];
+  get pagesNumber() {
+    return PagesMapper.#pagesNumber;
+  }
+  set pagesNumber(n) {
+    if (PagesMapper.#pagesNumber === n) {
+      return;
+    }
+    PagesMapper.#pagesNumber = n;
+    if (n === 0) {
+      PagesMapper.#pageNumberToId = null;
+      PagesMapper.#idToPageNumber = null;
+    }
+  }
+  addListener(listener) {
+    PagesMapper.#listeners.push(listener);
+  }
+  removeListener(listener) {
+    const index = PagesMapper.#listeners.indexOf(listener);
+    if (index >= 0) {
+      PagesMapper.#listeners.splice(index, 1);
+    }
+  }
+  #updateListeners() {
+    for (const listener of PagesMapper.#listeners) {
+      listener();
+    }
+  }
+  #init(mustInit) {
+    if (PagesMapper.#pageNumberToId) {
+      return;
+    }
+    const n = PagesMapper.#pagesNumber;
+    const array = new Uint32Array(3 * n);
+    const pageNumberToId = PagesMapper.#pageNumberToId = array.subarray(0, n);
+    const idToPageNumber = PagesMapper.#idToPageNumber = array.subarray(n, 2 * n);
+    if (mustInit) {
+      for (let i = 0; i < n; i++) {
+        pageNumberToId[i] = idToPageNumber[i] = i + 1;
+      }
+    }
+    PagesMapper.#prevIdToPageNumber = array.subarray(2 * n);
+  }
+  movePages(selectedPages, pagesToMove, index) {
+    this.#init(true);
+    const pageNumberToId = PagesMapper.#pageNumberToId;
+    const idToPageNumber = PagesMapper.#idToPageNumber;
+    PagesMapper.#prevIdToPageNumber.set(idToPageNumber);
+    const movedCount = pagesToMove.length;
+    const mappedPagesToMove = new Uint32Array(movedCount);
+    let removedBeforeTarget = 0;
+    for (let i = 0; i < movedCount; i++) {
+      const pageIndex = pagesToMove[i] - 1;
+      mappedPagesToMove[i] = pageNumberToId[pageIndex];
+      if (pageIndex < index) {
+        removedBeforeTarget += 1;
+      }
+    }
+    const pagesNumber = PagesMapper.#pagesNumber;
+    let adjustedTarget = index - removedBeforeTarget;
+    const remainingLen = pagesNumber - movedCount;
+    adjustedTarget = MathClamp(adjustedTarget, 0, remainingLen);
+    for (let i = 0, r = 0; i < pagesNumber; i++) {
+      if (!selectedPages.has(i + 1)) {
+        pageNumberToId[r++] = pageNumberToId[i];
+      }
+    }
+    pageNumberToId.copyWithin(adjustedTarget + movedCount, adjustedTarget, remainingLen);
+    pageNumberToId.set(mappedPagesToMove, adjustedTarget);
+    let hasChanged = false;
+    for (let i = 0, ii = pagesNumber; i < ii; i++) {
+      const id = pageNumberToId[i];
+      hasChanged ||= id !== i + 1;
+      idToPageNumber[id - 1] = i + 1;
+    }
+    this.#updateListeners();
+    if (!hasChanged) {
+      this.pagesNumber = 0;
+    }
+  }
+  hasBeenAltered() {
+    return PagesMapper.#pageNumberToId !== null;
+  }
+  getPageMappingForSaving() {
+    return {
+      pageIndices: PagesMapper.#idToPageNumber ? PagesMapper.#idToPageNumber.map(x => x - 1) : null
+    };
+  }
+  getPrevPageNumber(pageNumber) {
+    return PagesMapper.#prevIdToPageNumber[PagesMapper.#pageNumberToId[pageNumber - 1] - 1];
+  }
+  getPageNumber(id) {
+    return PagesMapper.#idToPageNumber?.[id - 1] ?? id;
+  }
+  getPageId(pageNumber) {
+    return PagesMapper.#pageNumberToId?.[pageNumber - 1] ?? pageNumber;
+  }
+  static get instance() {
+    return shadow(this, "instance", new PagesMapper());
+  }
+  getMapping() {
+    return PagesMapper.#pageNumberToId.subarray(0, this.pagesNumber);
+  }
+}
 
 ;// ./src/display/editor/toolbar.js
 
@@ -2759,6 +2843,9 @@ class AnnotationEditorUIManager {
     eventBus._on("switchannotationeditorparams", evt => this.updateParams(evt.type, evt.value), {
       signal
     });
+    eventBus._on("pagesedited", this.onPagesEdited.bind(this), {
+      signal
+    });
     window.addEventListener("pointerdown", () => {
       this.#isPointerDown = true;
     }, {
@@ -2920,6 +3007,21 @@ class AnnotationEditorUIManager {
   removeComment(editor) {
     this.#commentManager?.removeComments([editor.uid]);
   }
+  deleteComment(editor, savedData) {
+    const undo = () => {
+      editor.comment = savedData;
+    };
+    const cmd = () => {
+      this._editorUndoBar?.show(undo, "comment");
+      this.toggleComment(null);
+      editor.comment = null;
+    };
+    this.addCommands({
+      cmd,
+      undo,
+      mustExec: true
+    });
+  }
   toggleComment(editor, isSelected, visibility = undefined) {
     this.#commentManager?.toggleCommentPopup(editor, isSelected, visibility);
   }
@@ -2980,6 +3082,24 @@ class AnnotationEditorUIManager {
       case "enableNewAltTextWhenAddingImage":
         this.#enableNewAltTextWhenAddingImage = value;
         break;
+    }
+  }
+  onPagesEdited({
+    pagesMapper
+  }) {
+    for (const editor of this.#allEditors.values()) {
+      editor.updatePageIndex(pagesMapper.getPrevPageNumber(editor.pageIndex + 1) - 1);
+    }
+    const allLayers = this.#allLayers;
+    const newAllLayers = this.#allLayers = new Map();
+    for (const [pageIndex, layer] of allLayers) {
+      const prevPageIndex = pagesMapper.getPrevPageNumber(pageIndex + 1) - 1;
+      if (prevPageIndex === -1) {
+        layer.destroy();
+        continue;
+      }
+      newAllLayers.set(prevPageIndex, layer);
+      layer.updatePageIndex(prevPageIndex);
     }
   }
   onPageChanging({
@@ -4741,6 +4861,16 @@ class Comment {
     this.#date = new Date();
     this.#deleted = false;
   }
+  restoreData({
+    text,
+    richText,
+    date
+  }) {
+    this.#text = text;
+    this.#richText = richText;
+    this.#date = date;
+    this.#deleted = false;
+  }
   setInitialText(text, richText = null) {
     this.#initialText = text;
     this.data = text;
@@ -5043,6 +5173,9 @@ class AnnotationEditor {
     this.y = parameters.y / height;
     this.isAttachedToDOM = false;
     this.deleted = false;
+  }
+  updatePageIndex(newPageIndex) {
+    this.pageIndex = newPageIndex;
   }
   get editorType() {
     return Object.getPrototypeOf(this).constructor._type;
@@ -5750,9 +5883,13 @@ class AnnotationEditor {
       opacity: this.opacity ?? 1
     };
   }
-  set comment(text) {
+  set comment(value) {
     this.#comment ||= new Comment(this);
-    this.#comment.data = text;
+    if (typeof value === "object" && value !== null) {
+      this.#comment.restoreData(value);
+    } else {
+      this.#comment.data = value;
+    }
     if (this.hasComment) {
       this.removeCommentButtonFromToolbar();
       this.addStandaloneCommentButton();
@@ -6797,6 +6934,10 @@ class AnnotationStorage {
     let hasBitmap = false;
     for (const [key, val] of this.#storage) {
       const serialized = val instanceof AnnotationEditor ? val.serialize(false, context) : val;
+      if (val.page) {
+        val.pageIndex = val.page._pageIndex;
+        delete val.page;
+      }
       if (serialized) {
         map.set(key, serialized);
         hash.update(`${key}:${JSON.stringify(serialized)}`);
@@ -7183,7 +7324,7 @@ class FontFaceObject {
     if (!this.data || this.disableFontFace) {
       return null;
     }
-    const url = `url(data:${this.mimetype};base64,${toBase64Util(this.data)});`;
+    const url = `url(data:${this.mimetype};base64,${this.data.toBase64()});`;
     let rule;
     if (!this.cssFontInfo) {
       rule = `@font-face {font-family:"${this.loadedName}";src:${url}}`;
@@ -13322,71 +13463,58 @@ class PDFFetchStreamRangeReader {
 
 const OK_RESPONSE = 200;
 const PARTIAL_CONTENT_RESPONSE = 206;
-function network_getArrayBuffer(xhr) {
-  const data = xhr.response;
-  if (typeof data !== "string") {
-    return data;
-  }
-  return stringToBytes(data).buffer;
+function network_getArrayBuffer(val) {
+  return typeof val !== "string" ? val : stringToBytes(val).buffer;
 }
-class NetworkManager {
+class PDFNetworkStream {
+  #pendingRequests = new WeakMap();
+  _fullRequestReader = null;
+  _rangeRequestReaders = [];
   _responseOrigin = null;
-  constructor({
-    url,
-    httpHeaders,
-    withCredentials
-  }) {
-    this.url = url;
-    this.isHttp = /^https?:/i.test(url);
-    this.headers = createHeaders(this.isHttp, httpHeaders);
-    this.withCredentials = withCredentials || false;
-    this.currXhrId = 0;
-    this.pendingRequests = Object.create(null);
+  constructor(source) {
+    this._source = source;
+    this.url = source.url;
+    this.isHttp = /^https?:/i.test(this.url);
+    this.headers = createHeaders(this.isHttp, source.httpHeaders);
   }
-  request(args) {
+  _request(args) {
     const xhr = new XMLHttpRequest();
-    const xhrId = this.currXhrId++;
-    const pendingRequest = this.pendingRequests[xhrId] = {
-      xhr
+    const pendingRequest = {
+      validateStatus: null,
+      onHeadersReceived: args.onHeadersReceived,
+      onDone: args.onDone,
+      onError: args.onError,
+      onProgress: args.onProgress
     };
+    this.#pendingRequests.set(xhr, pendingRequest);
     xhr.open("GET", this.url);
-    xhr.withCredentials = this.withCredentials;
+    xhr.withCredentials = this._source.withCredentials;
     for (const [key, val] of this.headers) {
       xhr.setRequestHeader(key, val);
     }
     if (this.isHttp && "begin" in args && "end" in args) {
       xhr.setRequestHeader("Range", `bytes=${args.begin}-${args.end - 1}`);
-      pendingRequest.expectedStatus = PARTIAL_CONTENT_RESPONSE;
+      pendingRequest.validateStatus = status => status === PARTIAL_CONTENT_RESPONSE || status === OK_RESPONSE;
     } else {
-      pendingRequest.expectedStatus = OK_RESPONSE;
+      pendingRequest.validateStatus = status => status === OK_RESPONSE;
     }
     xhr.responseType = "arraybuffer";
     assert(args.onError, "Expected `onError` callback to be provided.");
-    xhr.onerror = () => {
-      args.onError(xhr.status);
-    };
-    xhr.onreadystatechange = this.onStateChange.bind(this, xhrId);
-    xhr.onprogress = this.onProgress.bind(this, xhrId);
-    pendingRequest.onHeadersReceived = args.onHeadersReceived;
-    pendingRequest.onDone = args.onDone;
-    pendingRequest.onError = args.onError;
-    pendingRequest.onProgress = args.onProgress;
+    xhr.onerror = () => args.onError(xhr.status);
+    xhr.onreadystatechange = this.#onStateChange.bind(this, xhr);
+    xhr.onprogress = this.#onProgress.bind(this, xhr);
     xhr.send(null);
-    return xhrId;
+    return xhr;
   }
-  onProgress(xhrId, evt) {
-    const pendingRequest = this.pendingRequests[xhrId];
+  #onProgress(xhr, evt) {
+    const pendingRequest = this.#pendingRequests.get(xhr);
+    pendingRequest?.onProgress?.(evt);
+  }
+  #onStateChange(xhr, evt) {
+    const pendingRequest = this.#pendingRequests.get(xhr);
     if (!pendingRequest) {
       return;
     }
-    pendingRequest.onProgress?.(evt);
-  }
-  onStateChange(xhrId, evt) {
-    const pendingRequest = this.pendingRequests[xhrId];
-    if (!pendingRequest) {
-      return;
-    }
-    const xhr = pendingRequest.xhr;
     if (xhr.readyState >= 2 && pendingRequest.onHeadersReceived) {
       pendingRequest.onHeadersReceived();
       delete pendingRequest.onHeadersReceived;
@@ -13394,76 +13522,53 @@ class NetworkManager {
     if (xhr.readyState !== 4) {
       return;
     }
-    if (!(xhrId in this.pendingRequests)) {
+    if (!this.#pendingRequests.has(xhr)) {
       return;
     }
-    delete this.pendingRequests[xhrId];
+    this.#pendingRequests.delete(xhr);
     if (xhr.status === 0 && this.isHttp) {
       pendingRequest.onError(xhr.status);
       return;
     }
     const xhrStatus = xhr.status || OK_RESPONSE;
-    const ok_response_on_range_request = xhrStatus === OK_RESPONSE && pendingRequest.expectedStatus === PARTIAL_CONTENT_RESPONSE;
-    if (!ok_response_on_range_request && xhrStatus !== pendingRequest.expectedStatus) {
+    if (!pendingRequest.validateStatus(xhrStatus)) {
       pendingRequest.onError(xhr.status);
       return;
     }
-    const chunk = network_getArrayBuffer(xhr);
+    const chunk = network_getArrayBuffer(xhr.response);
     if (xhrStatus === PARTIAL_CONTENT_RESPONSE) {
       const rangeHeader = xhr.getResponseHeader("Content-Range");
-      const matches = /bytes (\d+)-(\d+)\/(\d+)/.exec(rangeHeader);
-      if (matches) {
-        pendingRequest.onDone({
-          begin: parseInt(matches[1], 10),
-          chunk
-        });
+      if (/bytes (\d+)-(\d+)\/(\d+)/.test(rangeHeader)) {
+        pendingRequest.onDone(chunk);
       } else {
         warn(`Missing or invalid "Content-Range" header.`);
         pendingRequest.onError(0);
       }
     } else if (chunk) {
-      pendingRequest.onDone({
-        begin: 0,
-        chunk
-      });
+      pendingRequest.onDone(chunk);
     } else {
       pendingRequest.onError(xhr.status);
     }
   }
-  getRequestXhr(xhrId) {
-    return this.pendingRequests[xhrId].xhr;
-  }
-  isPendingRequest(xhrId) {
-    return xhrId in this.pendingRequests;
-  }
-  abortRequest(xhrId) {
-    const xhr = this.pendingRequests[xhrId].xhr;
-    delete this.pendingRequests[xhrId];
-    xhr.abort();
-  }
-}
-class PDFNetworkStream {
-  constructor(source) {
-    this._source = source;
-    this._manager = new NetworkManager(source);
-    this._rangeChunkSize = source.rangeChunkSize;
-    this._fullRequestReader = null;
-    this._rangeRequestReaders = [];
-  }
-  _onRangeRequestReaderClosed(reader) {
-    const i = this._rangeRequestReaders.indexOf(reader);
-    if (i >= 0) {
-      this._rangeRequestReaders.splice(i, 1);
+  _abortRequest(xhr) {
+    if (this.#pendingRequests.has(xhr)) {
+      this.#pendingRequests.delete(xhr);
+      xhr.abort();
     }
   }
   getFullReader() {
     assert(!this._fullRequestReader, "PDFNetworkStream.getFullReader can only be called once.");
-    this._fullRequestReader = new PDFNetworkStreamFullRequestReader(this._manager, this._source);
+    this._fullRequestReader = new PDFNetworkStreamFullRequestReader(this);
     return this._fullRequestReader;
   }
   getRangeReader(begin, end) {
-    const reader = new PDFNetworkStreamRangeRequestReader(this._manager, begin, end);
-    reader.onClosed = this._onRangeRequestReaderClosed.bind(this);
+    const reader = new PDFNetworkStreamRangeRequestReader(this, begin, end);
+    reader.onClosed = () => {
+      const i = this._rangeRequestReaders.indexOf(reader);
+      if (i >= 0) {
+        this._rangeRequestReaders.splice(i, 1);
+      }
+    };
     this._rangeRequestReaders.push(reader);
     return reader;
   }
@@ -13475,19 +13580,23 @@ class PDFNetworkStream {
   }
 }
 class PDFNetworkStreamFullRequestReader {
-  constructor(manager, source) {
-    this._manager = manager;
-    this._url = source.url;
-    this._fullRequestId = manager.request({
+  constructor(stream) {
+    this._stream = stream;
+    const {
+      disableRange,
+      length,
+      rangeChunkSize
+    } = stream._source;
+    this._fullRequestXhr = stream._request({
       onHeadersReceived: this._onHeadersReceived.bind(this),
       onDone: this._onDone.bind(this),
       onError: this._onError.bind(this),
       onProgress: this._onProgress.bind(this)
     });
     this._headersCapability = Promise.withResolvers();
-    this._disableRange = source.disableRange || false;
-    this._contentLength = source.length;
-    this._rangeChunkSize = source.rangeChunkSize;
+    this._disableRange = disableRange || false;
+    this._contentLength = length;
+    this._rangeChunkSize = rangeChunkSize;
     if (!this._rangeChunkSize && !this._disableRange) {
       this._disableRange = true;
     }
@@ -13501,9 +13610,9 @@ class PDFNetworkStreamFullRequestReader {
     this.onProgress = null;
   }
   _onHeadersReceived() {
-    const fullRequestXhrId = this._fullRequestId;
-    const fullRequestXhr = this._manager.getRequestXhr(fullRequestXhrId);
-    this._manager._responseOrigin = getResponseOrigin(fullRequestXhr.responseURL);
+    const stream = this._stream;
+    const fullRequestXhr = this._fullRequestXhr;
+    stream._responseOrigin = getResponseOrigin(fullRequestXhr.responseURL);
     const rawResponseHeaders = fullRequestXhr.getAllResponseHeaders();
     const responseHeaders = new Headers(rawResponseHeaders ? rawResponseHeaders.trimStart().replace(/[^\S ]+$/, "").split(/[\r\n]+/).map(x => {
       const [key, ...val] = x.split(": ");
@@ -13514,7 +13623,7 @@ class PDFNetworkStreamFullRequestReader {
       suggestedLength
     } = validateRangeRequestCapabilities({
       responseHeaders,
-      isHttp: this._manager.isHttp,
+      isHttp: stream.isHttp,
       rangeChunkSize: this._rangeChunkSize,
       disableRange: this._disableRange
     });
@@ -13524,21 +13633,19 @@ class PDFNetworkStreamFullRequestReader {
     this._contentLength = suggestedLength || this._contentLength;
     this._filename = extractFilenameFromHeader(responseHeaders);
     if (this._isRangeSupported) {
-      this._manager.abortRequest(fullRequestXhrId);
+      stream._abortRequest(fullRequestXhr);
     }
     this._headersCapability.resolve();
   }
-  _onDone(data) {
-    if (data) {
-      if (this._requests.length > 0) {
-        const requestCapability = this._requests.shift();
-        requestCapability.resolve({
-          value: data.chunk,
-          done: false
-        });
-      } else {
-        this._cachedChunks.push(data.chunk);
-      }
+  _onDone(chunk) {
+    if (this._requests.length > 0) {
+      const requestCapability = this._requests.shift();
+      requestCapability.resolve({
+        value: chunk,
+        done: false
+      });
+    } else {
+      this._cachedChunks.push(chunk);
     }
     this._done = true;
     if (this._cachedChunks.length > 0) {
@@ -13553,7 +13660,7 @@ class PDFNetworkStreamFullRequestReader {
     this._requests.length = 0;
   }
   _onError(status) {
-    this._storedError = createResponseError(status, this._url);
+    this._storedError = createResponseError(status, this._stream.url);
     this._headersCapability.reject(this._storedError);
     for (const requestCapability of this._requests) {
       requestCapability.reject(this._storedError);
@@ -13614,17 +13721,15 @@ class PDFNetworkStreamFullRequestReader {
       });
     }
     this._requests.length = 0;
-    if (this._manager.isPendingRequest(this._fullRequestId)) {
-      this._manager.abortRequest(this._fullRequestId);
-    }
-    this._fullRequestReader = null;
+    this._stream._abortRequest(this._fullRequestXhr);
+    this._fullRequestXhr = null;
   }
 }
 class PDFNetworkStreamRangeRequestReader {
-  constructor(manager, begin, end) {
-    this._manager = manager;
-    this._url = manager.url;
-    this._requestId = manager.request({
+  onClosed = null;
+  constructor(stream, begin, end) {
+    this._stream = stream;
+    this._requestXhr = stream._request({
       begin,
       end,
       onHeadersReceived: this._onHeadersReceived.bind(this),
@@ -13637,20 +13742,15 @@ class PDFNetworkStreamRangeRequestReader {
     this._done = false;
     this._storedError = undefined;
     this.onProgress = null;
-    this.onClosed = null;
   }
   _onHeadersReceived() {
-    const responseOrigin = getResponseOrigin(this._manager.getRequestXhr(this._requestId)?.responseURL);
-    if (responseOrigin !== this._manager._responseOrigin) {
-      this._storedError = new Error(`Expected range response-origin "${responseOrigin}" to match "${this._manager._responseOrigin}".`);
+    const responseOrigin = getResponseOrigin(this._requestXhr?.responseURL);
+    if (responseOrigin !== this._stream._responseOrigin) {
+      this._storedError = new Error(`Expected range response-origin "${responseOrigin}" to match "${this._stream._responseOrigin}".`);
       this._onError(0);
     }
   }
-  _close() {
-    this.onClosed?.(this);
-  }
-  _onDone(data) {
-    const chunk = data.chunk;
+  _onDone(chunk) {
     if (this._requests.length > 0) {
       const requestCapability = this._requests.shift();
       requestCapability.resolve({
@@ -13668,10 +13768,10 @@ class PDFNetworkStreamRangeRequestReader {
       });
     }
     this._requests.length = 0;
-    this._close();
+    this.onClosed?.(this);
   }
   _onError(status) {
-    this._storedError ??= createResponseError(status, this._url);
+    this._storedError ??= createResponseError(status, this._stream.url);
     for (const requestCapability of this._requests) {
       requestCapability.reject(this._storedError);
     }
@@ -13719,10 +13819,8 @@ class PDFNetworkStreamRangeRequestReader {
       });
     }
     this._requests.length = 0;
-    if (this._manager.isPendingRequest(this._requestId)) {
-      this._manager.abortRequest(this._requestId);
-    }
-    this._close();
+    this._stream._abortRequest(this._requestXhr);
+    this.onClosed?.(this);
   }
 }
 
@@ -13736,6 +13834,27 @@ function parseUrlOrPath(sourceUrl) {
   }
   const url = process.getBuiltinModule("url");
   return new URL(url.pathToFileURL(sourceUrl));
+}
+function getReadableStream(readStream) {
+  const {
+    Readable
+  } = process.getBuiltinModule("stream");
+  if (typeof Readable.toWeb === "function") {
+    return Readable.toWeb(readStream);
+  }
+  const require = process.getBuiltinModule("module").createRequire(import.meta.url);
+  const polyfill = require("node-readable-to-web-readable-stream");
+  return polyfill.makeDefaultReadableStreamFromNodeReadable(readStream);
+}
+function node_stream_getArrayBuffer(val) {
+  if (val instanceof Uint8Array) {
+    return val.buffer;
+  }
+  if (val instanceof ArrayBuffer) {
+    return val;
+  }
+  warn(`getArrayBuffer - unexpected data format: ${val}`);
+  return new Uint8Array(val).buffer;
 }
 class PDFNodeStream {
   constructor(source) {
@@ -13753,11 +13872,11 @@ class PDFNodeStream {
     this._fullRequestReader = new PDFNodeStreamFsFullReader(this);
     return this._fullRequestReader;
   }
-  getRangeReader(start, end) {
+  getRangeReader(begin, end) {
     if (end <= this._progressiveDataLength) {
       return null;
     }
-    const rangeReader = new PDFNodeStreamFsRangeReader(this, start, end);
+    const rangeReader = new PDFNodeStreamFsRangeReader(this, begin, end);
     this._rangeRequestReaders.push(rangeReader);
     return rangeReader;
   }
@@ -13769,10 +13888,9 @@ class PDFNodeStream {
   }
 }
 class PDFNodeStreamFsFullReader {
+  _headersCapability = Promise.withResolvers();
+  _reader = null;
   constructor(stream) {
-    this._url = stream.url;
-    this._done = false;
-    this._storedError = null;
     this.onProgress = null;
     const source = stream.source;
     this._contentLength = source.length;
@@ -13785,19 +13903,27 @@ class PDFNodeStreamFsFullReader {
     }
     this._isStreamingSupported = !source.disableStream;
     this._isRangeSupported = !source.disableRange;
-    this._readableStream = null;
-    this._readCapability = Promise.withResolvers();
-    this._headersCapability = Promise.withResolvers();
+    const url = stream.url;
     const fs = process.getBuiltinModule("fs");
-    fs.promises.lstat(this._url).then(stat => {
-      this._contentLength = stat.size;
-      this._setReadableStream(fs.createReadStream(this._url));
-      this._headersCapability.resolve();
-    }, error => {
-      if (error.code === "ENOENT") {
-        error = createResponseError(0, this._url.href);
+    fs.promises.lstat(url).then(stat => {
+      const readStream = fs.createReadStream(url);
+      const readableStream = getReadableStream(readStream);
+      this._reader = readableStream.getReader();
+      const {
+        size
+      } = stat;
+      if (size <= 2 * this._rangeChunkSize) {
+        this._isRangeSupported = false;
       }
-      this._storedError = error;
+      this._contentLength = size;
+      if (!this._isStreamingSupported && this._isRangeSupported) {
+        this.cancel(new AbortException("Streaming is disabled."));
+      }
+      this._headersCapability.resolve();
+    }).catch(error => {
+      if (error.code === "ENOENT") {
+        error = createResponseError(0, url.href);
+      }
       this._headersCapability.reject(error);
     });
   }
@@ -13817,137 +13943,79 @@ class PDFNodeStreamFsFullReader {
     return this._isStreamingSupported;
   }
   async read() {
-    await this._readCapability.promise;
-    if (this._done) {
+    await this._headersCapability.promise;
+    const {
+      value,
+      done
+    } = await this._reader.read();
+    if (done) {
       return {
-        value: undefined,
-        done: true
+        value,
+        done
       };
     }
-    if (this._storedError) {
-      throw this._storedError;
-    }
-    const chunk = this._readableStream.read();
-    if (chunk === null) {
-      this._readCapability = Promise.withResolvers();
-      return this.read();
-    }
-    this._loaded += chunk.length;
+    this._loaded += value.length;
     this.onProgress?.({
       loaded: this._loaded,
       total: this._contentLength
     });
-    const buffer = new Uint8Array(chunk).buffer;
     return {
-      value: buffer,
+      value: node_stream_getArrayBuffer(value),
       done: false
     };
   }
   cancel(reason) {
-    if (!this._readableStream) {
-      this._error(reason);
-      return;
-    }
-    this._readableStream.destroy(reason);
-  }
-  _error(reason) {
-    this._storedError = reason;
-    this._readCapability.resolve();
-  }
-  _setReadableStream(readableStream) {
-    this._readableStream = readableStream;
-    readableStream.on("readable", () => {
-      this._readCapability.resolve();
-    });
-    readableStream.on("end", () => {
-      readableStream.destroy();
-      this._done = true;
-      this._readCapability.resolve();
-    });
-    readableStream.on("error", reason => {
-      this._error(reason);
-    });
-    if (!this._isStreamingSupported && this._isRangeSupported) {
-      this._error(new AbortException("streaming is disabled"));
-    }
-    if (this._storedError) {
-      this._readableStream.destroy(this._storedError);
-    }
+    this._reader?.cancel(reason);
   }
 }
 class PDFNodeStreamFsRangeReader {
-  constructor(stream, start, end) {
-    this._url = stream.url;
-    this._done = false;
-    this._storedError = null;
+  _readCapability = Promise.withResolvers();
+  _reader = null;
+  constructor(stream, begin, end) {
     this.onProgress = null;
     this._loaded = 0;
-    this._readableStream = null;
-    this._readCapability = Promise.withResolvers();
     const source = stream.source;
     this._isStreamingSupported = !source.disableStream;
+    const url = stream.url;
     const fs = process.getBuiltinModule("fs");
-    this._setReadableStream(fs.createReadStream(this._url, {
-      start,
-      end: end - 1
-    }));
+    try {
+      const readStream = fs.createReadStream(url, {
+        start: begin,
+        end: end - 1
+      });
+      const readableStream = getReadableStream(readStream);
+      this._reader = readableStream.getReader();
+      this._readCapability.resolve();
+    } catch (error) {
+      this._readCapability.reject(error);
+    }
   }
   get isStreamingSupported() {
     return this._isStreamingSupported;
   }
   async read() {
     await this._readCapability.promise;
-    if (this._done) {
+    const {
+      value,
+      done
+    } = await this._reader.read();
+    if (done) {
       return {
-        value: undefined,
-        done: true
+        value,
+        done
       };
     }
-    if (this._storedError) {
-      throw this._storedError;
-    }
-    const chunk = this._readableStream.read();
-    if (chunk === null) {
-      this._readCapability = Promise.withResolvers();
-      return this.read();
-    }
-    this._loaded += chunk.length;
+    this._loaded += value.length;
     this.onProgress?.({
       loaded: this._loaded
     });
-    const buffer = new Uint8Array(chunk).buffer;
     return {
-      value: buffer,
+      value: node_stream_getArrayBuffer(value),
       done: false
     };
   }
   cancel(reason) {
-    if (!this._readableStream) {
-      this._error(reason);
-      return;
-    }
-    this._readableStream.destroy(reason);
-  }
-  _error(reason) {
-    this._storedError = reason;
-    this._readCapability.resolve();
-  }
-  _setReadableStream(readableStream) {
-    this._readableStream = readableStream;
-    readableStream.on("readable", () => {
-      this._readCapability.resolve();
-    });
-    readableStream.on("end", () => {
-      readableStream.destroy();
-      this._done = true;
-      this._readCapability.resolve();
-    });
-    readableStream.on("error", reason => {
-      this._error(reason);
-    });
-    if (this._storedError) {
-      this._readableStream.destroy(this._storedError);
-    }
+    this._reader?.cancel(reason);
   }
 }
 
@@ -14770,6 +14838,7 @@ class PDFDocumentProxy {
 }
 class PDFPageProxy {
   #pendingCleanup = false;
+  #pagesMapper = PagesMapper.instance;
   constructor(pageIndex, pageInfo, transport, pdfBug = false) {
     this._pageIndex = pageIndex;
     this._pageInfo = pageInfo;
@@ -14784,6 +14853,9 @@ class PDFPageProxy {
   }
   get pageNumber() {
     return this._pageIndex + 1;
+  }
+  set pageNumber(value) {
+    this._pageIndex = value - 1;
   }
   get rotate() {
     return this._pageInfo.rotate;
@@ -14998,6 +15070,7 @@ class PDFPageProxy {
   } = {}) {
     const TEXT_CONTENT_CHUNK_SIZE = 100;
     return this._transport.messageHandler.sendWithStream("GetTextContent", {
+      pageId: this.#pagesMapper.getPageId(this._pageIndex + 1) - 1,
       pageIndex: this._pageIndex,
       includeMarkedContent: includeMarkedContent === true,
       disableNormalization: disableNormalization === true
@@ -15120,6 +15193,7 @@ class PDFPageProxy {
       transfer
     } = annotationStorageSerializable;
     const readableStream = this._transport.messageHandler.sendWithStream("GetOperatorList", {
+      pageId: this.#pagesMapper.getPageId(this._pageIndex + 1) - 1,
       pageIndex: this._pageIndex,
       intent: renderingIntent,
       cacheKey,
@@ -15430,6 +15504,7 @@ class WorkerTransport {
   #pagePromises = new Map();
   #pageRefCache = new Map();
   #passwordCapability = null;
+  #pagesMapper = PagesMapper.instance;
   constructor(messageHandler, loadingTask, networkStream, params, factory, enableHWA) {
     this.messageHandler = messageHandler;
     this.loadingTask = loadingTask;
@@ -15453,6 +15528,24 @@ class WorkerTransport {
     this.downloadInfoCapability = Promise.withResolvers();
     this.enableHWA = enableHWA;
     this.setupMessageHandler();
+    this.#pagesMapper.addListener(this.#updateCaches.bind(this));
+  }
+  #updateCaches() {
+    const newPageCache = new Map();
+    const newPromiseCache = new Map();
+    for (let i = 0, ii = this.#pagesMapper.pagesNumber; i < ii; i++) {
+      const prevPageIndex = this.#pagesMapper.getPrevPageNumber(i + 1) - 1;
+      const page = this.#pageCache.get(prevPageIndex);
+      if (page) {
+        newPageCache.set(i, page);
+      }
+      const promise = this.#pagePromises.get(prevPageIndex);
+      if (promise) {
+        newPromiseCache.set(i, promise);
+      }
+    }
+    this.#pageCache = newPageCache;
+    this.#pagePromises = newPromiseCache;
   }
   #cacheSimpleMethod(name, data = null) {
     const cachedPromise = this.#methodPromises.get(name);
@@ -15646,6 +15739,7 @@ class WorkerTransport {
     messageHandler.on("GetDoc", ({
       pdfInfo
     }) => {
+      this.#pagesMapper.pagesNumber = pdfInfo.numPages;
       this._numPages = pdfInfo.numPages;
       this._htmlForXfa = pdfInfo.htmlForXfa;
       delete pdfInfo.htmlForXfa;
@@ -15816,22 +15910,23 @@ class WorkerTransport {
     });
   }
   getPage(pageNumber) {
-    if (!Number.isInteger(pageNumber) || pageNumber <= 0 || pageNumber > this._numPages) {
+    if (!Number.isInteger(pageNumber) || pageNumber <= 0 || pageNumber > this.#pagesMapper.pagesNumber) {
       return Promise.reject(new Error("Invalid page request."));
     }
-    const pageIndex = pageNumber - 1,
-      cachedPromise = this.#pagePromises.get(pageIndex);
+    const pageIndex = pageNumber - 1;
+    const newPageIndex = this.#pagesMapper.getPageId(pageNumber) - 1;
+    const cachedPromise = this.#pagePromises.get(pageIndex);
     if (cachedPromise) {
       return cachedPromise;
     }
     const promise = this.messageHandler.sendWithPromise("GetPage", {
-      pageIndex
+      pageIndex: newPageIndex
     }).then(pageInfo => {
       if (this.destroyed) {
         throw new Error("Transport destroyed");
       }
       if (pageInfo.refStr) {
-        this.#pageRefCache.set(pageInfo.refStr, pageNumber);
+        this.#pageRefCache.set(pageInfo.refStr, newPageIndex);
       }
       const page = new PDFPageProxy(pageIndex, pageInfo, this, this._params.pdfBug);
       this.#pageCache.set(pageIndex, page);
@@ -15840,18 +15935,19 @@ class WorkerTransport {
     this.#pagePromises.set(pageIndex, promise);
     return promise;
   }
-  getPageIndex(ref) {
+  async getPageIndex(ref) {
     if (!isRefProxy(ref)) {
-      return Promise.reject(new Error("Invalid pageIndex request."));
+      throw new Error("Invalid pageIndex request.");
     }
-    return this.messageHandler.sendWithPromise("GetPageIndex", {
+    const index = await this.messageHandler.sendWithPromise("GetPageIndex", {
       num: ref.num,
       gen: ref.gen
     });
+    return this.#pagesMapper.getPageNumber(index + 1) - 1;
   }
   getAnnotations(pageIndex, intent) {
     return this.messageHandler.sendWithPromise("GetAnnotations", {
-      pageIndex,
+      pageIndex: this.#pagesMapper.getPageId(pageIndex + 1) - 1,
       intent
     });
   }
@@ -15904,12 +16000,12 @@ class WorkerTransport {
   }
   getPageJSActions(pageIndex) {
     return this.messageHandler.sendWithPromise("GetPageJSActions", {
-      pageIndex
+      pageIndex: this.#pagesMapper.getPageId(pageIndex + 1) - 1
     });
   }
   getStructTree(pageIndex) {
     return this.messageHandler.sendWithPromise("GetStructTree", {
-      pageIndex
+      pageIndex: this.#pagesMapper.getPageId(pageIndex + 1) - 1
     });
   }
   getOutline() {
@@ -15964,32 +16060,33 @@ class WorkerTransport {
       return null;
     }
     const refStr = ref.gen === 0 ? `${ref.num}R` : `${ref.num}R${ref.gen}`;
-    return this.#pageRefCache.get(refStr) ?? null;
+    const pageIndex = this.#pageRefCache.get(refStr);
+    return pageIndex >= 0 ? this.#pagesMapper.getPageNumber(pageIndex + 1) : null;
   }
 }
 class RenderTask {
-  #internalRenderTask = null;
+  _internalRenderTask = null;
   onContinue = null;
   onError = null;
   constructor(internalRenderTask) {
-    this.#internalRenderTask = internalRenderTask;
+    this._internalRenderTask = internalRenderTask;
   }
   get promise() {
-    return this.#internalRenderTask.capability.promise;
+    return this._internalRenderTask.capability.promise;
   }
   cancel(extraDelay = 0) {
-    this.#internalRenderTask.cancel(null, extraDelay);
+    this._internalRenderTask.cancel(null, extraDelay);
   }
   get separateAnnots() {
     const {
       separateAnnots
-    } = this.#internalRenderTask.operatorList;
+    } = this._internalRenderTask.operatorList;
     if (!separateAnnots) {
       return false;
     }
     const {
       annotationCanvasMap
-    } = this.#internalRenderTask;
+    } = this._internalRenderTask;
     return separateAnnots.form || separateAnnots.canvas && annotationCanvasMap?.size > 0;
   }
 }
@@ -16147,7 +16244,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.4.0";
-const build = "95f62f3";
+const build = "814df09";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -16734,7 +16831,7 @@ class AnnotationElement {
       this.annotationStorage.setValue(`${AnnotationEditorPrefix}${data.id}`, {
         id: data.id,
         annotationType: data.annotationType,
-        pageIndex: this.parent.page._pageIndex,
+        page: this.parent.page,
         popup,
         popupRef: data.popupRef,
         modificationDate: new Date()
@@ -24216,11 +24313,11 @@ class SignatureExtractor {
     writer.close();
     const buf = await new Response(cs.readable).arrayBuffer();
     const bytes = new Uint8Array(buf);
-    return toBase64Util(bytes);
+    return bytes.toBase64();
   }
   static async decompressSignature(signatureData) {
     try {
-      const bytes = fromBase64Util(signatureData);
+      const bytes = Uint8Array.fromBase64(signatureData);
       const {
         readable,
         writable
@@ -25409,6 +25506,9 @@ class AnnotationEditorLayer {
     this._structTree = structTreeLayer;
     this.#uiManager.addLayer(this);
   }
+  updatePageIndex(newPageIndex) {
+    this.pageIndex = newPageIndex;
+  }
   get isEmpty() {
     return this.#editors.size === 0;
   }
@@ -26116,11 +26216,6 @@ class DrawLayer {
   #mapping = new Map();
   #toUpdate = new Map();
   static #id = 0;
-  constructor({
-    pageIndex
-  }) {
-    this.pageIndex = pageIndex;
-  }
   setParent(parent) {
     if (!this.#parent) {
       this.#parent = parent;
@@ -26182,7 +26277,7 @@ class DrawLayer {
     root.append(defs);
     const path = DrawLayer._svgFactory.createElement("path");
     defs.append(path);
-    const pathId = `path_p${this.pageIndex}_${id}`;
+    const pathId = `path_${id}`;
     path.setAttribute("id", pathId);
     path.setAttribute("vector-effect", "non-scaling-stroke");
     if (isPathUpdatable) {
@@ -26206,14 +26301,14 @@ class DrawLayer {
     root.append(defs);
     const path = DrawLayer._svgFactory.createElement("path");
     defs.append(path);
-    const pathId = `path_p${this.pageIndex}_${id}`;
+    const pathId = `path_${id}`;
     path.setAttribute("id", pathId);
     path.setAttribute("vector-effect", "non-scaling-stroke");
     let maskId;
     if (mustRemoveSelfIntersections) {
       const mask = DrawLayer._svgFactory.createElement("mask");
       defs.append(mask);
-      maskId = `mask_p${this.pageIndex}_${id}`;
+      maskId = `mask_${id}`;
       mask.setAttribute("id", maskId);
       mask.setAttribute("maskUnits", "objectBoundingBox");
       const rect = DrawLayer._svgFactory.createElement("rect");
@@ -26369,6 +26464,7 @@ globalThis.pdfjsLib = {
   normalizeUnicode: normalizeUnicode,
   OPS: OPS,
   OutputScale: OutputScale,
+  PagesMapper: PagesMapper,
   PasswordResponses: PasswordResponses,
   PDFDataRangeTransport: PDFDataRangeTransport,
   PDFDateString: PDFDateString,
@@ -26392,6 +26488,6 @@ globalThis.pdfjsLib = {
   XfaLayer: XfaLayer
 };
 
-export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, CSSConstants, ColorPicker, DOMSVGFactory, DrawLayer, util_FeatureTest as FeatureTest, GlobalWorkerOptions, util_ImageKind as ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TouchManager, Util, VerbosityLevel, XfaLayer, applyOpacity, build, createValidAbsoluteUrl, fetchData, findContrastColor, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getUuid, getXfaPageViewport, isDataScheme, isPdfFile, isValidExplicitDest, noContextMenu, normalizeUnicode, renderRichText, setLayerDimensions, shadow, stopEvent, updateUrlHash, version };
+export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, CSSConstants, ColorPicker, DOMSVGFactory, DrawLayer, util_FeatureTest as FeatureTest, GlobalWorkerOptions, util_ImageKind as ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PagesMapper, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TouchManager, Util, VerbosityLevel, XfaLayer, applyOpacity, build, createValidAbsoluteUrl, fetchData, findContrastColor, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getUuid, getXfaPageViewport, isDataScheme, isPdfFile, isValidExplicitDest, noContextMenu, normalizeUnicode, renderRichText, setLayerDimensions, shadow, stopEvent, updateUrlHash, version };
 
 //# sourceMappingURL=pdf.mjs.map

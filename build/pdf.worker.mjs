@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 95f62f3
+ * pdfjsBuild = 814df09
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -896,31 +896,6 @@ function _isValidExplicitDest(validRef, validName, dest) {
 }
 function MathClamp(v, min, max) {
   return Math.min(Math.max(v, min), max);
-}
-function toHexUtil(arr) {
-  if (Uint8Array.prototype.toHex) {
-    return arr.toHex();
-  }
-  return Array.from(arr, num => hexNumbers[num]).join("");
-}
-function toBase64Util(arr) {
-  if (Uint8Array.prototype.toBase64) {
-    return arr.toBase64();
-  }
-  return btoa(bytesToString(arr));
-}
-function fromBase64Util(str) {
-  if (Uint8Array.fromBase64) {
-    return Uint8Array.fromBase64(str);
-  }
-  return stringToBytes(atob(str));
-}
-if (typeof Promise.try !== "function") {
-  Promise.try = function (fn, ...args) {
-    return new Promise(resolve => {
-      resolve(fn(...args));
-    });
-  };
 }
 if (typeof Math.sumPrecise !== "function") {
   Math.sumPrecise = function (numbers) {
@@ -2887,6 +2862,7 @@ class Stream extends BaseStream {
     const pos = this.pos;
     const strEnd = this.end;
     if (!length) {
+      this.pos = strEnd;
       return bytes.subarray(pos, strEnd);
     }
     let end = pos + length;
@@ -8090,6 +8066,7 @@ const distDecode = new Int32Array([0x00001, 0x00002, 0x00003, 0x00004, 0x10005, 
 const fixedLitCodeTab = [new Int32Array([0x70100, 0x80050, 0x80010, 0x80118, 0x70110, 0x80070, 0x80030, 0x900c0, 0x70108, 0x80060, 0x80020, 0x900a0, 0x80000, 0x80080, 0x80040, 0x900e0, 0x70104, 0x80058, 0x80018, 0x90090, 0x70114, 0x80078, 0x80038, 0x900d0, 0x7010c, 0x80068, 0x80028, 0x900b0, 0x80008, 0x80088, 0x80048, 0x900f0, 0x70102, 0x80054, 0x80014, 0x8011c, 0x70112, 0x80074, 0x80034, 0x900c8, 0x7010a, 0x80064, 0x80024, 0x900a8, 0x80004, 0x80084, 0x80044, 0x900e8, 0x70106, 0x8005c, 0x8001c, 0x90098, 0x70116, 0x8007c, 0x8003c, 0x900d8, 0x7010e, 0x8006c, 0x8002c, 0x900b8, 0x8000c, 0x8008c, 0x8004c, 0x900f8, 0x70101, 0x80052, 0x80012, 0x8011a, 0x70111, 0x80072, 0x80032, 0x900c4, 0x70109, 0x80062, 0x80022, 0x900a4, 0x80002, 0x80082, 0x80042, 0x900e4, 0x70105, 0x8005a, 0x8001a, 0x90094, 0x70115, 0x8007a, 0x8003a, 0x900d4, 0x7010d, 0x8006a, 0x8002a, 0x900b4, 0x8000a, 0x8008a, 0x8004a, 0x900f4, 0x70103, 0x80056, 0x80016, 0x8011e, 0x70113, 0x80076, 0x80036, 0x900cc, 0x7010b, 0x80066, 0x80026, 0x900ac, 0x80006, 0x80086, 0x80046, 0x900ec, 0x70107, 0x8005e, 0x8001e, 0x9009c, 0x70117, 0x8007e, 0x8003e, 0x900dc, 0x7010f, 0x8006e, 0x8002e, 0x900bc, 0x8000e, 0x8008e, 0x8004e, 0x900fc, 0x70100, 0x80051, 0x80011, 0x80119, 0x70110, 0x80071, 0x80031, 0x900c2, 0x70108, 0x80061, 0x80021, 0x900a2, 0x80001, 0x80081, 0x80041, 0x900e2, 0x70104, 0x80059, 0x80019, 0x90092, 0x70114, 0x80079, 0x80039, 0x900d2, 0x7010c, 0x80069, 0x80029, 0x900b2, 0x80009, 0x80089, 0x80049, 0x900f2, 0x70102, 0x80055, 0x80015, 0x8011d, 0x70112, 0x80075, 0x80035, 0x900ca, 0x7010a, 0x80065, 0x80025, 0x900aa, 0x80005, 0x80085, 0x80045, 0x900ea, 0x70106, 0x8005d, 0x8001d, 0x9009a, 0x70116, 0x8007d, 0x8003d, 0x900da, 0x7010e, 0x8006d, 0x8002d, 0x900ba, 0x8000d, 0x8008d, 0x8004d, 0x900fa, 0x70101, 0x80053, 0x80013, 0x8011b, 0x70111, 0x80073, 0x80033, 0x900c6, 0x70109, 0x80063, 0x80023, 0x900a6, 0x80003, 0x80083, 0x80043, 0x900e6, 0x70105, 0x8005b, 0x8001b, 0x90096, 0x70115, 0x8007b, 0x8003b, 0x900d6, 0x7010d, 0x8006b, 0x8002b, 0x900b6, 0x8000b, 0x8008b, 0x8004b, 0x900f6, 0x70103, 0x80057, 0x80017, 0x8011f, 0x70113, 0x80077, 0x80037, 0x900ce, 0x7010b, 0x80067, 0x80027, 0x900ae, 0x80007, 0x80087, 0x80047, 0x900ee, 0x70107, 0x8005f, 0x8001f, 0x9009e, 0x70117, 0x8007f, 0x8003f, 0x900de, 0x7010f, 0x8006f, 0x8002f, 0x900be, 0x8000f, 0x8008f, 0x8004f, 0x900fe, 0x70100, 0x80050, 0x80010, 0x80118, 0x70110, 0x80070, 0x80030, 0x900c1, 0x70108, 0x80060, 0x80020, 0x900a1, 0x80000, 0x80080, 0x80040, 0x900e1, 0x70104, 0x80058, 0x80018, 0x90091, 0x70114, 0x80078, 0x80038, 0x900d1, 0x7010c, 0x80068, 0x80028, 0x900b1, 0x80008, 0x80088, 0x80048, 0x900f1, 0x70102, 0x80054, 0x80014, 0x8011c, 0x70112, 0x80074, 0x80034, 0x900c9, 0x7010a, 0x80064, 0x80024, 0x900a9, 0x80004, 0x80084, 0x80044, 0x900e9, 0x70106, 0x8005c, 0x8001c, 0x90099, 0x70116, 0x8007c, 0x8003c, 0x900d9, 0x7010e, 0x8006c, 0x8002c, 0x900b9, 0x8000c, 0x8008c, 0x8004c, 0x900f9, 0x70101, 0x80052, 0x80012, 0x8011a, 0x70111, 0x80072, 0x80032, 0x900c5, 0x70109, 0x80062, 0x80022, 0x900a5, 0x80002, 0x80082, 0x80042, 0x900e5, 0x70105, 0x8005a, 0x8001a, 0x90095, 0x70115, 0x8007a, 0x8003a, 0x900d5, 0x7010d, 0x8006a, 0x8002a, 0x900b5, 0x8000a, 0x8008a, 0x8004a, 0x900f5, 0x70103, 0x80056, 0x80016, 0x8011e, 0x70113, 0x80076, 0x80036, 0x900cd, 0x7010b, 0x80066, 0x80026, 0x900ad, 0x80006, 0x80086, 0x80046, 0x900ed, 0x70107, 0x8005e, 0x8001e, 0x9009d, 0x70117, 0x8007e, 0x8003e, 0x900dd, 0x7010f, 0x8006e, 0x8002e, 0x900bd, 0x8000e, 0x8008e, 0x8004e, 0x900fd, 0x70100, 0x80051, 0x80011, 0x80119, 0x70110, 0x80071, 0x80031, 0x900c3, 0x70108, 0x80061, 0x80021, 0x900a3, 0x80001, 0x80081, 0x80041, 0x900e3, 0x70104, 0x80059, 0x80019, 0x90093, 0x70114, 0x80079, 0x80039, 0x900d3, 0x7010c, 0x80069, 0x80029, 0x900b3, 0x80009, 0x80089, 0x80049, 0x900f3, 0x70102, 0x80055, 0x80015, 0x8011d, 0x70112, 0x80075, 0x80035, 0x900cb, 0x7010a, 0x80065, 0x80025, 0x900ab, 0x80005, 0x80085, 0x80045, 0x900eb, 0x70106, 0x8005d, 0x8001d, 0x9009b, 0x70116, 0x8007d, 0x8003d, 0x900db, 0x7010e, 0x8006d, 0x8002d, 0x900bb, 0x8000d, 0x8008d, 0x8004d, 0x900fb, 0x70101, 0x80053, 0x80013, 0x8011b, 0x70111, 0x80073, 0x80033, 0x900c7, 0x70109, 0x80063, 0x80023, 0x900a7, 0x80003, 0x80083, 0x80043, 0x900e7, 0x70105, 0x8005b, 0x8001b, 0x90097, 0x70115, 0x8007b, 0x8003b, 0x900d7, 0x7010d, 0x8006b, 0x8002b, 0x900b7, 0x8000b, 0x8008b, 0x8004b, 0x900f7, 0x70103, 0x80057, 0x80017, 0x8011f, 0x70113, 0x80077, 0x80037, 0x900cf, 0x7010b, 0x80067, 0x80027, 0x900af, 0x80007, 0x80087, 0x80047, 0x900ef, 0x70107, 0x8005f, 0x8001f, 0x9009f, 0x70117, 0x8007f, 0x8003f, 0x900df, 0x7010f, 0x8006f, 0x8002f, 0x900bf, 0x8000f, 0x8008f, 0x8004f, 0x900ff]), 9];
 const fixedDistCodeTab = [new Int32Array([0x50000, 0x50010, 0x50008, 0x50018, 0x50004, 0x50014, 0x5000c, 0x5001c, 0x50002, 0x50012, 0x5000a, 0x5001a, 0x50006, 0x50016, 0x5000e, 0x00000, 0x50001, 0x50011, 0x50009, 0x50019, 0x50005, 0x50015, 0x5000d, 0x5001d, 0x50003, 0x50013, 0x5000b, 0x5001b, 0x50007, 0x50017, 0x5000f, 0x00000]), 5];
 class FlateStream extends DecodeStream {
+  #isAsync = true;
   constructor(str, maybeLength) {
     super(maybeLength);
     this.stream = str;
@@ -8123,7 +8100,7 @@ class FlateStream extends DecodeStream {
   }
   async asyncGetBytes() {
     this.stream.reset();
-    const bytes = this.stream.getBytes();
+    const bytes = this.stream.isAsync ? await this.stream.asyncGetBytes() : this.stream.getBytes();
     try {
       const {
         readable,
@@ -8149,13 +8126,14 @@ class FlateStream extends DecodeStream {
       }
       return data;
     } catch {
+      this.#isAsync = false;
       this.stream = new Stream(bytes, 2, bytes.length, this.stream.dict);
       this.reset();
       return null;
     }
   }
   get isAsync() {
-    return true;
+    return this.#isAsync;
   }
   getBits(bits) {
     const str = this.stream;
@@ -12414,6 +12392,12 @@ class CMapFactory {
     if (encoding instanceof Name) {
       return createBuiltInCMap(encoding.name, fetchBuiltInCMap);
     } else if (encoding instanceof BaseStream) {
+      if (encoding.isAsync) {
+        const bytes = await encoding.asyncGetBytes();
+        if (bytes) {
+          encoding = new Stream(bytes, 0, bytes.length, encoding.dict);
+        }
+      }
       const parsedCMap = await parseCMap(new CMap(), new Lexer(encoding), fetchBuiltInCMap, useCMap);
       if (parsedCMap.isIdentityCMap) {
         return createBuiltInCMap(parsedCMap.name, fetchBuiltInCMap);
@@ -33474,7 +33458,7 @@ class PartialEvaluator {
     }
     return null;
   }
-  getOperatorList({
+  async getOperatorList({
     stream,
     task,
     resources,
@@ -33483,6 +33467,12 @@ class PartialEvaluator {
     fallbackFontDict = null,
     prevRefs = null
   }) {
+    if (stream.isAsync) {
+      const bytes = await stream.asyncGetBytes();
+      if (bytes) {
+        stream = new Stream(bytes, 0, bytes.length, stream.dict);
+      }
+    }
     const objId = stream.dict?.objId;
     const seenRefs = new RefSet(prevRefs);
     if (objId) {
@@ -33988,7 +33978,7 @@ class PartialEvaluator {
       throw reason;
     });
   }
-  getTextContent({
+  async getTextContent({
     stream,
     task,
     resources,
@@ -34004,6 +33994,12 @@ class PartialEvaluator {
     prevRefs = null,
     intersector = null
   }) {
+    if (stream.isAsync) {
+      const bytes = await stream.asyncGetBytes();
+      if (bytes) {
+        stream = new Stream(bytes, 0, bytes.length, stream.dict);
+      }
+    }
     const objId = stream.dict?.objId;
     const seenRefs = new RefSet(prevRefs);
     if (objId) {
@@ -35528,8 +35524,16 @@ class PartialEvaluator {
       if (fontFile) {
         if (!(fontFile instanceof BaseStream)) {
           throw new FormatError("FontFile should be a stream");
-        } else if (fontFile.isEmpty) {
-          throw new FormatError("FontFile is empty");
+        } else {
+          if (fontFile.isAsync) {
+            const bytes = await fontFile.asyncGetBytes();
+            if (bytes) {
+              fontFile = new Stream(bytes, 0, bytes.length, fontFile.dict);
+            }
+          }
+          if (fontFile.isEmpty) {
+            throw new FormatError("FontFile is empty");
+          }
         }
       }
     } catch (ex) {
@@ -37027,19 +37031,12 @@ function clearGlobalCaches() {
 
 
 function pickPlatformItem(dict) {
-  if (!(dict instanceof Dict)) {
-    return null;
-  }
-  if (dict.has("UF")) {
-    return dict.get("UF");
-  } else if (dict.has("F")) {
-    return dict.get("F");
-  } else if (dict.has("Unix")) {
-    return dict.get("Unix");
-  } else if (dict.has("Mac")) {
-    return dict.get("Mac");
-  } else if (dict.has("DOS")) {
-    return dict.get("DOS");
+  if (dict instanceof Dict) {
+    for (const key of ["UF", "F", "Unix", "Mac", "DOS"]) {
+      if (dict.has(key)) {
+        return dict.get(key);
+      }
+    }
   }
   return null;
 }
@@ -37048,11 +37045,10 @@ function stripPath(str) {
 }
 class FileSpec {
   #contentAvailable = false;
-  constructor(root, xref, skipContent = false) {
+  constructor(root, skipContent = false) {
     if (!(root instanceof Dict)) {
       return;
     }
-    this.xref = xref;
     this.root = root;
     if (root.has("FS")) {
       this.fs = root.get("FS");
@@ -37069,45 +37065,41 @@ class FileSpec {
     }
   }
   get filename() {
-    let filename = "";
     const item = pickPlatformItem(this.root);
     if (item && typeof item === "string") {
-      filename = stringToPDFString(item, true).replaceAll("\\\\", "\\").replaceAll("\\/", "/").replaceAll("\\", "/");
+      return stringToPDFString(item, true).replaceAll("\\\\", "\\").replaceAll("\\/", "/").replaceAll("\\", "/");
     }
-    return shadow(this, "filename", filename || "unnamed");
+    return "";
   }
   get content() {
     if (!this.#contentAvailable) {
       return null;
     }
-    this._contentRef ||= pickPlatformItem(this.root?.get("EF"));
-    let content = null;
-    if (this._contentRef) {
-      const fileObj = this.xref.fetchIfRef(this._contentRef);
-      if (fileObj instanceof BaseStream) {
-        content = fileObj.getBytes();
-      } else {
-        warn("Embedded file specification points to non-existing/invalid content");
-      }
-    } else {
-      warn("Embedded file specification does not have any content");
+    const ef = pickPlatformItem(this.root?.get("EF"));
+    if (ef instanceof BaseStream) {
+      return ef.getBytes();
     }
-    return content;
+    warn("Embedded file specification points to non-existing/invalid content");
+    return null;
   }
   get description() {
-    let description = "";
     const desc = this.root?.get("Desc");
     if (desc && typeof desc === "string") {
-      description = stringToPDFString(desc);
+      return stringToPDFString(desc);
     }
-    return shadow(this, "description", description);
+    return "";
   }
   get serializable() {
+    const {
+      filename,
+      content,
+      description
+    } = this;
     return {
-      rawFilename: this.filename,
-      filename: stripPath(this.filename),
-      content: this.content,
-      description: this.description
+      rawFilename: filename,
+      filename: stripPath(filename) || "unnamed",
+      content,
+      description
     };
   }
 }
@@ -39332,7 +39324,7 @@ class Catalog {
     if (obj instanceof Dict && obj.has("EmbeddedFiles")) {
       const nameTree = new NameTree(obj.getRaw("EmbeddedFiles"), this.xref);
       for (const [key, value] of nameTree.getAll()) {
-        const fs = new FileSpec(value, this.xref);
+        const fs = new FileSpec(value);
         attachments ??= Object.create(null);
         attachments[stringToPDFString(key, true)] = fs.serializable;
       }
@@ -39764,16 +39756,17 @@ class Catalog {
         case "GoToR":
           const urlDict = action.get("F");
           if (urlDict instanceof Dict) {
-            const fs = new FileSpec(urlDict, null, true);
-            const {
-              rawFilename
-            } = fs.serializable;
-            url = rawFilename;
+            const fs = new FileSpec(urlDict, true);
+            ({
+              rawFilename: url
+            } = fs.serializable);
           } else if (typeof urlDict === "string") {
             url = urlDict;
+          } else {
+            break;
           }
           const remoteDest = fetchRemoteDest(action);
-          if (remoteDest && typeof url === "string") {
+          if (remoteDest) {
             url = url.split("#", 1)[0] + "#" + remoteDest;
           }
           const newWindow = action.get("NewWindow");
@@ -44927,7 +44920,7 @@ class Image extends StringObject {
       return HTMLResult.EMPTY;
     }
     if (!buffer && this.transferEncoding === "base64") {
-      buffer = fromBase64Util(this[$content]);
+      buffer = Uint8Array.fromBase64(this[$content]);
     }
     if (!buffer) {
       return HTMLResult.EMPTY;
@@ -54243,10 +54236,9 @@ class FileAttachmentAnnotation extends MarkupAnnotation {
   constructor(params) {
     super(params);
     const {
-      dict,
-      xref
+      dict
     } = params;
-    const file = new FileSpec(dict.get("FS"), xref);
+    const file = new FileSpec(dict.get("FS"));
     this.data.annotationType = AnnotationType.FILEATTACHMENT;
     this.data.hasOwnCanvas = this.data.noRotate;
     this.data.noHTML = false;
@@ -56648,9 +56640,29 @@ class Page {
   async getContentStream() {
     const content = await this.pdfManager.ensure(this, "content");
     if (content instanceof BaseStream && !content.isImageStream) {
+      if (content.isAsync) {
+        const bytes = await content.asyncGetBytes();
+        if (bytes) {
+          return new Stream(bytes, 0, bytes.length, content.dict);
+        }
+      }
       return content;
     }
     if (Array.isArray(content)) {
+      const promises = [];
+      for (let i = 0, ii = content.length; i < ii; i++) {
+        const item = content[i];
+        if (item instanceof BaseStream && item.isAsync) {
+          promises.push(item.asyncGetBytes().then(bytes => {
+            if (bytes) {
+              content[i] = new Stream(bytes, 0, bytes.length, item.dict);
+            }
+          }));
+        }
+      }
+      if (promises.length > 0) {
+        await Promise.all(promises);
+      }
       return new StreamsSequenceStream(content, this.#onSubStreamError.bind(this));
     }
     return new NullStream();
@@ -56762,6 +56774,8 @@ class Page {
     task,
     intent,
     cacheKey,
+    pageId = this.pageIndex,
+    pageIndex = this.pageIndex,
     annotationStorage = null,
     modifiedIds = null
   }) {
@@ -56814,7 +56828,7 @@ class Page {
       const opList = new OperatorList(intent, sink);
       handler.send("StartRenderPage", {
         transparency: partialEvaluator.hasBlendModes(resources, this.nonBlendModesSet),
-        pageIndex: this.pageIndex,
+        pageIndex,
         cacheKey
       });
       await partialEvaluator.getOperatorList({
@@ -57600,7 +57614,7 @@ class PDFDocument {
     } else {
       hashOriginal = calculateMD5(this.stream.getByteRange(0, FINGERPRINT_FIRST_BYTES), 0, FINGERPRINT_FIRST_BYTES);
     }
-    return shadow(this, "fingerprints", [toHexUtil(hashOriginal), hashModified ? toHexUtil(hashModified) : null]);
+    return shadow(this, "fingerprints", [hashOriginal.toHex(), hashModified?.toHex() ?? null]);
   }
   async #getLinearizationPage(pageIndex) {
     const {
@@ -60908,8 +60922,11 @@ class WorkerMessageHandler {
       });
     });
     handler.on("GetOperatorList", function (data, sink) {
-      const pageIndex = data.pageIndex;
-      pdfManager.getPage(pageIndex).then(function (page) {
+      const {
+        pageId,
+        pageIndex
+      } = data;
+      pdfManager.getPage(pageId).then(function (page) {
         const task = new WorkerTask(`GetOperatorList: page ${pageIndex}`);
         startWorkerTask(task);
         const start = verbosity >= VerbosityLevel.INFOS ? Date.now() : 0;
@@ -60920,7 +60937,8 @@ class WorkerMessageHandler {
           intent: data.intent,
           cacheKey: data.cacheKey,
           annotationStorage: data.annotationStorage,
-          modifiedIds: data.modifiedIds
+          modifiedIds: data.modifiedIds,
+          pageIndex
         }).then(function (operatorListInfo) {
           finishWorkerTask(task);
           if (start) {
@@ -60938,11 +60956,12 @@ class WorkerMessageHandler {
     });
     handler.on("GetTextContent", function (data, sink) {
       const {
+        pageId,
         pageIndex,
         includeMarkedContent,
         disableNormalization
       } = data;
-      pdfManager.getPage(pageIndex).then(function (page) {
+      pdfManager.getPage(pageId).then(function (page) {
         const task = new WorkerTask("GetTextContent: page " + pageIndex);
         startWorkerTask(task);
         const start = verbosity >= VerbosityLevel.INFOS ? Date.now() : 0;

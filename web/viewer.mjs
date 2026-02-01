@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.4.0
- * pdfjsBuild = 95f62f3
+ * pdfjsBuild = 814df09
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -85,6 +85,7 @@ const {
   normalizeUnicode,
   OPS,
   OutputScale,
+  PagesMapper,
   PasswordResponses,
   PDFDataRangeTransport,
   PDFDateString,
@@ -601,65 +602,6 @@ const calcRound = function () {
   e.style.width = "round(down, calc(1.6666666666666665 * 792px), 1px)";
   return e.style.width === "calc(1320px)" ? Math.fround : x => x;
 }();
-class PagesMapper {
-  static #idToPageNumber = null;
-  static #pageNumberToId = null;
-  static #pagesNumber = 0;
-  get pagesNumber() {
-    return PagesMapper.#pagesNumber;
-  }
-  set pagesNumber(n) {
-    if (PagesMapper.#pagesNumber === n) {
-      return;
-    }
-    PagesMapper.#pagesNumber = n;
-    const pageNumberToId = PagesMapper.#pageNumberToId = new Uint32Array(2 * n);
-    const idToPageNumber = PagesMapper.#idToPageNumber = pageNumberToId.subarray(n);
-    for (let i = 0; i < n; i++) {
-      pageNumberToId[i] = idToPageNumber[i] = i + 1;
-    }
-  }
-  movePages(selectedPages, pagesToMove, index) {
-    const pageNumberToId = PagesMapper.#pageNumberToId;
-    const idToPageNumber = PagesMapper.#idToPageNumber;
-    const movedCount = pagesToMove.length;
-    const mappedPagesToMove = new Uint32Array(movedCount);
-    let removedBeforeTarget = 0;
-    for (let i = 0; i < movedCount; i++) {
-      const pageIndex = pagesToMove[i] - 1;
-      mappedPagesToMove[i] = pageNumberToId[pageIndex];
-      if (pageIndex < index) {
-        removedBeforeTarget += 1;
-      }
-    }
-    const pagesNumber = PagesMapper.#pagesNumber;
-    let adjustedTarget = index - removedBeforeTarget;
-    const remainingLen = pagesNumber - movedCount;
-    adjustedTarget = MathClamp(adjustedTarget, 0, remainingLen);
-    for (let i = 0, r = 0; i < pagesNumber; i++) {
-      if (!selectedPages.has(i + 1)) {
-        pageNumberToId[r++] = pageNumberToId[i];
-      }
-    }
-    pageNumberToId.copyWithin(adjustedTarget + movedCount, adjustedTarget, remainingLen);
-    pageNumberToId.set(mappedPagesToMove, adjustedTarget);
-    for (let i = 0, ii = pagesNumber; i < ii; i++) {
-      idToPageNumber[pageNumberToId[i] - 1] = i + 1;
-    }
-  }
-  getPageNumber(id) {
-    return PagesMapper.#idToPageNumber?.[id - 1] ?? id;
-  }
-  getPageId(pageNumber) {
-    return PagesMapper.#pageNumberToId?.[pageNumber - 1] ?? pageNumber;
-  }
-  static get instance() {
-    return shadow(this, "instance", new PagesMapper());
-  }
-  getMapping() {
-    return PagesMapper.#pageNumberToId.subarray(0, this.pagesNumber);
-  }
-}
 
 ;// ./web/app_options.js
 {
@@ -671,16 +613,12 @@ class PagesMapper {
   } = navigator;
   const isAndroid = /Android/.test(userAgent);
   const isIOS = /\b(iPad|iPhone|iPod)(?=;)/.test(userAgent) || platform === "MacIntel" && maxTouchPoints > 1;
-  (function () {
-    if (isIOS || isAndroid) {
-      compatParams.set("maxCanvasPixels", 5242880);
-    }
-  })();
-  (function () {
-    if (isAndroid) {
-      compatParams.set("useSystemFonts", false);
-    }
-  })();
+  if (isIOS || isAndroid) {
+    compatParams.set("maxCanvasPixels", 5242880);
+  }
+  if (isAndroid) {
+    compatParams.set("useSystemFonts", false);
+  }
 }
 const OptionKind = {
   BROWSER: 0x01,
@@ -1126,7 +1064,6 @@ const LinkTarget = {
 };
 class PDFLinkService {
   externalLinkEnabled = true;
-  #pagesMapper = PagesMapper.instance;
   constructor({
     eventBus,
     externalLinkTarget = null,
@@ -1178,7 +1115,7 @@ class PDFLinkService {
     if (!this.pdfDocument) {
       return;
     }
-    let namedDest, explicitDest, pageId;
+    let namedDest, explicitDest, pageNumber;
     if (typeof dest === "string") {
       namedDest = dest;
       explicitDest = await this.pdfDocument.getDestination(dest);
@@ -1192,24 +1129,20 @@ class PDFLinkService {
     }
     const [destRef] = explicitDest;
     if (destRef && typeof destRef === "object") {
-      pageId = this.pdfDocument.cachedPageNumber(destRef);
-      if (!pageId) {
+      pageNumber = this.pdfDocument.cachedPageNumber(destRef);
+      if (!pageNumber) {
         try {
-          pageId = (await this.pdfDocument.getPageIndex(destRef)) + 1;
+          pageNumber = (await this.pdfDocument.getPageIndex(destRef)) + 1;
         } catch {
           console.error(`goToDestination: "${destRef}" is not a valid page reference, for dest="${dest}".`);
           return;
         }
       }
     } else if (Number.isInteger(destRef)) {
-      pageId = destRef + 1;
+      pageNumber = destRef + 1;
     }
-    if (!pageId || pageId < 1 || pageId > this.pagesCount) {
-      console.error(`goToDestination: "${pageId}" is not a valid page number, for dest="${dest}".`);
-      return;
-    }
-    const pageNumber = this.#pagesMapper.getPageNumber(pageId);
-    if (pageNumber === null) {
+    if (!pageNumber || pageNumber < 1 || pageNumber > this.pagesCount) {
+      console.error(`goToDestination: "${pageNumber}" is not a valid page number, for dest="${dest}".`);
       return;
     }
     if (this.pdfHistory) {
@@ -1217,7 +1150,7 @@ class PDFLinkService {
       this.pdfHistory.push({
         namedDest,
         explicitDest,
-        pageNumber: pageId
+        pageNumber
       });
     }
     this.pdfViewer.scrollPageIntoView({
@@ -1227,7 +1160,7 @@ class PDFLinkService {
     });
     const ac = new AbortController();
     this.eventBus._on("textlayerrendered", evt => {
-      if (evt.pageNumber === pageId) {
+      if (evt.pageNumber === pageNumber) {
         evt.source.textLayer.div.focus();
         ac.abort();
       }
@@ -1584,51 +1517,7 @@ class BaseExternalServices {
 ;// ./web/preferences.js
 
 class BasePreferences {
-  #defaults = Object.freeze({
-    altTextLearnMoreUrl: "",
-    annotationEditorMode: 0,
-    annotationMode: 2,
-    capCanvasAreaFactor: 200,
-    commentLearnMoreUrl: "",
-    cursorToolOnLoad: 0,
-    defaultZoomDelay: 400,
-    defaultZoomValue: "",
-    disablePageLabels: false,
-    enableAltText: false,
-    enableAltTextModelDownload: true,
-    enableAutoLinking: true,
-    enableComment: false,
-    enableGuessAltText: true,
-    enableHighlightFloatingButton: false,
-    enableNewAltTextWhenAddingImage: true,
-    enableOptimizedPartialRendering: false,
-    enablePermissions: false,
-    enablePrintAutoRotate: true,
-    enableScripting: true,
-    enableSignatureEditor: false,
-    enableSplitMerge: false,
-    enableUpdatedAddImage: false,
-    externalLinkTarget: 0,
-    highlightEditorColors: "yellow=#FFFF98,green=#53FFBC,blue=#80EBFF,pink=#FFCBE6,red=#FF4F5F,yellow_HCM=#FFFFCC,green_HCM=#53FFBC,blue_HCM=#80EBFF,pink_HCM=#F6B8FF,red_HCM=#C50043",
-    historyUpdateUrl: false,
-    ignoreDestinationZoom: false,
-    forcePageColors: false,
-    pageColorsBackground: "Canvas",
-    pageColorsForeground: "CanvasText",
-    pdfBugEnabled: false,
-    sidebarViewOnLoad: -1,
-    scrollModeOnLoad: -1,
-    spreadModeOnLoad: -1,
-    textLayerMode: 1,
-    viewerCssTheme: 0,
-    viewOnLoad: 0,
-    disableAutoFetch: false,
-    disableFontFace: false,
-    disableRange: false,
-    disableStream: false,
-    enableHWA: true,
-    enableXfa: true
-  });
+  #defaults = Object.freeze(AppOptions.getAll(OptionKind.PREFERENCE, true));
   #initializedPromise = null;
   constructor() {
     this.#initializedPromise = this._readFromStorage(this.#defaults).then(({
@@ -1665,6 +1554,9 @@ class BasePreferences {
   async get(name) {
     await this.#initializedPromise;
     return AppOptions.get(name);
+  }
+  get defaults() {
+    return this.#defaults;
   }
   get initializedPromise() {
     return this.#initializedPromise;
@@ -3229,7 +3121,7 @@ class genericl10n_GenericL10n extends L10n {
     yield this.#createBundleFallback(lang);
   }
   static async #createBundleFallback(lang) {
-    const text = "pdfjs-previous-button =\n    .title = Previous Page\npdfjs-previous-button-label = Previous\npdfjs-next-button =\n    .title = Next Page\npdfjs-next-button-label = Next\npdfjs-page-input =\n    .title = Page\npdfjs-of-pages = of { $pagesCount }\npdfjs-page-of-pages = ({ $pageNumber } of { $pagesCount })\npdfjs-zoom-out-button =\n    .title = Zoom Out\npdfjs-zoom-out-button-label = Zoom Out\npdfjs-zoom-in-button =\n    .title = Zoom In\npdfjs-zoom-in-button-label = Zoom In\npdfjs-zoom-select =\n    .title = Zoom\npdfjs-presentation-mode-button =\n    .title = Switch to Presentation Mode\npdfjs-presentation-mode-button-label = Presentation Mode\npdfjs-open-file-button =\n    .title = Open File\npdfjs-open-file-button-label = Open\npdfjs-print-button =\n    .title = Print\npdfjs-print-button-label = Print\npdfjs-save-button =\n    .title = Save\npdfjs-save-button-label = Save\npdfjs-download-button =\n    .title = Download\npdfjs-download-button-label = Download\npdfjs-bookmark-button =\n    .title = Current Page (View URL from Current Page)\npdfjs-bookmark-button-label = Current Page\npdfjs-tools-button =\n    .title = Tools\npdfjs-tools-button-label = Tools\npdfjs-first-page-button =\n    .title = Go to First Page\npdfjs-first-page-button-label = Go to First Page\npdfjs-last-page-button =\n    .title = Go to Last Page\npdfjs-last-page-button-label = Go to Last Page\npdfjs-page-rotate-cw-button =\n    .title = Rotate Clockwise\npdfjs-page-rotate-cw-button-label = Rotate Clockwise\npdfjs-page-rotate-ccw-button =\n    .title = Rotate Counterclockwise\npdfjs-page-rotate-ccw-button-label = Rotate Counterclockwise\npdfjs-cursor-text-select-tool-button =\n    .title = Enable Text Selection Tool\npdfjs-cursor-text-select-tool-button-label = Text Selection Tool\npdfjs-cursor-hand-tool-button =\n    .title = Enable Hand Tool\npdfjs-cursor-hand-tool-button-label = Hand Tool\npdfjs-scroll-page-button =\n    .title = Use Page Scrolling\npdfjs-scroll-page-button-label = Page Scrolling\npdfjs-scroll-vertical-button =\n    .title = Use Vertical Scrolling\npdfjs-scroll-vertical-button-label = Vertical Scrolling\npdfjs-scroll-horizontal-button =\n    .title = Use Horizontal Scrolling\npdfjs-scroll-horizontal-button-label = Horizontal Scrolling\npdfjs-scroll-wrapped-button =\n    .title = Use Wrapped Scrolling\npdfjs-scroll-wrapped-button-label = Wrapped Scrolling\npdfjs-spread-none-button =\n    .title = Do not join page spreads\npdfjs-spread-none-button-label = No Spreads\npdfjs-spread-odd-button =\n    .title = Join page spreads starting with odd-numbered pages\npdfjs-spread-odd-button-label = Odd Spreads\npdfjs-spread-even-button =\n    .title = Join page spreads starting with even-numbered pages\npdfjs-spread-even-button-label = Even Spreads\npdfjs-document-properties-button =\n    .title = Document Properties\u2026\npdfjs-document-properties-button-label = Document Properties\u2026\npdfjs-document-properties-file-name = File name:\npdfjs-document-properties-file-size = File size:\npdfjs-document-properties-size-kb = { NUMBER($kb, maximumSignificantDigits: 3) } KB ({ $b } bytes)\npdfjs-document-properties-size-mb = { NUMBER($mb, maximumSignificantDigits: 3) } MB ({ $b } bytes)\npdfjs-document-properties-title = Title:\npdfjs-document-properties-author = Author:\npdfjs-document-properties-subject = Subject:\npdfjs-document-properties-keywords = Keywords:\npdfjs-document-properties-creation-date = Creation Date:\npdfjs-document-properties-modification-date = Modification Date:\npdfjs-document-properties-date-time-string = { DATETIME($dateObj, dateStyle: \"short\", timeStyle: \"medium\") }\npdfjs-document-properties-creator = Creator:\npdfjs-document-properties-producer = PDF Producer:\npdfjs-document-properties-version = PDF Version:\npdfjs-document-properties-page-count = Page Count:\npdfjs-document-properties-page-size = Page Size:\npdfjs-document-properties-page-size-unit-inches = in\npdfjs-document-properties-page-size-unit-millimeters = mm\npdfjs-document-properties-page-size-orientation-portrait = portrait\npdfjs-document-properties-page-size-orientation-landscape = landscape\npdfjs-document-properties-page-size-name-a-three = A3\npdfjs-document-properties-page-size-name-a-four = A4\npdfjs-document-properties-page-size-name-letter = Letter\npdfjs-document-properties-page-size-name-legal = Legal\npdfjs-document-properties-page-size-dimension-string = { $width } \xD7 { $height } { $unit } ({ $orientation })\npdfjs-document-properties-page-size-dimension-name-string = { $width } \xD7 { $height } { $unit } ({ $name }, { $orientation })\npdfjs-document-properties-linearized = Fast Web View:\npdfjs-document-properties-linearized-yes = Yes\npdfjs-document-properties-linearized-no = No\npdfjs-document-properties-close-button = Close\npdfjs-print-progress-message = Preparing document for printing\u2026\npdfjs-print-progress-percent = { $progress }%\npdfjs-print-progress-close-button = Cancel\npdfjs-printing-not-supported = Warning: Printing is not fully supported by this browser.\npdfjs-printing-not-ready = Warning: The PDF is not fully loaded for printing.\npdfjs-current-outline-item-button =\n    .title = Find Current Outline Item\npdfjs-current-outline-item-button-label = Current Outline Item\npdfjs-findbar-button =\n    .title = Find in Document\npdfjs-findbar-button-label = Find\npdfjs-additional-layers = Additional Layers\npdfjs-thumb-page-title =\n    .title = Page { $page }\npdfjs-thumb-page-canvas =\n    .aria-label = Thumbnail of Page { $page }\npdfjs-find-input =\n    .title = Find\n    .placeholder = Find in document\u2026\npdfjs-find-previous-button =\n    .title = Find the previous occurrence of the phrase\npdfjs-find-previous-button-label = Previous\npdfjs-find-next-button =\n    .title = Find the next occurrence of the phrase\npdfjs-find-next-button-label = Next\npdfjs-find-highlight-checkbox = Highlight All\npdfjs-find-match-case-checkbox-label = Match Case\npdfjs-find-match-diacritics-checkbox-label = Match Diacritics\npdfjs-find-entire-word-checkbox-label = Whole Words\npdfjs-find-reached-top = Reached top of document, continued from bottom\npdfjs-find-reached-bottom = Reached end of document, continued from top\npdfjs-find-match-count =\n    { $total ->\n        [one] { $current } of { $total } match\n       *[other] { $current } of { $total } matches\n    }\npdfjs-find-match-count-limit =\n    { $limit ->\n        [one] More than { $limit } match\n       *[other] More than { $limit } matches\n    }\npdfjs-find-not-found = Phrase not found\npdfjs-page-scale-width = Page Width\npdfjs-page-scale-fit = Page Fit\npdfjs-page-scale-auto = Automatic Zoom\npdfjs-page-scale-actual = Actual Size\npdfjs-page-scale-percent = { $scale }%\npdfjs-page-landmark =\n    .aria-label = Page { $page }\npdfjs-loading-error = An error occurred while loading the PDF.\npdfjs-invalid-file-error = Invalid or corrupted PDF file.\npdfjs-missing-file-error = Missing PDF file.\npdfjs-unexpected-response-error = Unexpected server response.\npdfjs-rendering-error = An error occurred while rendering the page.\npdfjs-annotation-date-time-string = { DATETIME($dateObj, dateStyle: \"short\", timeStyle: \"medium\") }\npdfjs-text-annotation-type =\n    .alt = [{ $type } Annotation]\npdfjs-password-label = Enter the password to open this PDF file.\npdfjs-password-invalid = Invalid password. Please try again.\npdfjs-password-ok-button = OK\npdfjs-password-cancel-button = Cancel\npdfjs-web-fonts-disabled = Web fonts are disabled: unable to use embedded PDF fonts.\npdfjs-editor-free-text-button =\n    .title = Text\npdfjs-editor-color-picker-free-text-input =\n    .title = Change text color\npdfjs-editor-free-text-button-label = Text\npdfjs-editor-ink-button =\n    .title = Draw\npdfjs-editor-color-picker-ink-input =\n    .title = Change drawing color\npdfjs-editor-ink-button-label = Draw\npdfjs-editor-stamp-button =\n    .title = Add or edit images\npdfjs-editor-stamp-button-label = Add or edit images\npdfjs-editor-highlight-button =\n    .title = Highlight\npdfjs-editor-highlight-button-label = Highlight\npdfjs-highlight-floating-button1 =\n    .title = Highlight\n    .aria-label = Highlight\npdfjs-highlight-floating-button-label = Highlight\npdfjs-comment-floating-button =\n    .title = Comment\n    .aria-label = Comment\npdfjs-comment-floating-button-label = Comment\npdfjs-editor-comment-button =\n    .title = Comment\n    .aria-label = Comment\npdfjs-editor-comment-button-label = Comment\npdfjs-editor-signature-button =\n    .title = Add signature\npdfjs-editor-signature-button-label = Add signature\npdfjs-editor-highlight-editor =\n    .aria-label = Highlight editor\npdfjs-editor-ink-editor =\n    .aria-label = Drawing editor\npdfjs-editor-signature-editor1 =\n    .aria-description = Signature editor: { $description }\npdfjs-editor-stamp-editor =\n    .aria-label = Image editor\npdfjs-editor-remove-ink-button =\n    .title = Remove drawing\npdfjs-editor-remove-freetext-button =\n    .title = Remove text\npdfjs-editor-remove-stamp-button =\n    .title = Remove image\npdfjs-editor-remove-highlight-button =\n    .title = Remove highlight\npdfjs-editor-remove-signature-button =\n    .title = Remove signature\npdfjs-editor-free-text-color-input = Color\npdfjs-editor-free-text-size-input = Size\npdfjs-editor-ink-color-input = Color\npdfjs-editor-ink-thickness-input = Thickness\npdfjs-editor-ink-opacity-input = Opacity\npdfjs-editor-stamp-add-image-button =\n    .title = Add image\npdfjs-editor-stamp-add-image-button-label = Add image\npdfjs-editor-free-highlight-thickness-input = Thickness\npdfjs-editor-free-highlight-thickness-title =\n    .title = Change thickness when highlighting items other than text\npdfjs-editor-add-signature-container =\n    .aria-label = Signature controls and saved signatures\npdfjs-editor-signature-add-signature-button =\n    .title = Add new signature\npdfjs-editor-signature-add-signature-button-label = Add new signature\npdfjs-editor-add-saved-signature-button =\n    .title = Saved signature: { $description }\npdfjs-free-text2 =\n    .aria-label = Text Editor\n    .default-content = Start typing\u2026\npdfjs-editor-comments-sidebar-title =\n    { $count ->\n        [one] Comment\n       *[other] Comments\n    }\npdfjs-editor-comments-sidebar-close-button =\n    .title = Close the sidebar\n    .aria-label = Close the sidebar\npdfjs-editor-comments-sidebar-close-button-label = Close the sidebar\npdfjs-editor-comments-sidebar-no-comments1 = See something noteworthy? Highlight it and leave a comment.\npdfjs-editor-comments-sidebar-no-comments-link = Learn more\npdfjs-editor-alt-text-button =\n    .aria-label = Alt text\npdfjs-editor-alt-text-button-label = Alt text\npdfjs-editor-alt-text-edit-button =\n    .aria-label = Edit alt text\npdfjs-editor-alt-text-dialog-label = Choose an option\npdfjs-editor-alt-text-dialog-description = Alt text (alternative text) helps when people can\u2019t see the image or when it doesn\u2019t load.\npdfjs-editor-alt-text-add-description-label = Add a description\npdfjs-editor-alt-text-add-description-description = Aim for 1-2 sentences that describe the subject, setting, or actions.\npdfjs-editor-alt-text-mark-decorative-label = Mark as decorative\npdfjs-editor-alt-text-mark-decorative-description = This is used for ornamental images, like borders or watermarks.\npdfjs-editor-alt-text-cancel-button = Cancel\npdfjs-editor-alt-text-save-button = Save\npdfjs-editor-alt-text-decorative-tooltip = Marked as decorative\npdfjs-editor-alt-text-textarea =\n    .placeholder = For example, \u201CA young man sits down at a table to eat a meal\u201D\npdfjs-editor-resizer-top-left =\n    .aria-label = Top left corner \u2014 resize\npdfjs-editor-resizer-top-middle =\n    .aria-label = Top middle \u2014 resize\npdfjs-editor-resizer-top-right =\n    .aria-label = Top right corner \u2014 resize\npdfjs-editor-resizer-middle-right =\n    .aria-label = Middle right \u2014 resize\npdfjs-editor-resizer-bottom-right =\n    .aria-label = Bottom right corner \u2014 resize\npdfjs-editor-resizer-bottom-middle =\n    .aria-label = Bottom middle \u2014 resize\npdfjs-editor-resizer-bottom-left =\n    .aria-label = Bottom left corner \u2014 resize\npdfjs-editor-resizer-middle-left =\n    .aria-label = Middle left \u2014 resize\npdfjs-editor-highlight-colorpicker-label = Highlight color\npdfjs-editor-colorpicker-button =\n    .title = Change color\npdfjs-editor-colorpicker-dropdown =\n    .aria-label = Color choices\npdfjs-editor-colorpicker-yellow =\n    .title = Yellow\npdfjs-editor-colorpicker-green =\n    .title = Green\npdfjs-editor-colorpicker-blue =\n    .title = Blue\npdfjs-editor-colorpicker-pink =\n    .title = Pink\npdfjs-editor-colorpicker-red =\n    .title = Red\npdfjs-editor-highlight-show-all-button-label = Show all\npdfjs-editor-highlight-show-all-button =\n    .title = Show all\npdfjs-editor-new-alt-text-dialog-edit-label = Edit alt text (image description)\npdfjs-editor-new-alt-text-dialog-add-label = Add alt text (image description)\npdfjs-editor-new-alt-text-textarea =\n    .placeholder = Write your description here\u2026\npdfjs-editor-new-alt-text-description = Short description for people who can\u2019t see the image or when the image doesn\u2019t load.\npdfjs-editor-new-alt-text-disclaimer1 = This alt text was created automatically and may be inaccurate.\npdfjs-editor-new-alt-text-disclaimer-learn-more-url = Learn more\npdfjs-editor-new-alt-text-create-automatically-button-label = Create alt text automatically\npdfjs-editor-new-alt-text-not-now-button = Not now\npdfjs-editor-new-alt-text-error-title = Couldn\u2019t create alt text automatically\npdfjs-editor-new-alt-text-error-description = Please write your own alt text or try again later.\npdfjs-editor-new-alt-text-error-close-button = Close\npdfjs-editor-new-alt-text-ai-model-downloading-progress = Downloading alt text AI model ({ $downloadedSize } of { $totalSize } MB)\n    .aria-valuetext = Downloading alt text AI model ({ $downloadedSize } of { $totalSize } MB)\npdfjs-editor-new-alt-text-added-button =\n    .aria-label = Alt text added\npdfjs-editor-new-alt-text-added-button-label = Alt text added\npdfjs-editor-new-alt-text-missing-button =\n    .aria-label = Missing alt text\npdfjs-editor-new-alt-text-missing-button-label = Missing alt text\npdfjs-editor-new-alt-text-to-review-button =\n    .aria-label = Review alt text\npdfjs-editor-new-alt-text-to-review-button-label = Review alt text\npdfjs-editor-new-alt-text-generated-alt-text-with-disclaimer = Created automatically: { $generatedAltText }\npdfjs-image-alt-text-settings-button =\n    .title = Image alt text settings\npdfjs-image-alt-text-settings-button-label = Image alt text settings\npdfjs-editor-alt-text-settings-dialog-label = Image alt text settings\npdfjs-editor-alt-text-settings-automatic-title = Automatic alt text\npdfjs-editor-alt-text-settings-create-model-button-label = Create alt text automatically\npdfjs-editor-alt-text-settings-create-model-description = Suggests descriptions to help people who can\u2019t see the image or when the image doesn\u2019t load.\npdfjs-editor-alt-text-settings-download-model-label = Alt text AI model ({ $totalSize } MB)\npdfjs-editor-alt-text-settings-ai-model-description = Runs locally on your device so your data stays private. Required for automatic alt text.\npdfjs-editor-alt-text-settings-delete-model-button = Delete\npdfjs-editor-alt-text-settings-download-model-button = Download\npdfjs-editor-alt-text-settings-downloading-model-button = Downloading\u2026\npdfjs-editor-alt-text-settings-editor-title = Alt text editor\npdfjs-editor-alt-text-settings-show-dialog-button-label = Show alt text editor right away when adding an image\npdfjs-editor-alt-text-settings-show-dialog-description = Helps you make sure all your images have alt text.\npdfjs-editor-alt-text-settings-close-button = Close\npdfjs-editor-highlight-added-alert = Highlight added\npdfjs-editor-freetext-added-alert = Text added\npdfjs-editor-ink-added-alert = Drawing added\npdfjs-editor-stamp-added-alert = Image added\npdfjs-editor-signature-added-alert = Signature added\npdfjs-editor-undo-bar-message-highlight = Highlight removed\npdfjs-editor-undo-bar-message-freetext = Text removed\npdfjs-editor-undo-bar-message-ink = Drawing removed\npdfjs-editor-undo-bar-message-stamp = Image removed\npdfjs-editor-undo-bar-message-signature = Signature removed\npdfjs-editor-undo-bar-message-multiple =\n    { $count ->\n        [one] { $count } annotation removed\n       *[other] { $count } annotations removed\n    }\npdfjs-editor-undo-bar-undo-button =\n    .title = Undo\npdfjs-editor-undo-bar-undo-button-label = Undo\npdfjs-editor-undo-bar-close-button =\n    .title = Close\npdfjs-editor-undo-bar-close-button-label = Close\npdfjs-editor-add-signature-dialog-label = This modal allows the user to create a signature to add to a PDF document. The user can edit the name (which also serves as the alt text), and optionally save the signature for repeated use.\npdfjs-editor-add-signature-dialog-title = Add a signature\npdfjs-editor-add-signature-type-button = Type\n    .title = Type\npdfjs-editor-add-signature-draw-button = Draw\n    .title = Draw\npdfjs-editor-add-signature-image-button = Image\n    .title = Image\npdfjs-editor-add-signature-type-input =\n    .aria-label = Type your signature\n    .placeholder = Type your signature\npdfjs-editor-add-signature-draw-placeholder = Draw your signature\npdfjs-editor-add-signature-draw-thickness-range-label = Thickness\npdfjs-editor-add-signature-draw-thickness-range =\n    .title = Drawing thickness: { $thickness }\npdfjs-editor-add-signature-image-placeholder = Drag a file here to upload\npdfjs-editor-add-signature-image-browse-link =\n    { PLATFORM() ->\n        [macos] Or choose image files\n       *[other] Or browse image files\n    }\npdfjs-editor-add-signature-description-label = Description (alt text)\npdfjs-editor-add-signature-description-input =\n    .title = Description (alt text)\npdfjs-editor-add-signature-description-default-when-drawing = Signature\npdfjs-editor-add-signature-clear-button-label = Clear signature\npdfjs-editor-add-signature-clear-button =\n    .title = Clear signature\npdfjs-editor-add-signature-save-checkbox = Save signature\npdfjs-editor-add-signature-save-warning-message = You\u2019ve reached the limit of 5 saved signatures. Remove one to save more.\npdfjs-editor-add-signature-image-upload-error-title = Couldn\u2019t upload image\npdfjs-editor-add-signature-image-upload-error-description = Check your network connection or try another image.\npdfjs-editor-add-signature-image-no-data-error-title = Can\u2019t convert this image into a signature\npdfjs-editor-add-signature-image-no-data-error-description = Please try uploading a different image.\npdfjs-editor-add-signature-error-close-button = Close\npdfjs-editor-add-signature-cancel-button = Cancel\npdfjs-editor-add-signature-add-button = Add\npdfjs-editor-delete-signature-button1 =\n    .title = Remove saved signature\npdfjs-editor-delete-signature-button-label1 = Remove saved signature\npdfjs-editor-add-signature-edit-button-label = Edit description\npdfjs-editor-edit-signature-dialog-title = Edit description\npdfjs-editor-edit-signature-update-button = Update\npdfjs-show-comment-button =\n    .title = Show comment\npdfjs-editor-edit-comment-popup-button-label = Edit comment\npdfjs-editor-edit-comment-popup-button =\n    .title = Edit comment\npdfjs-editor-delete-comment-popup-button-label = Remove comment\npdfjs-editor-delete-comment-popup-button =\n    .title = Remove comment\npdfjs-editor-edit-comment-dialog-title-when-editing = Edit comment\npdfjs-editor-edit-comment-dialog-save-button-when-editing = Update\npdfjs-editor-edit-comment-dialog-title-when-adding = Add comment\npdfjs-editor-edit-comment-dialog-save-button-when-adding = Add\npdfjs-editor-edit-comment-dialog-text-input =\n    .placeholder = Start typing\u2026\npdfjs-editor-edit-comment-dialog-cancel-button = Cancel\npdfjs-editor-add-comment-button =\n    .title = Add comment\npdfjs-toggle-views-manager-button =\n    .title = Toggle Sidebar\npdfjs-toggle-views-manager-notification-button =\n    .title = Toggle Sidebar (document contains thumbnails/outline/attachments/layers)\npdfjs-toggle-views-manager-button-label = Toggle Sidebar\npdfjs-views-manager-sidebar =\n    .aria-label = Sidebar\npdfjs-views-manager-view-selector-button =\n    .title = Views\npdfjs-views-manager-view-selector-button-label = Views\npdfjs-views-manager-pages-title = Pages\npdfjs-views-manager-outlines-title = Document outline\npdfjs-views-manager-attachments-title = Attachments\npdfjs-views-manager-layers-title = Layers\npdfjs-views-manager-pages-option-label = Pages\npdfjs-views-manager-outlines-option-label = Document outline\npdfjs-views-manager-attachments-option-label = Attachments\npdfjs-views-manager-layers-option-label = Layers\npdfjs-views-manager-add-file-button =\n    .title = Add file\npdfjs-views-manager-add-file-button-label = Add file\npdfjs-views-manager-pages-status-action-label =\n    { $count ->\n        [one] { $count } selected\n        *[other] { $count } selected\n    }\npdfjs-views-manager-pages-status-none-action-label = Select pages\npdfjs-views-manager-pages-status-action-button-label = Manage\npdfjs-views-manager-pages-status-copy-button-label = Copy\npdfjs-views-manager-pages-status-cut-button-label = Cut\npdfjs-views-manager-pages-status-delete-button-label = Delete\npdfjs-views-manager-pages-status-save-as-button-label = Save as\u2026\npdfjs-views-manager-status-undo-cut-label =\n    { $count ->\n        [one] 1 page cut\n        *[other] { $count } pages cut\n    }\npdfjs-views-manager-pages-status-undo-copy-label =\n    { $count ->\n        [one] 1 page copied\n        *[other] { $count } pages copied\n    }\npdfjs-views-manager-pages-status-undo-delete-label =\n    { $count ->\n        [one] 1 page deleted\n        *[other] { $count } pages deleted\n    }\npdfjs-views-manager-pages-status-waiting-ready-label = Getting your file ready\u2026\npdfjs-views-manager-pages-status-waiting-uploading-label = Uploading file\u2026\npdfjs-views-manager-status-warning-cut-label = Couldn\u2019t cut. Refresh page and try again.\npdfjs-views-manager-status-warning-copy-label = Couldn\u2019t copy. Refresh page and try again.\npdfjs-views-manager-status-warning-delete-label = Couldn\u2019t delete. Refresh page and try again.\npdfjs-views-manager-status-warning-save-label = Couldn\u2019t save. Refresh page and try again.\npdfjs-views-manager-status-undo-button-label = Undo\npdfjs-views-manager-status-close-button =\n    .title = Close\npdfjs-views-manager-status-close-button-label = Close";
+    const text = "pdfjs-previous-button =\n    .title = Previous Page\npdfjs-previous-button-label = Previous\npdfjs-next-button =\n    .title = Next Page\npdfjs-next-button-label = Next\npdfjs-page-input =\n    .title = Page\npdfjs-of-pages = of { $pagesCount }\npdfjs-page-of-pages = ({ $pageNumber } of { $pagesCount })\npdfjs-zoom-out-button =\n    .title = Zoom Out\npdfjs-zoom-out-button-label = Zoom Out\npdfjs-zoom-in-button =\n    .title = Zoom In\npdfjs-zoom-in-button-label = Zoom In\npdfjs-zoom-select =\n    .title = Zoom\npdfjs-presentation-mode-button =\n    .title = Switch to Presentation Mode\npdfjs-presentation-mode-button-label = Presentation Mode\npdfjs-open-file-button =\n    .title = Open File\npdfjs-open-file-button-label = Open\npdfjs-print-button =\n    .title = Print\npdfjs-print-button-label = Print\npdfjs-save-button =\n    .title = Save\npdfjs-save-button-label = Save\npdfjs-download-button =\n    .title = Download\npdfjs-download-button-label = Download\npdfjs-bookmark-button =\n    .title = Current Page (View URL from Current Page)\npdfjs-bookmark-button-label = Current Page\npdfjs-tools-button =\n    .title = Tools\npdfjs-tools-button-label = Tools\npdfjs-first-page-button =\n    .title = Go to First Page\npdfjs-first-page-button-label = Go to First Page\npdfjs-last-page-button =\n    .title = Go to Last Page\npdfjs-last-page-button-label = Go to Last Page\npdfjs-page-rotate-cw-button =\n    .title = Rotate Clockwise\npdfjs-page-rotate-cw-button-label = Rotate Clockwise\npdfjs-page-rotate-ccw-button =\n    .title = Rotate Counterclockwise\npdfjs-page-rotate-ccw-button-label = Rotate Counterclockwise\npdfjs-cursor-text-select-tool-button =\n    .title = Enable Text Selection Tool\npdfjs-cursor-text-select-tool-button-label = Text Selection Tool\npdfjs-cursor-hand-tool-button =\n    .title = Enable Hand Tool\npdfjs-cursor-hand-tool-button-label = Hand Tool\npdfjs-scroll-page-button =\n    .title = Use Page Scrolling\npdfjs-scroll-page-button-label = Page Scrolling\npdfjs-scroll-vertical-button =\n    .title = Use Vertical Scrolling\npdfjs-scroll-vertical-button-label = Vertical Scrolling\npdfjs-scroll-horizontal-button =\n    .title = Use Horizontal Scrolling\npdfjs-scroll-horizontal-button-label = Horizontal Scrolling\npdfjs-scroll-wrapped-button =\n    .title = Use Wrapped Scrolling\npdfjs-scroll-wrapped-button-label = Wrapped Scrolling\npdfjs-spread-none-button =\n    .title = Do not join page spreads\npdfjs-spread-none-button-label = No Spreads\npdfjs-spread-odd-button =\n    .title = Join page spreads starting with odd-numbered pages\npdfjs-spread-odd-button-label = Odd Spreads\npdfjs-spread-even-button =\n    .title = Join page spreads starting with even-numbered pages\npdfjs-spread-even-button-label = Even Spreads\npdfjs-document-properties-button =\n    .title = Document Properties\u2026\npdfjs-document-properties-button-label = Document Properties\u2026\npdfjs-document-properties-file-name = File name:\npdfjs-document-properties-file-size = File size:\npdfjs-document-properties-size-kb = { NUMBER($kb, maximumSignificantDigits: 3) } KB ({ $b } bytes)\npdfjs-document-properties-size-mb = { NUMBER($mb, maximumSignificantDigits: 3) } MB ({ $b } bytes)\npdfjs-document-properties-title = Title:\npdfjs-document-properties-author = Author:\npdfjs-document-properties-subject = Subject:\npdfjs-document-properties-keywords = Keywords:\npdfjs-document-properties-creation-date = Creation Date:\npdfjs-document-properties-modification-date = Modification Date:\npdfjs-document-properties-date-time-string = { DATETIME($dateObj, dateStyle: \"short\", timeStyle: \"medium\") }\npdfjs-document-properties-creator = Creator:\npdfjs-document-properties-producer = PDF Producer:\npdfjs-document-properties-version = PDF Version:\npdfjs-document-properties-page-count = Page Count:\npdfjs-document-properties-page-size = Page Size:\npdfjs-document-properties-page-size-unit-inches = in\npdfjs-document-properties-page-size-unit-millimeters = mm\npdfjs-document-properties-page-size-orientation-portrait = portrait\npdfjs-document-properties-page-size-orientation-landscape = landscape\npdfjs-document-properties-page-size-name-a-three = A3\npdfjs-document-properties-page-size-name-a-four = A4\npdfjs-document-properties-page-size-name-letter = Letter\npdfjs-document-properties-page-size-name-legal = Legal\npdfjs-document-properties-page-size-dimension-string = { $width } \xD7 { $height } { $unit } ({ $orientation })\npdfjs-document-properties-page-size-dimension-name-string = { $width } \xD7 { $height } { $unit } ({ $name }, { $orientation })\npdfjs-document-properties-linearized = Fast Web View:\npdfjs-document-properties-linearized-yes = Yes\npdfjs-document-properties-linearized-no = No\npdfjs-document-properties-close-button = Close\npdfjs-print-progress-message = Preparing document for printing\u2026\npdfjs-print-progress-percent = { $progress }%\npdfjs-print-progress-close-button = Cancel\npdfjs-printing-not-supported = Warning: Printing is not fully supported by this browser.\npdfjs-printing-not-ready = Warning: The PDF is not fully loaded for printing.\npdfjs-current-outline-item-button =\n    .title = Find Current Outline Item\npdfjs-current-outline-item-button-label = Current Outline Item\npdfjs-findbar-button =\n    .title = Find in Document\npdfjs-findbar-button-label = Find\npdfjs-additional-layers = Additional Layers\npdfjs-thumb-page-title =\n    .title = Page { $page }\npdfjs-thumb-page-canvas =\n    .aria-label = Thumbnail of Page { $page }\npdfjs-find-input =\n    .title = Find\n    .placeholder = Find in document\u2026\npdfjs-find-previous-button =\n    .title = Find the previous occurrence of the phrase\npdfjs-find-previous-button-label = Previous\npdfjs-find-next-button =\n    .title = Find the next occurrence of the phrase\npdfjs-find-next-button-label = Next\npdfjs-find-highlight-checkbox = Highlight All\npdfjs-find-match-case-checkbox-label = Match Case\npdfjs-find-match-diacritics-checkbox-label = Match Diacritics\npdfjs-find-entire-word-checkbox-label = Whole Words\npdfjs-find-reached-top = Reached top of document, continued from bottom\npdfjs-find-reached-bottom = Reached end of document, continued from top\npdfjs-find-match-count =\n    { $total ->\n        [one] { $current } of { $total } match\n       *[other] { $current } of { $total } matches\n    }\npdfjs-find-match-count-limit =\n    { $limit ->\n        [one] More than { $limit } match\n       *[other] More than { $limit } matches\n    }\npdfjs-find-not-found = Phrase not found\npdfjs-page-scale-width = Page Width\npdfjs-page-scale-fit = Page Fit\npdfjs-page-scale-auto = Automatic Zoom\npdfjs-page-scale-actual = Actual Size\npdfjs-page-scale-percent = { $scale }%\npdfjs-page-landmark =\n    .aria-label = Page { $page }\npdfjs-loading-error = An error occurred while loading the PDF.\npdfjs-invalid-file-error = Invalid or corrupted PDF file.\npdfjs-missing-file-error = Missing PDF file.\npdfjs-unexpected-response-error = Unexpected server response.\npdfjs-rendering-error = An error occurred while rendering the page.\npdfjs-annotation-date-time-string = { DATETIME($dateObj, dateStyle: \"short\", timeStyle: \"medium\") }\npdfjs-text-annotation-type =\n    .alt = [{ $type } Annotation]\npdfjs-password-label = Enter the password to open this PDF file.\npdfjs-password-invalid = Invalid password. Please try again.\npdfjs-password-ok-button = OK\npdfjs-password-cancel-button = Cancel\npdfjs-web-fonts-disabled = Web fonts are disabled: unable to use embedded PDF fonts.\npdfjs-editor-free-text-button =\n    .title = Text\npdfjs-editor-color-picker-free-text-input =\n    .title = Change text color\npdfjs-editor-free-text-button-label = Text\npdfjs-editor-ink-button =\n    .title = Draw\npdfjs-editor-color-picker-ink-input =\n    .title = Change drawing color\npdfjs-editor-ink-button-label = Draw\npdfjs-editor-stamp-button =\n    .title = Add or edit images\npdfjs-editor-stamp-button-label = Add or edit images\npdfjs-editor-highlight-button =\n    .title = Highlight\npdfjs-editor-highlight-button-label = Highlight\npdfjs-highlight-floating-button1 =\n    .title = Highlight\n    .aria-label = Highlight\npdfjs-highlight-floating-button-label = Highlight\npdfjs-comment-floating-button =\n    .title = Comment\n    .aria-label = Comment\npdfjs-comment-floating-button-label = Comment\npdfjs-editor-comment-button =\n    .title = Comment\n    .aria-label = Comment\npdfjs-editor-comment-button-label = Comment\npdfjs-editor-signature-button =\n    .title = Add signature\npdfjs-editor-signature-button-label = Add signature\npdfjs-editor-highlight-editor =\n    .aria-label = Highlight editor\npdfjs-editor-ink-editor =\n    .aria-label = Drawing editor\npdfjs-editor-signature-editor1 =\n    .aria-description = Signature editor: { $description }\npdfjs-editor-stamp-editor =\n    .aria-label = Image editor\npdfjs-editor-remove-ink-button =\n    .title = Remove drawing\npdfjs-editor-remove-freetext-button =\n    .title = Remove text\npdfjs-editor-remove-stamp-button =\n    .title = Remove image\npdfjs-editor-remove-highlight-button =\n    .title = Remove highlight\npdfjs-editor-remove-signature-button =\n    .title = Remove signature\npdfjs-editor-free-text-color-input = Color\npdfjs-editor-free-text-size-input = Size\npdfjs-editor-ink-color-input = Color\npdfjs-editor-ink-thickness-input = Thickness\npdfjs-editor-ink-opacity-input = Opacity\npdfjs-editor-stamp-add-image-button =\n    .title = Add image\npdfjs-editor-stamp-add-image-button-label = Add image\npdfjs-editor-free-highlight-thickness-input = Thickness\npdfjs-editor-free-highlight-thickness-title =\n    .title = Change thickness when highlighting items other than text\npdfjs-editor-add-signature-container =\n    .aria-label = Signature controls and saved signatures\npdfjs-editor-signature-add-signature-button =\n    .title = Add new signature\npdfjs-editor-signature-add-signature-button-label = Add new signature\npdfjs-editor-add-saved-signature-button =\n    .title = Saved signature: { $description }\npdfjs-free-text2 =\n    .aria-label = Text Editor\n    .default-content = Start typing\u2026\npdfjs-editor-comments-sidebar-title =\n    { $count ->\n        [one] Comment\n       *[other] Comments\n    }\npdfjs-editor-comments-sidebar-close-button =\n    .title = Close the sidebar\n    .aria-label = Close the sidebar\npdfjs-editor-comments-sidebar-close-button-label = Close the sidebar\npdfjs-editor-comments-sidebar-no-comments1 = See something noteworthy? Highlight it and leave a comment.\npdfjs-editor-comments-sidebar-no-comments-link = Learn more\npdfjs-editor-alt-text-button =\n    .aria-label = Alt text\npdfjs-editor-alt-text-button-label = Alt text\npdfjs-editor-alt-text-edit-button =\n    .aria-label = Edit alt text\npdfjs-editor-alt-text-dialog-label = Choose an option\npdfjs-editor-alt-text-dialog-description = Alt text (alternative text) helps when people can\u2019t see the image or when it doesn\u2019t load.\npdfjs-editor-alt-text-add-description-label = Add a description\npdfjs-editor-alt-text-add-description-description = Aim for 1-2 sentences that describe the subject, setting, or actions.\npdfjs-editor-alt-text-mark-decorative-label = Mark as decorative\npdfjs-editor-alt-text-mark-decorative-description = This is used for ornamental images, like borders or watermarks.\npdfjs-editor-alt-text-cancel-button = Cancel\npdfjs-editor-alt-text-save-button = Save\npdfjs-editor-alt-text-decorative-tooltip = Marked as decorative\npdfjs-editor-alt-text-textarea =\n    .placeholder = For example, \u201CA young man sits down at a table to eat a meal\u201D\npdfjs-editor-resizer-top-left =\n    .aria-label = Top left corner \u2014 resize\npdfjs-editor-resizer-top-middle =\n    .aria-label = Top middle \u2014 resize\npdfjs-editor-resizer-top-right =\n    .aria-label = Top right corner \u2014 resize\npdfjs-editor-resizer-middle-right =\n    .aria-label = Middle right \u2014 resize\npdfjs-editor-resizer-bottom-right =\n    .aria-label = Bottom right corner \u2014 resize\npdfjs-editor-resizer-bottom-middle =\n    .aria-label = Bottom middle \u2014 resize\npdfjs-editor-resizer-bottom-left =\n    .aria-label = Bottom left corner \u2014 resize\npdfjs-editor-resizer-middle-left =\n    .aria-label = Middle left \u2014 resize\npdfjs-editor-highlight-colorpicker-label = Highlight color\npdfjs-editor-colorpicker-button =\n    .title = Change color\npdfjs-editor-colorpicker-dropdown =\n    .aria-label = Color choices\npdfjs-editor-colorpicker-yellow =\n    .title = Yellow\npdfjs-editor-colorpicker-green =\n    .title = Green\npdfjs-editor-colorpicker-blue =\n    .title = Blue\npdfjs-editor-colorpicker-pink =\n    .title = Pink\npdfjs-editor-colorpicker-red =\n    .title = Red\npdfjs-editor-highlight-show-all-button-label = Show all\npdfjs-editor-highlight-show-all-button =\n    .title = Show all\npdfjs-editor-new-alt-text-dialog-edit-label = Edit alt text (image description)\npdfjs-editor-new-alt-text-dialog-add-label = Add alt text (image description)\npdfjs-editor-new-alt-text-textarea =\n    .placeholder = Write your description here\u2026\npdfjs-editor-new-alt-text-description = Short description for people who can\u2019t see the image or when the image doesn\u2019t load.\npdfjs-editor-new-alt-text-disclaimer1 = This alt text was created automatically and may be inaccurate.\npdfjs-editor-new-alt-text-disclaimer-learn-more-url = Learn more\npdfjs-editor-new-alt-text-create-automatically-button-label = Create alt text automatically\npdfjs-editor-new-alt-text-not-now-button = Not now\npdfjs-editor-new-alt-text-error-title = Couldn\u2019t create alt text automatically\npdfjs-editor-new-alt-text-error-description = Please write your own alt text or try again later.\npdfjs-editor-new-alt-text-error-close-button = Close\npdfjs-editor-new-alt-text-ai-model-downloading-progress = Downloading alt text AI model ({ $downloadedSize } of { $totalSize } MB)\n    .aria-valuetext = Downloading alt text AI model ({ $downloadedSize } of { $totalSize } MB)\npdfjs-editor-new-alt-text-added-button =\n    .aria-label = Alt text added\npdfjs-editor-new-alt-text-added-button-label = Alt text added\npdfjs-editor-new-alt-text-missing-button =\n    .aria-label = Missing alt text\npdfjs-editor-new-alt-text-missing-button-label = Missing alt text\npdfjs-editor-new-alt-text-to-review-button =\n    .aria-label = Review alt text\npdfjs-editor-new-alt-text-to-review-button-label = Review alt text\npdfjs-editor-new-alt-text-generated-alt-text-with-disclaimer = Created automatically: { $generatedAltText }\npdfjs-image-alt-text-settings-button =\n    .title = Image alt text settings\npdfjs-image-alt-text-settings-button-label = Image alt text settings\npdfjs-editor-alt-text-settings-dialog-label = Image alt text settings\npdfjs-editor-alt-text-settings-automatic-title = Automatic alt text\npdfjs-editor-alt-text-settings-create-model-button-label = Create alt text automatically\npdfjs-editor-alt-text-settings-create-model-description = Suggests descriptions to help people who can\u2019t see the image or when the image doesn\u2019t load.\npdfjs-editor-alt-text-settings-download-model-label = Alt text AI model ({ $totalSize } MB)\npdfjs-editor-alt-text-settings-ai-model-description = Runs locally on your device so your data stays private. Required for automatic alt text.\npdfjs-editor-alt-text-settings-delete-model-button = Delete\npdfjs-editor-alt-text-settings-download-model-button = Download\npdfjs-editor-alt-text-settings-downloading-model-button = Downloading\u2026\npdfjs-editor-alt-text-settings-editor-title = Alt text editor\npdfjs-editor-alt-text-settings-show-dialog-button-label = Show alt text editor right away when adding an image\npdfjs-editor-alt-text-settings-show-dialog-description = Helps you make sure all your images have alt text.\npdfjs-editor-alt-text-settings-close-button = Close\npdfjs-editor-highlight-added-alert = Highlight added\npdfjs-editor-freetext-added-alert = Text added\npdfjs-editor-ink-added-alert = Drawing added\npdfjs-editor-stamp-added-alert = Image added\npdfjs-editor-signature-added-alert = Signature added\npdfjs-editor-undo-bar-message-highlight = Highlight removed\npdfjs-editor-undo-bar-message-freetext = Text removed\npdfjs-editor-undo-bar-message-ink = Drawing removed\npdfjs-editor-undo-bar-message-stamp = Image removed\npdfjs-editor-undo-bar-message-signature = Signature removed\npdfjs-editor-undo-bar-message-comment = Comment removed\npdfjs-editor-undo-bar-message-multiple =\n    { $count ->\n        [one] { $count } annotation removed\n       *[other] { $count } annotations removed\n    }\npdfjs-editor-undo-bar-undo-button =\n    .title = Undo\npdfjs-editor-undo-bar-undo-button-label = Undo\npdfjs-editor-undo-bar-close-button =\n    .title = Close\npdfjs-editor-undo-bar-close-button-label = Close\npdfjs-editor-add-signature-dialog-label = This modal allows the user to create a signature to add to a PDF document. The user can edit the name (which also serves as the alt text), and optionally save the signature for repeated use.\npdfjs-editor-add-signature-dialog-title = Add a signature\npdfjs-editor-add-signature-type-button = Type\n    .title = Type\npdfjs-editor-add-signature-draw-button = Draw\n    .title = Draw\npdfjs-editor-add-signature-image-button = Image\n    .title = Image\npdfjs-editor-add-signature-type-input =\n    .aria-label = Type your signature\n    .placeholder = Type your signature\npdfjs-editor-add-signature-draw-placeholder = Draw your signature\npdfjs-editor-add-signature-draw-thickness-range-label = Thickness\npdfjs-editor-add-signature-draw-thickness-range =\n    .title = Drawing thickness: { $thickness }\npdfjs-editor-add-signature-image-placeholder = Drag a file here to upload\npdfjs-editor-add-signature-image-browse-link =\n    { PLATFORM() ->\n        [macos] Or choose image files\n       *[other] Or browse image files\n    }\npdfjs-editor-add-signature-description-label = Description (alt text)\npdfjs-editor-add-signature-description-input =\n    .title = Description (alt text)\npdfjs-editor-add-signature-description-default-when-drawing = Signature\npdfjs-editor-add-signature-clear-button-label = Clear signature\npdfjs-editor-add-signature-clear-button =\n    .title = Clear signature\npdfjs-editor-add-signature-save-checkbox = Save signature\npdfjs-editor-add-signature-save-warning-message = You\u2019ve reached the limit of 5 saved signatures. Remove one to save more.\npdfjs-editor-add-signature-image-upload-error-title = Couldn\u2019t upload image\npdfjs-editor-add-signature-image-upload-error-description = Check your network connection or try another image.\npdfjs-editor-add-signature-image-no-data-error-title = Can\u2019t convert this image into a signature\npdfjs-editor-add-signature-image-no-data-error-description = Please try uploading a different image.\npdfjs-editor-add-signature-error-close-button = Close\npdfjs-editor-add-signature-cancel-button = Cancel\npdfjs-editor-add-signature-add-button = Add\npdfjs-editor-delete-signature-button1 =\n    .title = Remove saved signature\npdfjs-editor-delete-signature-button-label1 = Remove saved signature\npdfjs-editor-add-signature-edit-button-label = Edit description\npdfjs-editor-edit-signature-dialog-title = Edit description\npdfjs-editor-edit-signature-update-button = Update\npdfjs-show-comment-button =\n    .title = Show comment\npdfjs-editor-edit-comment-popup-button-label = Edit comment\npdfjs-editor-edit-comment-popup-button =\n    .title = Edit comment\npdfjs-editor-delete-comment-popup-button-label = Remove comment\npdfjs-editor-delete-comment-popup-button =\n    .title = Remove comment\npdfjs-editor-edit-comment-dialog-title-when-editing = Edit comment\npdfjs-editor-edit-comment-dialog-save-button-when-editing = Update\npdfjs-editor-edit-comment-dialog-title-when-adding = Add comment\npdfjs-editor-edit-comment-dialog-save-button-when-adding = Add\npdfjs-editor-edit-comment-dialog-text-input =\n    .placeholder = Start typing\u2026\npdfjs-editor-edit-comment-dialog-cancel-button = Cancel\npdfjs-editor-add-comment-button =\n    .title = Add comment\npdfjs-toggle-views-manager-button =\n    .title = Toggle Sidebar\npdfjs-toggle-views-manager-notification-button =\n    .title = Toggle Sidebar (document contains thumbnails/outline/attachments/layers)\npdfjs-toggle-views-manager-button-label = Toggle Sidebar\npdfjs-views-manager-sidebar =\n    .aria-label = Sidebar\npdfjs-views-manager-view-selector-button =\n    .title = Views\npdfjs-views-manager-view-selector-button-label = Views\npdfjs-views-manager-pages-title = Pages\npdfjs-views-manager-outlines-title = Document outline\npdfjs-views-manager-attachments-title = Attachments\npdfjs-views-manager-layers-title = Layers\npdfjs-views-manager-pages-option-label = Pages\npdfjs-views-manager-outlines-option-label = Document outline\npdfjs-views-manager-attachments-option-label = Attachments\npdfjs-views-manager-layers-option-label = Layers\npdfjs-views-manager-add-file-button =\n    .title = Add file\npdfjs-views-manager-add-file-button-label = Add file\npdfjs-views-manager-pages-status-action-label =\n    { $count ->\n        [one] { $count } selected\n        *[other] { $count } selected\n    }\npdfjs-views-manager-pages-status-none-action-label = Select pages\npdfjs-views-manager-pages-status-action-button-label = Manage\npdfjs-views-manager-pages-status-copy-button-label = Copy\npdfjs-views-manager-pages-status-cut-button-label = Cut\npdfjs-views-manager-pages-status-delete-button-label = Delete\npdfjs-views-manager-pages-status-save-as-button-label = Save as\u2026\npdfjs-views-manager-status-undo-cut-label =\n    { $count ->\n        [one] 1 page cut\n        *[other] { $count } pages cut\n    }\npdfjs-views-manager-pages-status-undo-copy-label =\n    { $count ->\n        [one] 1 page copied\n        *[other] { $count } pages copied\n    }\npdfjs-views-manager-pages-status-undo-delete-label =\n    { $count ->\n        [one] 1 page deleted\n        *[other] { $count } pages deleted\n    }\npdfjs-views-manager-pages-status-waiting-ready-label = Getting your file ready\u2026\npdfjs-views-manager-pages-status-waiting-uploading-label = Uploading file\u2026\npdfjs-views-manager-status-warning-cut-label = Couldn\u2019t cut. Refresh page and try again.\npdfjs-views-manager-status-warning-copy-label = Couldn\u2019t copy. Refresh page and try again.\npdfjs-views-manager-status-warning-delete-label = Couldn\u2019t delete. Refresh page and try again.\npdfjs-views-manager-status-warning-save-label = Couldn\u2019t save. Refresh page and try again.\npdfjs-views-manager-status-undo-button-label = Undo\npdfjs-views-manager-status-close-button =\n    .title = Close\npdfjs-views-manager-status-close-button-label = Close";
     return createBundle(lang, text);
   }
 }
@@ -4541,8 +4433,8 @@ class Sidebar {
     this.#isResizerOnTheLeft = isResizerOnTheLeft;
     const style = window.getComputedStyle(sidebar);
     this.#initialWidth = this.#width = parseFloat(style.getPropertyValue("--sidebar-width"));
-    resizer.ariaValueMin = parseFloat(style.getPropertyValue("--sidebar-min-width"));
-    resizer.ariaValueMax = parseFloat(style.getPropertyValue("--sidebar-max-width"));
+    resizer.ariaValueMin = parseFloat(style.getPropertyValue("--sidebar-min-width")) || 0;
+    resizer.ariaValueMax = parseFloat(style.getPropertyValue("--sidebar-max-width")) || Infinity;
     resizer.ariaValueNow = this.#width;
     this.#makeSidebarResizable();
     toggleButton.addEventListener("click", this.toggle.bind(this));
@@ -4595,7 +4487,7 @@ class Sidebar {
         signal
       });
       window.addEventListener("pointermove", ev => {
-        if (!pointerMoveAC) {
+        if (!pointerMoveAC || Math.abs(ev.clientX - this.#prevX) < 1) {
           return;
         }
         stopEvent(ev);
@@ -5435,9 +5327,15 @@ class CommentPopup {
           }
         }
       });
-      this.#editor.comment = null;
-      this.#editor.focus();
+      const editor = this.#editor;
+      const savedData = editor.comment;
       this.destroy();
+      if (savedData?.text) {
+        editor._uiManager.deleteComment(editor, savedData);
+      } else {
+        editor.comment = null;
+      }
+      editor.focus();
     });
     del.addEventListener("contextmenu", noContextMenu);
     buttons.append(edit, del);
@@ -5718,6 +5616,7 @@ class EditorUndoBar {
     stamp: "pdfjs-editor-undo-bar-message-stamp",
     ink: "pdfjs-editor-undo-bar-message-ink",
     signature: "pdfjs-editor-undo-bar-message-signature",
+    comment: "pdfjs-editor-undo-bar-message-comment",
     _multiple: "pdfjs-editor-undo-bar-message-multiple"
   });
   constructor({
@@ -6823,7 +6722,6 @@ class PDFFindController {
   #state = null;
   #updateMatchesCountOnProgress = true;
   #visitedPagesCount = 0;
-  #pagesMapper = PagesMapper.instance;
   constructor({
     linkService,
     eventBus,
@@ -7080,12 +6978,11 @@ class PDFFindController {
     if (query.length === 0) {
       return;
     }
-    const pageId = this.getPageId(pageIndex);
-    const pageContent = this._pageContents[pageId];
+    const pageContent = this._pageContents[pageIndex];
     const matcherResult = this.match(query, pageContent, pageIndex);
     const matches = this._pageMatches[pageIndex] = [];
     const matchesLength = this._pageMatchesLength[pageIndex] = [];
-    const diffs = this._pageDiffs[pageId];
+    const diffs = this._pageDiffs[pageIndex];
     matcherResult?.forEach(({
       index,
       length
@@ -7114,7 +7011,7 @@ class PDFFindController {
     }
   }
   match(query, pageContent, pageIndex) {
-    const hasDiacritics = this._hasDiacritics[this.getPageId(pageIndex)];
+    const hasDiacritics = this._hasDiacritics[pageIndex];
     let isUnicode = false;
     if (typeof query === "string") {
       [isUnicode, query] = this.#convertToRegExpString(query, hasDiacritics);
@@ -7187,27 +7084,19 @@ class PDFFindController {
       });
     }
   }
-  getPageNumber(idx) {
-    return this.#pagesMapper.getPageNumber(idx + 1) - 1;
-  }
-  getPageId(pageNumber) {
-    return this.#pagesMapper.getPageId(pageNumber + 1) - 1;
-  }
   #updatePage(index) {
     if (this._scrollMatches && this._selected.pageIdx === index) {
       this._linkService.page = index + 1;
     }
     this._eventBus.dispatch("updatetextlayermatches", {
       source: this,
-      pageIndex: index,
-      pageId: this.getPageId(index)
+      pageIndex: index
     });
   }
   #updateAllPages() {
     this._eventBus.dispatch("updatetextlayermatches", {
       source: this,
-      pageIndex: -1,
-      pageId: -1
+      pageIndex: -1
     });
   }
   #nextMatch() {
@@ -7232,7 +7121,7 @@ class PDFFindController {
           continue;
         }
         this._pendingFindMatches.add(i);
-        this._extractTextPromises[this.getPageId(i)].then(() => {
+        this._extractTextPromises[i].then(() => {
           this._pendingFindMatches.delete(i);
           this.#calculateMatch(i);
         });
@@ -7322,12 +7211,23 @@ class PDFFindController {
       this.#updatePage(this._selected.pageIdx);
     }
   }
-  #onPagesEdited() {
+  #onPagesEdited({
+    pagesMapper
+  }) {
     if (this._extractTextPromises.length === 0) {
       return;
     }
     this.#onFindBarClose();
     this._dirtyMatch = true;
+    const prevTextPromises = this._extractTextPromises;
+    const extractTextPromises = this._extractTextPromises.length = [];
+    for (let i = 0, ii = pagesMapper.length; i < ii; i++) {
+      const prevPageIndex = pagesMapper.getPrevPageNumber(i + 1) - 1;
+      if (prevPageIndex === -1) {
+        continue;
+      }
+      extractTextPromises.push(prevTextPromises[prevPageIndex] || Promise.resolve());
+    }
   }
   #onFindBarClose(evt) {
     const pdfDocument = this._pdfDocument;
@@ -9643,6 +9543,161 @@ class PdfTextExtractor {
   }
 }
 
+;// ./web/menu.js
+
+class Menu {
+  #triggeringButton;
+  #menu;
+  #menuItems;
+  #openMenuAC = null;
+  #menuAC = new AbortController();
+  #lastIndex = -1;
+  constructor(menuContainer, triggeringButton, menuItems) {
+    this.#menu = menuContainer;
+    this.#triggeringButton = triggeringButton;
+    if (Array.isArray(menuItems)) {
+      this.#menuItems = menuItems;
+    } else {
+      this.#menuItems = [];
+      for (const button of this.#menu.querySelectorAll("button")) {
+        this.#menuItems.push(button);
+      }
+    }
+    this.#setUpMenu();
+  }
+  #closeMenu() {
+    if (!this.#openMenuAC) {
+      return;
+    }
+    const menu = this.#menu;
+    this.#triggeringButton.ariaExpanded = "false";
+    this.#openMenuAC.abort();
+    this.#openMenuAC = null;
+    if (menu.contains(document.activeElement)) {
+      setTimeout(() => {
+        if (!menu.contains(document.activeElement)) {
+          this.#triggeringButton.focus();
+        }
+      }, 0);
+    }
+    this.#lastIndex = -1;
+  }
+  #setUpMenu() {
+    this.#triggeringButton.addEventListener("click", e => {
+      if (this.#openMenuAC) {
+        this.#closeMenu();
+        return;
+      }
+      const menu = this.#menu;
+      this.#triggeringButton.ariaExpanded = "true";
+      this.#openMenuAC = new AbortController();
+      const signal = AbortSignal.any([this.#menuAC.signal, this.#openMenuAC.signal]);
+      window.addEventListener("pointerdown", ({
+        target
+      }) => {
+        if (target !== this.#triggeringButton && !menu.contains(target)) {
+          this.#closeMenu();
+        }
+      }, {
+        signal
+      });
+      window.addEventListener("blur", this.#closeMenu.bind(this), {
+        signal
+      });
+    });
+    const {
+      signal
+    } = this.#menuAC;
+    this.#menu.addEventListener("keydown", e => {
+      switch (e.key) {
+        case "Escape":
+          this.#closeMenu();
+          stopEvent(e);
+          break;
+        case "ArrowDown":
+        case "Tab":
+          this.#goToNextItem(e.target, true);
+          stopEvent(e);
+          break;
+        case "ArrowUp":
+        case "ShiftTab":
+          this.#goToNextItem(e.target, false);
+          stopEvent(e);
+          break;
+        case "Home":
+          this.#menuItems.find(item => !item.disabled && !item.classList.contains("hidden")).focus();
+          stopEvent(e);
+          break;
+        case "End":
+          this.#menuItems.findLast(item => !item.disabled && !item.classList.contains("hidden")).focus();
+          stopEvent(e);
+          break;
+        default:
+          const char = e.key.toLocaleLowerCase();
+          this.#goToNextItem(e.target, true, item => item.textContent.trim().toLowerCase().startsWith(char));
+          stopEvent(e);
+          break;
+      }
+    }, {
+      signal,
+      capture: true
+    });
+    this.#menu.addEventListener("contextmenu", noContextMenu, {
+      signal
+    });
+    this.#menu.addEventListener("click", this.#closeMenu.bind(this), {
+      signal,
+      capture: true
+    });
+    this.#triggeringButton.addEventListener("keydown", e => {
+      switch (e.key) {
+        case " ":
+        case "Enter":
+        case "ArrowDown":
+        case "Home":
+          if (!this.#openMenuAC) {
+            this.#triggeringButton.click();
+          }
+          this.#menuItems.find(item => !item.disabled && !item.classList.contains("hidden")).focus();
+          stopEvent(e);
+          break;
+        case "ArrowUp":
+        case "End":
+          if (!this.#openMenuAC) {
+            this.#triggeringButton.click();
+          }
+          this.#menuItems.findLast(item => !item.disabled && !item.classList.contains("hidden")).focus();
+          stopEvent(e);
+          break;
+        case "Escape":
+          this.#closeMenu();
+          stopEvent(e);
+          break;
+      }
+    }, {
+      signal
+    });
+  }
+  #goToNextItem(element, forward, check = () => true) {
+    const index = this.#lastIndex === -1 ? this.#menuItems.indexOf(element) : this.#lastIndex;
+    const len = this.#menuItems.length;
+    const increment = forward ? 1 : len - 1;
+    for (let i = (index + increment) % len; i !== index; i = (i + increment) % len) {
+      const menuItem = this.#menuItems[i];
+      if (!menuItem.disabled && !menuItem.classList.contains("hidden") && check(menuItem)) {
+        menuItem.focus();
+        this.#lastIndex = i;
+        break;
+      }
+    }
+  }
+  destroy() {
+    this.#closeMenu();
+    this.#menuAC?.abort();
+    this.#menuAC = null;
+  }
+}
+
 ;// ./web/pdf_thumbnail_view.js
 
 
@@ -9685,7 +9740,7 @@ class PDFThumbnailView {
     enableSplitMerge = false
   }) {
     this.id = id;
-    this.renderingId = "thumbnail" + id;
+    this.renderingId = `thumbnail${id}`;
     this.pageLabel = null;
     this.pdfPage = null;
     this.rotation = 0;
@@ -9720,6 +9775,12 @@ class PDFThumbnailView {
     this.#updateDims();
     imageContainer.append(image);
     container.append(imageContainer);
+  }
+  updateId(newId) {
+    this.id = newId;
+    this.renderingId = `thumbnail${newId}`;
+    this.div.setAttribute("page-number", newId);
+    this.setPageLabel(this.pageLabel);
   }
   #updateDims() {
     const {
@@ -9959,6 +10020,7 @@ class PDFThumbnailView {
 
 
 
+
 const SCROLL_OPTIONS = {
   behavior: "instant",
   block: "nearest",
@@ -9987,7 +10049,7 @@ class PDFThumbnailViewer {
   #currentScrollBottom = 0;
   #currentScrollTop = 0;
   #pagesMapper = PagesMapper.instance;
-  #originalThumbnails = null;
+  #manageSaveAsButton = null;
   constructor({
     container,
     eventBus,
@@ -9998,7 +10060,8 @@ class PDFThumbnailViewer {
     pageColors,
     abortSignal,
     enableHWA,
-    enableSplitMerge
+    enableSplitMerge,
+    manageMenu
   }) {
     this.scrollableContainer = container.parentElement;
     this.container = container;
@@ -10010,6 +10073,26 @@ class PDFThumbnailViewer {
     this.pageColors = pageColors || null;
     this.enableHWA = enableHWA || false;
     this.#enableSplitMerge = enableSplitMerge || false;
+    if (this.#enableSplitMerge && manageMenu) {
+      const {
+        button,
+        menu,
+        copy,
+        cut,
+        delete: del,
+        saveAs
+      } = manageMenu;
+      this._manageMenu = new Menu(menu, button, [copy, cut, del, saveAs]);
+      this.#manageSaveAsButton = saveAs;
+      saveAs.addEventListener("click", () => {
+        this.eventBus.dispatch("savepageseditedpdf", {
+          source: this,
+          data: this.#pagesMapper.getPageMappingForSaving()
+        });
+      });
+    } else {
+      manageMenu.button.hidden = true;
+    }
     this.scroll = watchScroll(this.scrollableContainer, this.#scrollUpdated.bind(this), abortSignal);
     this.#resetView();
     this.#addEventListeners();
@@ -10207,6 +10290,25 @@ class PDFThumbnailViewer {
   static #getScaleFactor(image) {
     return PDFThumbnailViewer.#draggingScaleFactor ||= parseFloat(getComputedStyle(image).getPropertyValue("--thumbnail-dragging-scale"));
   }
+  #updateThumbnails() {
+    const pagesMapper = this.#pagesMapper;
+    this.container.replaceChildren();
+    const prevThumbnails = this._thumbnails;
+    const newThumbnails = this._thumbnails = [];
+    const fragment = document.createDocumentFragment();
+    for (let i = 0, ii = pagesMapper.pagesNumber; i < ii; i++) {
+      const prevPageIndex = pagesMapper.getPrevPageNumber(i + 1) - 1;
+      if (prevPageIndex === -1) {
+        continue;
+      }
+      const newThumbnail = prevThumbnails[prevPageIndex];
+      newThumbnails.push(newThumbnail);
+      newThumbnail.updateId(i + 1);
+      newThumbnail.checkbox.checked = false;
+      fragment.append(newThumbnail.div);
+    }
+    this.container.append(fragment);
+  }
   #onStartDragging(draggedThumbnail) {
     this.#currentScrollTop = this.scrollableContainer.scrollTop;
     this.#currentScrollBottom = this.#currentScrollTop + this.scrollableContainer.clientHeight;
@@ -10256,7 +10358,6 @@ class PDFThumbnailViewer {
     this.#dragMarker = null;
     this.#dragAC.abort();
     this.#dragAC = null;
-    this.#originalThumbnails ||= this._thumbnails;
     this.container.classList.remove("isDragging");
     for (const selected of this.#selectedPages) {
       const thumbnail = this._thumbnails[selected - 1];
@@ -10280,49 +10381,28 @@ class PDFThumbnailViewer {
     if (!isNaN(lastDraggedOverIndex) && isDropping && !(selectedPages.size === 1 && (selectedPages.has(lastDraggedOverIndex + 1) || selectedPages.has(lastDraggedOverIndex + 2)))) {
       const newIndex = lastDraggedOverIndex + 1;
       const pagesToMove = Array.from(selectedPages).sort((a, b) => a - b);
-      const movedCount = pagesToMove.length;
-      const thumbnails = this._thumbnails;
       const pagesMapper = this.#pagesMapper;
-      const N = thumbnails.length;
-      pagesMapper.pagesNumber = N;
       const currentPageId = pagesMapper.getPageId(this._currentPageNumber);
       const newCurrentPageId = pagesMapper.getPageId(isNaN(this.#pageNumberToRemove) ? pagesToMove[0] : this.#pageNumberToRemove);
-      let thumbnail = thumbnails[pagesToMove[0] - 1];
-      thumbnail.checkbox.checked = false;
-      if (newIndex === 0) {
-        thumbnails[0].div.before(thumbnail.div);
-      } else {
-        thumbnails[newIndex - 1].div.after(thumbnail.div);
-      }
-      for (let i = 1; i < movedCount; i++) {
-        const newThumbnail = thumbnails[pagesToMove[i] - 1];
-        newThumbnail.checkbox.checked = false;
-        thumbnail.div.after(newThumbnail.div);
-        thumbnail = newThumbnail;
-      }
       this.eventBus.dispatch("beforepagesedited", {
         source: this,
-        pagesMapper,
-        index: newIndex,
-        pagesToMove
+        pagesMapper
       });
       pagesMapper.movePages(selectedPages, pagesToMove, newIndex);
-      const newThumbnails = this._thumbnails = new Array(N);
-      const originalThumbnails = this.#originalThumbnails;
-      for (let i = 0; i < N; i++) {
-        const newThumbnail = newThumbnails[i] = originalThumbnails[pagesMapper.getPageId(i + 1) - 1];
-        newThumbnail.div.setAttribute("page-number", i + 1);
-      }
+      this.#updateThumbnails();
       this._currentPageNumber = pagesMapper.getPageNumber(currentPageId);
       this.#computeThumbnailsPosition();
       selectedPages.clear();
       this.#pageNumberToRemove = NaN;
-      this.eventBus.dispatch("pagesedited", {
-        source: this,
-        pagesMapper,
-        index: newIndex,
-        pagesToMove
-      });
+      const isIdentity = this.#manageSaveAsButton.disabled = !this.#pagesMapper.hasBeenAltered();
+      if (!isIdentity) {
+        this.eventBus.dispatch("pagesedited", {
+          source: this,
+          pagesMapper,
+          index: newIndex,
+          pagesToMove
+        });
+      }
       const newCurrentPageNumber = pagesMapper.getPageNumber(newCurrentPageId);
       setTimeout(() => {
         this.linkService.goToPage(newCurrentPageNumber);
@@ -10405,6 +10485,9 @@ class PDFThumbnailViewer {
         offsetWidth: w,
         offsetHeight: h
       } = div;
+      if (w === 0) {
+        return;
+      }
       bbox[i * 4] = x;
       bbox[i * 4 + 1] = y;
       bbox[i * 4 + 2] = w;
@@ -11369,18 +11452,13 @@ class BasePDFPageView {
 
 class DrawLayerBuilder {
   #drawLayer = null;
-  constructor(options) {
-    this.pageIndex = options.pageIndex;
-  }
   async render({
     intent = "display"
   }) {
     if (intent !== "display" || this.#drawLayer || this._cancelled) {
       return;
     }
-    this.#drawLayer = new DrawLayer({
-      pageIndex: this.pageIndex
-    });
+    this.#drawLayer = new DrawLayer();
   }
   cancel() {
     this._cancelled = true;
@@ -12079,7 +12157,7 @@ class TextHighlighter {
     if (!this.#eventAbortController) {
       this.#eventAbortController = new AbortController();
       this.eventBus._on("updatetextlayermatches", evt => {
-        if (evt.pageId === this.pageIdx || evt.pageId === -1) {
+        if (evt.pageIndex === this.pageIdx || evt.pageIndex === -1) {
           this._updateMatches();
         }
       }, {
@@ -12148,7 +12226,7 @@ class TextHighlighter {
       textContentItemsStr,
       textDivs
     } = this;
-    const isSelectedPage = findController.getPageNumber(pageIdx) === findController.selected.pageIdx;
+    const isSelectedPage = pageIdx === findController.selected.pageIdx;
     const selectedMatchIdx = findController.selected.matchIdx;
     const highlightAll = findController.state.highlightAll;
     let prevEnd = null;
@@ -12233,7 +12311,7 @@ class TextHighlighter {
         findController.scrollMatchIntoView({
           element: textDivs[begin.divIdx],
           selectedLeft,
-          pageIndex: findController.getPageNumber(pageIdx),
+          pageIndex: pageIdx,
           matchIndex: selectedMatchIdx
         });
       }
@@ -12268,9 +12346,8 @@ class TextHighlighter {
     if (!findController?.highlightMatches || reset) {
       return;
     }
-    const pageNumber = findController.getPageNumber(pageIdx);
-    const pageMatches = findController.pageMatches[pageNumber] || null;
-    const pageMatchesLength = findController.pageMatchesLength[pageNumber] || null;
+    const pageMatches = findController.pageMatches[pageIdx] || null;
+    const pageMatchesLength = findController.pageMatchesLength[pageIdx] || null;
     this.matches = this._convertMatches(pageMatches, pageMatchesLength);
     this._renderMatches(this.matches);
   }
@@ -12620,6 +12697,25 @@ class PDFPageView extends BasePDFPageView {
       this.#previousRotation = viewport.rotation;
     }
     setLayerDimensions(div, viewport, true, false);
+  }
+  updatePageNumber(newPageNumber) {
+    if (this.id === newPageNumber) {
+      return;
+    }
+    this.id = newPageNumber;
+    this.renderingId = `page${newPageNumber}`;
+    if (this.pdfPage) {
+      this.pdfPage.pageNumber = newPageNumber;
+    }
+    this.setPageLabel(this.pageLabel);
+    const {
+      div
+    } = this;
+    div.setAttribute("data-page-number", newPageNumber);
+    div.setAttribute("data-l10n-args", JSON.stringify({
+      page: newPageNumber
+    }));
+    this._textHighlighter.pageIdx = newPageNumber - 1;
   }
   setPdfPage(pdfPage) {
     if (this._isStandalone && (this.pageColors?.foreground === "CanvasText" || this.pageColors?.background === "Canvas")) {
@@ -13209,9 +13305,7 @@ class PDFPageView extends BasePDFPageView {
       if (!annotationEditorUIManager) {
         return;
       }
-      this.drawLayer ||= new DrawLayerBuilder({
-        pageIndex: this.id
-      });
+      this.drawLayer ||= new DrawLayerBuilder();
       await this.#renderDrawLayer();
       this.drawLayer.setParent(canvasWrapper);
       if (this.annotationLayer || this.#annotationMode === AnnotationMode.DISABLE) {
@@ -13368,7 +13462,6 @@ class PDFViewer {
   #supportsPinchToZoom = true;
   #textLayerMode = TextLayerMode.ENABLE;
   #viewerAlert = null;
-  #originalPages = null;
   #pagesMapper = PagesMapper.instance;
   constructor(options) {
     const viewerVersion = "5.4.0";
@@ -13753,6 +13846,7 @@ class PDFViewer {
       this.#annotationEditorUIManager = null;
       this.#annotationEditorMode = AnnotationEditorType.NONE;
       this.#printingAllowed = true;
+      this.#pagesMapper.pagesNumber = 0;
     }
     this.pdfDocument = pdfDocument;
     if (!pdfDocument) {
@@ -13961,36 +14055,43 @@ class PDFViewer {
       this._pagesCapability.reject(reason);
     });
   }
-  onBeforePagesEdited() {
-    this._currentPageId = this.#pagesMapper.getPageId(this._currentPageNumber);
+  async onBeforePagesEdited({
+    pagesMapper
+  }) {
+    await this._pagesCapability.promise;
+    this._currentPageId = pagesMapper.getPageId(this._currentPageNumber);
   }
   onPagesEdited({
-    index,
-    pagesToMove
+    pagesMapper
   }) {
-    const pagesMapper = this.#pagesMapper;
     this._currentPageNumber = pagesMapper.getPageNumber(this._currentPageId);
-    const viewerElement = this._scrollMode === ScrollMode.PAGE ? null : this.viewer;
-    if (viewerElement) {
-      const pages = this._pages;
-      let page = pages[pagesToMove[0] - 1].div;
-      if (index === 0) {
-        pages[0].div.before(page);
-      } else {
-        pages[index - 1].div.after(page);
-      }
-      for (let i = 1, ii = pagesToMove.length; i < ii; i++) {
-        const newPage = pages[pagesToMove[i] - 1].div;
-        page.after(newPage);
-        page = newPage;
-      }
-    }
-    this.#originalPages ||= this._pages;
+    const prevPages = this._pages;
     const newPages = this._pages = [];
     for (let i = 0, ii = pagesMapper.pagesNumber; i < ii; i++) {
-      const pageView = this.#originalPages[pagesMapper.getPageId(i + 1) - 1];
-      newPages.push(pageView);
+      const prevPageNumber = pagesMapper.getPrevPageNumber(i + 1) - 1;
+      if (prevPageNumber === -1) {
+        continue;
+      }
+      const page = prevPages[prevPageNumber];
+      newPages[i] = page;
+      page.updatePageNumber(i + 1);
     }
+    const viewerElement = this._scrollMode === ScrollMode.PAGE ? null : this.viewer;
+    if (viewerElement) {
+      viewerElement.replaceChildren();
+      const fragment = document.createDocumentFragment();
+      for (let i = 0, ii = pagesMapper.pagesNumber; i < ii; i++) {
+        const {
+          div
+        } = newPages[i];
+        div.setAttribute("data-page-number", i + 1);
+        fragment.append(div);
+      }
+      viewerElement.append(fragment);
+    }
+    setTimeout(() => {
+      this.forceRendering();
+    });
   }
   setPageLabels(labels) {
     if (!this.pdfDocument) {
@@ -14102,9 +14203,8 @@ class PDFViewer {
       div,
       id
     } = pageView;
-    const pageNumber = this.#pagesMapper.getPageNumber(id);
-    if (this._currentPageNumber !== pageNumber) {
-      this._setCurrentPageNumber(pageNumber);
+    if (this._currentPageNumber !== id) {
+      this._setCurrentPageNumber(id);
     }
     if (this._scrollMode === ScrollMode.PAGE) {
       this.#ensurePageViewVisible();
@@ -14419,18 +14519,18 @@ class PDFViewer {
     }
     this.renderingQueue.renderHighestPriority(visible);
     const isSimpleLayout = this._spreadMode === SpreadMode.NONE && (this._scrollMode === ScrollMode.PAGE || this._scrollMode === ScrollMode.VERTICAL);
-    const currentId = this.#pagesMapper.getPageId(this._currentPageNumber);
+    const currentPageNumber = this._currentPageNumber;
     let stillFullyVisible = false;
     for (const page of visiblePages) {
       if (page.percent < 100) {
         break;
       }
-      if (page.id === currentId && isSimpleLayout) {
+      if (page.id === currentPageNumber && isSimpleLayout) {
         stillFullyVisible = true;
         break;
       }
     }
-    this._setCurrentPageNumber(stillFullyVisible ? this._currentPageNumber : this.#pagesMapper.getPageNumber(visiblePages[0].id));
+    this._setCurrentPageNumber(stillFullyVisible ? this._currentPageNumber : visiblePages[0].id);
     this._updateLocation(visible.first);
     this.eventBus.dispatch("updateviewarea", {
       source: this,
@@ -16566,161 +16666,6 @@ class ViewHistory {
   }
 }
 
-;// ./web/menu.js
-
-class Menu {
-  #triggeringButton;
-  #menu;
-  #menuItems;
-  #openMenuAC = null;
-  #menuAC = new AbortController();
-  #lastIndex = -1;
-  constructor(menuContainer, triggeringButton, menuItems) {
-    this.#menu = menuContainer;
-    this.#triggeringButton = triggeringButton;
-    if (Array.isArray(menuItems)) {
-      this.#menuItems = menuItems;
-    } else {
-      this.#menuItems = [];
-      for (const button of this.#menu.querySelectorAll("button")) {
-        this.#menuItems.push(button);
-      }
-    }
-    this.#setUpMenu();
-  }
-  #closeMenu() {
-    if (!this.#openMenuAC) {
-      return;
-    }
-    const menu = this.#menu;
-    this.#triggeringButton.ariaExpanded = "false";
-    this.#openMenuAC.abort();
-    this.#openMenuAC = null;
-    if (menu.contains(document.activeElement)) {
-      setTimeout(() => {
-        if (!menu.contains(document.activeElement)) {
-          this.#triggeringButton.focus();
-        }
-      }, 0);
-    }
-    this.#lastIndex = -1;
-  }
-  #setUpMenu() {
-    this.#triggeringButton.addEventListener("click", e => {
-      if (this.#openMenuAC) {
-        this.#closeMenu();
-        return;
-      }
-      const menu = this.#menu;
-      this.#triggeringButton.ariaExpanded = "true";
-      this.#openMenuAC = new AbortController();
-      const signal = AbortSignal.any([this.#menuAC.signal, this.#openMenuAC.signal]);
-      window.addEventListener("pointerdown", ({
-        target
-      }) => {
-        if (target !== this.#triggeringButton && !menu.contains(target)) {
-          this.#closeMenu();
-        }
-      }, {
-        signal
-      });
-      window.addEventListener("blur", this.#closeMenu.bind(this), {
-        signal
-      });
-    });
-    const {
-      signal
-    } = this.#menuAC;
-    this.#menu.addEventListener("keydown", e => {
-      switch (e.key) {
-        case "Escape":
-          this.#closeMenu();
-          stopEvent(e);
-          break;
-        case "ArrowDown":
-        case "Tab":
-          this.#goToNextItem(e.target, true);
-          stopEvent(e);
-          break;
-        case "ArrowUp":
-        case "ShiftTab":
-          this.#goToNextItem(e.target, false);
-          stopEvent(e);
-          break;
-        case "Home":
-          this.#menuItems.find(item => !item.disabled && !item.classList.contains("hidden")).focus();
-          stopEvent(e);
-          break;
-        case "End":
-          this.#menuItems.findLast(item => !item.disabled && !item.classList.contains("hidden")).focus();
-          stopEvent(e);
-          break;
-        default:
-          const char = e.key.toLocaleLowerCase();
-          this.#goToNextItem(e.target, true, item => item.textContent.trim().toLowerCase().startsWith(char));
-          stopEvent(e);
-          break;
-      }
-    }, {
-      signal,
-      capture: true
-    });
-    this.#menu.addEventListener("contextmenu", noContextMenu, {
-      signal
-    });
-    this.#menu.addEventListener("click", this.#closeMenu.bind(this), {
-      signal,
-      capture: true
-    });
-    this.#triggeringButton.addEventListener("keydown", e => {
-      switch (e.key) {
-        case " ":
-        case "Enter":
-        case "ArrowDown":
-        case "Home":
-          if (!this.#openMenuAC) {
-            this.#triggeringButton.click();
-          }
-          this.#menuItems.find(item => !item.disabled && !item.classList.contains("hidden")).focus();
-          stopEvent(e);
-          break;
-        case "ArrowUp":
-        case "End":
-          if (!this.#openMenuAC) {
-            this.#triggeringButton.click();
-          }
-          this.#menuItems.findLast(item => !item.disabled && !item.classList.contains("hidden")).focus();
-          stopEvent(e);
-          break;
-        case "Escape":
-          this.#closeMenu();
-          stopEvent(e);
-          break;
-      }
-    }, {
-      signal
-    });
-  }
-  #goToNextItem(element, forward, check = () => true) {
-    const index = this.#lastIndex === -1 ? this.#menuItems.indexOf(element) : this.#lastIndex;
-    const len = this.#menuItems.length;
-    const increment = forward ? 1 : len - 1;
-    for (let i = (index + increment) % len; i !== index; i = (i + increment) % len) {
-      const menuItem = this.#menuItems[i];
-      if (!menuItem.disabled && !menuItem.classList.contains("hidden") && check(menuItem)) {
-        menuItem.focus();
-        this.#lastIndex = i;
-        break;
-      }
-    }
-  }
-  destroy() {
-    this.#closeMenu();
-    this.#menuAC?.abort();
-    this.#menuAC = null;
-  }
-}
-
 ;// ./web/views_manager.js
 
 
@@ -17365,7 +17310,8 @@ const PDFViewerApplication = {
         pageColors,
         abortSignal,
         enableHWA,
-        enableSplitMerge: AppOptions.get("enableSplitMerge")
+        enableSplitMerge: AppOptions.get("enableSplitMerge"),
+        manageMenu: appConfig.viewsManager.manageMenu
       });
       renderingQueue.setThumbnailViewer(this.pdfThumbnailViewer);
     }
@@ -18374,6 +18320,7 @@ const PDFViewerApplication = {
     eventBus._on("openfile", onOpenFile.bind(this), opts);
     eventBus._on("pagesedited", this.onPagesEdited.bind(this), opts);
     eventBus._on("beforepagesedited", this.onBeforePagesEdited.bind(this), opts);
+    eventBus._on("savepageseditedpdf", this.onSavePagesEditedPDF.bind(this), opts);
   },
   bindWindowEvents() {
     if (this._windowAbortController) {
@@ -18521,6 +18468,29 @@ const PDFViewerApplication = {
   },
   onPagesEdited(data) {
     this.pdfViewer.onPagesEdited(data);
+  },
+  async onSavePagesEditedPDF({
+    data: {
+      includePages,
+      excludePages,
+      pageIndices
+    }
+  }) {
+    if (!this.pdfDocument) {
+      return;
+    }
+    const pageInfo = {
+      document: null,
+      includePages,
+      excludePages,
+      pageIndices
+    };
+    const modifiedPdfBytes = await this.pdfDocument.extractPages([pageInfo]);
+    if (!modifiedPdfBytes) {
+      console.error("Something wrong happened when saving the edited PDF.\nPlease file a bug.");
+      return;
+    }
+    this.downloadManager.download(modifiedPdfBytes, this._downloadUrl, this._docFilename);
   },
   _accumulateTicks(ticks, prop) {
     if (this[prop] > 0 && ticks < 0 || this[prop] < 0 && ticks > 0) {
@@ -19234,7 +19204,15 @@ function getViewerConfiguration() {
       layersView: document.getElementById("layersView"),
       viewsManagerAddFileButton: document.getElementById("viewsManagerAddFileButton"),
       viewsManagerCurrentOutlineButton: document.getElementById("viewsManagerCurrentOutlineButton"),
-      viewsManagerHeaderLabel: document.getElementById("viewsManagerHeaderLabel")
+      viewsManagerHeaderLabel: document.getElementById("viewsManagerHeaderLabel"),
+      manageMenu: {
+        button: document.getElementById("viewsManagerStatusActionButton"),
+        menu: document.getElementById("viewsManagerStatusActionOptions"),
+        copy: document.getElementById("viewsManagerStatusActionCopy"),
+        cut: document.getElementById("viewsManagerStatusActionCut"),
+        delete: document.getElementById("viewsManagerStatusActionDelete"),
+        saveAs: document.getElementById("viewsManagerStatusActionSaveAs")
+      }
     },
     findBar: {
       bar: document.getElementById("findbar"),

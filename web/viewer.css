@@ -6721,6 +6721,7 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
   max-width:var(--sidebar-max-width);
   -webkit-backdrop-filter:var(--sidebar-backdrop-filter);
           backdrop-filter:var(--sidebar-backdrop-filter);
+  box-sizing:border-box;
 }
 
 .sidebar .sidebarResizer{
