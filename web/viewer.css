@@ -5293,19 +5293,6 @@
       gap:12px;
     }
 
-:is(:is(#altTextSettingsDialog #altTextSettingsContainer) #aiModelSettings) button{
-        width:-moz-fit-content;
-        width:fit-content;
-      }
-
-.download:is(:is(#altTextSettingsDialog #altTextSettingsContainer) #aiModelSettings) #deleteModelButton{
-          display:none;
-        }
-
-:is(:is(#altTextSettingsDialog #altTextSettingsContainer) #aiModelSettings):not(.download) #downloadModelButton{
-          display:none;
-        }
-
 :is(#altTextSettingsDialog #altTextSettingsContainer) #automaticAltText,:is(#altTextSettingsDialog #altTextSettingsContainer) #altTextEditor{
       display:flex;
       flex-direction:column;
