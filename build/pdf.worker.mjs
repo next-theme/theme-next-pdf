@@ -21,8 +21,8 @@
  */
 
 /**
- * pdfjsVersion = 5.4.0
- * pdfjsBuild = c00591c
+ * pdfjsVersion = 5.5.0
+ * pdfjsBuild = c574694
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -407,6 +407,9 @@ function updateUrlHash(url, hash, allowRel = false) {
     return url.split("#", 1)[0] + `${hash ? `#${hash}` : ""}`;
   }
   return "";
+}
+function stripPath(str) {
+  return str.substring(str.lastIndexOf("/") + 1);
 }
 function shadow(obj, prop, value, nonSerializable = false) {
   Object.defineProperty(obj, prop, {
@@ -1370,7 +1373,7 @@ async function fetchBinaryData(url) {
   if (!response.ok) {
     throw new Error(`Failed to fetch file "${url}" with "${response.statusText}".`);
   }
-  return new Uint8Array(await response.arrayBuffer());
+  return response.bytes();
 }
 function getInheritableProperty({
   dict,
@@ -3116,7 +3119,7 @@ class ChunkedStreamManager {
       }) => {
         try {
           if (done) {
-            resolve(arrayBuffersToBytes(chunks));
+            resolve(chunks.length > 0 || !this.disableAutoFetch ? arrayBuffersToBytes(chunks) : null);
             chunks = null;
             return;
           }
@@ -3129,6 +3132,9 @@ class ChunkedStreamManager {
       rangeReader.read().then(readChunk, reject);
     }).then(data => {
       if (this.aborted) {
+        return;
+      }
+      if (!data) {
         return;
       }
       this.onReceiveData({
@@ -3340,27 +3346,28 @@ function convertBlackAndWhiteToRGBA({
   const [zeroMapping, oneMapping] = inverseDecode ? [nonBlackColor, black] : [black, nonBlackColor];
   const widthInSource = width >> 3;
   const widthRemainder = width & 7;
+  const xorMask = zeroMapping ^ oneMapping;
   const srcLength = src.length;
   dest = new Uint32Array(dest.buffer);
   let destPos = 0;
-  for (let i = 0; i < height; i++) {
-    for (const max = srcPos + widthInSource; srcPos < max; srcPos++) {
-      const elem = srcPos < srcLength ? src[srcPos] : 255;
-      dest[destPos++] = elem & 0b10000000 ? oneMapping : zeroMapping;
-      dest[destPos++] = elem & 0b1000000 ? oneMapping : zeroMapping;
-      dest[destPos++] = elem & 0b100000 ? oneMapping : zeroMapping;
-      dest[destPos++] = elem & 0b10000 ? oneMapping : zeroMapping;
-      dest[destPos++] = elem & 0b1000 ? oneMapping : zeroMapping;
-      dest[destPos++] = elem & 0b100 ? oneMapping : zeroMapping;
-      dest[destPos++] = elem & 0b10 ? oneMapping : zeroMapping;
-      dest[destPos++] = elem & 0b1 ? oneMapping : zeroMapping;
+  for (let i = 0; i < height; ++i) {
+    for (const max = srcPos + widthInSource; srcPos < max; ++srcPos, destPos += 8) {
+      const elem = src[srcPos];
+      dest[destPos] = zeroMapping ^ -(elem >> 7 & 1) & xorMask;
+      dest[destPos + 1] = zeroMapping ^ -(elem >> 6 & 1) & xorMask;
+      dest[destPos + 2] = zeroMapping ^ -(elem >> 5 & 1) & xorMask;
+      dest[destPos + 3] = zeroMapping ^ -(elem >> 4 & 1) & xorMask;
+      dest[destPos + 4] = zeroMapping ^ -(elem >> 3 & 1) & xorMask;
+      dest[destPos + 5] = zeroMapping ^ -(elem >> 2 & 1) & xorMask;
+      dest[destPos + 6] = zeroMapping ^ -(elem >> 1 & 1) & xorMask;
+      dest[destPos + 7] = zeroMapping ^ -(elem & 1) & xorMask;
     }
     if (widthRemainder === 0) {
       continue;
     }
     const elem = srcPos < srcLength ? src[srcPos++] : 255;
-    for (let j = 0; j < widthRemainder; j++) {
-      dest[destPos++] = elem & 1 << 7 - j ? oneMapping : zeroMapping;
+    for (let j = 0; j < widthRemainder; ++j, ++destPos) {
+      dest[destPos] = zeroMapping ^ -(elem >> 7 - j & 1) & xorMask;
     }
   }
   return {
@@ -3380,31 +3387,32 @@ function convertRGBToRGBA({
   const len = width * height * 3;
   const len32 = len >> 2;
   const src32 = new Uint32Array(src.buffer, srcPos, len32);
+  const alphaMask = FeatureTest.isLittleEndian ? 0xff000000 : 0xff;
   if (FeatureTest.isLittleEndian) {
     for (; i < len32 - 2; i += 3, destPos += 4) {
-      const s1 = src32[i];
-      const s2 = src32[i + 1];
-      const s3 = src32[i + 2];
-      dest[destPos] = s1 | 0xff000000;
-      dest[destPos + 1] = s1 >>> 24 | s2 << 8 | 0xff000000;
-      dest[destPos + 2] = s2 >>> 16 | s3 << 16 | 0xff000000;
-      dest[destPos + 3] = s3 >>> 8 | 0xff000000;
+      const s1 = src32[i],
+        s2 = src32[i + 1],
+        s3 = src32[i + 2];
+      dest[destPos] = s1 | alphaMask;
+      dest[destPos + 1] = s1 >>> 24 | s2 << 8 | alphaMask;
+      dest[destPos + 2] = s2 >>> 16 | s3 << 16 | alphaMask;
+      dest[destPos + 3] = s3 >>> 8 | alphaMask;
     }
     for (let j = i * 4, jj = srcPos + len; j < jj; j += 3) {
-      dest[destPos++] = src[j] | src[j + 1] << 8 | src[j + 2] << 16 | 0xff000000;
+      dest[destPos++] = src[j] | src[j + 1] << 8 | src[j + 2] << 16 | alphaMask;
     }
   } else {
     for (; i < len32 - 2; i += 3, destPos += 4) {
-      const s1 = src32[i];
-      const s2 = src32[i + 1];
-      const s3 = src32[i + 2];
-      dest[destPos] = s1 | 0xff;
-      dest[destPos + 1] = s1 << 24 | s2 >>> 8 | 0xff;
-      dest[destPos + 2] = s2 << 16 | s3 >>> 16 | 0xff;
-      dest[destPos + 3] = s3 << 8 | 0xff;
+      const s1 = src32[i],
+        s2 = src32[i + 1],
+        s3 = src32[i + 2];
+      dest[destPos] = s1 | alphaMask;
+      dest[destPos + 1] = s1 << 24 | s2 >>> 8 | alphaMask;
+      dest[destPos + 2] = s2 << 16 | s3 >>> 16 | alphaMask;
+      dest[destPos + 3] = s3 << 8 | alphaMask;
     }
     for (let j = i * 4, jj = srcPos + len; j < jj; j += 3) {
-      dest[destPos++] = src[j] << 24 | src[j + 1] << 16 | src[j + 2] << 8 | 0xff;
+      dest[destPos++] = src[j] << 24 | src[j + 1] << 16 | src[j + 2] << 8 | alphaMask;
     }
   }
   return {
@@ -3958,10 +3966,11 @@ async function JBig2(moduleArg = {}) {
       return;
     }
     try {
-      func();
-      maybeExit();
+      return func();
     } catch (e) {
       handleException(e);
+    } finally {
+      maybeExit();
     }
   };
   var _emscripten_get_now = () => performance.now();
@@ -20207,20 +20216,18 @@ class CFFParser {
   }
 }
 class CFF {
-  constructor() {
-    this.header = null;
-    this.names = [];
-    this.topDict = null;
-    this.strings = new CFFStrings();
-    this.globalSubrIndex = null;
-    this.encoding = null;
-    this.charset = null;
-    this.charStrings = null;
-    this.fdArray = [];
-    this.fdSelect = null;
-    this.isCIDFont = false;
-    this.charStringCount = 0;
-  }
+  header = null;
+  names = [];
+  topDict = null;
+  strings = new CFFStrings();
+  globalSubrIndex = null;
+  encoding = null;
+  charset = null;
+  charStrings = null;
+  fdArray = [];
+  fdSelect = null;
+  isCIDFont = false;
+  charStringCount = 0;
   duplicateFirstGlyph() {
     if (this.charStrings.count >= 65535) {
       warn("Not enough space in charstrings to duplicate first glyph.");
@@ -26422,13 +26429,11 @@ const COMMAND_MAP = {
   hvcurveto: [31]
 };
 class Type1CharString {
-  constructor() {
-    this.width = 0;
-    this.lsb = 0;
-    this.flexing = false;
-    this.output = [];
-    this.stack = [];
-  }
+  width = 0;
+  lsb = 0;
+  flexing = false;
+  output = [];
+  stack = [];
   convert(encoded, subrs, seacAnalysisEnabled) {
     const count = encoded.length;
     let error = false;
@@ -27845,7 +27850,7 @@ class Font {
         nonStdFontMap = getNonStdFontMap(),
         serifFonts = getSerifFonts();
       for (const namePart of name.split("+")) {
-        let fontName = namePart.replaceAll(/[,_]/g, "-");
+        let fontName = normalizeFontName(namePart);
         fontName = stdFontMap[fontName] || nonStdFontMap[fontName] || fontName;
         fontName = fontName.split("-", 1)[0];
         if (serifFonts[fontName]) {
@@ -37326,13 +37331,11 @@ class PartialEvaluator {
     let defaultWidth = 0;
     let widths = Object.create(null);
     let monospace = false;
+    let fontName = normalizeFontName(name);
     const stdFontMap = getStdFontMap();
-    let lookupName = stdFontMap[name] || name;
+    fontName = stdFontMap[fontName] || fontName;
     const Metrics = getMetrics();
-    if (!(lookupName in Metrics)) {
-      lookupName = this.isSerifFont(name) ? "Times-Roman" : "Helvetica";
-    }
-    const glyphWidths = Metrics[lookupName];
+    const glyphWidths = Metrics[fontName] ?? Metrics[this.isSerifFont(name) ? "Times-Roman" : "Helvetica"];
     if (typeof glyphWidths === "number") {
       defaultWidth = glyphWidths;
       monospace = true;
@@ -37502,7 +37505,7 @@ class PartialEvaluator {
         if (!(baseFontName instanceof Name)) {
           throw new FormatError("Base font is not specified");
         }
-        baseFontName = baseFontName.name.replaceAll(/[,_]/g, "-");
+        baseFontName = normalizeFontName(baseFontName.name);
         const metrics = this.getBaseFontMetrics(baseFontName);
         const fontNameWoStyle = baseFontName.split("-", 1)[0];
         const flags = (this.isSerifFont(fontNameWoStyle) ? FontFlags.Serif : 0) | (metrics.monospace ? FontFlags.FixedPitch : 0) | (getSymbolsFonts()[fontNameWoStyle] ? FontFlags.Symbolic : FontFlags.Nonsymbolic);
@@ -39096,9 +39099,6 @@ function pickPlatformItem(dict) {
     }
   }
   return null;
-}
-function stripPath(str) {
-  return str.substring(str.lastIndexOf("/") + 1);
 }
 class FileSpec {
   #contentAvailable = false;
@@ -53564,14 +53564,12 @@ class Annotation {
   }
 }
 class AnnotationBorderStyle {
-  constructor() {
-    this.width = 1;
-    this.rawWidth = 1;
-    this.style = AnnotationBorderStyleType.SOLID;
-    this.dashArray = [3];
-    this.horizontalCornerRadius = 0;
-    this.verticalCornerRadius = 0;
-  }
+  width = 1;
+  rawWidth = 1;
+  style = AnnotationBorderStyleType.SOLID;
+  dashArray = [3];
+  horizontalCornerRadius = 0;
+  verticalCornerRadius = 0;
   setWidth(width, rect = [0, 0, 0, 0]) {
     if (width instanceof Name) {
       this.width = 0;
@@ -57016,9 +57014,9 @@ class DecryptStream extends DecodeStream {
 
 
 class ARCFourCipher {
+  a = 0;
+  b = 0;
   constructor(key) {
-    this.a = 0;
-    this.b = 0;
     const s = new Uint8Array(256);
     const keyLength = key.length;
     for (let i = 0; i < 256; ++i) {
@@ -60989,37 +60987,37 @@ class XRefWrapper {
   }
 }
 class PDFEditor {
+  hasSingleFile = false;
+  currentDocument = null;
+  oldPages = [];
+  newPages = [];
+  xref = [null];
+  xrefWrapper = new XRefWrapper(this.xref);
+  newRefCount = 1;
+  namesDict = null;
+  version = "1.7";
+  pageLabels = null;
+  namedDestinations = new Map();
+  parentTree = new Map();
+  structTreeKids = [];
+  idTree = new Map();
+  classMap = new Dict();
+  roleMap = new Dict();
+  namespaces = new Map();
+  structTreeAF = [];
+  structTreePronunciationLexicon = [];
   constructor({
     useObjectStreams = true,
     title = "",
     author = ""
   } = {}) {
-    this.hasSingleFile = false;
-    this.currentDocument = null;
-    this.oldPages = [];
-    this.newPages = [];
-    this.xref = [null];
-    this.xrefWrapper = new XRefWrapper(this.xref);
-    this.newRefCount = 1;
     [this.rootRef, this.rootDict] = this.newDict;
     [this.infoRef, this.infoDict] = this.newDict;
     [this.pagesRef, this.pagesDict] = this.newDict;
-    this.namesDict = null;
     this.useObjectStreams = useObjectStreams;
     this.objStreamRefs = useObjectStreams ? new Set() : null;
-    this.version = "1.7";
     this.title = title;
     this.author = author;
-    this.pageLabels = null;
-    this.namedDestinations = new Map();
-    this.parentTree = new Map();
-    this.structTreeKids = [];
-    this.idTree = new Map();
-    this.classMap = new Dict();
-    this.roleMap = new Dict();
-    this.namespaces = new Map();
-    this.structTreeAF = [];
-    this.structTreePronunciationLexicon = [];
   }
   get newRef() {
     const ref = Ref.get(this.newRefCount++, 0);
@@ -62486,7 +62484,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = "5.4.0";
+    const workerVersion = "5.5.0";
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }

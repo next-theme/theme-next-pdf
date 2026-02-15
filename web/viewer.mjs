@@ -21,8 +21,8 @@
  */
 
 /**
- * pdfjsVersion = 5.4.0
- * pdfjsBuild = c00591c
+ * pdfjsVersion = 5.5.0
+ * pdfjsBuild = c574694
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -70,7 +70,7 @@ const {
   findContrastColor,
   getDocument,
   getFilenameFromUrl,
-  getPdfFilenameFromUrl: pdfjs_getPdfFilenameFromUrl,
+  getPdfFilenameFromUrl,
   getRGB,
   getUuid,
   getXfaPageViewport,
@@ -85,7 +85,6 @@ const {
   normalizeUnicode,
   OPS,
   OutputScale,
-  PagesMapper,
   PasswordResponses,
   PDFDataRangeTransport,
   PDFDateString,
@@ -3121,6 +3120,7 @@ class genericl10n_GenericL10n extends L10n {
 }
 
 ;// ./web/generic_scripting.js
+/* unused harmony import specifier */ var generic_scripting_getPdfFilenameFromUrl;
 
 async function docProperties(pdfDocument) {
   const url = "",
@@ -3135,7 +3135,7 @@ async function docProperties(pdfDocument) {
     ...info,
     baseURL: baseUrl,
     filesize: contentLength || (await pdfDocument.getDownloadInfo()).length,
-    filename: contentDispositionFilename || getPdfFilenameFromUrl(url),
+    filename: contentDispositionFilename || generic_scripting_getPdfFilenameFromUrl(url),
     metadata: metadata?.getRaw(),
     authors: metadata?.get("dc:creator"),
     numPages: pdfDocument.numPages,
@@ -7296,8 +7296,8 @@ const MATCHES_COUNT_LIMIT = 1000;
 class PDFFindBar {
   #mainContainer;
   #resizeObserver = new ResizeObserver(this.#resizeObserverCallback.bind(this));
+  opened = false;
   constructor(options, mainContainer, eventBus) {
-    this.opened = false;
     this.bar = options.bar;
     this.toggleButton = options.toggleButton;
     this.findField = options.findField;
@@ -9043,43 +9043,43 @@ class RenderableView {
 
 const CLEANUP_TIMEOUT = 30000;
 class PDFRenderingQueue {
+  #highestPriorityPage = null;
+  #idleTimeout = null;
+  #pdfThumbnailViewer = null;
+  #pdfViewer = null;
+  isThumbnailViewEnabled = false;
+  onIdle = null;
+  printing = false;
   constructor() {
-    this.pdfViewer = null;
-    this.pdfThumbnailViewer = null;
-    this.onIdle = null;
-    this.highestPriorityPage = null;
-    this.idleTimeout = null;
-    this.printing = false;
-    this.isThumbnailViewEnabled = false;
     Object.defineProperty(this, "hasViewer", {
-      value: () => !!this.pdfViewer
+      value: () => !!this.#pdfViewer
     });
   }
   setViewer(pdfViewer) {
-    this.pdfViewer = pdfViewer;
+    this.#pdfViewer = pdfViewer;
   }
   setThumbnailViewer(pdfThumbnailViewer) {
-    this.pdfThumbnailViewer = pdfThumbnailViewer;
+    this.#pdfThumbnailViewer = pdfThumbnailViewer;
   }
   isHighestPriority(view) {
-    return this.highestPriorityPage === view.renderingId;
+    return this.#highestPriorityPage === view.renderingId;
   }
   renderHighestPriority(currentlyVisiblePages) {
-    if (this.idleTimeout) {
-      clearTimeout(this.idleTimeout);
-      this.idleTimeout = null;
+    if (this.#idleTimeout) {
+      clearTimeout(this.#idleTimeout);
+      this.#idleTimeout = null;
     }
-    if (this.pdfViewer.forceRendering(currentlyVisiblePages)) {
+    if (this.#pdfViewer.forceRendering(currentlyVisiblePages)) {
       return;
     }
-    if (this.isThumbnailViewEnabled && this.pdfThumbnailViewer?.forceRendering()) {
+    if (this.isThumbnailViewEnabled && this.#pdfThumbnailViewer?.forceRendering()) {
       return;
     }
     if (this.printing) {
       return;
     }
     if (this.onIdle) {
-      this.idleTimeout = setTimeout(this.onIdle.bind(this), CLEANUP_TIMEOUT);
+      this.#idleTimeout = setTimeout(this.onIdle.bind(this), CLEANUP_TIMEOUT);
     }
   }
   getHighestPriority(visible, views, scrolledDown, preRenderExtra = false, ignoreDetailViews = false) {
@@ -9141,14 +9141,14 @@ class PDFRenderingQueue {
       case RenderingStates.FINISHED:
         return false;
       case RenderingStates.PAUSED:
-        this.highestPriorityPage = view.renderingId;
+        this.#highestPriorityPage = view.renderingId;
         view.resume();
         break;
       case RenderingStates.RUNNING:
-        this.highestPriorityPage = view.renderingId;
+        this.#highestPriorityPage = view.renderingId;
         break;
       case RenderingStates.INITIAL:
-        this.highestPriorityPage = view.renderingId;
+        this.#highestPriorityPage = view.renderingId;
         view.draw().finally(() => {
           this.renderHighestPriority();
         }).catch(reason => {
@@ -10085,7 +10085,7 @@ class PDFThumbnailViewer {
   #pageNumberToRemove = NaN;
   #currentScrollBottom = 0;
   #currentScrollTop = 0;
-  #pagesMapper = PagesMapper.instance;
+  #pagesMapper = null;
   #manageSaveAsButton = null;
   constructor({
     container,
@@ -10233,6 +10233,7 @@ class PDFThumbnailViewer {
     if (!pdfDocument) {
       return;
     }
+    this.#pagesMapper = pdfDocument.pagesMapper;
     const firstPagePromise = pdfDocument.getPage(1);
     const optionalContentConfigPromise = pdfDocument.getOptionalContentConfig({
       intent: "display"
@@ -12635,8 +12636,10 @@ class PDFPageView extends BasePDFPageView {
   #layers = [null, null, null, null];
   constructor(options) {
     super(options);
-    const container = options.container;
-    const defaultViewport = options.defaultViewport;
+    const {
+      container,
+      defaultViewport
+    } = options;
     this.renderingId = "page" + this.id;
     this.#layerProperties = options.layerProperties || DEFAULT_LAYER_PROPERTIES;
     this.pdfPage = null;
@@ -13502,9 +13505,8 @@ class PDFViewer {
   #supportsPinchToZoom = true;
   #textLayerMode = TextLayerMode.ENABLE;
   #viewerAlert = null;
-  #pagesMapper = PagesMapper.instance;
   constructor(options) {
-    const viewerVersion = "5.4.0";
+    const viewerVersion = "5.5.0";
     if (version !== viewerVersion) {
       throw new Error(`The API version "${version}" does not match the Viewer version "${viewerVersion}".`);
     }
@@ -13886,7 +13888,6 @@ class PDFViewer {
       this.#annotationEditorUIManager = null;
       this.#annotationEditorMode = AnnotationEditorType.NONE;
       this.#printingAllowed = true;
-      this.#pagesMapper.pagesNumber = 0;
     }
     this.pdfDocument = pdfDocument;
     if (!pdfDocument) {
@@ -17635,7 +17636,7 @@ const PDFViewerApplication = {
     if (isDataScheme(url)) {
       this._hideViewBookmark();
     }
-    let title = pdfjs_getPdfFilenameFromUrl(url, "");
+    let title = getPdfFilenameFromUrl(url, "");
     if (!title) {
       try {
         title = decodeURIComponent(getFilenameFromUrl(url));
@@ -17652,7 +17653,7 @@ const PDFViewerApplication = {
     document.title = `${editorIndicator ? "* " : ""}${title}`;
   },
   get _docFilename() {
-    return this._contentDispositionFilename || pdfjs_getPdfFilenameFromUrl(this.url);
+    return this._contentDispositionFilename || getPdfFilenameFromUrl(this.url);
   },
   get _docTitle() {
     const {

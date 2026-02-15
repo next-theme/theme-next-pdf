@@ -21,8 +21,8 @@
  */
 
 /**
- * pdfjsVersion = 5.4.0
- * pdfjsBuild = c00591c
+ * pdfjsVersion = 5.5.0
+ * pdfjsBuild = c574694
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -125,7 +125,7 @@ const TextRenderingMode = {
   FILL_STROKE_MASK: 3,
   ADD_TO_PATH_FLAG: 4
 };
-const util_ImageKind = {
+const ImageKind = {
   GRAYSCALE_1BPP: 1,
   RGB_24BPP: 2,
   RGBA_32BPP: 3
@@ -408,6 +408,9 @@ function updateUrlHash(url, hash, allowRel = false) {
   }
   return "";
 }
+function stripPath(str) {
+  return str.substring(str.lastIndexOf("/") + 1);
+}
 function shadow(obj, prop, value, nonSerializable = false) {
   Object.defineProperty(obj, prop, {
     value,
@@ -508,7 +511,7 @@ function isEvalSupported() {
     return false;
   }
 }
-class util_FeatureTest {
+class FeatureTest {
   static get isLittleEndian() {
     return shadow(this, "isLittleEndian", isLittleEndian());
   }
@@ -1173,10 +1176,10 @@ async function fetchData(url, type = "text") {
       throw new Error(response.statusText);
     }
     switch (type) {
-      case "arraybuffer":
-        return response.arrayBuffer();
       case "blob":
         return response.blob();
+      case "bytes":
+        return response.bytes();
       case "json":
         return response.json();
     }
@@ -1185,14 +1188,16 @@ async function fetchData(url, type = "text") {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open("GET", url, true);
-    request.responseType = type;
+    request.responseType = type === "bytes" ? "arraybuffer" : type;
     request.onreadystatechange = () => {
       if (request.readyState !== XMLHttpRequest.DONE) {
         return;
       }
       if (request.status === 200 || request.status === 0) {
         switch (type) {
-          case "arraybuffer":
+          case "bytes":
+            resolve(new Uint8Array(request.response));
+            return;
           case "blob":
           case "json":
             resolve(request.response);
@@ -1342,7 +1347,7 @@ function isPdfFile(filename) {
 }
 function getFilenameFromUrl(url) {
   [url] = url.split(/[#?]/, 1);
-  return url.substring(url.lastIndexOf("/") + 1);
+  return stripPath(url);
 }
 function getPdfFilenameFromUrl(url, defaultFilename = "document.pdf") {
   if (typeof url !== "string") {
@@ -1379,7 +1384,7 @@ function getPdfFilenameFromUrl(url, defaultFilename = "document.pdf") {
     try {
       let decoded = decodeURIComponent(name);
       if (decoded.includes("/")) {
-        decoded = decoded.split("/").at(-1);
+        decoded = stripPath(decoded);
         if (decoded.test(/^\.pdf$/i)) {
           return decoded;
         }
@@ -1391,7 +1396,7 @@ function getPdfFilenameFromUrl(url, defaultFilename = "document.pdf") {
     }
   };
   const pdfRegex = /\.pdf$/i;
-  const filename = newURL.pathname.split("/").at(-1);
+  const filename = stripPath(newURL.pathname);
   if (pdfRegex.test(filename)) {
     return decode(filename);
   }
@@ -1583,7 +1588,7 @@ function setLayerDimensions(div, viewport, mustFlip = false, mustRotate = true) 
     const {
       style
     } = div;
-    const useRound = util_FeatureTest.isCSSRoundSupported;
+    const useRound = FeatureTest.isCSSRoundSupported;
     const w = `var(--total-scale-factor) * ${pageWidth}px`,
       h = `var(--total-scale-factor) * ${pageHeight}px`;
     const widthStr = useRound ? `round(down, ${w}, var(--scale-round-x))` : `calc(${w})`,
@@ -1855,58 +1860,58 @@ function makePathFromDrawOPS(data) {
   return path;
 }
 class PagesMapper {
-  static #idToPageNumber = null;
-  static #pageNumberToId = null;
-  static #prevIdToPageNumber = null;
-  static #pagesNumber = 0;
-  static #listeners = [];
+  #idToPageNumber = null;
+  #pageNumberToId = null;
+  #prevIdToPageNumber = null;
+  #pagesNumber = 0;
+  #listeners = [];
   get pagesNumber() {
-    return PagesMapper.#pagesNumber;
+    return this.#pagesNumber;
   }
   set pagesNumber(n) {
-    if (PagesMapper.#pagesNumber === n) {
+    if (this.#pagesNumber === n) {
       return;
     }
-    PagesMapper.#pagesNumber = n;
+    this.#pagesNumber = n;
     if (n === 0) {
-      PagesMapper.#pageNumberToId = null;
-      PagesMapper.#idToPageNumber = null;
+      this.#pageNumberToId = null;
+      this.#idToPageNumber = null;
     }
   }
   addListener(listener) {
-    PagesMapper.#listeners.push(listener);
+    this.#listeners.push(listener);
   }
   removeListener(listener) {
-    const index = PagesMapper.#listeners.indexOf(listener);
+    const index = this.#listeners.indexOf(listener);
     if (index >= 0) {
-      PagesMapper.#listeners.splice(index, 1);
+      this.#listeners.splice(index, 1);
     }
   }
   #updateListeners() {
-    for (const listener of PagesMapper.#listeners) {
+    for (const listener of this.#listeners) {
       listener();
     }
   }
   #init(mustInit) {
-    if (PagesMapper.#pageNumberToId) {
+    if (this.#pageNumberToId) {
       return;
     }
-    const n = PagesMapper.#pagesNumber;
+    const n = this.#pagesNumber;
     const array = new Uint32Array(3 * n);
-    const pageNumberToId = PagesMapper.#pageNumberToId = array.subarray(0, n);
-    const idToPageNumber = PagesMapper.#idToPageNumber = array.subarray(n, 2 * n);
+    const pageNumberToId = this.#pageNumberToId = array.subarray(0, n);
+    const idToPageNumber = this.#idToPageNumber = array.subarray(n, 2 * n);
     if (mustInit) {
       for (let i = 0; i < n; i++) {
         pageNumberToId[i] = idToPageNumber[i] = i + 1;
       }
     }
-    PagesMapper.#prevIdToPageNumber = array.subarray(2 * n);
+    this.#prevIdToPageNumber = array.subarray(2 * n);
   }
   movePages(selectedPages, pagesToMove, index) {
     this.#init(true);
-    const pageNumberToId = PagesMapper.#pageNumberToId;
-    const idToPageNumber = PagesMapper.#idToPageNumber;
-    PagesMapper.#prevIdToPageNumber.set(idToPageNumber);
+    const pageNumberToId = this.#pageNumberToId;
+    const idToPageNumber = this.#idToPageNumber;
+    this.#prevIdToPageNumber.set(idToPageNumber);
     const movedCount = pagesToMove.length;
     const mappedPagesToMove = new Uint32Array(movedCount);
     let removedBeforeTarget = 0;
@@ -1917,7 +1922,7 @@ class PagesMapper {
         removedBeforeTarget += 1;
       }
     }
-    const pagesNumber = PagesMapper.#pagesNumber;
+    const pagesNumber = this.#pagesNumber;
     let adjustedTarget = index - removedBeforeTarget;
     const remainingLen = pagesNumber - movedCount;
     adjustedTarget = MathClamp(adjustedTarget, 0, remainingLen);
@@ -1940,27 +1945,24 @@ class PagesMapper {
     }
   }
   hasBeenAltered() {
-    return PagesMapper.#pageNumberToId !== null;
+    return this.#pageNumberToId !== null;
   }
   getPageMappingForSaving() {
     return {
-      pageIndices: PagesMapper.#idToPageNumber ? PagesMapper.#idToPageNumber.map(x => x - 1) : null
+      pageIndices: this.#idToPageNumber ? this.#idToPageNumber.map(x => x - 1) : null
     };
   }
   getPrevPageNumber(pageNumber) {
-    return PagesMapper.#prevIdToPageNumber[PagesMapper.#pageNumberToId[pageNumber - 1] - 1];
+    return this.#prevIdToPageNumber[this.#pageNumberToId[pageNumber - 1] - 1];
   }
   getPageNumber(id) {
-    return PagesMapper.#idToPageNumber?.[id - 1] ?? id;
+    return this.#idToPageNumber?.[id - 1] ?? id;
   }
   getPageId(pageNumber) {
-    return PagesMapper.#pageNumberToId?.[pageNumber - 1] ?? pageNumber;
-  }
-  static get instance() {
-    return shadow(this, "instance", new PagesMapper());
+    return this.#pageNumberToId?.[pageNumber - 1] ?? pageNumber;
   }
   getMapping() {
-    return PagesMapper.#pageNumberToId.subarray(0, this.pagesNumber);
+    return this.#pageNumberToId.subarray(0, this.pagesNumber);
   }
 }
 
@@ -2607,7 +2609,7 @@ class KeyboardManager {
     this.allKeys = new Set();
     const {
       isMac
-    } = util_FeatureTest.platform;
+    } = FeatureTest.platform;
     for (const [keys, callback, options = {}] of callbacks) {
       for (const key of keys) {
         const isMacKey = key.startsWith("mac+");
@@ -2855,6 +2857,10 @@ class AnnotationEditorUIManager {
     window.addEventListener("pointerup", () => {
       this.#isPointerDown = false;
     }, {
+      capture: true,
+      signal
+    });
+    window.addEventListener("beforeunload", this.#beforeUnload.bind(this), {
       capture: true,
       signal
     });
@@ -3217,6 +3223,10 @@ class AnnotationEditorUIManager {
   }
   commentSelection(methodOfCreation = "") {
     this.highlightSelection(methodOfCreation, true);
+  }
+  #beforeUnload(e) {
+    this.commitOrRemove();
+    this.currentLayer?.endDrawingSession(false);
   }
   #displayFloatingToolbar() {
     const selection = document.getSelection();
@@ -5562,7 +5572,7 @@ class AnnotationEditor {
     event.preventDefault();
     const {
       isMac
-    } = util_FeatureTest.platform;
+    } = FeatureTest.platform;
     if (event.button !== 0 || event.ctrlKey && isMac) {
       return;
     }
@@ -6056,7 +6066,7 @@ class AnnotationEditor {
   pointerdown(event) {
     const {
       isMac
-    } = util_FeatureTest.platform;
+    } = FeatureTest.platform;
     if (event.button !== 0 || event.ctrlKey && isMac) {
       event.preventDefault();
       return;
@@ -6071,7 +6081,7 @@ class AnnotationEditor {
   #selectOnPointerEvent(event) {
     const {
       isMac
-    } = util_FeatureTest.platform;
+    } = FeatureTest.platform;
     if (event.ctrlKey && !isMac || event.shiftKey || event.metaKey && isMac) {
       this.parent.toggleSelected(this);
     } else {
@@ -6838,11 +6848,9 @@ class AnnotationStorage {
   #modifiedIds = null;
   #editorsMap = null;
   #storage = new Map();
-  constructor() {
-    this.onSetModified = null;
-    this.onResetModified = null;
-    this.onAnnotationEditor = null;
-  }
+  onSetModified = null;
+  onResetModified = null;
+  onAnnotationEditor = null;
   getValue(key, defaultValue) {
     const value = this.#storage.get(key);
     if (value === undefined) {
@@ -7197,7 +7205,7 @@ class FontLoader {
     return shadow(this, "isFontLoadingAPISupported", hasFonts);
   }
   get isSyncFontLoadingSupported() {
-    return shadow(this, "isSyncFontLoadingSupported", isNodeJS || util_FeatureTest.platform.isFirefox);
+    return shadow(this, "isSyncFontLoadingSupported", isNodeJS || FeatureTest.platform.isFirefox);
   }
   _queueLoadingCallback(callback) {
     function completeRequest() {
@@ -8092,7 +8100,7 @@ class FontPathInfo {
   static write(path) {
     let data;
     let buffer;
-    if (util_FeatureTest.isFloat16ArraySupported) {
+    if (FeatureTest.isFloat16ArraySupported) {
       buffer = new ArrayBuffer(path.length * 2);
       data = new Float16Array(buffer);
     } else {
@@ -8107,7 +8115,7 @@ class FontPathInfo {
     this.#buffer = buffer;
   }
   get path() {
-    if (util_FeatureTest.isFloat16ArraySupported) {
+    if (FeatureTest.isFloat16ArraySupported) {
       return new Float16Array(this.#buffer);
     }
     return new Float32Array(this.#buffer);
@@ -8705,8 +8713,8 @@ class BaseCMapReaderFactory {
 }
 class DOMCMapReaderFactory extends BaseCMapReaderFactory {
   async _fetch(url) {
-    const data = await fetchData(url, this.isCompressed ? "arraybuffer" : "text");
-    return data instanceof ArrayBuffer ? new Uint8Array(data) : stringToBytes(data);
+    const data = await fetchData(url, this.isCompressed ? "bytes" : "text");
+    return data instanceof Uint8Array ? data : stringToBytes(data);
   }
 }
 
@@ -9075,8 +9083,7 @@ class BaseStandardFontDataFactory {
 }
 class DOMStandardFontDataFactory extends BaseStandardFontDataFactory {
   async _fetch(url) {
-    const data = await fetchData(url, "arraybuffer");
-    return new Uint8Array(data);
+    return fetchData(url, "bytes");
   }
 }
 
@@ -9109,8 +9116,7 @@ class BaseWasmFactory {
 }
 class DOMWasmFactory extends BaseWasmFactory {
   async _fetch(url) {
-    const data = await fetchData(url, "arraybuffer");
-    return new Uint8Array(data);
+    return fetchData(url, "bytes");
   }
 }
 
@@ -10254,12 +10260,14 @@ class TilingPattern {
 }
 
 ;// ./src/shared/image_utils.js
+/* unused harmony import specifier */ var image_utils_ImageKind;
+/* unused harmony import specifier */ var image_utils_FeatureTest;
 
 function convertToRGBA(params) {
   switch (params.kind) {
-    case ImageKind.GRAYSCALE_1BPP:
+    case image_utils_ImageKind.GRAYSCALE_1BPP:
       return convertBlackAndWhiteToRGBA(params);
-    case ImageKind.RGB_24BPP:
+    case image_utils_ImageKind.RGB_24BPP:
       return convertRGBToRGBA(params);
   }
   return null;
@@ -10273,31 +10281,32 @@ function convertBlackAndWhiteToRGBA({
   nonBlackColor = 0xffffffff,
   inverseDecode = false
 }) {
-  const black = util_FeatureTest.isLittleEndian ? 0xff000000 : 0x000000ff;
+  const black = FeatureTest.isLittleEndian ? 0xff000000 : 0x000000ff;
   const [zeroMapping, oneMapping] = inverseDecode ? [nonBlackColor, black] : [black, nonBlackColor];
   const widthInSource = width >> 3;
   const widthRemainder = width & 7;
+  const xorMask = zeroMapping ^ oneMapping;
   const srcLength = src.length;
   dest = new Uint32Array(dest.buffer);
   let destPos = 0;
-  for (let i = 0; i < height; i++) {
-    for (const max = srcPos + widthInSource; srcPos < max; srcPos++) {
-      const elem = srcPos < srcLength ? src[srcPos] : 255;
-      dest[destPos++] = elem & 0b10000000 ? oneMapping : zeroMapping;
-      dest[destPos++] = elem & 0b1000000 ? oneMapping : zeroMapping;
-      dest[destPos++] = elem & 0b100000 ? oneMapping : zeroMapping;
-      dest[destPos++] = elem & 0b10000 ? oneMapping : zeroMapping;
-      dest[destPos++] = elem & 0b1000 ? oneMapping : zeroMapping;
-      dest[destPos++] = elem & 0b100 ? oneMapping : zeroMapping;
-      dest[destPos++] = elem & 0b10 ? oneMapping : zeroMapping;
-      dest[destPos++] = elem & 0b1 ? oneMapping : zeroMapping;
+  for (let i = 0; i < height; ++i) {
+    for (const max = srcPos + widthInSource; srcPos < max; ++srcPos, destPos += 8) {
+      const elem = src[srcPos];
+      dest[destPos] = zeroMapping ^ -(elem >> 7 & 1) & xorMask;
+      dest[destPos + 1] = zeroMapping ^ -(elem >> 6 & 1) & xorMask;
+      dest[destPos + 2] = zeroMapping ^ -(elem >> 5 & 1) & xorMask;
+      dest[destPos + 3] = zeroMapping ^ -(elem >> 4 & 1) & xorMask;
+      dest[destPos + 4] = zeroMapping ^ -(elem >> 3 & 1) & xorMask;
+      dest[destPos + 5] = zeroMapping ^ -(elem >> 2 & 1) & xorMask;
+      dest[destPos + 6] = zeroMapping ^ -(elem >> 1 & 1) & xorMask;
+      dest[destPos + 7] = zeroMapping ^ -(elem & 1) & xorMask;
     }
     if (widthRemainder === 0) {
       continue;
     }
     const elem = srcPos < srcLength ? src[srcPos++] : 255;
-    for (let j = 0; j < widthRemainder; j++) {
-      dest[destPos++] = elem & 1 << 7 - j ? oneMapping : zeroMapping;
+    for (let j = 0; j < widthRemainder; ++j, ++destPos) {
+      dest[destPos] = zeroMapping ^ -(elem >> 7 - j & 1) & xorMask;
     }
   }
   return {
@@ -10317,31 +10326,32 @@ function convertRGBToRGBA({
   const len = width * height * 3;
   const len32 = len >> 2;
   const src32 = new Uint32Array(src.buffer, srcPos, len32);
-  if (FeatureTest.isLittleEndian) {
+  const alphaMask = image_utils_FeatureTest.isLittleEndian ? 0xff000000 : 0xff;
+  if (image_utils_FeatureTest.isLittleEndian) {
     for (; i < len32 - 2; i += 3, destPos += 4) {
-      const s1 = src32[i];
-      const s2 = src32[i + 1];
-      const s3 = src32[i + 2];
-      dest[destPos] = s1 | 0xff000000;
-      dest[destPos + 1] = s1 >>> 24 | s2 << 8 | 0xff000000;
-      dest[destPos + 2] = s2 >>> 16 | s3 << 16 | 0xff000000;
-      dest[destPos + 3] = s3 >>> 8 | 0xff000000;
+      const s1 = src32[i],
+        s2 = src32[i + 1],
+        s3 = src32[i + 2];
+      dest[destPos] = s1 | alphaMask;
+      dest[destPos + 1] = s1 >>> 24 | s2 << 8 | alphaMask;
+      dest[destPos + 2] = s2 >>> 16 | s3 << 16 | alphaMask;
+      dest[destPos + 3] = s3 >>> 8 | alphaMask;
     }
     for (let j = i * 4, jj = srcPos + len; j < jj; j += 3) {
-      dest[destPos++] = src[j] | src[j + 1] << 8 | src[j + 2] << 16 | 0xff000000;
+      dest[destPos++] = src[j] | src[j + 1] << 8 | src[j + 2] << 16 | alphaMask;
     }
   } else {
     for (; i < len32 - 2; i += 3, destPos += 4) {
-      const s1 = src32[i];
-      const s2 = src32[i + 1];
-      const s3 = src32[i + 2];
-      dest[destPos] = s1 | 0xff;
-      dest[destPos + 1] = s1 << 24 | s2 >>> 8 | 0xff;
-      dest[destPos + 2] = s2 << 16 | s3 >>> 16 | 0xff;
-      dest[destPos + 3] = s3 << 8 | 0xff;
+      const s1 = src32[i],
+        s2 = src32[i + 1],
+        s3 = src32[i + 2];
+      dest[destPos] = s1 | alphaMask;
+      dest[destPos + 1] = s1 << 24 | s2 >>> 8 | alphaMask;
+      dest[destPos + 2] = s2 << 16 | s3 >>> 16 | alphaMask;
+      dest[destPos + 3] = s3 << 8 | alphaMask;
     }
     for (let j = i * 4, jj = srcPos + len; j < jj; j += 3) {
-      dest[destPos++] = src[j] << 24 | src[j + 1] << 16 | src[j + 2] << 8 | 0xff;
+      dest[destPos++] = src[j] << 24 | src[j + 1] << 16 | src[j + 2] << 8 | alphaMask;
     }
   }
   return {
@@ -10350,7 +10360,7 @@ function convertRGBToRGBA({
   };
 }
 function grayToRGBA(src, dest) {
-  if (FeatureTest.isLittleEndian) {
+  if (image_utils_FeatureTest.isLittleEndian) {
     for (let i = 0, ii = src.length; i < ii; i++) {
       dest[i] = src[i] * 0x10101 | 0xff000000;
     }
@@ -10619,13 +10629,13 @@ function putBinaryImageData(ctx, imgData) {
   const src = imgData.data;
   const dest = chunkImgData.data;
   let i, j, thisChunkHeight, elemsInThisChunk;
-  if (imgData.kind === util_ImageKind.GRAYSCALE_1BPP) {
+  if (imgData.kind === ImageKind.GRAYSCALE_1BPP) {
     const srcLength = src.byteLength;
     const dest32 = new Uint32Array(dest.buffer, 0, dest.byteLength >> 2);
     const dest32DataLength = dest32.length;
     const fullSrcDiff = width + 7 >> 3;
     const white = 0xffffffff;
-    const black = util_FeatureTest.isLittleEndian ? 0xff000000 : 0x000000ff;
+    const black = FeatureTest.isLittleEndian ? 0xff000000 : 0x000000ff;
     for (i = 0; i < totalChunks; i++) {
       thisChunkHeight = i < fullChunks ? FULL_CHUNK_HEIGHT : partialChunkHeight;
       destPos = 0;
@@ -10661,7 +10671,7 @@ function putBinaryImageData(ctx, imgData) {
       }
       ctx.putImageData(chunkImgData, 0, i * FULL_CHUNK_HEIGHT);
     }
-  } else if (imgData.kind === util_ImageKind.RGBA_32BPP) {
+  } else if (imgData.kind === ImageKind.RGBA_32BPP) {
     j = 0;
     elemsInThisChunk = width * FULL_CHUNK_HEIGHT * 4;
     for (i = 0; i < fullChunks; i++) {
@@ -10675,7 +10685,7 @@ function putBinaryImageData(ctx, imgData) {
       dest.set(src.subarray(srcPos, srcPos + elemsInThisChunk));
       ctx.putImageData(chunkImgData, 0, j);
     }
-  } else if (imgData.kind === util_ImageKind.RGB_24BPP) {
+  } else if (imgData.kind === ImageKind.RGB_24BPP) {
     thisChunkHeight = FULL_CHUNK_HEIGHT;
     elemsInThisChunk = width * thisChunkHeight;
     for (i = 0; i < totalChunks; i++) {
@@ -12886,6 +12896,15 @@ class BasePDFStreamRangeReader {
 function getArrayBuffer(val) {
   return val instanceof Uint8Array && val.byteLength === val.buffer.byteLength ? val.buffer : new Uint8Array(val).buffer;
 }
+function endRequests() {
+  for (const capability of this._requests) {
+    capability.resolve({
+      value: undefined,
+      done: true
+    });
+  }
+  this._requests.length = 0;
+}
 class PDFDataTransportStream extends BasePDFStream {
   _progressiveDone = false;
   _queuedChunks = [];
@@ -12948,6 +12967,7 @@ class PDFDataTransportStream extends BasePDFStream {
   }
 }
 class PDFDataTransportStreamReader extends BasePDFStreamReader {
+  #endRequests = endRequests.bind(this);
   _done = false;
   _queuedChunks = null;
   _requests = [];
@@ -13017,19 +13037,17 @@ class PDFDataTransportStreamReader extends BasePDFStreamReader {
   }
   cancel(reason) {
     this._done = true;
-    for (const capability of this._requests) {
-      capability.resolve({
-        value: undefined,
-        done: true
-      });
-    }
-    this._requests.length = 0;
+    this.#endRequests();
   }
   progressiveDone() {
     this._done ||= true;
+    if (this._queuedChunks.length === 0) {
+      this.#endRequests();
+    }
   }
 }
 class PDFDataTransportStreamRangeReader extends BasePDFStreamRangeReader {
+  #endRequests = endRequests.bind(this);
   onDone = null;
   _begin = -1;
   _done = false;
@@ -13046,18 +13064,12 @@ class PDFDataTransportStreamRangeReader extends BasePDFStreamRangeReader {
     if (this._requests.length === 0) {
       this._queuedChunk = chunk;
     } else {
-      const firstCapability = this._requests.shift();
-      firstCapability.resolve({
+      const capability = this._requests.shift();
+      capability.resolve({
         value: chunk,
         done: false
       });
-      for (const capability of this._requests) {
-        capability.resolve({
-          value: undefined,
-          done: true
-        });
-      }
-      this._requests.length = 0;
+      this.#endRequests();
     }
     this._done = true;
     this.onDone?.();
@@ -13083,13 +13095,7 @@ class PDFDataTransportStreamRangeReader extends BasePDFStreamRangeReader {
   }
   cancel(reason) {
     this._done = true;
-    for (const capability of this._requests) {
-      capability.resolve({
-        value: undefined,
-        done: true
-      });
-    }
-    this._requests.length = 0;
+    this.#endRequests();
     this.onDone?.();
   }
 }
@@ -13326,8 +13332,7 @@ function fetch_stream_getArrayBuffer(val) {
   if (val instanceof ArrayBuffer) {
     return val;
   }
-  warn(`getArrayBuffer - unexpected data format: ${val}`);
-  return new Uint8Array(val).buffer;
+  throw new Error(`getArrayBuffer - unexpected data: ${val}`);
 }
 class PDFFetchStream extends BasePDFStream {
   _responseOrigin = null;
@@ -13452,6 +13457,7 @@ class PDFFetchStreamRangeReader extends BasePDFStreamRangeReader {
 
 
 
+
 const OK_RESPONSE = 200;
 const PARTIAL_CONTENT_RESPONSE = 206;
 function network_getArrayBuffer(val) {
@@ -13558,6 +13564,7 @@ class PDFNetworkStream extends BasePDFStream {
   }
 }
 class PDFNetworkStreamReader extends BasePDFStreamReader {
+  #endRequests = endRequests.bind(this);
   _cachedChunks = [];
   _done = false;
   _requests = [];
@@ -13618,16 +13625,9 @@ class PDFNetworkStreamReader extends BasePDFStreamReader {
       this._cachedChunks.push(chunk);
     }
     this._done = true;
-    if (this._cachedChunks.length > 0) {
-      return;
+    if (this._cachedChunks.length === 0) {
+      this.#endRequests();
     }
-    for (const capability of this._requests) {
-      capability.resolve({
-        value: undefined,
-        done: true
-      });
-    }
-    this._requests.length = 0;
   }
   #onError(status) {
     this._storedError = createResponseError(status, this._stream.url);
@@ -13669,18 +13669,13 @@ class PDFNetworkStreamReader extends BasePDFStreamReader {
   cancel(reason) {
     this._done = true;
     this._headersCapability.reject(reason);
-    for (const capability of this._requests) {
-      capability.resolve({
-        value: undefined,
-        done: true
-      });
-    }
-    this._requests.length = 0;
+    this.#endRequests();
     this._stream._abortRequest(this._fullRequestXhr);
     this._fullRequestXhr = null;
   }
 }
 class PDFNetworkStreamRangeReader extends BasePDFStreamRangeReader {
+  #endRequests = endRequests.bind(this);
   onClosed = null;
   _done = false;
   _queuedChunk = null;
@@ -13717,13 +13712,7 @@ class PDFNetworkStreamRangeReader extends BasePDFStreamRangeReader {
       this._queuedChunk = chunk;
     }
     this._done = true;
-    for (const capability of this._requests) {
-      capability.resolve({
-        value: undefined,
-        done: true
-      });
-    }
-    this._requests.length = 0;
+    this.#endRequests();
     this.onClosed?.();
   }
   #onError(status) {
@@ -13758,19 +13747,14 @@ class PDFNetworkStreamRangeReader extends BasePDFStreamRangeReader {
   }
   cancel(reason) {
     this._done = true;
-    for (const capability of this._requests) {
-      capability.resolve({
-        value: undefined,
-        done: true
-      });
-    }
-    this._requests.length = 0;
+    this.#endRequests();
     this._stream._abortRequest(this._requestXhr);
     this.onClosed?.();
   }
 }
 
 ;// ./src/display/node_stream.js
+
 
 
 
@@ -13784,16 +13768,6 @@ function getReadableStream(readStream) {
   const require = process.getBuiltinModule("module").createRequire(import.meta.url);
   const polyfill = require("node-readable-to-web-readable-stream");
   return polyfill.makeDefaultReadableStreamFromNodeReadable(readStream);
-}
-function node_stream_getArrayBuffer(val) {
-  if (val instanceof Uint8Array) {
-    return val.buffer;
-  }
-  if (val instanceof ArrayBuffer) {
-    return val;
-  }
-  warn(`getArrayBuffer - unexpected data format: ${val}`);
-  return new Uint8Array(val).buffer;
 }
 class PDFNodeStream extends BasePDFStream {
   constructor(source) {
@@ -13856,7 +13830,7 @@ class PDFNodeStreamReader extends BasePDFStreamReader {
     this._loaded += value.byteLength;
     this._callOnProgress();
     return {
-      value: node_stream_getArrayBuffer(value),
+      value: fetch_stream_getArrayBuffer(value),
       done: false
     };
   }
@@ -13898,7 +13872,7 @@ class PDFNodeStreamRangeReader extends BasePDFStreamRangeReader {
       };
     }
     return {
-      value: node_stream_getArrayBuffer(value),
+      value: fetch_stream_getArrayBuffer(value),
       done: false
     };
   }
@@ -14044,7 +14018,7 @@ class TextLayer {
     const {
       isWindows,
       isFirefox
-    } = util_FeatureTest.platform;
+    } = FeatureTest.platform;
     return shadow(this, "fontFamilyMap", new Map([["sans-serif", `${isWindows && isFirefox ? "Calibri, " : ""}sans-serif`], ["monospace", `${isWindows && isFirefox ? "Lucida Console, " : ""}monospace`]]));
   }
   render() {
@@ -14310,7 +14284,7 @@ class TextLayer {
     if (ascent) {
       ratio = ascent / (ascent + descent);
     } else {
-      if (util_FeatureTest.platform.isFirefox) {
+      if (FeatureTest.platform.isFirefox) {
         warn("Enable the `dom.textMetrics.fontBoundingBox.enabled` preference " + "in `about:config` to improve TextLayer rendering.");
       }
       if (style.ascent) {
@@ -14387,7 +14361,7 @@ function getDocument(src = {}) {
   const maxImageSize = Number.isInteger(src.maxImageSize) && src.maxImageSize > -1 ? src.maxImageSize : -1;
   const isEvalSupported = src.isEvalSupported !== false;
   const isOffscreenCanvasSupported = typeof src.isOffscreenCanvasSupported === "boolean" ? src.isOffscreenCanvasSupported : !isNodeJS;
-  const isImageDecoderSupported = typeof src.isImageDecoderSupported === "boolean" ? src.isImageDecoderSupported : !isNodeJS && (util_FeatureTest.platform.isFirefox || !globalThis.chrome);
+  const isImageDecoderSupported = typeof src.isImageDecoderSupported === "boolean" ? src.isImageDecoderSupported : !isNodeJS && (FeatureTest.platform.isFirefox || !globalThis.chrome);
   const canvasMaxAreaInBytes = Number.isInteger(src.canvasMaxAreaInBytes) ? src.canvasMaxAreaInBytes : -1;
   const disableFontFace = typeof src.disableFontFace === "boolean" ? src.disableFontFace : isNodeJS;
   const fontExtraProperties = src.fontExtraProperties === true;
@@ -14401,6 +14375,7 @@ function getDocument(src = {}) {
   const FilterFactory = src.FilterFactory || (isNodeJS ? NodeFilterFactory : DOMFilterFactory);
   const enableHWA = src.enableHWA === true;
   const useWasm = src.useWasm !== false;
+  const pagesMapper = src.pagesMapper || new PagesMapper();
   const length = rangeTransport ? rangeTransport.length : src.length ?? NaN;
   const useSystemFonts = typeof src.useSystemFonts === "boolean" ? src.useSystemFonts : !isNodeJS && !disableFontFace;
   const useWorkerFetch = typeof src.useWorkerFetch === "boolean" ? src.useWorkerFetch : !!(CMapReaderFactory === DOMCMapReaderFactory && StandardFontDataFactory === DOMStandardFontDataFactory && WasmFactory === DOMWasmFactory && cMapUrl && standardFontDataUrl && wasmUrl && isValidFetchUrl(cMapUrl, document.baseURI) && isValidFetchUrl(standardFontDataUrl, document.baseURI) && isValidFetchUrl(wasmUrl, document.baseURI));
@@ -14435,7 +14410,7 @@ function getDocument(src = {}) {
   }
   const docParams = {
     docId,
-    apiVersion: "5.4.0",
+    apiVersion: "5.5.0",
     data,
     password,
     disableAutoFetch,
@@ -14509,7 +14484,7 @@ function getDocument(src = {}) {
         throw new Error("Worker was destroyed");
       }
       const messageHandler = new MessageHandler(docId, workerId, worker.port);
-      const transport = new WorkerTransport(messageHandler, task, networkStream, transportParams, transportFactory);
+      const transport = new WorkerTransport(messageHandler, task, networkStream, transportParams, transportFactory, pagesMapper);
       task._transport = transport;
       messageHandler.send("Ready", null);
     });
@@ -14605,6 +14580,9 @@ class PDFDocumentProxy {
   constructor(pdfInfo, transport) {
     this._pdfInfo = pdfInfo;
     this._transport = transport;
+  }
+  get pagesMapper() {
+    return this._transport.pagesMapper;
   }
   get annotationStorage() {
     return this._transport.annotationStorage;
@@ -14722,8 +14700,8 @@ class PDFDocumentProxy {
 }
 class PDFPageProxy {
   #pendingCleanup = false;
-  #pagesMapper = PagesMapper.instance;
-  constructor(pageIndex, pageInfo, transport, pdfBug = false) {
+  #pagesMapper = null;
+  constructor(pageIndex, pageInfo, transport, pagesMapper, pdfBug = false) {
     this._pageIndex = pageIndex;
     this._pageInfo = pageInfo;
     this._transport = transport;
@@ -14734,6 +14712,7 @@ class PDFPageProxy {
     this._intentStates = new Map();
     this.destroyed = false;
     this.recordedBBoxes = null;
+    this.#pagesMapper = pagesMapper;
   }
   get pageNumber() {
     return this._pageIndex + 1;
@@ -14965,35 +14944,22 @@ class PDFPageProxy {
       }
     });
   }
-  getTextContent(params = {}) {
+  async getTextContent(params = {}) {
     if (this._transport._htmlForXfa) {
       return this.getXfa().then(xfa => XfaText.textContent(xfa));
     }
     const readableStream = this.streamTextContent(params);
-    return new Promise(function (resolve, reject) {
-      function pump() {
-        reader.read().then(function ({
-          value,
-          done
-        }) {
-          if (done) {
-            resolve(textContent);
-            return;
-          }
-          textContent.lang ??= value.lang;
-          Object.assign(textContent.styles, value.styles);
-          textContent.items.push(...value.items);
-          pump();
-        }, reject);
-      }
-      const reader = readableStream.getReader();
-      const textContent = {
-        items: [],
-        styles: Object.create(null),
-        lang: null
-      };
-      pump();
-    });
+    const textContent = {
+      items: [],
+      styles: Object.create(null),
+      lang: null
+    };
+    for await (const value of readableStream) {
+      textContent.lang ??= value.lang;
+      Object.assign(textContent.styles, value.styles);
+      textContent.items.push(...value.items);
+    }
+    return textContent;
   }
   getStructTree() {
     return this._transport.getStructTree(this._pageIndex);
@@ -15391,8 +15357,7 @@ class WorkerTransport {
   #pagePromises = new Map();
   #pageRefCache = new Map();
   #passwordCapability = null;
-  #pagesMapper = PagesMapper.instance;
-  constructor(messageHandler, loadingTask, networkStream, params, factory) {
+  constructor(messageHandler, loadingTask, networkStream, params, factory, pagesMapper) {
     this.messageHandler = messageHandler;
     this.loadingTask = loadingTask;
     this.#networkStream = networkStream;
@@ -15412,13 +15377,14 @@ class WorkerTransport {
     this.destroyed = false;
     this.destroyCapability = null;
     this.setupMessageHandler();
-    this.#pagesMapper.addListener(this.#updateCaches.bind(this));
+    this.pagesMapper = pagesMapper;
+    this.pagesMapper.addListener(this.#updateCaches.bind(this));
   }
   #updateCaches() {
     const newPageCache = new Map();
     const newPromiseCache = new Map();
-    for (let i = 0, ii = this.#pagesMapper.pagesNumber; i < ii; i++) {
-      const prevPageIndex = this.#pagesMapper.getPrevPageNumber(i + 1) - 1;
+    for (let i = 0, ii = this.pagesMapper.pagesNumber; i < ii; i++) {
+      const prevPageIndex = this.pagesMapper.getPrevPageNumber(i + 1) - 1;
       const page = this.#pageCache.get(prevPageIndex);
       if (page) {
         newPageCache.set(i, page);
@@ -15620,7 +15586,7 @@ class WorkerTransport {
     messageHandler.on("GetDoc", ({
       pdfInfo
     }) => {
-      this.#pagesMapper.pagesNumber = pdfInfo.numPages;
+      this.pagesMapper.pagesNumber = pdfInfo.numPages;
       this._numPages = pdfInfo.numPages;
       this._htmlForXfa = pdfInfo.htmlForXfa;
       delete pdfInfo.htmlForXfa;
@@ -15788,11 +15754,11 @@ class WorkerTransport {
     });
   }
   getPage(pageNumber) {
-    if (!Number.isInteger(pageNumber) || pageNumber <= 0 || pageNumber > this.#pagesMapper.pagesNumber) {
+    if (!Number.isInteger(pageNumber) || pageNumber <= 0 || pageNumber > this.pagesMapper.pagesNumber) {
       return Promise.reject(new Error("Invalid page request."));
     }
     const pageIndex = pageNumber - 1;
-    const newPageIndex = this.#pagesMapper.getPageId(pageNumber) - 1;
+    const newPageIndex = this.pagesMapper.getPageId(pageNumber) - 1;
     const cachedPromise = this.#pagePromises.get(pageIndex);
     if (cachedPromise) {
       return cachedPromise;
@@ -15806,7 +15772,7 @@ class WorkerTransport {
       if (pageInfo.refStr) {
         this.#pageRefCache.set(pageInfo.refStr, newPageIndex);
       }
-      const page = new PDFPageProxy(pageIndex, pageInfo, this, this._params.pdfBug);
+      const page = new PDFPageProxy(pageIndex, pageInfo, this, this.pagesMapper, this._params.pdfBug);
       this.#pageCache.set(pageIndex, page);
       return page;
     });
@@ -15821,11 +15787,11 @@ class WorkerTransport {
       num: ref.num,
       gen: ref.gen
     });
-    return this.#pagesMapper.getPageNumber(index + 1) - 1;
+    return this.pagesMapper.getPageNumber(index + 1) - 1;
   }
   getAnnotations(pageIndex, intent) {
     return this.messageHandler.sendWithPromise("GetAnnotations", {
-      pageIndex: this.#pagesMapper.getPageId(pageIndex + 1) - 1,
+      pageIndex: this.pagesMapper.getPageId(pageIndex + 1) - 1,
       intent
     });
   }
@@ -15878,12 +15844,12 @@ class WorkerTransport {
   }
   getPageJSActions(pageIndex) {
     return this.messageHandler.sendWithPromise("GetPageJSActions", {
-      pageIndex: this.#pagesMapper.getPageId(pageIndex + 1) - 1
+      pageIndex: this.pagesMapper.getPageId(pageIndex + 1) - 1
     });
   }
   getStructTree(pageIndex) {
     return this.messageHandler.sendWithPromise("GetStructTree", {
-      pageIndex: this.#pagesMapper.getPageId(pageIndex + 1) - 1
+      pageIndex: this.pagesMapper.getPageId(pageIndex + 1) - 1
     });
   }
   getOutline() {
@@ -15939,7 +15905,7 @@ class WorkerTransport {
     }
     const refStr = ref.gen === 0 ? `${ref.num}R` : `${ref.num}R${ref.gen}`;
     const pageIndex = this.#pageRefCache.get(refStr);
-    return pageIndex >= 0 ? this.#pagesMapper.getPageNumber(pageIndex + 1) : null;
+    return pageIndex >= 0 ? this.pagesMapper.getPageNumber(pageIndex + 1) : null;
   }
 }
 class RenderTask {
@@ -16121,8 +16087,8 @@ class InternalRenderTask {
     }
   }
 }
-const version = "5.4.0";
-const build = "c00591c";
+const version = "5.5.0";
+const build = "c574694";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -17543,7 +17509,7 @@ class WidgetAnnotationElement extends AnnotationElement {
     }
   }
   _getKeyModifier(event) {
-    return util_FeatureTest.platform.isMac ? event.metaKey : event.ctrlKey;
+    return FeatureTest.platform.isMac ? event.metaKey : event.ctrlKey;
   }
   _setEventListener(element, elementData, baseName, eventName, valueGetter) {
     if (baseName.includes("mouse")) {
@@ -19544,7 +19510,7 @@ class FileAttachmentAnnotationElement extends AnnotationElement {
     this.#trigger = trigger;
     const {
       isMac
-    } = util_FeatureTest.platform;
+    } = FeatureTest.platform;
     container.addEventListener("keydown", evt => {
       if (evt.key === "Enter" && (isMac ? evt.metaKey : evt.ctrlKey)) {
         this.#download();
@@ -25652,7 +25618,7 @@ class AnnotationEditorLayer {
     if (target === this.#textLayer.div || (target.getAttribute("role") === "img" || target.classList.contains("endOfContent")) && this.#textLayer.div.contains(target)) {
       const {
         isMac
-      } = util_FeatureTest.platform;
+      } = FeatureTest.platform;
       if (event.button !== 0 || event.ctrlKey && isMac) {
         return;
       }
@@ -25898,7 +25864,7 @@ class AnnotationEditorLayer {
   pointerup(event) {
     const {
       isMac
-    } = util_FeatureTest.platform;
+    } = FeatureTest.platform;
     if (event.button !== 0 || event.ctrlKey && isMac) {
       return;
     }
@@ -25933,7 +25899,7 @@ class AnnotationEditorLayer {
     }
     const {
       isMac
-    } = util_FeatureTest.platform;
+    } = FeatureTest.platform;
     if (event.button !== 0 || event.ctrlKey && isMac) {
       return;
     }
@@ -26322,7 +26288,7 @@ globalThis.pdfjsLib = {
   CSSConstants: CSSConstants,
   DOMSVGFactory: DOMSVGFactory,
   DrawLayer: DrawLayer,
-  FeatureTest: util_FeatureTest,
+  FeatureTest: FeatureTest,
   fetchData: fetchData,
   findContrastColor: findContrastColor,
   getDocument: getDocument,
@@ -26332,7 +26298,7 @@ globalThis.pdfjsLib = {
   getUuid: getUuid,
   getXfaPageViewport: getXfaPageViewport,
   GlobalWorkerOptions: GlobalWorkerOptions,
-  ImageKind: util_ImageKind,
+  ImageKind: ImageKind,
   InvalidPDFException: InvalidPDFException,
   isDataScheme: isDataScheme,
   isPdfFile: isPdfFile,
@@ -26342,7 +26308,6 @@ globalThis.pdfjsLib = {
   normalizeUnicode: normalizeUnicode,
   OPS: OPS,
   OutputScale: OutputScale,
-  PagesMapper: PagesMapper,
   PasswordResponses: PasswordResponses,
   PDFDataRangeTransport: PDFDataRangeTransport,
   PDFDateString: PDFDateString,
@@ -26366,6 +26331,6 @@ globalThis.pdfjsLib = {
   XfaLayer: XfaLayer
 };
 
-export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, CSSConstants, ColorPicker, DOMSVGFactory, DrawLayer, util_FeatureTest as FeatureTest, GlobalWorkerOptions, util_ImageKind as ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PagesMapper, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TouchManager, Util, VerbosityLevel, XfaLayer, applyOpacity, build, createValidAbsoluteUrl, fetchData, findContrastColor, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getUuid, getXfaPageViewport, isDataScheme, isPdfFile, isValidExplicitDest, noContextMenu, normalizeUnicode, renderRichText, setLayerDimensions, shadow, stopEvent, updateUrlHash, version };
+export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, CSSConstants, ColorPicker, DOMSVGFactory, DrawLayer, FeatureTest, GlobalWorkerOptions, ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TouchManager, Util, VerbosityLevel, XfaLayer, applyOpacity, build, createValidAbsoluteUrl, fetchData, findContrastColor, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getUuid, getXfaPageViewport, isDataScheme, isPdfFile, isValidExplicitDest, noContextMenu, normalizeUnicode, renderRichText, setLayerDimensions, shadow, stopEvent, updateUrlHash, version };
 
 //# sourceMappingURL=pdf.mjs.map

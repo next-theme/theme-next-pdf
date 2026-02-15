@@ -5629,7 +5629,7 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
 .treeView.withNesting .treeItemToggler{
 
       position:relative;
-      float:var(--inline-start);
+      float:inline-start;
       height:0;
       width:0;
       color:rgb(255 255 255 / 0.5);
@@ -6968,8 +6968,6 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
 
 :root{
   --dir-factor:1;
-  --inline-start:left;
-  --inline-end:right;
 
   --sidebar-width:200px;
   --sidebar-transition-duration:200ms;
@@ -7192,8 +7190,6 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
 
 [dir="rtl"]:root{
   --dir-factor:-1;
-  --inline-start:right;
-  --inline-end:left;
 }
 
 @media screen and (forced-colors: active){
@@ -7474,7 +7470,7 @@ body.wait::before{
 }
 
 .splitToolbarButtonSeparator{
-  float:var(--inline-start);
+  float:inline-start;
   width:0;
   height:62%;
   border-left:1px solid var(--separator-color);
