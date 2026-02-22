@@ -146,22 +146,22 @@ See https://github.com/adobe-type-tools/cmap-resources
                           </button>
                           <menu id="viewsManagerStatusActionOptions" class="popupMenu">
                             <li>
-                              <button id="viewsManagerStatusActionCopy" class="noIcon" role="menuitem" type="button" tabindex="0" disabled>
+                              <button id="viewsManagerStatusActionCopy" class="noIcon" role="menuitem" type="button" tabindex="-1" disabled>
                                 <span data-l10n-id="pdfjs-views-manager-pages-status-copy-button-label"></span>
                               </button>
                             </li>
                             <li>
-                              <button id="viewsManagerStatusActionCut" class="noIcon" role="menuitem" type="button" tabindex="0" disabled>
+                              <button id="viewsManagerStatusActionCut" class="noIcon" role="menuitem" type="button" tabindex="-1" disabled>
                                 <span data-l10n-id="pdfjs-views-manager-pages-status-cut-button-label"></span>
                               </button>
                             </li>
                             <li>
-                              <button id="viewsManagerStatusActionDelete" class="noIcon" role="menuitem" type="button" tabindex="0" disabled>
+                              <button id="viewsManagerStatusActionDelete" class="noIcon" role="menuitem" type="button" tabindex="-1" disabled>
                                 <span data-l10n-id="pdfjs-views-manager-pages-status-delete-button-label"></span>
                               </button>
                             </li>
                             <li>
-                              <button id="viewsManagerStatusActionSaveAs" class="noIcon" role="menuitem" type="button" tabindex="0" disabled>
+                              <button id="viewsManagerStatusActionSaveAs" class="noIcon" role="menuitem" type="button" tabindex="-1" disabled>
                                 <span data-l10n-id="pdfjs-views-manager-pages-status-save-as-button-label"></span>
                               </button>
                             </li>
@@ -217,7 +217,14 @@ See https://github.com/adobe-type-tools/cmap-resources
                     <div id="attachmentsView" class="hidden"></div>
                     <div id="layersView" class="treeView hidden"></div>
                   </div>
-                  <div id="viewsManagerResizer" class="sidebarResizer" role="separator" aria-controls="viewsManager" tabindex="0"></div>
+                  <div
+                    id="viewsManagerResizer"
+                    class="sidebarResizer"
+                    role="separator"
+                    aria-controls="viewsManager"
+                    tabindex="0"
+                    data-l10n-id="pdfjs-views-manager-sidebar-resizer"
+                  ></div>
                 </div>
                 <!-- sidebarContainer -->
 

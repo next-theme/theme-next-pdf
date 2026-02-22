@@ -215,6 +215,15 @@ pdfjs-editor-highlight-show-all-button-label = បង្ហាញ​ទាំង
 pdfjs-editor-highlight-show-all-button =
     .title = បង្ហាញ​ទាំងអស់
 
+## New alt-text dialog
+## Group note for entire feature: Alternative text (alt text) helps when people can't see the image. This feature includes a tool to create alt text automatically using an AI model that works locally on the user's device to preserve privacy.
+
+pdfjs-editor-new-alt-text-not-now-button = មិន​មែន​ឥឡូវ
+
+## Image alt-text settings
+
+pdfjs-editor-alt-text-settings-delete-model-button = លុប
+
 ## Dialog buttons
 
 pdfjs-editor-add-signature-cancel-button = បោះបង់
@@ -222,3 +231,12 @@ pdfjs-editor-add-signature-cancel-button = បោះបង់
 ##  Edit a comment dialog
 
 pdfjs-editor-edit-comment-dialog-cancel-button = បោះបង់
+
+## The view manager is a sidebar displaying different views:
+##  - thumbnails;
+##  - outline;
+##  - attachments;
+##  - layers.
+## The thumbnails view is used to edit the pdf: remove/insert pages, ...
+
+pdfjs-views-manager-pages-status-delete-button-label = លុប

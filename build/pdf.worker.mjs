@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.5.0
- * pdfjsBuild = c574694
+ * pdfjsBuild = 1118050
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -1161,9 +1161,7 @@ class RefSet {
   }
 }
 class RefSetCache {
-  constructor() {
-    this._map = new Map();
-  }
+  _map = new Map();
   get size() {
     return this._map.size;
   }
@@ -2090,6 +2088,21 @@ function copyRgbaImage(src, dest, alpha01) {
     }
   }
 }
+function isDefaultDecodeHelper(decode, expectedLen) {
+  if (!Array.isArray(decode)) {
+    return true;
+  }
+  const decodeLen = decode.length;
+  if (decodeLen < expectedLen) {
+    warn("Decode map length is too short.");
+    return true;
+  }
+  if (decodeLen > expectedLen) {
+    info("Truncating too long decode map.");
+    decode.length = expectedLen;
+  }
+  return false;
+}
 class ColorSpace {
   static #rgbBuf = new Uint8ClampedArray(3);
   constructor(name, numComps) {
@@ -2116,8 +2129,8 @@ class ColorSpace {
   isPassthrough(bits) {
     return false;
   }
-  isDefaultDecode(decodeMap, bpc) {
-    return ColorSpace.isDefaultDecode(decodeMap, this.numComps);
+  isDefaultDecode(decode, bpc) {
+    return ColorSpace.isDefaultDecode(decode, this.numComps);
   }
   fillRgb(dest, originalWidth, originalHeight, width, height, actualHeight, bpc, comps, alpha01) {
     const count = originalWidth * originalHeight;
@@ -2177,11 +2190,7 @@ class ColorSpace {
     return shadow(this, "usesZeroToOneRange", true);
   }
   static isDefaultDecode(decode, numComps) {
-    if (!Array.isArray(decode)) {
-      return true;
-    }
-    if (numComps * 2 !== decode.length) {
-      warn("The decode map is not the correct length");
+    if (isDefaultDecodeHelper(decode, numComps * 2)) {
       return true;
     }
     for (let i = 0, ii = decode.length; i < ii; i += 2) {
@@ -2244,7 +2253,7 @@ class PatternCS extends ColorSpace {
     super("Pattern", null);
     this.base = baseCS;
   }
-  isDefaultDecode(decodeMap, bpc) {
+  isDefaultDecode(decode, bpc) {
     unreachable("Should not call PatternCS.isDefaultDecode");
   }
 }
@@ -2294,19 +2303,15 @@ class IndexedCS extends ColorSpace {
   getOutputLength(inputLength, alpha01) {
     return this.base.getOutputLength(inputLength * this.base.numComps, alpha01);
   }
-  isDefaultDecode(decodeMap, bpc) {
-    if (!Array.isArray(decodeMap)) {
-      return true;
-    }
-    if (decodeMap.length !== 2) {
-      warn("Decode map length is not correct");
+  isDefaultDecode(decode, bpc) {
+    if (isDefaultDecodeHelper(decode, 2)) {
       return true;
     }
     if (!Number.isInteger(bpc) || bpc < 1) {
       warn("Bits per component is not correct");
       return true;
     }
-    return decodeMap[0] === 0 && decodeMap[1] === (1 << bpc) - 1;
+    return decode[0] === 0 && decode[1] === (1 << bpc) - 1;
   }
 }
 class DeviceGrayCS extends ColorSpace {
@@ -2692,7 +2697,7 @@ class LabCS extends ColorSpace {
   getOutputLength(inputLength, alpha01) {
     return inputLength * (3 + alpha01) / 3 | 0;
   }
-  isDefaultDecode(decodeMap, bpc) {
+  isDefaultDecode(decode, bpc) {
     return true;
   }
   get usesZeroToOneRange() {
@@ -3109,38 +3114,31 @@ class ChunkedStreamManager {
     this.disableAutoFetch = args.disableAutoFetch;
     this.msgHandler = args.msgHandler;
   }
-  sendRequest(begin, end) {
+  async sendRequest(begin, end) {
     const rangeReader = this.pdfStream.getRangeReader(begin, end);
     let chunks = [];
-    return new Promise((resolve, reject) => {
-      const readChunk = ({
+    while (true) {
+      const {
         value,
         done
-      }) => {
-        try {
-          if (done) {
-            resolve(chunks.length > 0 || !this.disableAutoFetch ? arrayBuffersToBytes(chunks) : null);
-            chunks = null;
-            return;
-          }
-          chunks.push(value);
-          rangeReader.read().then(readChunk, reject);
-        } catch (e) {
-          reject(e);
-        }
-      };
-      rangeReader.read().then(readChunk, reject);
-    }).then(data => {
+      } = await rangeReader.read();
       if (this.aborted) {
+        chunks = null;
         return;
       }
-      if (!data) {
-        return;
+      if (done) {
+        break;
       }
-      this.onReceiveData({
-        chunk: data.buffer,
-        begin
-      });
+      chunks.push(value);
+    }
+    if (chunks.length === 0 && this.disableAutoFetch) {
+      return;
+    }
+    const data = arrayBuffersToBytes(chunks);
+    chunks = null;
+    this.onReceiveData({
+      chunk: data.buffer,
+      begin
     });
   }
   requestAllChunks(noFetch = false) {
@@ -20256,9 +20254,7 @@ class CFFHeader {
   }
 }
 class CFFStrings {
-  constructor() {
-    this.strings = [];
-  }
+  strings = [];
   get(index) {
     if (index >= 0 && index <= NUM_STANDARD_CFF_STRINGS - 1) {
       return CFFStandardStrings[index];
@@ -20287,10 +20283,8 @@ class CFFStrings {
   }
 }
 class CFFIndex {
-  constructor() {
-    this.objects = [];
-    this.length = 0;
-  }
+  objects = [];
+  length = 0;
   add(data) {
     this.length += data.length;
     this.objects.push(data);
@@ -20434,9 +20428,7 @@ class CFFFDSelect {
   }
 }
 class CFFOffsetTracker {
-  constructor() {
-    this.offsets = Object.create(null);
-  }
+  offsets = Object.create(null);
   isTracking(key) {
     return key in this.offsets;
   }
@@ -32664,9 +32656,7 @@ class AstVariableDefinition extends AstNode {
   }
 }
 class ExpressionBuilderVisitor {
-  constructor() {
-    this.parts = [];
-  }
+  parts = [];
   visitArgument(arg) {
     this.parts.push("Math.max(", arg.min, ", Math.min(", arg.max, ", src[srcOffset + ", arg.index, "]))");
   }
@@ -37940,21 +37930,19 @@ class StateManager {
   }
 }
 class TextState {
-  constructor() {
-    this.ctm = new Float32Array(IDENTITY_MATRIX);
-    this.fontName = null;
-    this.fontSize = 0;
-    this.loadedName = null;
-    this.font = null;
-    this.fontMatrix = FONT_IDENTITY_MATRIX;
-    this.textMatrix = IDENTITY_MATRIX.slice();
-    this.textLineMatrix = IDENTITY_MATRIX.slice();
-    this.charSpacing = 0;
-    this.wordSpacing = 0;
-    this.leading = 0;
-    this.textHScale = 1;
-    this.textRise = 0;
-  }
+  ctm = new Float32Array(IDENTITY_MATRIX);
+  fontName = null;
+  fontSize = 0;
+  loadedName = null;
+  font = null;
+  fontMatrix = FONT_IDENTITY_MATRIX;
+  textMatrix = IDENTITY_MATRIX.slice();
+  textLineMatrix = IDENTITY_MATRIX.slice();
+  charSpacing = 0;
+  wordSpacing = 0;
+  leading = 0;
+  textHScale = 1;
+  textRise = 0;
   setTextMatrix(a, b, c, d, e, f) {
     const m = this.textMatrix;
     m[0] = a;
@@ -37996,17 +37984,17 @@ class TextState {
   }
 }
 class EvalState {
-  constructor() {
-    this.ctm = new Float32Array(IDENTITY_MATRIX);
-    this.font = null;
-    this.textRenderingMode = TextRenderingMode.FILL;
-    this._fillColorSpace = this._strokeColorSpace = ColorSpaceUtils.gray;
-    this.patternFillColorSpace = null;
-    this.patternStrokeColorSpace = null;
-    this.currentPointX = this.currentPointY = 0;
-    this.pathMinMax = new Float32Array([Infinity, Infinity, -Infinity, -Infinity]);
-    this.pathBuffer = [];
-  }
+  ctm = new Float32Array(IDENTITY_MATRIX);
+  font = null;
+  textRenderingMode = TextRenderingMode.FILL;
+  _fillColorSpace = ColorSpaceUtils.gray;
+  _strokeColorSpace = ColorSpaceUtils.gray;
+  patternFillColorSpace = null;
+  patternStrokeColorSpace = null;
+  currentPointX = 0;
+  currentPointY = 0;
+  pathMinMax = new Float32Array([Infinity, Infinity, -Infinity, -Infinity]);
+  pathBuffer = [];
   get fillColorSpace() {
     return this._fillColorSpace;
   }
@@ -38737,7 +38725,7 @@ class FakeUnicodeFont {
     descendantFont.set("FontDescriptor", this.fontDescriptorRef);
     descendantFont.set("DW", 1000);
     const widths = [];
-    const chars = [...this.widths.entries()].sort();
+    const chars = [...this.widths].sort();
     let currentChar = null;
     let currentWidths = null;
     for (const [char, width] of chars) {
@@ -42450,13 +42438,13 @@ class FontFinder {
     }
     name = name.toLowerCase();
     const maybe = [];
-    for (const [family, pdfFont] of this.fonts.entries()) {
+    for (const [family, pdfFont] of this.fonts) {
       if (family.replaceAll(pattern, "").toLowerCase().startsWith(name)) {
         maybe.push(pdfFont);
       }
     }
     if (maybe.length === 0) {
-      for (const [, pdfFont] of this.fonts.entries()) {
+      for (const pdfFont of this.fonts.values()) {
         if (pdfFont.regular.name?.replaceAll(pattern, "").toLowerCase().startsWith(name)) {
           maybe.push(pdfFont);
         }
@@ -42464,7 +42452,7 @@ class FontFinder {
     }
     if (maybe.length === 0) {
       name = name.replaceAll(/psmt|mt/gi, "");
-      for (const [family, pdfFont] of this.fonts.entries()) {
+      for (const [family, pdfFont] of this.fonts) {
         if (family.replaceAll(pattern, "").toLowerCase().startsWith(name)) {
           maybe.push(pdfFont);
         }
@@ -43564,7 +43552,7 @@ class XmlObject extends XFAObject {
     const utf8TagName = utf8StringToString(tagName);
     const prefix = this[$namespaceId] === NS_DATASETS ? "xfa:" : "";
     buf.push(`<${prefix}${utf8TagName}`);
-    for (const [name, value] of this[_attributes].entries()) {
+    for (const [name, value] of this[_attributes]) {
       const utf8Name = utf8StringToString(name);
       buf.push(` ${utf8Name}="${encodeToXmlString(value[$content])}"`);
     }
@@ -52737,7 +52725,7 @@ class AnnotationFactory {
     }
     let subtype = dict.get("Subtype");
     subtype = subtype instanceof Name ? subtype.name : null;
-    if (collectByType && !collectByType.has(AnnotationType[subtype.toUpperCase()])) {
+    if (collectByType && !collectByType.has(AnnotationType[subtype?.toUpperCase()])) {
       return null;
     }
     const {
@@ -53069,11 +53057,12 @@ function getTransformMatrix(rect, bbox, matrix) {
 class Annotation {
   constructor(params) {
     const {
-      dict,
-      xref,
       annotationGlobals,
+      dict,
+      orphanFields,
       ref,
-      orphanFields
+      subtype,
+      xref
     } = params;
     const parentRef = orphanFields?.get(ref);
     if (parentRef) {
@@ -53099,6 +53088,7 @@ class Annotation {
     const isLocked = !!(this.flags & AnnotationFlag.LOCKED);
     const isContentLocked = !!(this.flags & AnnotationFlag.LOCKEDCONTENTS);
     this.data = {
+      annotationType: AnnotationType[subtype?.toUpperCase()],
       annotationFlags: this.flags,
       borderStyle: this.borderStyle,
       color: this.color,
@@ -53110,7 +53100,7 @@ class Annotation {
       id: params.id,
       modificationDate: this.modificationDate,
       rect: this.rectangle,
-      subtype: params.subtype,
+      subtype,
       hasOwnCanvas: false,
       noRotate: !!(this.flags & AnnotationFlag.NOROTATE),
       noHTML: isLocked && isContentLocked,
@@ -53829,7 +53819,6 @@ class WidgetAnnotation extends Annotation {
     } = params;
     const data = this.data;
     this._needAppearances = params.needAppearances;
-    data.annotationType = AnnotationType.WIDGET;
     if (data.fieldName === undefined) {
       data.fieldName = this._constructFieldName(dict);
     }
@@ -55158,7 +55147,6 @@ class TextAnnotation extends MarkupAnnotation {
     const {
       dict
     } = params;
-    this.data.annotationType = AnnotationType.TEXT;
     if (this.data.hasAppearance) {
       this.data.name = "NoIcon";
     } else {
@@ -55182,7 +55170,6 @@ class LinkAnnotation extends Annotation {
       dict,
       annotationGlobals
     } = params;
-    this.data.annotationType = AnnotationType.LINK;
     this.data.noHTML = false;
     const quadPoints = getQuadPoints(dict, this.rectangle);
     if (quadPoints) {
@@ -55206,7 +55193,6 @@ class PopupAnnotation extends Annotation {
     const {
       dict
     } = params;
-    this.data.annotationType = AnnotationType.POPUP;
     this.data.noHTML = false;
     if (this.width === 0 || this.height === 0) {
       this.data.rect = null;
@@ -55278,7 +55264,6 @@ class FreeTextAnnotation extends MarkupAnnotation {
       evaluatorOptions,
       xref
     } = params;
-    this.data.annotationType = AnnotationType.FREETEXT;
     this.setDefaultAppearance(params);
     this._hasAppearance = !!this.appearance;
     if (this._hasAppearance) {
@@ -55473,7 +55458,6 @@ class LineAnnotation extends MarkupAnnotation {
       dict,
       xref
     } = params;
-    this.data.annotationType = AnnotationType.LINE;
     this.data.hasOwnCanvas = this.data.noRotate;
     this.data.noHTML = false;
     const lineCoordinates = lookupRect(dict.getArray("L"), [0, 0, 0, 0]);
@@ -55514,7 +55498,6 @@ class SquareAnnotation extends MarkupAnnotation {
       dict,
       xref
     } = params;
-    this.data.annotationType = AnnotationType.SQUARE;
     this.data.hasOwnCanvas = this.data.noRotate;
     this.data.noHTML = false;
     if (!this.appearance) {
@@ -55557,7 +55540,6 @@ class CircleAnnotation extends MarkupAnnotation {
       dict,
       xref
     } = params;
-    this.data.annotationType = AnnotationType.CIRCLE;
     if (!this.appearance) {
       const strokeColor = getPdfColorArray(this.color, [0, 0, 0]);
       const strokeAlpha = dict.get("CA");
@@ -55603,7 +55585,6 @@ class PolylineAnnotation extends MarkupAnnotation {
       dict,
       xref
     } = params;
-    this.data.annotationType = AnnotationType.POLYLINE;
     this.data.hasOwnCanvas = this.data.noRotate;
     this.data.noHTML = false;
     this.data.vertices = null;
@@ -55660,18 +55641,8 @@ class PolylineAnnotation extends MarkupAnnotation {
     }
   }
 }
-class PolygonAnnotation extends PolylineAnnotation {
-  constructor(params) {
-    super(params);
-    this.data.annotationType = AnnotationType.POLYGON;
-  }
-}
-class CaretAnnotation extends MarkupAnnotation {
-  constructor(params) {
-    super(params);
-    this.data.annotationType = AnnotationType.CARET;
-  }
-}
+class PolygonAnnotation extends PolylineAnnotation {}
+class CaretAnnotation extends MarkupAnnotation {}
 class InkAnnotation extends MarkupAnnotation {
   constructor(params) {
     super(params);
@@ -55681,7 +55652,6 @@ class InkAnnotation extends MarkupAnnotation {
       dict,
       xref
     } = params;
-    this.data.annotationType = AnnotationType.INK;
     this.data.inkLists = [];
     this.data.isEditable = !this.data.noHTML;
     this.data.noHTML = false;
@@ -55885,7 +55855,6 @@ class HighlightAnnotation extends MarkupAnnotation {
       dict,
       xref
     } = params;
-    this.data.annotationType = AnnotationType.HIGHLIGHT;
     this.data.isEditable = !this.data.noHTML;
     this.data.noHTML = false;
     this.data.opacity = dict.get("CA") || 1;
@@ -56001,7 +55970,6 @@ class UnderlineAnnotation extends MarkupAnnotation {
       dict,
       xref
     } = params;
-    this.data.annotationType = AnnotationType.UNDERLINE;
     const quadPoints = this.data.quadPoints = getQuadPoints(dict, null);
     if (quadPoints) {
       if (!this.appearance) {
@@ -56033,7 +56001,6 @@ class SquigglyAnnotation extends MarkupAnnotation {
       dict,
       xref
     } = params;
-    this.data.annotationType = AnnotationType.SQUIGGLY;
     const quadPoints = this.data.quadPoints = getQuadPoints(dict, null);
     if (quadPoints) {
       if (!this.appearance) {
@@ -56076,7 +56043,6 @@ class StrikeOutAnnotation extends MarkupAnnotation {
       dict,
       xref
     } = params;
-    this.data.annotationType = AnnotationType.STRIKEOUT;
     const quadPoints = this.data.quadPoints = getQuadPoints(dict, null);
     if (quadPoints) {
       if (!this.appearance) {
@@ -56105,7 +56071,6 @@ class StampAnnotation extends MarkupAnnotation {
   #savedHasOwnCanvas = null;
   constructor(params) {
     super(params);
-    this.data.annotationType = AnnotationType.STAMP;
     this.data.hasOwnCanvas = this.data.noRotate;
     this.data.isEditable = !this.data.noHTML;
     this.data.noHTML = false;
@@ -56294,7 +56259,6 @@ class FileAttachmentAnnotation extends MarkupAnnotation {
       dict
     } = params;
     const file = new FileSpec(dict.get("FS"));
-    this.data.annotationType = AnnotationType.FILEATTACHMENT;
     this.data.hasOwnCanvas = this.data.noRotate;
     this.data.noHTML = false;
     this.data.file = file.serializable;
@@ -56395,10 +56359,7 @@ function decodeString(str) {
   }
 }
 class DatasetXMLParser extends SimpleXMLParser {
-  constructor(options) {
-    super(options);
-    this.node = null;
-  }
+  node = null;
   onEndElement(name) {
     const node = super.onEndElement(name);
     if (node && name === "xfa:datasets") {
@@ -58271,10 +58232,10 @@ class XRef {
     }
     if (!trailerDicts.length) {
       for (const num in this.entries) {
-        if (!Object.hasOwn(this.entries, num)) {
+        const entry = this.entries[num];
+        if (!entry) {
           continue;
         }
-        const entry = this.entries[num];
         const ref = Ref.get(parseInt(num), entry.gen);
         let obj;
         try {
