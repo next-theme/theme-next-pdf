@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.5.0
- * pdfjsBuild = 1118050
+ * pdfjsBuild = 86573cc
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -897,6 +897,9 @@ function _isValidExplicitDest(validRef, validName, dest) {
   }
   return true;
 }
+const makeArr = () => [];
+const makeMap = () => new Map();
+const makeObj = () => Object.create(null);
 function MathClamp(v, min, max) {
   return Math.min(Math.max(v, min), max);
 }
@@ -1708,12 +1711,7 @@ function getNewAnnotationsMap(annotationStorage) {
     if (!key.startsWith(AnnotationEditorPrefix)) {
       continue;
     }
-    let annotations = newAnnotationsByPage.get(value.pageIndex);
-    if (!annotations) {
-      annotations = [];
-      newAnnotationsByPage.set(value.pageIndex, annotations);
-    }
-    annotations.push(value);
+    newAnnotationsByPage.getOrInsertComputed(value.pageIndex, makeArr).push(value);
   }
   return newAnnotationsByPage.size > 0 ? newAnnotationsByPage : null;
 }
@@ -12647,7 +12645,6 @@ class LZWStream extends DecodeStream {
     }
     this.bitsCached = bitsCached -= n;
     this.cachedData = cachedData;
-    this.lastCode = null;
     return cachedData >>> bitsCached & (1 << n) - 1;
   }
   readBlock() {
@@ -13594,7 +13591,6 @@ class Lexer {
   }
   getNumber() {
     let ch = this.currentChar;
-    let eNotation = false;
     let divideBy = 0;
     let sign = 1;
     if (ch === 0x2d) {
@@ -13624,19 +13620,13 @@ class Lexer {
       throw new FormatError(msg);
     }
     let baseValue = ch - 0x30;
-    let powerValue = 0;
-    let powerValueSign = 1;
     while ((ch = this.nextChar()) >= 0) {
       if (ch >= 0x30 && ch <= 0x39) {
         const currentDigit = ch - 0x30;
-        if (eNotation) {
-          powerValue = powerValue * 10 + currentDigit;
-        } else {
-          if (divideBy !== 0) {
-            divideBy *= 10;
-          }
-          baseValue = baseValue * 10 + currentDigit;
+        if (divideBy !== 0) {
+          divideBy *= 10;
         }
+        baseValue = baseValue * 10 + currentDigit;
       } else if (ch === 0x2e) {
         if (divideBy === 0) {
           divideBy = 1;
@@ -13645,24 +13635,12 @@ class Lexer {
         }
       } else if (ch === 0x2d) {
         warn("Badly formatted number: minus sign in the middle");
-      } else if (ch === 0x45 || ch === 0x65) {
-        ch = this.peekChar();
-        if (ch === 0x2b || ch === 0x2d) {
-          powerValueSign = ch === 0x2d ? -1 : 1;
-          this.nextChar();
-        } else if (ch < 0x30 || ch > 0x39) {
-          break;
-        }
-        eNotation = true;
       } else {
         break;
       }
     }
     if (divideBy !== 0) {
       baseValue /= divideBy;
-    }
-    if (eNotation) {
-      baseValue *= 10 ** (powerValueSign * powerValue);
     }
     return sign * baseValue;
   }
@@ -34936,6 +34914,9 @@ class PartialEvaluator {
     let transferArray;
     if (Array.isArray(tr)) {
       transferArray = tr;
+      if (tr.length > 1 && tr.every(map => map === tr[0])) {
+        transferArray = [tr[0]];
+      }
     } else if (isPDFFunction(tr)) {
       transferArray = [tr];
     } else {
@@ -40055,12 +40036,7 @@ class StructTreeRoot {
     for (const element of elements) {
       if (element.structTreeParentId) {
         const id = parseInt(element.structTreeParentId.split("_mc")[1], 10);
-        let elems = idToElements.get(id);
-        if (!elems) {
-          elems = [];
-          idToElements.set(id, elems);
-        }
-        elems.push(element);
+        idToElements.getOrInsertComputed(id, makeArr).push(element);
       }
     }
     const id = pageDict.get("StructParents");
@@ -42393,14 +42369,8 @@ class FontFinder {
   addPdfFont(pdfFont) {
     const cssFontInfo = pdfFont.cssFontInfo;
     const name = cssFontInfo.fontFamily;
-    let font = this.fonts.get(name);
-    if (!font) {
-      font = Object.create(null);
-      this.fonts.set(name, font);
-      if (!this.defaultFont) {
-        this.defaultFont = font;
-      }
-    }
+    const font = this.fonts.getOrInsertComputed(name, makeObj);
+    this.defaultFont ??= font;
     let property = "";
     const fontWeight = parseFloat(cssFontInfo.fontWeight);
     if (parseFloat(cssFontInfo.italicAngle) !== 0) {
@@ -42851,11 +42821,7 @@ function searchNode(root, container, expr, dotDotAllowed = true, useCache = true
       }
       let children, cached;
       if (useCache) {
-        cached = somCache.get(node);
-        if (!cached) {
-          cached = new Map();
-          somCache.set(node, cached);
-        }
+        cached = somCache.getOrInsertComputed(node, makeMap);
         children = cached.get(cacheName);
       }
       if (!children) {
@@ -52374,12 +52340,7 @@ class Builder {
       value
     } of prefixes) {
       const namespace = this._searchNamespace(value);
-      let prefixStack = this._namespacePrefixes.get(prefix);
-      if (!prefixStack) {
-        prefixStack = [];
-        this._namespacePrefixes.set(prefix, prefixStack);
-      }
-      prefixStack.push(namespace);
+      this._namespacePrefixes.getOrInsertComputed(prefix, makeArr).push(namespace);
     }
   }
   _getNamespaceToUse(prefix) {
@@ -58558,11 +58519,11 @@ class Page {
       }
     };
   }
-  #createPartialEvaluator(handler) {
+  #createPartialEvaluator(handler, pageIndex = this.pageIndex) {
     return new PartialEvaluator({
       xref: this.xref,
       handler,
-      pageIndex: this.pageIndex,
+      pageIndex,
       idFactory: this._localIdFactory,
       fontCache: this.fontCache,
       builtInCMapCache: this.builtInCMapCache,
@@ -58790,14 +58751,13 @@ class Page {
     task,
     intent,
     cacheKey,
-    pageId = this.pageIndex,
     pageIndex = this.pageIndex,
     annotationStorage = null,
     modifiedIds = null
   }) {
     const contentStreamPromise = this.getContentStream();
     const resourcesPromise = this.loadResources(RESOURCES_KEYS_OPERATOR_LIST);
-    const partialEvaluator = this.#createPartialEvaluator(handler);
+    const partialEvaluator = this.#createPartialEvaluator(handler, pageIndex);
     const newAnnotsByPage = !this.xfaFactory ? getNewAnnotationsMap(annotationStorage) : null;
     const newAnnots = newAnnotsByPage?.get(this.pageIndex);
     let newAnnotationsPromise = Promise.resolve(null);
@@ -59839,10 +59799,7 @@ class PDFDocument {
     if (parentRef && !field.has("Parent") && isName(field.get("Subtype"), "Widget")) {
       orphanFields.put(fieldRef, parentRef);
     }
-    if (!promises.has(name)) {
-      promises.set(name, []);
-    }
-    promises.get(name).push(AnnotationFactory.create(xref, fieldRef, annotationGlobals, null, true, orphanFields, null, null).then(annotation => annotation?.getFieldObject()).catch(function (reason) {
+    promises.getOrInsertComputed(name, makeArr).push(AnnotationFactory.create(xref, fieldRef, annotationGlobals, null, true, orphanFields, null, null).then(annotation => annotation?.getFieldObject()).catch(function (reason) {
       warn(`#collectFieldObjects: "${reason}".`);
       return null;
     }));

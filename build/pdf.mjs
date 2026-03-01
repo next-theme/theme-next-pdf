@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.5.0
- * pdfjsBuild = 1118050
+ * pdfjsBuild = 86573cc
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -897,6 +897,9 @@ function _isValidExplicitDest(validRef, validName, dest) {
   }
   return true;
 }
+const makeArr = () => [];
+const makeMap = () => new Map();
+const makeObj = () => Object.create(null);
 function MathClamp(v, min, max) {
   return Math.min(Math.max(v, min), max);
 }
@@ -1385,10 +1388,9 @@ function getPdfFilenameFromUrl(url, defaultFilename = "document.pdf") {
       let decoded = decodeURIComponent(name);
       if (decoded.includes("/")) {
         decoded = stripPath(decoded);
-        if (decoded.test(/^\.pdf$/i)) {
-          return decoded;
+        if (/^\.pdf$/i.test(decoded)) {
+          return name;
         }
-        return name;
       }
       return decoded;
     } catch {
@@ -7098,13 +7100,8 @@ class AnnotationStorage {
         if (key === "type") {
           continue;
         }
-        let counters = map.get(key);
-        if (!counters) {
-          counters = new Map();
-          map.set(key, counters);
-        }
-        const count = counters.get(val) ?? 0;
-        counters.set(val, count + 1);
+        const counters = map.getOrInsertComputed(key, makeMap);
+        counters.set(val, (counters.get(val) ?? 0) + 1);
       }
     }
     if (numberOfDeletedComments > 0 || numberOfEditedComments > 0) {
@@ -7159,21 +7156,27 @@ class AnnotationStorage {
   }
 }
 class PrintAnnotationStorage extends AnnotationStorage {
-  #serializable;
+  #serializable = SerializableEmpty;
   constructor(parent) {
     super();
+    const {
+      serializable
+    } = parent;
+    if (serializable === SerializableEmpty) {
+      return;
+    }
     const {
       map,
       hash,
       transfer
-    } = parent.serializable;
+    } = serializable;
     const clone = structuredClone(map, transfer ? {
       transfer
     } : null);
     this.#serializable = {
       map: clone,
       hash,
-      transfer
+      transfer: []
     };
   }
   get print() {
@@ -9295,20 +9298,10 @@ class BBoxReader {
     return (this.#coords[i * 4 + 3] + 1) / 256;
   }
 }
-const ensureDebugMetadata = (map, key) => {
-  if (!map) {
-    return undefined;
-  }
-  let value = map.get(key);
-  if (!value) {
-    value = {
-      dependencies: new Set(),
-      isRenderingOperation: false
-    };
-    map.set(key, value);
-  }
-  return value;
-};
+const ensureDebugMetadata = (map, key) => map?.getOrInsertComputed(key, () => ({
+  dependencies: new Set(),
+  isRenderingOperation: false
+}));
 class CanvasDependencyTracker {
   #simple = {
     __proto__: null
@@ -11092,11 +11085,7 @@ class CanvasGraphics {
     if ((img.bitmap || img.data) && img.count > 1) {
       const mainKey = img.bitmap || img.data.buffer;
       cacheKey = JSON.stringify(isPatternFill ? currentTransform : [currentTransform.slice(0, 4), fillColor]);
-      cache = this._cachedBitmapsMap.get(mainKey);
-      if (!cache) {
-        cache = new Map();
-        this._cachedBitmapsMap.set(mainKey, cache);
-      }
+      cache = this._cachedBitmapsMap.getOrInsertComputed(mainKey, makeMap);
       const cachedImage = cache.get(cacheKey);
       if (cachedImage && !isPatternFill) {
         const offsetX = Math.round(Math.min(currentTransform[0], currentTransform[2]) + currentTransform[4]);
@@ -12134,7 +12123,7 @@ class CanvasGraphics {
     copyCtxState(currentCtx, groupCtx);
     this.ctx = groupCtx;
     this.dependencyTracker?.inheritSimpleDataAsFutureForcedDependencies(["fillAlpha", "strokeAlpha", "globalCompositeOperation"]).pushBaseTransform(currentCtx);
-    this.setGState(opIdx, [["BM", "source-over"], ["ca", 1], ["CA", 1]]);
+    this.setGState(opIdx, [["BM", "source-over"], ["ca", 1], ["CA", 1], ["TR", null]]);
     this.groupStack.push(currentCtx);
     this.groupLevel++;
   }
@@ -13977,13 +13966,14 @@ class PDFNodeStreamRangeReader extends BasePDFStreamRangeReader {
 
 ;// ./src/display/pdf_objects.js
 const INITIAL_DATA = Symbol("INITIAL_DATA");
+const dataObj = () => ({
+  ...Promise.withResolvers(),
+  data: INITIAL_DATA
+});
 class PDFObjects {
   #objs = new Map();
   #ensureObj(objId) {
-    return this.#objs.getOrInsertComputed(objId, () => ({
-      ...Promise.withResolvers(),
-      data: INITIAL_DATA
-    }));
+    return this.#objs.getOrInsertComputed(objId, dataObj);
   }
   get(objId, callback = null) {
     if (callback) {
@@ -14884,11 +14874,7 @@ class PDFPageProxy {
     } = intentArgs;
     this.#pendingCleanup = false;
     optionalContentConfigPromise ||= this._transport.getOptionalContentConfig(renderingIntent);
-    let intentState = this._intentStates.get(cacheKey);
-    if (!intentState) {
-      intentState = Object.create(null);
-      this._intentStates.set(cacheKey, intentState);
-    }
+    const intentState = this._intentStates.getOrInsertComputed(cacheKey, makeObj);
     if (intentState.streamReaderCancelTimeout) {
       clearTimeout(intentState.streamReaderCancelTimeout);
       intentState.streamReaderCancelTimeout = null;
@@ -14996,11 +14982,7 @@ class PDFPageProxy {
       }
     }
     const intentArgs = this._transport.getRenderingIntent(intent, annotationMode, printAnnotationStorage, isEditing, true);
-    let intentState = this._intentStates.get(intentArgs.cacheKey);
-    if (!intentState) {
-      intentState = Object.create(null);
-      this._intentStates.set(intentArgs.cacheKey, intentState);
-    }
+    const intentState = this._intentStates.getOrInsertComputed(intentArgs.cacheKey, makeObj);
     let opListTask;
     if (!intentState.opListReadCapability) {
       opListTask = Object.create(null);
@@ -15140,7 +15122,7 @@ class PDFPageProxy {
       cacheKey,
       annotationStorage: map,
       modifiedIds
-    }, transfer);
+    }, undefined, transfer);
     const reader = readableStream.getReader();
     const intentState = this._intentStates.get(cacheKey);
     intentState.streamReader = reader;
@@ -15526,13 +15508,7 @@ class WorkerTransport {
     this.#pagePromises = newPromiseCache;
   }
   #cacheSimpleMethod(name, data = null) {
-    const cachedPromise = this.#methodPromises.get(name);
-    if (cachedPromise) {
-      return cachedPromise;
-    }
-    const promise = this.messageHandler.sendWithPromise(name, data);
-    this.#methodPromises.set(name, promise);
-    return promise;
+    return this.#methodPromises.getOrInsertComputed(name, () => this.messageHandler.sendWithPromise(name, data));
   }
   #onProgress({
     loaded,
@@ -15994,20 +15970,14 @@ class WorkerTransport {
     return this.messageHandler.sendWithPromise("GetPermissions", null);
   }
   getMetadata() {
-    const name = "GetMetadata",
-      cachedPromise = this.#methodPromises.get(name);
-    if (cachedPromise) {
-      return cachedPromise;
-    }
-    const promise = this.messageHandler.sendWithPromise(name, null).then(results => ({
+    const name = "GetMetadata";
+    return this.#methodPromises.getOrInsertComputed(name, () => this.messageHandler.sendWithPromise(name, null).then(results => ({
       info: results[0],
       metadata: results[1] ? new Metadata(results[1]) : null,
       contentDispositionFilename: this.#fullReader?.filename ?? null,
       contentLength: this.#fullReader?.contentLength ?? null,
       hasStructTree: results[2]
-    }));
-    this.#methodPromises.set(name, promise);
-    return promise;
+    })));
   }
   getMarkInfo() {
     return this.messageHandler.sendWithPromise("GetMarkInfo", null);
@@ -16226,7 +16196,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.5.0";
-const build = "1118050";
+const build = "86573cc";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -19761,12 +19731,7 @@ class AnnotationLayer {
       if (!isPopupAnnotation) {
         this.#elements.push(element);
         if (data.popupRef) {
-          const elements = popupToElements.get(data.popupRef);
-          if (!elements) {
-            popupToElements.set(data.popupRef, [element]);
-          } else {
-            elements.push(element);
-          }
+          popupToElements.getOrInsertComputed(data.popupRef, makeArr).push(element);
         }
       }
       const rendered = element.render();
@@ -26464,6 +26429,9 @@ globalThis.pdfjsLib = {
   isDataScheme: isDataScheme,
   isPdfFile: isPdfFile,
   isValidExplicitDest: isValidExplicitDest,
+  makeArr: makeArr,
+  makeMap: makeMap,
+  makeObj: makeObj,
   MathClamp: MathClamp,
   noContextMenu: noContextMenu,
   normalizeUnicode: normalizeUnicode,
@@ -26492,6 +26460,6 @@ globalThis.pdfjsLib = {
   XfaLayer: XfaLayer
 };
 
-export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, CSSConstants, ColorPicker, DOMSVGFactory, DrawLayer, FeatureTest, GlobalWorkerOptions, ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TouchManager, Util, VerbosityLevel, XfaLayer, applyOpacity, build, createValidAbsoluteUrl, fetchData, findContrastColor, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getUuid, getXfaPageViewport, isDataScheme, isPdfFile, isValidExplicitDest, noContextMenu, normalizeUnicode, renderRichText, setLayerDimensions, shadow, stopEvent, updateUrlHash, version };
+export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, CSSConstants, ColorPicker, DOMSVGFactory, DrawLayer, FeatureTest, GlobalWorkerOptions, ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TouchManager, Util, VerbosityLevel, XfaLayer, applyOpacity, build, createValidAbsoluteUrl, fetchData, findContrastColor, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getUuid, getXfaPageViewport, isDataScheme, isPdfFile, isValidExplicitDest, makeArr, makeMap, makeObj, noContextMenu, normalizeUnicode, renderRichText, setLayerDimensions, shadow, stopEvent, updateUrlHash, version };
 
 //# sourceMappingURL=pdf.mjs.map

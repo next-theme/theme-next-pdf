@@ -192,8 +192,9 @@ pdfjs-additional-layers = Additional Layers
 
 # Variables:
 #   $page (Number) - the page number
-pdfjs-thumb-page-title =
-    .title = Page { $page }
+#   $total (Number) - the number of pages
+pdfjs-thumb-page-title1 =
+    .title = Page { $page } of { $total }
 
 # Variables:
 #   $page (Number) - the page number
@@ -202,8 +203,8 @@ pdfjs-thumb-page-canvas =
 
 # Variables:
 #   $page (Number) - the page number
-pdfjs-thumb-page-checkbox =
-    .aria-label = Select page { $page }
+pdfjs-thumb-page-checkbox1 =
+    .title = Select page { $page }
 
 ## Find panel button title and messages
 
@@ -690,11 +691,11 @@ pdfjs-editor-add-comment-button =
 ##  - layers.
 ## The thumbnails view is used to edit the pdf: remove/insert pages, ...
 
-pdfjs-toggle-views-manager-button =
-    .title = Toggle Sidebar
+pdfjs-toggle-views-manager-button1 =
+    .title = Manage pages
 pdfjs-toggle-views-manager-notification-button =
     .title = Toggle Sidebar (document contains thumbnails/outline/attachments/layers)
-pdfjs-toggle-views-manager-button-label = Toggle Sidebar
+pdfjs-toggle-views-manager-button1-label = Manage pages
 
 pdfjs-views-manager-sidebar =
     .aria-label = Sidebar
