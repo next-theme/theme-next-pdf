@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.5.0
- * pdfjsBuild = 86573cc
+ * pdfjsBuild = 98dc351
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -2031,8 +2031,7 @@ class PagesMapper {
   hasBeenAltered() {
     return this.#pageNumberToId !== null;
   }
-  getPageMappingForSaving() {
-    const idToPageNumber = this.#idToPageNumber;
+  getPageMappingForSaving(idToPageNumber = this.#idToPageNumber) {
     let nCopy = 0;
     for (const pageNumbers of idToPageNumber.values()) {
       nCopy = Math.max(nCopy, pageNumbers.length);
@@ -2061,6 +2060,16 @@ class PagesMapper {
       }
     }
     return extractParams;
+  }
+  extractPages(extractedPageNumbers) {
+    extractedPageNumbers = Array.from(extractedPageNumbers).sort((a, b) => a - b);
+    const usedIds = new Map();
+    for (let i = 0, ii = extractedPageNumbers.length; i < ii; i++) {
+      const id = this.getPageId(extractedPageNumbers[i]);
+      const usedPageNumbers = usedIds.getOrInsertComputed(id, makeArr);
+      usedPageNumbers.push(i + 1);
+    }
+    return this.getPageMappingForSaving(usedIds);
   }
   getPrevPageNumber(pageNumber) {
     return this.#prevPageNumbers[pageNumber - 1] ?? 0;
@@ -3696,7 +3705,7 @@ class AnnotationEditorUIManager {
   #dispatchUpdateStates(details) {
     const hasChanged = Object.entries(details).some(([key, value]) => this.#previousStates[key] !== value);
     if (hasChanged) {
-      this._eventBus.dispatch("annotationeditorstateschanged", {
+      this._eventBus.dispatch("editingstateschanged", {
         source: this,
         details: Object.assign(this.#previousStates, details)
       });
@@ -4058,6 +4067,7 @@ class AnnotationEditorUIManager {
         ed.unselect();
       }
     }
+    this.#commentManager?.destroyPopup();
     this.#selectedEditors.clear();
     this.#selectedEditors.add(editor);
     editor.select();
@@ -4186,6 +4196,7 @@ class AnnotationEditorUIManager {
     if (this.#currentDrawingSession?.commitOrRemove()) {
       return;
     }
+    this.#commentManager?.destroyPopup();
     if (!this.hasSelection) {
       return;
     }
@@ -16196,7 +16207,7 @@ class InternalRenderTask {
   }
 }
 const version = "5.5.0";
-const build = "86573cc";
+const build = "98dc351";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -24258,8 +24269,7 @@ class SignatureExtractor {
       writer.write(diffs);
     }
     writer.close();
-    const buf = await new Response(cs.readable).arrayBuffer();
-    const bytes = new Uint8Array(buf);
+    const bytes = await new Response(cs.readable).bytes();
     return bytes.toBase64();
   }
   static async decompressSignature(signatureData) {
@@ -26009,7 +26019,7 @@ class AnnotationEditorLayer {
       return;
     }
     const currentMode = this.#uiManager.getMode();
-    if (currentMode === AnnotationEditorType.STAMP || currentMode === AnnotationEditorType.SIGNATURE) {
+    if (currentMode === AnnotationEditorType.STAMP || currentMode === AnnotationEditorType.POPUP || currentMode === AnnotationEditorType.SIGNATURE) {
       this.#uiManager.unselectAll();
       return;
     }

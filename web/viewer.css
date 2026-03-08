@@ -5330,6 +5330,7 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
     transparent 79%
   );
   --menuitem-text-active-fg:var(--menu-text-color);
+  --menuitem-active-border-color:var(--menuitem-border-color);
   --menuitem-focus-bg:color-mix(
     in srgb,
     var(--menu-text-color),
@@ -5353,6 +5354,7 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
   --menu-backdrop-filter:none;
   --csstools-light-dark-toggle--124:var(--csstools-color-scheme--light) #fbfbfe;
   --menu-text-color:var(--csstools-light-dark-toggle--124, #15141a);
+  --menu-text-disabled-color:var(--menu-text-color);
   --menuitem-text-hover-fg:var(--menu-text-color);
   --menuitem-hover-bg:color-mix(
     in srgb,
@@ -5360,6 +5362,7 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
     transparent 86%
   );
   --menuitem-hover-background-blend-mode:normal;
+  --disabled-opacity:0.62;
 }
 
 @supports (color: light-dark(red, red)){
@@ -5413,14 +5416,18 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
     --menu-box-shadow:none;
     --menu-backdrop-filter:none;
     --menu-text-color:ButtonText;
+    --menu-text-disabled-color:GrayText;
     --menu-border-color:CanvasText;
     --menuitem-border-color:none;
     --menuitem-hover-bg:SelectedItemText;
     --menuitem-text-hover-fg:SelectedItem;
     --menuitem-active-bg:SelectedItemText;
+    --menuitem-active-border-color:ButtonText;
     --menuitem-text-active-fg:SelectedItem;
+    --menuitem-focus-bg:ButtonFace;
     --menuitem-focus-outline-color:CanvasText;
     --menuitem-focus-border-color:none;
+    --disabled-opacity:1;
 }
   }
 
@@ -5456,7 +5463,7 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
     align-items:center;
     list-style:none;
     width:100%;
-    height:24px;
+    height:26px;
     padding-inline:calc(var(--menu-mark-icon-size) + var(--menuitem-gap)) var(--menuitem-gap);
     gap:var(--menuitem-gap);
     box-sizing:border-box;
@@ -5482,9 +5489,13 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
     }
 
 :is(.popupMenu > li):has(button:disabled){
-      opacity:0.62;
+      opacity:var(--disabled-opacity);
       pointer-events:none;
     }
+
+:is(.popupMenu > li):has(button:disabled):has(button.selected)::before{
+        background-color:var(--menu-text-disabled-color);
+      }
 
 :is(.popupMenu > li):hover{
       background:var(--menuitem-hover-bg);
@@ -5505,6 +5516,7 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
 
 :is(.popupMenu > li):active{
       background-color:var(--menuitem-active-bg);
+      border-color:var(--menuitem-active-border-color);
     }
 
 :is(.popupMenu > li):active  > button > span{
@@ -5564,6 +5576,18 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
         font-weight:510;
         line-height:normal;
       }
+
+:is(:is(.popupMenu > li) > button):disabled{
+        pointer-events:none;
+      }
+
+:is(:is(.popupMenu > li) > button):disabled:not(.noIcon)::before{
+          background-color:var(--menu-text-disabled-color);
+        }
+
+:is(:is(.popupMenu > li) > button):disabled  > span{
+          color:var(--menu-text-disabled-color);
+        }
 
 .treeView{
   --csstools-light-dark-toggle--125:var(--csstools-color-scheme--light) rgb(255 255 255 / 0.8);
@@ -5742,6 +5766,7 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
   --sidebar-width:230px;
   --sidebar-min-width:min-content;
   --sidebar-max-width:50vw;
+  --sidebar-block-padding:8px;
 
   --csstools-light-dark-toggle--131:var(--csstools-color-scheme--light) #fbfbfe;
 
@@ -6008,9 +6033,9 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
   padding-bottom:16px;
   flex-direction:column;
   align-items:flex-start;
+  inset-block-start:calc(100% + var(--sidebar-block-padding));
   height:calc(
-    var(--viewer-container-height) - var(--toolbar-height) -
-      var(--doorhanger-height)
+    var(--viewer-container-height) - 2 * var(--sidebar-block-padding)
   );
   position:absolute;
 
@@ -6407,13 +6432,14 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
 
 :is(#viewsManager #viewsManagerContent) #thumbnailsView{
       --thumbnail-width:126px;
+      --gap-between-input-and-thumbnail:16px;
 
       display:flex;
       flex-flow:row wrap;
       align-items:center;
       justify-content:space-evenly;
       padding:20px 32px;
-      gap:20px;
+      gap:44px;
       width:100%;
       box-sizing:border-box;
       position:relative;
@@ -6443,6 +6469,10 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
           contain:strict;
         }
 
+.pasteMode:is(:is(#viewsManager #viewsManagerContent) #thumbnailsView){
+        gap:var(--gap-between-input-and-thumbnail);
+      }
+
 .pasteMode:is(:is(#viewsManager #viewsManagerContent) #thumbnailsView)  > .thumbnail{
           flex-direction:column;
         }
@@ -6471,12 +6501,25 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
       }
 
 :is(:is(#viewsManager #viewsManagerContent) #thumbnailsView)  > .thumbnail{
+        --input-dim:16px;
+      }
+
+:is(:is(:is(#viewsManager #viewsManagerContent) #thumbnailsView) > .thumbnail):not(:is(:is(:is(#viewsManager #viewsManagerContent) #thumbnailsView) > .thumbnail):has(input)){
+          --input-dim:0px;
+          --gap-between-input-and-thumbnail:0px;
+        }
+
+:is(:is(#viewsManager #viewsManagerContent) #thumbnailsView)  > .thumbnail{
+
         display:inline-flex;
-        justify-content:center;
+        justify-content:flex-end;
         align-items:center;
         flex-direction:row-reverse;
-        gap:16px;
-        width:auto;
+        gap:var(--gap-between-input-and-thumbnail);
+        width:calc(
+          var(--thumbnail-width) + 2 *
+            (var(--input-dim) + var(--gap-between-input-and-thumbnail))
+        );
         height:auto;
         position:relative;
         scroll-margin-top:20px;
@@ -6526,6 +6569,9 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
 
 :is(:is(:is(#viewsManager #viewsManagerContent) #thumbnailsView) > .thumbnail)  > input{
           margin:0;
+          width:var(--input-dim);
+          height:var(--input-dim);
+          accent-color:var(--indicator-color);
         }
 
 :is(:is(:is(#viewsManager #viewsManagerContent) #thumbnailsView) > .thumbnail)  > .thumbnailImageContainer{
