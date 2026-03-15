@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.5.0
- * pdfjsBuild = 98dc351
+ * pdfjsBuild = 8f7a615
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -14462,6 +14462,331 @@ class CMapFactory {
   }
 }
 
+;// ./src/shared/obj_bin_transform_utils.js
+class CSS_FONT_INFO {
+  static strings = ["fontFamily", "fontWeight", "italicAngle"];
+}
+class SYSTEM_FONT_INFO {
+  static strings = ["css", "loadedName", "baseFontName", "src"];
+}
+class FONT_INFO {
+  static bools = ["black", "bold", "disableFontFace", "fontExtraProperties", "isInvalidPDFjsFont", "isType3Font", "italic", "missingFile", "remeasure", "vertical"];
+  static numbers = ["ascent", "defaultWidth", "descent"];
+  static strings = ["fallbackName", "loadedName", "mimetype", "name"];
+  static OFFSET_NUMBERS = Math.ceil(this.bools.length * 2 / 8);
+  static OFFSET_BBOX = this.OFFSET_NUMBERS + this.numbers.length * 8;
+  static OFFSET_FONT_MATRIX = this.OFFSET_BBOX + 1 + 2 * 4;
+  static OFFSET_DEFAULT_VMETRICS = this.OFFSET_FONT_MATRIX + 1 + 8 * 6;
+  static OFFSET_STRINGS = this.OFFSET_DEFAULT_VMETRICS + 1 + 2 * 3;
+}
+class PATTERN_INFO {
+  static KIND = 0;
+  static HAS_BBOX = 1;
+  static HAS_BACKGROUND = 2;
+  static SHADING_TYPE = 3;
+  static N_COORD = 4;
+  static N_COLOR = 8;
+  static N_STOP = 12;
+  static N_FIGURES = 16;
+}
+
+;// ./src/core/obj_bin_transform_core.js
+
+
+function compileCssFontInfo(info) {
+  const encoder = new TextEncoder();
+  const encodedStrings = {};
+  let stringsLength = 0;
+  for (const prop of CSS_FONT_INFO.strings) {
+    const encoded = encoder.encode(info[prop]);
+    encodedStrings[prop] = encoded;
+    stringsLength += 4 + encoded.length;
+  }
+  const buffer = new ArrayBuffer(stringsLength);
+  const data = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  let offset = 0;
+  for (const prop of CSS_FONT_INFO.strings) {
+    const encoded = encodedStrings[prop];
+    const length = encoded.length;
+    view.setUint32(offset, length);
+    data.set(encoded, offset + 4);
+    offset += 4 + length;
+  }
+  assert(offset === buffer.byteLength, "compileCssFontInfo: Buffer overflow");
+  return buffer;
+}
+function compileSystemFontInfo(info) {
+  const encoder = new TextEncoder();
+  const encodedStrings = {};
+  let stringsLength = 0;
+  for (const prop of SYSTEM_FONT_INFO.strings) {
+    const encoded = encoder.encode(info[prop]);
+    encodedStrings[prop] = encoded;
+    stringsLength += 4 + encoded.length;
+  }
+  stringsLength += 4;
+  let encodedStyleStyle,
+    encodedStyleWeight,
+    lengthEstimate = 1 + stringsLength;
+  if (info.style) {
+    encodedStyleStyle = encoder.encode(info.style.style);
+    encodedStyleWeight = encoder.encode(info.style.weight);
+    lengthEstimate += 4 + encodedStyleStyle.length + 4 + encodedStyleWeight.length;
+  }
+  const buffer = new ArrayBuffer(lengthEstimate);
+  const data = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  let offset = 0;
+  view.setUint8(offset++, info.guessFallback ? 1 : 0);
+  view.setUint32(offset, 0);
+  offset += 4;
+  stringsLength = 0;
+  for (const prop of SYSTEM_FONT_INFO.strings) {
+    const encoded = encodedStrings[prop];
+    const length = encoded.length;
+    stringsLength += 4 + length;
+    view.setUint32(offset, length);
+    data.set(encoded, offset + 4);
+    offset += 4 + length;
+  }
+  view.setUint32(offset - stringsLength - 4, stringsLength);
+  if (info.style) {
+    view.setUint32(offset, encodedStyleStyle.length);
+    data.set(encodedStyleStyle, offset + 4);
+    offset += 4 + encodedStyleStyle.length;
+    view.setUint32(offset, encodedStyleWeight.length);
+    data.set(encodedStyleWeight, offset + 4);
+    offset += 4 + encodedStyleWeight.length;
+  }
+  assert(offset <= buffer.byteLength, "compileSystemFontInfo: Buffer overflow");
+  return buffer.transferToFixedLength(offset);
+}
+function compileFontInfo(font) {
+  const systemFontInfoBuffer = font.systemFontInfo ? compileSystemFontInfo(font.systemFontInfo) : null;
+  const cssFontInfoBuffer = font.cssFontInfo ? compileCssFontInfo(font.cssFontInfo) : null;
+  const encoder = new TextEncoder();
+  const encodedStrings = {};
+  let stringsLength = 0;
+  for (const prop of FONT_INFO.strings) {
+    encodedStrings[prop] = encoder.encode(font[prop]);
+    stringsLength += 4 + encodedStrings[prop].length;
+  }
+  const lengthEstimate = FONT_INFO.OFFSET_STRINGS + 4 + stringsLength + 4 + (systemFontInfoBuffer?.byteLength ?? 0) + 4 + (cssFontInfoBuffer?.byteLength ?? 0) + 4 + (font.data?.length ?? 0);
+  const buffer = new ArrayBuffer(lengthEstimate);
+  const data = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  let offset = 0;
+  const numBools = FONT_INFO.bools.length;
+  let boolByte = 0,
+    boolBit = 0;
+  for (let i = 0; i < numBools; i++) {
+    const value = font[FONT_INFO.bools[i]];
+    const bits = value === undefined ? 0x00 : value ? 0x02 : 0x01;
+    boolByte |= bits << boolBit;
+    boolBit += 2;
+    if (boolBit === 8 || i === numBools - 1) {
+      view.setUint8(offset++, boolByte);
+      boolByte = 0;
+      boolBit = 0;
+    }
+  }
+  assert(offset === FONT_INFO.OFFSET_NUMBERS, "compileFontInfo: Boolean properties offset mismatch");
+  for (const prop of FONT_INFO.numbers) {
+    view.setFloat64(offset, font[prop]);
+    offset += 8;
+  }
+  assert(offset === FONT_INFO.OFFSET_BBOX, "compileFontInfo: Number properties offset mismatch");
+  if (font.bbox) {
+    view.setUint8(offset++, 4);
+    for (const coord of font.bbox) {
+      view.setInt16(offset, coord, true);
+      offset += 2;
+    }
+  } else {
+    view.setUint8(offset++, 0);
+    offset += 2 * 4;
+  }
+  assert(offset === FONT_INFO.OFFSET_FONT_MATRIX, "compileFontInfo: BBox properties offset mismatch");
+  if (font.fontMatrix) {
+    view.setUint8(offset++, 6);
+    for (const point of font.fontMatrix) {
+      view.setFloat64(offset, point, true);
+      offset += 8;
+    }
+  } else {
+    view.setUint8(offset++, 0);
+    offset += 8 * 6;
+  }
+  assert(offset === FONT_INFO.OFFSET_DEFAULT_VMETRICS, "compileFontInfo: FontMatrix properties offset mismatch");
+  if (font.defaultVMetrics) {
+    view.setUint8(offset++, 3);
+    for (const metric of font.defaultVMetrics) {
+      view.setInt16(offset, metric, true);
+      offset += 2;
+    }
+  } else {
+    view.setUint8(offset++, 0);
+    offset += 3 * 2;
+  }
+  assert(offset === FONT_INFO.OFFSET_STRINGS, "compileFontInfo: DefaultVMetrics properties offset mismatch");
+  view.setUint32(FONT_INFO.OFFSET_STRINGS, 0);
+  offset += 4;
+  for (const prop of FONT_INFO.strings) {
+    const encoded = encodedStrings[prop];
+    const length = encoded.length;
+    view.setUint32(offset, length);
+    data.set(encoded, offset + 4);
+    offset += 4 + length;
+  }
+  view.setUint32(FONT_INFO.OFFSET_STRINGS, offset - FONT_INFO.OFFSET_STRINGS - 4);
+  if (!systemFontInfoBuffer) {
+    view.setUint32(offset, 0);
+    offset += 4;
+  } else {
+    const length = systemFontInfoBuffer.byteLength;
+    view.setUint32(offset, length);
+    assert(offset + 4 + length <= buffer.byteLength, "compileFontInfo: Buffer overflow at systemFontInfo");
+    data.set(new Uint8Array(systemFontInfoBuffer), offset + 4);
+    offset += 4 + length;
+  }
+  if (!cssFontInfoBuffer) {
+    view.setUint32(offset, 0);
+    offset += 4;
+  } else {
+    const length = cssFontInfoBuffer.byteLength;
+    view.setUint32(offset, length);
+    assert(offset + 4 + length <= buffer.byteLength, "compileFontInfo: Buffer overflow at cssFontInfo");
+    data.set(new Uint8Array(cssFontInfoBuffer), offset + 4);
+    offset += 4 + length;
+  }
+  if (font.data === undefined) {
+    view.setUint32(offset, 0);
+    offset += 4;
+  } else {
+    view.setUint32(offset, font.data.length);
+    data.set(font.data, offset + 4);
+    offset += 4 + font.data.length;
+  }
+  assert(offset <= buffer.byteLength, "compileFontInfo: Buffer overflow");
+  return buffer.transferToFixedLength(offset);
+}
+function compilePatternInfo(ir) {
+  let kind,
+    bbox = null,
+    coords = [],
+    colors = [],
+    colorStops = [],
+    figures = [],
+    shadingType = null,
+    background = null;
+  switch (ir[0]) {
+    case "RadialAxial":
+      kind = ir[1] === "axial" ? 1 : 2;
+      bbox = ir[2];
+      colorStops = ir[3];
+      if (kind === 1) {
+        coords.push(...ir[4], ...ir[5]);
+      } else {
+        coords.push(ir[4][0], ir[4][1], ir[6], ir[5][0], ir[5][1], ir[7]);
+      }
+      break;
+    case "Mesh":
+      kind = 3;
+      shadingType = ir[1];
+      coords = ir[2];
+      colors = ir[3];
+      figures = ir[4] || [];
+      bbox = ir[6];
+      background = ir[7];
+      break;
+    default:
+      throw new Error(`Unsupported pattern type: ${ir[0]}`);
+  }
+  const nCoord = Math.floor(coords.length / 2);
+  const nColor = Math.floor(colors.length / 3);
+  const nStop = colorStops.length;
+  const nFigures = figures.length;
+  let figuresSize = 0;
+  for (const figure of figures) {
+    figuresSize += 1;
+    figuresSize = Math.ceil(figuresSize / 4) * 4;
+    figuresSize += 4 + figure.coords.length * 4;
+    figuresSize += 4 + figure.colors.length * 4;
+    if (figure.verticesPerRow !== undefined) {
+      figuresSize += 4;
+    }
+  }
+  const byteLen = 20 + nCoord * 8 + nColor * 3 + nStop * 8 + (bbox ? 16 : 0) + (background ? 3 : 0) + figuresSize;
+  const buffer = new ArrayBuffer(byteLen);
+  const dataView = new DataView(buffer);
+  const u8data = new Uint8Array(buffer);
+  dataView.setUint8(PATTERN_INFO.KIND, kind);
+  dataView.setUint8(PATTERN_INFO.HAS_BBOX, bbox ? 1 : 0);
+  dataView.setUint8(PATTERN_INFO.HAS_BACKGROUND, background ? 1 : 0);
+  dataView.setUint8(PATTERN_INFO.SHADING_TYPE, shadingType);
+  dataView.setUint32(PATTERN_INFO.N_COORD, nCoord, true);
+  dataView.setUint32(PATTERN_INFO.N_COLOR, nColor, true);
+  dataView.setUint32(PATTERN_INFO.N_STOP, nStop, true);
+  dataView.setUint32(PATTERN_INFO.N_FIGURES, nFigures, true);
+  let offset = 20;
+  const coordsView = new Float32Array(buffer, offset, nCoord * 2);
+  coordsView.set(coords);
+  offset += nCoord * 8;
+  u8data.set(colors, offset);
+  offset += nColor * 3;
+  for (const [pos, hex] of colorStops) {
+    dataView.setFloat32(offset, pos, true);
+    offset += 4;
+    dataView.setUint32(offset, parseInt(hex.slice(1), 16), true);
+    offset += 4;
+  }
+  if (bbox) {
+    for (const v of bbox) {
+      dataView.setFloat32(offset, v, true);
+      offset += 4;
+    }
+  }
+  if (background) {
+    u8data.set(background, offset);
+    offset += 3;
+  }
+  for (let i = 0; i < figures.length; i++) {
+    const figure = figures[i];
+    dataView.setUint8(offset, figure.type);
+    offset += 1;
+    offset = Math.ceil(offset / 4) * 4;
+    dataView.setUint32(offset, figure.coords.length, true);
+    offset += 4;
+    const figureCoordsView = new Int32Array(buffer, offset, figure.coords.length);
+    figureCoordsView.set(figure.coords);
+    offset += figure.coords.length * 4;
+    dataView.setUint32(offset, figure.colors.length, true);
+    offset += 4;
+    const colorsView = new Int32Array(buffer, offset, figure.colors.length);
+    colorsView.set(figure.colors);
+    offset += figure.colors.length * 4;
+    if (figure.verticesPerRow !== undefined) {
+      dataView.setUint32(offset, figure.verticesPerRow, true);
+      offset += 4;
+    }
+  }
+  return buffer;
+}
+function compileFontPathInfo(path) {
+  let data;
+  let buffer;
+  if (FeatureTest.isFloat16ArraySupported) {
+    buffer = new ArrayBuffer(path.length * 2);
+    data = new Float16Array(buffer);
+  } else {
+    buffer = new ArrayBuffer(path.length * 4);
+    data = new Float32Array(buffer);
+  }
+  data.set(path);
+  return buffer;
+}
+
 ;// ./src/core/encodings.js
 const ExpertEncoding = ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "space", "exclamsmall", "Hungarumlautsmall", "", "dollaroldstyle", "dollarsuperior", "ampersandsmall", "Acutesmall", "parenleftsuperior", "parenrightsuperior", "twodotenleader", "onedotenleader", "comma", "hyphen", "period", "fraction", "zerooldstyle", "oneoldstyle", "twooldstyle", "threeoldstyle", "fouroldstyle", "fiveoldstyle", "sixoldstyle", "sevenoldstyle", "eightoldstyle", "nineoldstyle", "colon", "semicolon", "commasuperior", "threequartersemdash", "periodsuperior", "questionsmall", "", "asuperior", "bsuperior", "centsuperior", "dsuperior", "esuperior", "", "", "", "isuperior", "", "", "lsuperior", "msuperior", "nsuperior", "osuperior", "", "", "rsuperior", "ssuperior", "tsuperior", "", "ff", "fi", "fl", "ffi", "ffl", "parenleftinferior", "", "parenrightinferior", "Circumflexsmall", "hyphensuperior", "Gravesmall", "Asmall", "Bsmall", "Csmall", "Dsmall", "Esmall", "Fsmall", "Gsmall", "Hsmall", "Ismall", "Jsmall", "Ksmall", "Lsmall", "Msmall", "Nsmall", "Osmall", "Psmall", "Qsmall", "Rsmall", "Ssmall", "Tsmall", "Usmall", "Vsmall", "Wsmall", "Xsmall", "Ysmall", "Zsmall", "colonmonetary", "onefitted", "rupiah", "Tildesmall", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "exclamdownsmall", "centoldstyle", "Lslashsmall", "", "", "Scaronsmall", "Zcaronsmall", "Dieresissmall", "Brevesmall", "Caronsmall", "", "Dotaccentsmall", "", "", "Macronsmall", "", "", "figuredash", "hypheninferior", "", "", "Ogoneksmall", "Ringsmall", "Cedillasmall", "", "", "", "onequarter", "onehalf", "threequarters", "questiondownsmall", "oneeighth", "threeeighths", "fiveeighths", "seveneighths", "onethird", "twothirds", "", "", "zerosuperior", "onesuperior", "twosuperior", "threesuperior", "foursuperior", "fivesuperior", "sixsuperior", "sevensuperior", "eightsuperior", "ninesuperior", "zeroinferior", "oneinferior", "twoinferior", "threeinferior", "fourinferior", "fiveinferior", "sixinferior", "seveninferior", "eightinferior", "nineinferior", "centinferior", "dollarinferior", "periodinferior", "commainferior", "Agravesmall", "Aacutesmall", "Acircumflexsmall", "Atildesmall", "Adieresissmall", "Aringsmall", "AEsmall", "Ccedillasmall", "Egravesmall", "Eacutesmall", "Ecircumflexsmall", "Edieresissmall", "Igravesmall", "Iacutesmall", "Icircumflexsmall", "Idieresissmall", "Ethsmall", "Ntildesmall", "Ogravesmall", "Oacutesmall", "Ocircumflexsmall", "Otildesmall", "Odieresissmall", "OEsmall", "Oslashsmall", "Ugravesmall", "Uacutesmall", "Ucircumflexsmall", "Udieresissmall", "Yacutesmall", "Thornsmall", "Ydieresissmall"];
 const MacExpertEncoding = ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "space", "exclamsmall", "Hungarumlautsmall", "centoldstyle", "dollaroldstyle", "dollarsuperior", "ampersandsmall", "Acutesmall", "parenleftsuperior", "parenrightsuperior", "twodotenleader", "onedotenleader", "comma", "hyphen", "period", "fraction", "zerooldstyle", "oneoldstyle", "twooldstyle", "threeoldstyle", "fouroldstyle", "fiveoldstyle", "sixoldstyle", "sevenoldstyle", "eightoldstyle", "nineoldstyle", "colon", "semicolon", "", "threequartersemdash", "", "questionsmall", "", "", "", "", "Ethsmall", "", "", "onequarter", "onehalf", "threequarters", "oneeighth", "threeeighths", "fiveeighths", "seveneighths", "onethird", "twothirds", "", "", "", "", "", "", "ff", "fi", "fl", "ffi", "ffl", "parenleftinferior", "", "parenrightinferior", "Circumflexsmall", "hypheninferior", "Gravesmall", "Asmall", "Bsmall", "Csmall", "Dsmall", "Esmall", "Fsmall", "Gsmall", "Hsmall", "Ismall", "Jsmall", "Ksmall", "Lsmall", "Msmall", "Nsmall", "Osmall", "Psmall", "Qsmall", "Rsmall", "Ssmall", "Tsmall", "Usmall", "Vsmall", "Wsmall", "Xsmall", "Ysmall", "Zsmall", "colonmonetary", "onefitted", "rupiah", "Tildesmall", "", "", "asuperior", "centsuperior", "", "", "", "", "Aacutesmall", "Agravesmall", "Acircumflexsmall", "Adieresissmall", "Atildesmall", "Aringsmall", "Ccedillasmall", "Eacutesmall", "Egravesmall", "Ecircumflexsmall", "Edieresissmall", "Iacutesmall", "Igravesmall", "Icircumflexsmall", "Idieresissmall", "Ntildesmall", "Oacutesmall", "Ogravesmall", "Ocircumflexsmall", "Odieresissmall", "Otildesmall", "Uacutesmall", "Ugravesmall", "Ucircumflexsmall", "Udieresissmall", "", "eightsuperior", "fourinferior", "threeinferior", "sixinferior", "eightinferior", "seveninferior", "Scaronsmall", "", "centinferior", "twoinferior", "", "Dieresissmall", "", "Caronsmall", "osuperior", "fiveinferior", "", "commainferior", "periodinferior", "Yacutesmall", "", "dollarinferior", "", "", "Thornsmall", "", "nineinferior", "zeroinferior", "Zcaronsmall", "AEsmall", "Oslashsmall", "questiondownsmall", "oneinferior", "Lslashsmall", "", "", "", "", "", "", "Cedillasmall", "", "", "", "", "", "OEsmall", "figuredash", "hyphensuperior", "", "", "", "", "exclamdownsmall", "", "Ydieresissmall", "", "onesuperior", "twosuperior", "threesuperior", "foursuperior", "fivesuperior", "sixsuperior", "sevensuperior", "ninesuperior", "zerosuperior", "", "esuperior", "rsuperior", "tsuperior", "", "", "isuperior", "ssuperior", "dsuperior", "", "", "", "", "", "lsuperior", "Ogoneksmall", "Brevesmall", "Macronsmall", "bsuperior", "nsuperior", "msuperior", "commasuperior", "periodsuperior", "Dotaccentsmall", "Ringsmall", "", "", "", ""];
@@ -27818,6 +28143,8 @@ function createNameTable(name, proto) {
   return nameTable;
 }
 class Font {
+  #charsCache = new Map();
+  #glyphCache = new Map();
   constructor(name, file, properties, evaluatorOptions) {
     this.name = name;
     this.psName = null;
@@ -27828,8 +28155,6 @@ class Font {
     this.isType3Font = properties.isType3Font;
     this.missingFile = false;
     this.cssFontInfo = properties.cssFontInfo;
-    this._charsCache = Object.create(null);
-    this._glyphCache = Object.create(null);
     let isSerifFont = !!(properties.flags & FontFlags.Serif);
     if (!isSerifFont && !properties.isSimulatedFlags) {
       const stdFontMap = getStdFontMap(),
@@ -29552,7 +29877,7 @@ class Font {
     return shadow(this, "_spaceWidth", width || this.defaultWidth);
   }
   _charToGlyph(charcode, isSpace = false) {
-    let glyph = this._glyphCache[charcode];
+    let glyph = this.#glyphCache.get(charcode);
     if (glyph?.isSpace === isSpace) {
       return glyph;
     }
@@ -29614,10 +29939,11 @@ class Font {
       }
     }
     glyph = new fonts_Glyph(charcode, fontChar, unicode, accent, width, vmetric, operatorListId, isSpace, isInFont);
-    return this._glyphCache[charcode] = glyph;
+    this.#glyphCache.set(charcode, glyph);
+    return glyph;
   }
   charsToGlyphs(chars) {
-    let glyphs = this._charsCache[chars];
+    let glyphs = this.#charsCache.get(chars);
     if (glyphs) {
       return glyphs;
     }
@@ -29643,7 +29969,8 @@ class Font {
         glyphs.push(glyph);
       }
     }
-    return this._charsCache[chars] = glyphs;
+    this.#charsCache.set(chars, glyphs);
+    return glyphs;
   }
   getCharPositions(chars) {
     const positions = [];
@@ -29664,7 +29991,7 @@ class Font {
     return positions;
   }
   get glyphCacheValues() {
-    return Object.values(this._glyphCache);
+    return this.#glyphCache.values();
   }
   encodeString(str) {
     const buffers = [];
@@ -29716,685 +30043,6 @@ class ErrorFont {
     return {
       error: this.error
     };
-  }
-}
-
-;// ./src/shared/obj-bin-transform.js
-
-class CssFontInfo {
-  #buffer;
-  #view;
-  #decoder;
-  static strings = ["fontFamily", "fontWeight", "italicAngle"];
-  static write(info) {
-    const encoder = new TextEncoder();
-    const encodedStrings = {};
-    let stringsLength = 0;
-    for (const prop of CssFontInfo.strings) {
-      const encoded = encoder.encode(info[prop]);
-      encodedStrings[prop] = encoded;
-      stringsLength += 4 + encoded.length;
-    }
-    const buffer = new ArrayBuffer(stringsLength);
-    const data = new Uint8Array(buffer);
-    const view = new DataView(buffer);
-    let offset = 0;
-    for (const prop of CssFontInfo.strings) {
-      const encoded = encodedStrings[prop];
-      const length = encoded.length;
-      view.setUint32(offset, length);
-      data.set(encoded, offset + 4);
-      offset += 4 + length;
-    }
-    assert(offset === buffer.byteLength, "CssFontInfo.write: Buffer overflow");
-    return buffer;
-  }
-  constructor(buffer) {
-    this.#buffer = buffer;
-    this.#view = new DataView(this.#buffer);
-    this.#decoder = new TextDecoder();
-  }
-  #readString(index) {
-    assert(index < CssFontInfo.strings.length, "Invalid string index");
-    let offset = 0;
-    for (let i = 0; i < index; i++) {
-      offset += this.#view.getUint32(offset) + 4;
-    }
-    const length = this.#view.getUint32(offset);
-    return this.#decoder.decode(new Uint8Array(this.#buffer, offset + 4, length));
-  }
-  get fontFamily() {
-    return this.#readString(0);
-  }
-  get fontWeight() {
-    return this.#readString(1);
-  }
-  get italicAngle() {
-    return this.#readString(2);
-  }
-}
-class SystemFontInfo {
-  #buffer;
-  #view;
-  #decoder;
-  static strings = ["css", "loadedName", "baseFontName", "src"];
-  static write(info) {
-    const encoder = new TextEncoder();
-    const encodedStrings = {};
-    let stringsLength = 0;
-    for (const prop of SystemFontInfo.strings) {
-      const encoded = encoder.encode(info[prop]);
-      encodedStrings[prop] = encoded;
-      stringsLength += 4 + encoded.length;
-    }
-    stringsLength += 4;
-    let encodedStyleStyle,
-      encodedStyleWeight,
-      lengthEstimate = 1 + stringsLength;
-    if (info.style) {
-      encodedStyleStyle = encoder.encode(info.style.style);
-      encodedStyleWeight = encoder.encode(info.style.weight);
-      lengthEstimate += 4 + encodedStyleStyle.length + 4 + encodedStyleWeight.length;
-    }
-    const buffer = new ArrayBuffer(lengthEstimate);
-    const data = new Uint8Array(buffer);
-    const view = new DataView(buffer);
-    let offset = 0;
-    view.setUint8(offset++, info.guessFallback ? 1 : 0);
-    view.setUint32(offset, 0);
-    offset += 4;
-    stringsLength = 0;
-    for (const prop of SystemFontInfo.strings) {
-      const encoded = encodedStrings[prop];
-      const length = encoded.length;
-      stringsLength += 4 + length;
-      view.setUint32(offset, length);
-      data.set(encoded, offset + 4);
-      offset += 4 + length;
-    }
-    view.setUint32(offset - stringsLength - 4, stringsLength);
-    if (info.style) {
-      view.setUint32(offset, encodedStyleStyle.length);
-      data.set(encodedStyleStyle, offset + 4);
-      offset += 4 + encodedStyleStyle.length;
-      view.setUint32(offset, encodedStyleWeight.length);
-      data.set(encodedStyleWeight, offset + 4);
-      offset += 4 + encodedStyleWeight.length;
-    }
-    assert(offset <= buffer.byteLength, "SubstitionInfo.write: Buffer overflow");
-    return buffer.transferToFixedLength(offset);
-  }
-  constructor(buffer) {
-    this.#buffer = buffer;
-    this.#view = new DataView(this.#buffer);
-    this.#decoder = new TextDecoder();
-  }
-  get guessFallback() {
-    return this.#view.getUint8(0) !== 0;
-  }
-  #readString(index) {
-    assert(index < SystemFontInfo.strings.length, "Invalid string index");
-    let offset = 5;
-    for (let i = 0; i < index; i++) {
-      offset += this.#view.getUint32(offset) + 4;
-    }
-    const length = this.#view.getUint32(offset);
-    return this.#decoder.decode(new Uint8Array(this.#buffer, offset + 4, length));
-  }
-  get css() {
-    return this.#readString(0);
-  }
-  get loadedName() {
-    return this.#readString(1);
-  }
-  get baseFontName() {
-    return this.#readString(2);
-  }
-  get src() {
-    return this.#readString(3);
-  }
-  get style() {
-    let offset = 1;
-    offset += 4 + this.#view.getUint32(offset);
-    const styleLength = this.#view.getUint32(offset);
-    const style = this.#decoder.decode(new Uint8Array(this.#buffer, offset + 4, styleLength));
-    offset += 4 + styleLength;
-    const weightLength = this.#view.getUint32(offset);
-    const weight = this.#decoder.decode(new Uint8Array(this.#buffer, offset + 4, weightLength));
-    return {
-      style,
-      weight
-    };
-  }
-}
-class FontInfo {
-  static bools = ["black", "bold", "disableFontFace", "fontExtraProperties", "isInvalidPDFjsFont", "isType3Font", "italic", "missingFile", "remeasure", "vertical"];
-  static numbers = ["ascent", "defaultWidth", "descent"];
-  static strings = ["fallbackName", "loadedName", "mimetype", "name"];
-  static #OFFSET_NUMBERS = Math.ceil(this.bools.length * 2 / 8);
-  static #OFFSET_BBOX = this.#OFFSET_NUMBERS + this.numbers.length * 8;
-  static #OFFSET_FONT_MATRIX = this.#OFFSET_BBOX + 1 + 2 * 4;
-  static #OFFSET_DEFAULT_VMETRICS = this.#OFFSET_FONT_MATRIX + 1 + 8 * 6;
-  static #OFFSET_STRINGS = this.#OFFSET_DEFAULT_VMETRICS + 1 + 2 * 3;
-  #buffer;
-  #decoder;
-  #view;
-  constructor({
-    data,
-    extra
-  }) {
-    this.#buffer = data;
-    this.#decoder = new TextDecoder();
-    this.#view = new DataView(this.#buffer);
-    if (extra) {
-      Object.assign(this, extra);
-    }
-  }
-  #readBoolean(index) {
-    assert(index < FontInfo.bools.length, "Invalid boolean index");
-    const byteOffset = Math.floor(index / 4);
-    const bitOffset = index * 2 % 8;
-    const value = this.#view.getUint8(byteOffset) >> bitOffset & 0x03;
-    return value === 0x00 ? undefined : value === 0x02;
-  }
-  get black() {
-    return this.#readBoolean(0);
-  }
-  get bold() {
-    return this.#readBoolean(1);
-  }
-  get disableFontFace() {
-    return this.#readBoolean(2);
-  }
-  get fontExtraProperties() {
-    return this.#readBoolean(3);
-  }
-  get isInvalidPDFjsFont() {
-    return this.#readBoolean(4);
-  }
-  get isType3Font() {
-    return this.#readBoolean(5);
-  }
-  get italic() {
-    return this.#readBoolean(6);
-  }
-  get missingFile() {
-    return this.#readBoolean(7);
-  }
-  get remeasure() {
-    return this.#readBoolean(8);
-  }
-  get vertical() {
-    return this.#readBoolean(9);
-  }
-  #readNumber(index) {
-    assert(index < FontInfo.numbers.length, "Invalid number index");
-    return this.#view.getFloat64(FontInfo.#OFFSET_NUMBERS + index * 8);
-  }
-  get ascent() {
-    return this.#readNumber(0);
-  }
-  get defaultWidth() {
-    return this.#readNumber(1);
-  }
-  get descent() {
-    return this.#readNumber(2);
-  }
-  get bbox() {
-    let offset = FontInfo.#OFFSET_BBOX;
-    const numCoords = this.#view.getUint8(offset);
-    if (numCoords === 0) {
-      return undefined;
-    }
-    offset += 1;
-    const bbox = [];
-    for (let i = 0; i < 4; i++) {
-      bbox.push(this.#view.getInt16(offset, true));
-      offset += 2;
-    }
-    return bbox;
-  }
-  get fontMatrix() {
-    let offset = FontInfo.#OFFSET_FONT_MATRIX;
-    const numPoints = this.#view.getUint8(offset);
-    if (numPoints === 0) {
-      return undefined;
-    }
-    offset += 1;
-    const fontMatrix = [];
-    for (let i = 0; i < 6; i++) {
-      fontMatrix.push(this.#view.getFloat64(offset, true));
-      offset += 8;
-    }
-    return fontMatrix;
-  }
-  get defaultVMetrics() {
-    let offset = FontInfo.#OFFSET_DEFAULT_VMETRICS;
-    const numMetrics = this.#view.getUint8(offset);
-    if (numMetrics === 0) {
-      return undefined;
-    }
-    offset += 1;
-    const defaultVMetrics = [];
-    for (let i = 0; i < 3; i++) {
-      defaultVMetrics.push(this.#view.getInt16(offset, true));
-      offset += 2;
-    }
-    return defaultVMetrics;
-  }
-  #readString(index) {
-    assert(index < FontInfo.strings.length, "Invalid string index");
-    let offset = FontInfo.#OFFSET_STRINGS + 4;
-    for (let i = 0; i < index; i++) {
-      offset += this.#view.getUint32(offset) + 4;
-    }
-    const length = this.#view.getUint32(offset);
-    const stringData = new Uint8Array(length);
-    stringData.set(new Uint8Array(this.#buffer, offset + 4, length));
-    return this.#decoder.decode(stringData);
-  }
-  get fallbackName() {
-    return this.#readString(0);
-  }
-  get loadedName() {
-    return this.#readString(1);
-  }
-  get mimetype() {
-    return this.#readString(2);
-  }
-  get name() {
-    return this.#readString(3);
-  }
-  get data() {
-    let offset = FontInfo.#OFFSET_STRINGS;
-    const stringsLength = this.#view.getUint32(offset);
-    offset += 4 + stringsLength;
-    const systemFontInfoLength = this.#view.getUint32(offset);
-    offset += 4 + systemFontInfoLength;
-    const cssFontInfoLength = this.#view.getUint32(offset);
-    offset += 4 + cssFontInfoLength;
-    const length = this.#view.getUint32(offset);
-    if (length === 0) {
-      return undefined;
-    }
-    return new Uint8Array(this.#buffer, offset + 4, length);
-  }
-  clearData() {
-    let offset = FontInfo.#OFFSET_STRINGS;
-    const stringsLength = this.#view.getUint32(offset);
-    offset += 4 + stringsLength;
-    const systemFontInfoLength = this.#view.getUint32(offset);
-    offset += 4 + systemFontInfoLength;
-    const cssFontInfoLength = this.#view.getUint32(offset);
-    offset += 4 + cssFontInfoLength;
-    const length = this.#view.getUint32(offset);
-    const data = new Uint8Array(this.#buffer, offset + 4, length);
-    data.fill(0);
-    this.#view.setUint32(offset, 0);
-  }
-  get cssFontInfo() {
-    let offset = FontInfo.#OFFSET_STRINGS;
-    const stringsLength = this.#view.getUint32(offset);
-    offset += 4 + stringsLength;
-    const systemFontInfoLength = this.#view.getUint32(offset);
-    offset += 4 + systemFontInfoLength;
-    const cssFontInfoLength = this.#view.getUint32(offset);
-    if (cssFontInfoLength === 0) {
-      return null;
-    }
-    const cssFontInfoData = new Uint8Array(cssFontInfoLength);
-    cssFontInfoData.set(new Uint8Array(this.#buffer, offset + 4, cssFontInfoLength));
-    return new CssFontInfo(cssFontInfoData.buffer);
-  }
-  get systemFontInfo() {
-    let offset = FontInfo.#OFFSET_STRINGS;
-    const stringsLength = this.#view.getUint32(offset);
-    offset += 4 + stringsLength;
-    const systemFontInfoLength = this.#view.getUint32(offset);
-    if (systemFontInfoLength === 0) {
-      return null;
-    }
-    const systemFontInfoData = new Uint8Array(systemFontInfoLength);
-    systemFontInfoData.set(new Uint8Array(this.#buffer, offset + 4, systemFontInfoLength));
-    return new SystemFontInfo(systemFontInfoData.buffer);
-  }
-  static write(font) {
-    const systemFontInfoBuffer = font.systemFontInfo ? SystemFontInfo.write(font.systemFontInfo) : null;
-    const cssFontInfoBuffer = font.cssFontInfo ? CssFontInfo.write(font.cssFontInfo) : null;
-    const encoder = new TextEncoder();
-    const encodedStrings = {};
-    let stringsLength = 0;
-    for (const prop of FontInfo.strings) {
-      encodedStrings[prop] = encoder.encode(font[prop]);
-      stringsLength += 4 + encodedStrings[prop].length;
-    }
-    const lengthEstimate = FontInfo.#OFFSET_STRINGS + 4 + stringsLength + 4 + (systemFontInfoBuffer ? systemFontInfoBuffer.byteLength : 0) + 4 + (cssFontInfoBuffer ? cssFontInfoBuffer.byteLength : 0) + 4 + (font.data ? font.data.length : 0);
-    const buffer = new ArrayBuffer(lengthEstimate);
-    const data = new Uint8Array(buffer);
-    const view = new DataView(buffer);
-    let offset = 0;
-    const numBools = FontInfo.bools.length;
-    let boolByte = 0,
-      boolBit = 0;
-    for (let i = 0; i < numBools; i++) {
-      const value = font[FontInfo.bools[i]];
-      const bits = value === undefined ? 0x00 : value ? 0x02 : 0x01;
-      boolByte |= bits << boolBit;
-      boolBit += 2;
-      if (boolBit === 8 || i === numBools - 1) {
-        view.setUint8(offset++, boolByte);
-        boolByte = 0;
-        boolBit = 0;
-      }
-    }
-    assert(offset === FontInfo.#OFFSET_NUMBERS, "FontInfo.write: Boolean properties offset mismatch");
-    for (const prop of FontInfo.numbers) {
-      view.setFloat64(offset, font[prop]);
-      offset += 8;
-    }
-    assert(offset === FontInfo.#OFFSET_BBOX, "FontInfo.write: Number properties offset mismatch");
-    if (font.bbox) {
-      view.setUint8(offset++, 4);
-      for (const coord of font.bbox) {
-        view.setInt16(offset, coord, true);
-        offset += 2;
-      }
-    } else {
-      view.setUint8(offset++, 0);
-      offset += 2 * 4;
-    }
-    assert(offset === FontInfo.#OFFSET_FONT_MATRIX, "FontInfo.write: BBox properties offset mismatch");
-    if (font.fontMatrix) {
-      view.setUint8(offset++, 6);
-      for (const point of font.fontMatrix) {
-        view.setFloat64(offset, point, true);
-        offset += 8;
-      }
-    } else {
-      view.setUint8(offset++, 0);
-      offset += 8 * 6;
-    }
-    assert(offset === FontInfo.#OFFSET_DEFAULT_VMETRICS, "FontInfo.write: FontMatrix properties offset mismatch");
-    if (font.defaultVMetrics) {
-      view.setUint8(offset++, 1);
-      for (const metric of font.defaultVMetrics) {
-        view.setInt16(offset, metric, true);
-        offset += 2;
-      }
-    } else {
-      view.setUint8(offset++, 0);
-      offset += 3 * 2;
-    }
-    assert(offset === FontInfo.#OFFSET_STRINGS, "FontInfo.write: DefaultVMetrics properties offset mismatch");
-    view.setUint32(FontInfo.#OFFSET_STRINGS, 0);
-    offset += 4;
-    for (const prop of FontInfo.strings) {
-      const encoded = encodedStrings[prop];
-      const length = encoded.length;
-      view.setUint32(offset, length);
-      data.set(encoded, offset + 4);
-      offset += 4 + length;
-    }
-    view.setUint32(FontInfo.#OFFSET_STRINGS, offset - FontInfo.#OFFSET_STRINGS - 4);
-    if (!systemFontInfoBuffer) {
-      view.setUint32(offset, 0);
-      offset += 4;
-    } else {
-      const length = systemFontInfoBuffer.byteLength;
-      view.setUint32(offset, length);
-      assert(offset + 4 + length <= buffer.byteLength, "FontInfo.write: Buffer overflow at systemFontInfo");
-      data.set(new Uint8Array(systemFontInfoBuffer), offset + 4);
-      offset += 4 + length;
-    }
-    if (!cssFontInfoBuffer) {
-      view.setUint32(offset, 0);
-      offset += 4;
-    } else {
-      const length = cssFontInfoBuffer.byteLength;
-      view.setUint32(offset, length);
-      assert(offset + 4 + length <= buffer.byteLength, "FontInfo.write: Buffer overflow at cssFontInfo");
-      data.set(new Uint8Array(cssFontInfoBuffer), offset + 4);
-      offset += 4 + length;
-    }
-    if (font.data === undefined) {
-      view.setUint32(offset, 0);
-      offset += 4;
-    } else {
-      view.setUint32(offset, font.data.length);
-      data.set(font.data, offset + 4);
-      offset += 4 + font.data.length;
-    }
-    assert(offset <= buffer.byteLength, "FontInfo.write: Buffer overflow");
-    return buffer.transferToFixedLength(offset);
-  }
-}
-class PatternInfo {
-  static #KIND = 0;
-  static #HAS_BBOX = 1;
-  static #HAS_BACKGROUND = 2;
-  static #SHADING_TYPE = 3;
-  static #N_COORD = 4;
-  static #N_COLOR = 8;
-  static #N_STOP = 12;
-  static #N_FIGURES = 16;
-  constructor(buffer) {
-    this.buffer = buffer;
-    this.view = new DataView(buffer);
-    this.data = new Uint8Array(buffer);
-  }
-  static write(ir) {
-    let kind,
-      bbox = null,
-      coords = [],
-      colors = [],
-      colorStops = [],
-      figures = [],
-      shadingType = null,
-      background = null;
-    switch (ir[0]) {
-      case "RadialAxial":
-        kind = ir[1] === "axial" ? 1 : 2;
-        bbox = ir[2];
-        colorStops = ir[3];
-        if (kind === 1) {
-          coords.push(...ir[4], ...ir[5]);
-        } else {
-          coords.push(ir[4][0], ir[4][1], ir[6], ir[5][0], ir[5][1], ir[7]);
-        }
-        break;
-      case "Mesh":
-        kind = 3;
-        shadingType = ir[1];
-        coords = ir[2];
-        colors = ir[3];
-        figures = ir[4] || [];
-        bbox = ir[6];
-        background = ir[7];
-        break;
-      default:
-        throw new Error(`Unsupported pattern type: ${ir[0]}`);
-    }
-    const nCoord = Math.floor(coords.length / 2);
-    const nColor = Math.floor(colors.length / 3);
-    const nStop = colorStops.length;
-    const nFigures = figures.length;
-    let figuresSize = 0;
-    for (const figure of figures) {
-      figuresSize += 1;
-      figuresSize = Math.ceil(figuresSize / 4) * 4;
-      figuresSize += 4 + figure.coords.length * 4;
-      figuresSize += 4 + figure.colors.length * 4;
-      if (figure.verticesPerRow !== undefined) {
-        figuresSize += 4;
-      }
-    }
-    const byteLen = 20 + nCoord * 8 + nColor * 3 + nStop * 8 + (bbox ? 16 : 0) + (background ? 3 : 0) + figuresSize;
-    const buffer = new ArrayBuffer(byteLen);
-    const dataView = new DataView(buffer);
-    const u8data = new Uint8Array(buffer);
-    dataView.setUint8(PatternInfo.#KIND, kind);
-    dataView.setUint8(PatternInfo.#HAS_BBOX, bbox ? 1 : 0);
-    dataView.setUint8(PatternInfo.#HAS_BACKGROUND, background ? 1 : 0);
-    dataView.setUint8(PatternInfo.#SHADING_TYPE, shadingType);
-    dataView.setUint32(PatternInfo.#N_COORD, nCoord, true);
-    dataView.setUint32(PatternInfo.#N_COLOR, nColor, true);
-    dataView.setUint32(PatternInfo.#N_STOP, nStop, true);
-    dataView.setUint32(PatternInfo.#N_FIGURES, nFigures, true);
-    let offset = 20;
-    const coordsView = new Float32Array(buffer, offset, nCoord * 2);
-    coordsView.set(coords);
-    offset += nCoord * 8;
-    u8data.set(colors, offset);
-    offset += nColor * 3;
-    for (const [pos, hex] of colorStops) {
-      dataView.setFloat32(offset, pos, true);
-      offset += 4;
-      dataView.setUint32(offset, parseInt(hex.slice(1), 16), true);
-      offset += 4;
-    }
-    if (bbox) {
-      for (const v of bbox) {
-        dataView.setFloat32(offset, v, true);
-        offset += 4;
-      }
-    }
-    if (background) {
-      u8data.set(background, offset);
-      offset += 3;
-    }
-    for (let i = 0; i < figures.length; i++) {
-      const figure = figures[i];
-      dataView.setUint8(offset, figure.type);
-      offset += 1;
-      offset = Math.ceil(offset / 4) * 4;
-      dataView.setUint32(offset, figure.coords.length, true);
-      offset += 4;
-      const figureCoordsView = new Int32Array(buffer, offset, figure.coords.length);
-      figureCoordsView.set(figure.coords);
-      offset += figure.coords.length * 4;
-      dataView.setUint32(offset, figure.colors.length, true);
-      offset += 4;
-      const colorsView = new Int32Array(buffer, offset, figure.colors.length);
-      colorsView.set(figure.colors);
-      offset += figure.colors.length * 4;
-      if (figure.verticesPerRow !== undefined) {
-        dataView.setUint32(offset, figure.verticesPerRow, true);
-        offset += 4;
-      }
-    }
-    return buffer;
-  }
-  getIR() {
-    const dataView = this.view;
-    const kind = this.data[PatternInfo.#KIND];
-    const hasBBox = !!this.data[PatternInfo.#HAS_BBOX];
-    const hasBackground = !!this.data[PatternInfo.#HAS_BACKGROUND];
-    const nCoord = dataView.getUint32(PatternInfo.#N_COORD, true);
-    const nColor = dataView.getUint32(PatternInfo.#N_COLOR, true);
-    const nStop = dataView.getUint32(PatternInfo.#N_STOP, true);
-    const nFigures = dataView.getUint32(PatternInfo.#N_FIGURES, true);
-    let offset = 20;
-    const coords = new Float32Array(this.buffer, offset, nCoord * 2);
-    offset += nCoord * 8;
-    const colors = new Uint8Array(this.buffer, offset, nColor * 3);
-    offset += nColor * 3;
-    const stops = [];
-    for (let i = 0; i < nStop; ++i) {
-      const p = dataView.getFloat32(offset, true);
-      offset += 4;
-      const rgb = dataView.getUint32(offset, true);
-      offset += 4;
-      stops.push([p, `#${rgb.toString(16).padStart(6, "0")}`]);
-    }
-    let bbox = null;
-    if (hasBBox) {
-      bbox = [];
-      for (let i = 0; i < 4; ++i) {
-        bbox.push(dataView.getFloat32(offset, true));
-        offset += 4;
-      }
-    }
-    let background = null;
-    if (hasBackground) {
-      background = new Uint8Array(this.buffer, offset, 3);
-      offset += 3;
-    }
-    const figures = [];
-    for (let i = 0; i < nFigures; ++i) {
-      const type = dataView.getUint8(offset);
-      offset += 1;
-      offset = Math.ceil(offset / 4) * 4;
-      const coordsLength = dataView.getUint32(offset, true);
-      offset += 4;
-      const figureCoords = new Int32Array(this.buffer, offset, coordsLength);
-      offset += coordsLength * 4;
-      const colorsLength = dataView.getUint32(offset, true);
-      offset += 4;
-      const figureColors = new Int32Array(this.buffer, offset, colorsLength);
-      offset += colorsLength * 4;
-      const figure = {
-        type,
-        coords: figureCoords,
-        colors: figureColors
-      };
-      if (type === MeshFigureType.LATTICE) {
-        figure.verticesPerRow = dataView.getUint32(offset, true);
-        offset += 4;
-      }
-      figures.push(figure);
-    }
-    if (kind === 1) {
-      return ["RadialAxial", "axial", bbox, stops, Array.from(coords.slice(0, 2)), Array.from(coords.slice(2, 4)), null, null];
-    }
-    if (kind === 2) {
-      return ["RadialAxial", "radial", bbox, stops, [coords[0], coords[1]], [coords[3], coords[4]], coords[2], coords[5]];
-    }
-    if (kind === 3) {
-      const shadingType = this.data[PatternInfo.#SHADING_TYPE];
-      let bounds = null;
-      if (coords.length > 0) {
-        let minX = coords[0],
-          maxX = coords[0];
-        let minY = coords[1],
-          maxY = coords[1];
-        for (let i = 0; i < coords.length; i += 2) {
-          const x = coords[i],
-            y = coords[i + 1];
-          minX = minX > x ? x : minX;
-          minY = minY > y ? y : minY;
-          maxX = maxX < x ? x : maxX;
-          maxY = maxY < y ? y : maxY;
-        }
-        bounds = [minX, minY, maxX, maxY];
-      }
-      return ["Mesh", shadingType, coords, colors, figures, bounds, bbox, background];
-    }
-    throw new Error(`Unsupported pattern kind: ${kind}`);
-  }
-}
-class FontPathInfo {
-  static write(path) {
-    let data;
-    let buffer;
-    if (FeatureTest.isFloat16ArraySupported) {
-      buffer = new ArrayBuffer(path.length * 2);
-      data = new Float16Array(buffer);
-    } else {
-      buffer = new ArrayBuffer(path.length * 4);
-      data = new Float32Array(buffer);
-    }
-    data.set(path);
-    return buffer;
-  }
-  #buffer;
-  constructor(buffer) {
-    this.#buffer = buffer;
-  }
-  get path() {
-    if (FeatureTest.isFloat16ArraySupported) {
-      return new Float16Array(this.#buffer);
-    }
-    return new Float32Array(this.#buffer);
   }
 }
 
@@ -30481,13 +30129,6 @@ class RadialAxialShading extends BaseShading {
     const extendArr = dict.getArray("Extend");
     if (isBooleanArray(extendArr, 2)) {
       [extendStart, extendEnd] = extendArr;
-    }
-    if (this.shadingType === ShadingType.RADIAL && (!extendStart || !extendEnd)) {
-      const [x1, y1, r1, x2, y2, r2] = this.coordsArr;
-      const distance = Math.hypot(x1 - x2, y1 - y2);
-      if (r1 <= r2 + distance && r2 <= r1 + distance) {
-        warn("Unsupported radial gradient.");
-      }
     }
     this.extendStart = extendStart;
     this.extendEnd = extendEnd;
@@ -35346,10 +34987,8 @@ class PartialEvaluator {
     }
     localShadingPatternCache.set(shading, id);
     if (this.parsingType3Font) {
-      const transfers = [];
-      const patternBuffer = PatternInfo.write(patternIR);
-      transfers.push(patternBuffer);
-      this.handler.send("commonobj", [id, "Pattern", patternBuffer], transfers);
+      const buffer = compilePatternInfo(patternIR);
+      this.handler.send("commonobj", [id, "Pattern", buffer], [buffer]);
     } else {
       this.handler.send("obj", [id, this.pageIndex, "Pattern", patternIR]);
     }
@@ -37680,7 +37319,7 @@ class PartialEvaluator {
         if (font.renderer.hasBuiltPath(fontChar)) {
           return;
         }
-        const buffer = FontPathInfo.write(font.renderer.getPathJs(fontChar));
+        const buffer = compileFontPathInfo(font.renderer.getPathJs(fontChar));
         handler.send("commonobj", [glyphName, "FontPath", buffer], [buffer]);
       } catch (reason) {
         if (evaluatorOptions.ignoreErrors) {
@@ -37731,7 +37370,7 @@ class TranslatedFont {
       if (fontData.data.charProcOperatorList) {
         fontData.charProcOperatorList = fontData.data.charProcOperatorList;
       }
-      fontData.data = FontInfo.write(fontData.data);
+      fontData.data = compileFontInfo(fontData.data);
       transfer.push(fontData.data);
     }
     handler.send("commonobj", [this.loadedName, "Font", fontData], transfer);
@@ -41707,6 +41346,83 @@ class Catalog {
     }
     return shadow(this, "baseUrl", this.pdfManager.docBaseUrl);
   }
+  static #getDestFromStructElement(xref, seRef) {
+    const seDict = xref.fetchIfRef(seRef);
+    if (!(seDict instanceof Dict)) {
+      return null;
+    }
+    let pageRef = null;
+    const directPg = seDict.getRaw("Pg");
+    if (directPg instanceof Ref) {
+      pageRef = directPg;
+    }
+    if (!pageRef) {
+      const queue = [seDict];
+      while (queue.length > 0 && !pageRef) {
+        const node = queue.shift();
+        const kids = node.get("K");
+        let kidsArr;
+        if (Array.isArray(kids)) {
+          kidsArr = kids;
+        } else if (kids) {
+          kidsArr = [kids];
+        } else {
+          kidsArr = [];
+        }
+        for (const kid of kidsArr) {
+          const kidObj = xref.fetchIfRef(kid);
+          if (!(kidObj instanceof Dict)) {
+            continue;
+          }
+          const pg = kidObj.getRaw("Pg");
+          if (pg instanceof Ref) {
+            pageRef = pg;
+            break;
+          }
+          queue.push(kidObj);
+        }
+      }
+    }
+    if (!pageRef) {
+      const MAX_DEPTH = 40;
+      let current = seDict;
+      for (let depth = 0; depth < MAX_DEPTH; depth++) {
+        const parentRaw = current.getRaw("P");
+        if (!(parentRaw instanceof Ref)) {
+          break;
+        }
+        const parentDict = xref.fetchIfRef(parentRaw);
+        if (!(parentDict instanceof Dict)) {
+          break;
+        }
+        if (isName(parentDict.get("Type"), "StructTreeRoot")) {
+          break;
+        }
+        const pg = parentDict.getRaw("Pg");
+        if (pg instanceof Ref) {
+          pageRef = pg;
+          break;
+        }
+        current = parentDict;
+      }
+    }
+    if (!pageRef) {
+      return null;
+    }
+    let x = null,
+      y = null;
+    const attrs = seDict.get("A");
+    if (attrs instanceof Dict) {
+      const bboxArr = attrs.getArray("BBox");
+      if (isNumberArray(bboxArr, 4)) {
+        x = bboxArr[0];
+        y = bboxArr[3];
+      }
+    }
+    return [pageRef, {
+      name: "XYZ"
+    }, x, y, null];
+  }
   static parseDestDictionary({
     destDict,
     resultObj,
@@ -41887,6 +41603,22 @@ class Catalog {
         resultObj.dest = stringToPDFString(dest, true);
       } else if (isValidExplicitDest(dest)) {
         resultObj.dest = dest;
+      }
+    }
+    if (!resultObj.dest && !resultObj.url && !resultObj.action && !resultObj.attachment && !resultObj.setOCGState && !resultObj.resetForm) {
+      const seRef = destDict.getRaw("SE");
+      if (seRef instanceof Ref) {
+        try {
+          const seDest = Catalog.#getDestFromStructElement(destDict.xref, seRef);
+          if (seDest) {
+            resultObj.dest = seDest;
+          }
+        } catch (ex) {
+          if (ex instanceof MissingDataException) {
+            throw ex;
+          }
+          info("SE parsing failed.");
+        }
       }
     }
   }
@@ -42483,7 +42215,7 @@ function fonts_getMetrics(xfaFont, real = false) {
 ;// ./src/core/xfa/text.js
 
 const WIDTH_FACTOR = 1.02;
-class text_FontInfo {
+class FontInfo {
   constructor(xfaFont, margin, lineHeight, fontFinder) {
     this.lineHeight = lineHeight;
     this.paraMargin = margin || {
@@ -42540,7 +42272,7 @@ class text_FontInfo {
 class FontSelector {
   constructor(defaultXfaFont, defaultParaMargin, defaultLineHeight, fontFinder) {
     this.fontFinder = fontFinder;
-    this.stack = [new text_FontInfo(defaultXfaFont, defaultParaMargin, defaultLineHeight, fontFinder)];
+    this.stack = [new FontInfo(defaultXfaFont, defaultParaMargin, defaultLineHeight, fontFinder)];
   }
   pushData(xfaFont, margin, lineHeight) {
     const lastFont = this.stack.at(-1);
@@ -42554,7 +42286,7 @@ class FontSelector {
         margin[name] = lastFont.paraMargin[name];
       }
     }
-    const fontInfo = new text_FontInfo(xfaFont, margin, lineHeight || lastFont.lineHeight, this.fontFinder);
+    const fontInfo = new FontInfo(xfaFont, margin, lineHeight || lastFont.lineHeight, this.fontFinder);
     if (!fontInfo.pdfFont) {
       fontInfo.pdfFont = lastFont.pdfFont;
     }
@@ -56065,10 +55797,10 @@ class StampAnnotation extends MarkupAnnotation {
       ctx.fillRect(0, 0, width, height);
       ctx.drawImage(bitmap, 0, 0);
     }
-    const jpegBufferPromise = canvas.convertToBlob({
+    const jpegBytesPromise = canvas.convertToBlob({
       type: "image/jpeg",
       quality: 1
-    }).then(blob => blob.arrayBuffer());
+    }).then(blob => blob.bytes());
     const xobjectName = Name.get("XObject");
     const imageName = Name.get("Image");
     const image = new Dict(xref);
@@ -56101,7 +55833,7 @@ class StampAnnotation extends MarkupAnnotation {
       smask.set("Height", height);
       smaskStream = new Stream(alphaBuffer, 0, 0, smask);
     }
-    const imageStream = new Stream(await jpegBufferPromise, 0, 0, image);
+    const imageStream = new Stream(await jpegBytesPromise, 0, 0, image);
     return {
       imageStream,
       smaskStream,
@@ -58469,6 +58201,9 @@ class XRef {
 
 
 
+
+
+
 const LETTER_SIZE_MEDIABOX = [0, 0, 612, 792];
 class Page {
   #areAnnotationsCached = false;
@@ -59874,6 +59609,9 @@ class PDFDocument {
   }
   get annotationGlobals() {
     return shadow(this, "annotationGlobals", AnnotationFactory.createGlobals(this.pdfManager));
+  }
+  async toJSObject(value, firstCall = true) {
+    throw new Error("Not implemented: toJSObject");
   }
 }
 
@@ -62876,7 +62614,7 @@ class WorkerMessageHandler {
           if (!fullReader.isStreamingSupported) {
             handler.send("DocProgress", {
               loaded,
-              total: Math.max(loaded, fullReader.contentLength || 0)
+              total: fullReader.contentLength
             });
           }
           if (newPdfManager) {

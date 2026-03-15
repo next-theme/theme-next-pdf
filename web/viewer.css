@@ -1025,6 +1025,19 @@
     top:0;
   }
 
+.textLayerImages{
+  position:absolute;
+  inset:0;
+  -webkit-user-select:none;
+     -moz-user-select:none;
+          user-select:none;
+}
+
+.textLayerImages canvas{
+    position:absolute;
+    transform-origin:0% 0%;
+  }
+
 .annotationLayer{
   --csstools-color-scheme--light:initial;
   color-scheme:only light;
@@ -5836,6 +5849,7 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
   --image-current-shadow:0 0.375px 1.5px 0 var(--csstools-light-dark-toggle--153, rgb(0 0 0 / 0.05)), 0 0 0 var(--image-border-width) var(--image-current-border-color), 0 3px 12px 0 var(--csstools-light-dark-toggle--154, rgb(0 0 0 / 0.1));
   --csstools-light-dark-toggle--155:var(--csstools-color-scheme--light) rgb(0 202 219 / 0.08);
   --image-dragging-placeholder-bg:var(--csstools-light-dark-toggle--155, rgb(0 98 250 / 0.08));
+  --image-dragging-placeholder-border:var(--image-outline);
   --multiple-dragging-bg:white;
   --image-multiple-dragging-shadow:0 0 0 var(--image-border-width) var(--image-current-border-color), var(--image-border-width) var(--image-border-width) 0 calc(var(--image-border-width) / 2) var(--multiple-dragging-bg), var(--image-border-width) var(--image-border-width) 0 calc(3 * var(--image-border-width) / 2) var(--image-current-border-color);
   --image-dragging-shadow:0 0 0 var(--image-border-width) var(--image-current-border-color);
@@ -6024,6 +6038,8 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
     --multiple-dragging-bg:Canvas;
     --multiple-dragging-indicator-bg:ButtonBorder;
     --multiple-dragging-text-color:Canvas;
+    --image-dragging-placeholder-bg:Canvas;
+    --image-dragging-placeholder-border:1px GrayText solid;
 }
   }
 
@@ -6086,10 +6102,11 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
     }
 
 .viewsCloseButton:is(#viewsManager .viewsManagerButton){
-      width:32px;
-      height:32px;
+      width:26px;
+      height:26px;
       padding:4px;
       border-radius:8px;
+      background:none;
     }
 
 .viewsCloseButton:is(#viewsManager .viewsManagerButton)::before{
@@ -6277,9 +6294,7 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
         background-color:var(--status-actions-bg);
       }
 
-:is(:is(:is(#viewsManager #viewsManagerHeader) #viewsManagerStatus) #viewsManagerStatusAction)  > span.selected::before{
-          content:"";
-          display:inline-block;
+:is(:is(:is(#viewsManager #viewsManagerHeader) #viewsManagerStatus) #viewsManagerStatusAction) #viewsManagerStatusActionLabelContainer > button{
           width:var(--icon-size);
           height:var(--icon-size);
           -webkit-mask-repeat:no-repeat;
@@ -6289,6 +6304,9 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
           background-color:var(--indicator-color);
           -webkit-mask-image:var(--pages-selected-icon);
                   mask-image:var(--pages-selected-icon);
+          border:none;
+          padding:0;
+          flex:0 0 auto;
         }
 
 :is(:is(:is(#viewsManager #viewsManagerHeader) #viewsManagerStatus) #viewsManagerStatusAction) #actionSelector{
@@ -6693,6 +6711,7 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
 .placeholder:is(:is(:is(:is(#viewsManager #viewsManagerContent) #thumbnailsView) > .thumbnail) > .thumbnailImageContainer){
             background-color:var(--image-dragging-placeholder-bg);
             box-shadow:none !important;
+            outline:var(--image-dragging-placeholder-border);
           }
 
 .draggingThumbnail:is(:is(:is(:is(#viewsManager #viewsManagerContent) #thumbnailsView) > .thumbnail) > .thumbnailImageContainer){

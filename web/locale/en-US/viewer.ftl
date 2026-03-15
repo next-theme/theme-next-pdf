@@ -730,7 +730,7 @@ pdfjs-views-manager-pages-status-action-button-label = Manage
 pdfjs-views-manager-pages-status-copy-button-label = Copy
 pdfjs-views-manager-pages-status-cut-button-label = Cut
 pdfjs-views-manager-pages-status-delete-button-label = Delete
-pdfjs-views-manager-pages-status-save-as-button-label = Save as…
+pdfjs-views-manager-pages-status-export-selected-button-label = Export selected…
 
 # Variables:
 #   $count (Number) - the number of selected pages to be cut.
@@ -764,12 +764,16 @@ pdfjs-views-manager-status-warning-copy-label = Couldn’t copy. Refresh page an
 pdfjs-views-manager-status-warning-delete-label = Couldn’t delete. Refresh page and try again.
 pdfjs-views-manager-status-warning-save-label = Couldn’t save. Refresh page and try again.
 pdfjs-views-manager-status-undo-button-label = Undo
+pdfjs-views-manager-status-done-button-label = Done
 pdfjs-views-manager-status-close-button =
     .title = Close
 pdfjs-views-manager-status-close-button-label = Close
 
+pdfjs-views-manager-paste-button-label = Paste
+pdfjs-views-manager-paste-button-before =
+    .title = Paste before the first page
+
 # Variables:
 #   $page (Number) - the page number after which the paste button is.
-pdfjs-views-manager-paste-button-after-label = Paste after page { $page }
-
-pdfjs-views-manager-paste-button-before-label = Paste before the first page
+pdfjs-views-manager-paste-button-after =
+    .title = Paste after page { $page }
