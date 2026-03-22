@@ -21,8 +21,8 @@
  */
 
 /**
- * pdfjsVersion = 5.5.0
- * pdfjsBuild = 8f7a615
+ * pdfjsVersion = 5.6.0
+ * pdfjsBuild = 918a319
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -2594,6 +2594,7 @@ class AnnotationEditorUIManager {
   #allEditableAnnotations = null;
   #allEditors = new Map();
   #allLayers = new Map();
+  #savedAllLayers = null;
   #altTextManager = null;
   #annotationStorage = null;
   #changedExistingAnnotations = null;
@@ -3471,6 +3472,59 @@ class AnnotationEditorUIManager {
         this.commentSelection("context_menu");
         break;
     }
+  }
+  updatePageIndex(oldPageIndex, newPageIndex) {
+    for (const editor of this.getEditors(oldPageIndex)) {
+      editor.pageIndex = newPageIndex;
+    }
+    const layer = this.#savedAllLayers.get(oldPageIndex);
+    if (layer) {
+      layer.pageIndex = newPageIndex;
+      this.#allLayers.set(newPageIndex, layer);
+      if (this.#isEnabled) {
+        layer.enable();
+      } else {
+        layer.disable();
+      }
+    }
+  }
+  startUpdatePages() {
+    this.#savedAllLayers = new Map(this.#allLayers);
+    this.#allLayers.clear();
+  }
+  endUpdatePages() {
+    this.#savedAllLayers = null;
+  }
+  clonePage(pageIndex, newPageIndex) {
+    for (const editor of this.getEditors(pageIndex)) {
+      const serialized = editor.serialize(editor.mode !== AnnotationEditorType.HIGHLIGHT);
+      if (!serialized) {
+        continue;
+      }
+      serialized.pageIndex = newPageIndex;
+      serialized.id = this.getId();
+      serialized.isClone = true;
+      delete serialized.popupRef;
+      this.#annotationStorage.setValue(serialized.id, serialized);
+    }
+  }
+  findClonesForPage(layer) {
+    const promises = [];
+    const {
+      pageIndex
+    } = layer;
+    for (const [id, editor] of this.#annotationStorage) {
+      if (editor.pageIndex === pageIndex && editor.isClone) {
+        this.#annotationStorage.remove(id);
+        promises.push(layer.deserialize(editor).then(deserializedEditor => {
+          if (deserializedEditor) {
+            deserializedEditor.isClone = true;
+            layer.addOrRebuild(deserializedEditor);
+          }
+        }));
+      }
+    }
+    return Promise.all(promises);
   }
   #dispatchUpdateStates(details) {
     const hasChanged = Object.entries(details).some(([key, value]) => this.#previousStates[key] !== value);
@@ -5080,7 +5134,7 @@ class AnnotationEditor {
   }
   static deleteAnnotationElement(editor) {
     const fakeEditor = new FakeEditor({
-      id: editor.parent.getNextId(),
+      id: editor._uiManager.getId(),
       parent: editor.parent,
       uiManager: editor._uiManager
     });
@@ -5227,6 +5281,10 @@ class AnnotationEditor {
     this.fixAndSetPosition();
   }
   _moveAfterPaste(baseX, baseY) {
+    if (this.isClone) {
+      delete this.isClone;
+      return;
+    }
     const [parentWidth, parentHeight] = this.parentDimensions;
     this.setAt(baseX * parentWidth, baseY * parentHeight, this.width * parentWidth, this.height * parentHeight);
     this._onTranslated();
@@ -6218,7 +6276,7 @@ class AnnotationEditor {
   static async deserialize(data, parent, uiManager) {
     const editor = new this.prototype.constructor({
       parent,
-      id: parent.getNextId(),
+      id: uiManager.getId(),
       uiManager,
       annotationElementId: data.annotationElementId,
       creationDate: data.creationDate,
@@ -7915,14 +7973,14 @@ class FontLoader {
 class FontFaceObject {
   compiledGlyphs = Object.create(null);
   #fontData;
-  constructor(translatedData, inspectFont = null, extra, charProcOperatorList) {
+  constructor(translatedData, inspectFont = null, charProcOperatorList, extra) {
     this.#fontData = translatedData;
     this._inspectFont = inspectFont;
-    if (extra) {
-      Object.assign(this, extra);
-    }
     if (charProcOperatorList) {
       this.charProcOperatorList = charProcOperatorList;
+    }
+    if (extra) {
+      Object.assign(this, extra);
     }
   }
   createNativeFontFace() {
@@ -8024,9 +8082,6 @@ class FontFaceObject {
   get bbox() {
     return this.#fontData.bbox;
   }
-  set bbox(bbox) {
-    shadow(this, "bbox", bbox);
-  }
   get fontMatrix() {
     return this.#fontData.fontMatrix;
   }
@@ -8096,7 +8151,7 @@ class CssFontInfo {
   #view;
   constructor(buffer) {
     this.#buffer = buffer;
-    this.#view = new DataView(this.#buffer);
+    this.#view = new DataView(buffer);
   }
   #readString(index) {
     assert(index < CSS_FONT_INFO.strings.length, "Invalid string index");
@@ -8123,7 +8178,7 @@ class SystemFontInfo {
   #view;
   constructor(buffer) {
     this.#buffer = buffer;
-    this.#view = new DataView(this.#buffer);
+    this.#view = new DataView(buffer);
   }
   get guessFallback() {
     return this.#view.getUint8(0) !== 0;
@@ -8168,11 +8223,11 @@ class FontInfo {
   #decoder = new TextDecoder();
   #view;
   constructor({
-    data,
+    buffer,
     extra
   }) {
-    this.#buffer = data;
-    this.#view = new DataView(this.#buffer);
+    this.#buffer = buffer;
+    this.#view = new DataView(buffer);
     if (extra) {
       Object.assign(this, extra);
     }
@@ -8408,19 +8463,10 @@ class PatternInfo {
       const shadingType = this.data[PATTERN_INFO.SHADING_TYPE];
       let bounds = null;
       if (coords.length > 0) {
-        let minX = coords[0],
-          maxX = coords[0];
-        let minY = coords[1],
-          maxY = coords[1];
-        for (let i = 0; i < coords.length; i += 2) {
-          const x = coords[i],
-            y = coords[i + 1];
-          minX = minX > x ? x : minX;
-          minY = minY > y ? y : minY;
-          maxX = maxX < x ? x : maxX;
-          maxY = maxY < y ? y : maxY;
+        bounds = [Infinity, Infinity, -Infinity, -Infinity];
+        for (let i = 0, ii = coords.length; i < ii; i += 2) {
+          Util.pointBoundingBox(coords[i], coords[i + 1], bounds);
         }
-        bounds = [minX, minY, maxX, maxY];
       }
       return ["Mesh", shadingType, coords, colors, figures, bounds, bbox, background];
     }
@@ -9014,15 +9060,12 @@ class BaseCMapReaderFactory {
     if (!this.baseUrl) {
       throw new Error("Ensure that the `cMapUrl` and `cMapPacked` API parameters are provided.");
     }
-    if (!name) {
-      throw new Error("CMap name must be specified.");
-    }
     const url = this.baseUrl + name + (this.isCompressed ? ".bcmap" : "");
     return this._fetch(url).then(cMapData => ({
       cMapData,
       isCompressed: this.isCompressed
     })).catch(reason => {
-      throw new Error(`Unable to load ${this.isCompressed ? "binary " : ""}CMap at: ${url}`);
+      throw new Error(`Unable to load CMap data at: ${url}`);
     });
   }
   async _fetch(url) {
@@ -9387,9 +9430,6 @@ class BaseStandardFontDataFactory {
     if (!this.baseUrl) {
       throw new Error("Ensure that the `standardFontDataUrl` API parameter is provided.");
     }
-    if (!filename) {
-      throw new Error("Font filename must be specified.");
-    }
     const url = `${this.baseUrl}${filename}`;
     return this._fetch(url).catch(reason => {
       throw new Error(`Unable to load font data at: ${url}`);
@@ -9419,9 +9459,6 @@ class BaseWasmFactory {
   }) {
     if (!this.baseUrl) {
       throw new Error("Ensure that the `wasmUrl` API parameter is provided.");
-    }
-    if (!filename) {
-      throw new Error("Wasm filename must be specified.");
     }
     const url = `${this.baseUrl}${filename}`;
     return this._fetch(url).catch(reason => {
@@ -9477,7 +9514,271 @@ class NodeWasmFactory extends BaseWasmFactory {
   }
 }
 
+;// ./src/display/webgpu_mesh.js
+
+const WGSL = `
+struct Uniforms {
+  offsetX      : f32,
+  offsetY      : f32,
+  scaleX       : f32,
+  scaleY       : f32,
+  paddedWidth  : f32,
+  paddedHeight : f32,
+  borderSize   : f32,
+  _pad         : f32,
+};
+
+@group(0) @binding(0) var<uniform> u : Uniforms;
+
+struct VertexInput {
+  @location(0) position : vec2<f32>,
+  @location(1) color    : vec4<f32>,
+};
+
+struct VertexOutput {
+  @builtin(position) position : vec4<f32>,
+  @location(0)       color    : vec3<f32>,
+};
+
+@vertex
+fn vs_main(in : VertexInput) -> VertexOutput {
+  var out : VertexOutput;
+  let cx = (in.position.x + u.offsetX) * u.scaleX;
+  let cy = (in.position.y + u.offsetY) * u.scaleY;
+  out.position = vec4<f32>(
+    ((cx + u.borderSize) / u.paddedWidth) * 2.0 - 1.0,
+    1.0 - ((cy + u.borderSize) / u.paddedHeight) * 2.0,
+    0.0,
+    1.0
+  );
+  out.color = in.color.rgb;
+  return out;
+}
+
+@fragment
+fn fs_main(in : VertexOutput) -> @location(0) vec4<f32> {
+  return vec4<f32>(in.color, 1.0);
+}
+`;
+class WebGPUMesh {
+  #initPromise = null;
+  #device = null;
+  #pipeline = null;
+  #preferredFormat = null;
+  async #initGPU() {
+    if (!globalThis.navigator?.gpu) {
+      return false;
+    }
+    try {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (!adapter) {
+        return false;
+      }
+      this.#preferredFormat = navigator.gpu.getPreferredCanvasFormat();
+      const device = this.#device = await adapter.requestDevice();
+      const shaderModule = device.createShaderModule({
+        code: WGSL
+      });
+      this.#pipeline = device.createRenderPipeline({
+        layout: "auto",
+        vertex: {
+          module: shaderModule,
+          entryPoint: "vs_main",
+          buffers: [{
+            arrayStride: 2 * 4,
+            attributes: [{
+              shaderLocation: 0,
+              offset: 0,
+              format: "float32x2"
+            }]
+          }, {
+            arrayStride: 4,
+            attributes: [{
+              shaderLocation: 1,
+              offset: 0,
+              format: "unorm8x4"
+            }]
+          }]
+        },
+        fragment: {
+          module: shaderModule,
+          entryPoint: "fs_main",
+          targets: [{
+            format: this.#preferredFormat
+          }]
+        },
+        primitive: {
+          topology: "triangle-list"
+        }
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  init() {
+    if (this.#initPromise === null) {
+      this.#initPromise = this.#initGPU();
+    }
+  }
+  get isReady() {
+    return this.#device !== null;
+  }
+  #buildVertexStreams(figures, context) {
+    const {
+      coords,
+      colors
+    } = context;
+    let vertexCount = 0;
+    for (const figure of figures) {
+      const ps = figure.coords;
+      if (figure.type === MeshFigureType.TRIANGLES) {
+        vertexCount += ps.length;
+      } else if (figure.type === MeshFigureType.LATTICE) {
+        const vpr = figure.verticesPerRow;
+        vertexCount += (Math.floor(ps.length / vpr) - 1) * (vpr - 1) * 6;
+      }
+    }
+    const posData = new Float32Array(vertexCount * 2);
+    const colData = new Uint8Array(vertexCount * 4);
+    let pOff = 0,
+      cOff = 0;
+    const addVertex = (pi, ci) => {
+      posData[pOff++] = coords[pi * 2];
+      posData[pOff++] = coords[pi * 2 + 1];
+      colData[cOff++] = colors[ci * 4];
+      colData[cOff++] = colors[ci * 4 + 1];
+      colData[cOff++] = colors[ci * 4 + 2];
+      cOff++;
+    };
+    for (const figure of figures) {
+      const ps = figure.coords;
+      const cs = figure.colors;
+      if (figure.type === MeshFigureType.TRIANGLES) {
+        for (let i = 0, ii = ps.length; i < ii; i += 3) {
+          addVertex(ps[i], cs[i]);
+          addVertex(ps[i + 1], cs[i + 1]);
+          addVertex(ps[i + 2], cs[i + 2]);
+        }
+      } else if (figure.type === MeshFigureType.LATTICE) {
+        const vpr = figure.verticesPerRow;
+        const rows = Math.floor(ps.length / vpr) - 1;
+        const cols = vpr - 1;
+        for (let i = 0; i < rows; i++) {
+          let q = i * vpr;
+          for (let j = 0; j < cols; j++, q++) {
+            addVertex(ps[q], cs[q]);
+            addVertex(ps[q + 1], cs[q + 1]);
+            addVertex(ps[q + vpr], cs[q + vpr]);
+            addVertex(ps[q + vpr + 1], cs[q + vpr + 1]);
+            addVertex(ps[q + 1], cs[q + 1]);
+            addVertex(ps[q + vpr], cs[q + vpr]);
+          }
+        }
+      }
+    }
+    return {
+      posData,
+      colData,
+      vertexCount
+    };
+  }
+  draw(figures, context, backgroundColor, paddedWidth, paddedHeight, borderSize) {
+    const device = this.#device;
+    const {
+      offsetX,
+      offsetY,
+      scaleX,
+      scaleY
+    } = context;
+    const {
+      posData,
+      colData,
+      vertexCount
+    } = this.#buildVertexStreams(figures, context);
+    const posBuffer = device.createBuffer({
+      size: Math.max(posData.byteLength, 4),
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+    });
+    if (posData.byteLength > 0) {
+      device.queue.writeBuffer(posBuffer, 0, posData);
+    }
+    const colBuffer = device.createBuffer({
+      size: Math.max(colData.byteLength, 4),
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+    });
+    if (colData.byteLength > 0) {
+      device.queue.writeBuffer(colBuffer, 0, colData);
+    }
+    const uniformBuffer = device.createBuffer({
+      size: 8 * 4,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(uniformBuffer, 0, new Float32Array([offsetX, offsetY, scaleX, scaleY, paddedWidth, paddedHeight, borderSize, 0]));
+    const bindGroup = device.createBindGroup({
+      layout: this.#pipeline.getBindGroupLayout(0),
+      entries: [{
+        binding: 0,
+        resource: {
+          buffer: uniformBuffer
+        }
+      }]
+    });
+    const offscreen = new OffscreenCanvas(paddedWidth, paddedHeight);
+    const gpuCtx = offscreen.getContext("webgpu");
+    gpuCtx.configure({
+      device,
+      format: this.#preferredFormat,
+      alphaMode: backgroundColor ? "opaque" : "premultiplied"
+    });
+    const clearValue = backgroundColor ? {
+      r: backgroundColor[0] / 255,
+      g: backgroundColor[1] / 255,
+      b: backgroundColor[2] / 255,
+      a: 1
+    } : {
+      r: 0,
+      g: 0,
+      b: 0,
+      a: 0
+    };
+    const commandEncoder = device.createCommandEncoder();
+    const renderPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: gpuCtx.getCurrentTexture().createView(),
+        clearValue,
+        loadOp: "clear",
+        storeOp: "store"
+      }]
+    });
+    if (vertexCount > 0) {
+      renderPass.setPipeline(this.#pipeline);
+      renderPass.setBindGroup(0, bindGroup);
+      renderPass.setVertexBuffer(0, posBuffer);
+      renderPass.setVertexBuffer(1, colBuffer);
+      renderPass.draw(vertexCount);
+    }
+    renderPass.end();
+    device.queue.submit([commandEncoder.finish()]);
+    posBuffer.destroy();
+    colBuffer.destroy();
+    uniformBuffer.destroy();
+    return offscreen.transferToImageBitmap();
+  }
+}
+const _webGPUMesh = new WebGPUMesh();
+function initWebGPUMesh() {
+  _webGPUMesh.init();
+}
+function isWebGPUMeshReady() {
+  return _webGPUMesh.isReady;
+}
+function drawMeshWithGPU(figures, context, backgroundColor, paddedWidth, paddedHeight, borderSize) {
+  return _webGPUMesh.draw(figures, context, backgroundColor, paddedWidth, paddedHeight, borderSize);
+}
+
 ;// ./src/display/pattern_helper.js
+
 
 
 const PathType = {
@@ -9646,7 +9947,7 @@ function drawTriangle(data, context, p1, p2, p3, c1, c2, c3) {
   const bytes = data.data,
     rowSize = data.width * 4;
   let tmp;
-  if (coords[p1 + 1] > coords[p2 + 1]) {
+  if (coords[p1 * 2 + 1] > coords[p2 * 2 + 1]) {
     tmp = p1;
     p1 = p2;
     p2 = tmp;
@@ -9654,7 +9955,7 @@ function drawTriangle(data, context, p1, p2, p3, c1, c2, c3) {
     c1 = c2;
     c2 = tmp;
   }
-  if (coords[p2 + 1] > coords[p3 + 1]) {
+  if (coords[p2 * 2 + 1] > coords[p3 * 2 + 1]) {
     tmp = p2;
     p2 = p3;
     p3 = tmp;
@@ -9662,7 +9963,7 @@ function drawTriangle(data, context, p1, p2, p3, c1, c2, c3) {
     c2 = c3;
     c3 = tmp;
   }
-  if (coords[p1 + 1] > coords[p2 + 1]) {
+  if (coords[p1 * 2 + 1] > coords[p2 * 2 + 1]) {
     tmp = p1;
     p1 = p2;
     p2 = tmp;
@@ -9670,24 +9971,24 @@ function drawTriangle(data, context, p1, p2, p3, c1, c2, c3) {
     c1 = c2;
     c2 = tmp;
   }
-  const x1 = (coords[p1] + context.offsetX) * context.scaleX;
-  const y1 = (coords[p1 + 1] + context.offsetY) * context.scaleY;
-  const x2 = (coords[p2] + context.offsetX) * context.scaleX;
-  const y2 = (coords[p2 + 1] + context.offsetY) * context.scaleY;
-  const x3 = (coords[p3] + context.offsetX) * context.scaleX;
-  const y3 = (coords[p3 + 1] + context.offsetY) * context.scaleY;
+  const x1 = (coords[p1 * 2] + context.offsetX) * context.scaleX;
+  const y1 = (coords[p1 * 2 + 1] + context.offsetY) * context.scaleY;
+  const x2 = (coords[p2 * 2] + context.offsetX) * context.scaleX;
+  const y2 = (coords[p2 * 2 + 1] + context.offsetY) * context.scaleY;
+  const x3 = (coords[p3 * 2] + context.offsetX) * context.scaleX;
+  const y3 = (coords[p3 * 2 + 1] + context.offsetY) * context.scaleY;
   if (y1 >= y3) {
     return;
   }
-  const c1r = colors[c1],
-    c1g = colors[c1 + 1],
-    c1b = colors[c1 + 2];
-  const c2r = colors[c2],
-    c2g = colors[c2 + 1],
-    c2b = colors[c2 + 2];
-  const c3r = colors[c3],
-    c3g = colors[c3 + 1],
-    c3b = colors[c3 + 2];
+  const c1r = colors[c1 * 4],
+    c1g = colors[c1 * 4 + 1],
+    c1b = colors[c1 * 4 + 2];
+  const c2r = colors[c2 * 4],
+    c2g = colors[c2 * 4 + 1],
+    c2b = colors[c2 * 4 + 2];
+  const c3r = colors[c3 * 4],
+    c3g = colors[c3 * 4 + 1],
+    c3b = colors[c3 * 4 + 2];
   const minY = Math.round(y1),
     maxY = Math.round(y3);
   let xa, car, cag, cab;
@@ -9787,10 +10088,10 @@ class MeshShadingPattern extends BaseShadingPattern {
     const offsetY = Math.floor(this._bounds[1]);
     const boundsWidth = Math.ceil(this._bounds[2]) - offsetX;
     const boundsHeight = Math.ceil(this._bounds[3]) - offsetY;
-    const width = Math.min(Math.ceil(Math.abs(boundsWidth * combinedScale[0] * EXPECTED_SCALE)), MAX_PATTERN_SIZE);
-    const height = Math.min(Math.ceil(Math.abs(boundsHeight * combinedScale[1] * EXPECTED_SCALE)), MAX_PATTERN_SIZE);
-    const scaleX = boundsWidth / width;
-    const scaleY = boundsHeight / height;
+    const width = Math.min(Math.ceil(Math.abs(boundsWidth * combinedScale[0] * EXPECTED_SCALE)), MAX_PATTERN_SIZE) || 1;
+    const height = Math.min(Math.ceil(Math.abs(boundsHeight * combinedScale[1] * EXPECTED_SCALE)), MAX_PATTERN_SIZE) || 1;
+    const scaleX = boundsWidth ? boundsWidth / width : 1;
+    const scaleY = boundsHeight ? boundsHeight / height : 1;
     const context = {
       coords: this._coords,
       colors: this._colors,
@@ -9802,24 +10103,26 @@ class MeshShadingPattern extends BaseShadingPattern {
     const paddedWidth = width + BORDER_SIZE * 2;
     const paddedHeight = height + BORDER_SIZE * 2;
     const tmpCanvas = cachedCanvases.getCanvas("mesh", paddedWidth, paddedHeight);
-    const tmpCtx = tmpCanvas.context;
-    const data = tmpCtx.createImageData(width, height);
-    if (backgroundColor) {
-      const bytes = data.data;
-      for (let i = 0, ii = bytes.length; i < ii; i += 4) {
-        bytes[i] = backgroundColor[0];
-        bytes[i + 1] = backgroundColor[1];
-        bytes[i + 2] = backgroundColor[2];
-        bytes[i + 3] = 255;
+    if (isWebGPUMeshReady()) {
+      tmpCanvas.context.drawImage(drawMeshWithGPU(this._figures, context, backgroundColor, paddedWidth, paddedHeight, BORDER_SIZE), 0, 0);
+    } else {
+      const data = tmpCanvas.context.createImageData(width, height);
+      if (backgroundColor) {
+        const bytes = data.data;
+        for (let i = 0, ii = bytes.length; i < ii; i += 4) {
+          bytes[i] = backgroundColor[0];
+          bytes[i + 1] = backgroundColor[1];
+          bytes[i + 2] = backgroundColor[2];
+          bytes[i + 3] = 255;
+        }
       }
+      for (const figure of this._figures) {
+        drawFigure(data, figure, context);
+      }
+      tmpCanvas.context.putImageData(data, BORDER_SIZE, BORDER_SIZE);
     }
-    for (const figure of this._figures) {
-      drawFigure(data, figure, context);
-    }
-    tmpCtx.putImageData(data, BORDER_SIZE, BORDER_SIZE);
-    const canvas = tmpCanvas.canvas;
     return {
-      canvas,
+      canvas: tmpCanvas.canvas,
       offsetX: offsetX - BORDER_SIZE * scaleX,
       offsetY: offsetY - BORDER_SIZE * scaleY,
       scaleX,
@@ -10277,30 +10580,28 @@ function mirrorContextOperations(ctx, destCtx) {
   };
 }
 class CachedCanvases {
+  #cache = new Map();
   constructor(canvasFactory) {
     this.canvasFactory = canvasFactory;
-    this.cache = Object.create(null);
   }
   getCanvas(id, width, height) {
-    let canvasEntry;
-    if (this.cache[id] !== undefined) {
-      canvasEntry = this.cache[id];
+    let canvasEntry = this.#cache.get(id);
+    if (canvasEntry) {
       this.canvasFactory.reset(canvasEntry, width, height);
     } else {
       canvasEntry = this.canvasFactory.create(width, height);
-      this.cache[id] = canvasEntry;
+      this.#cache.set(id, canvasEntry);
     }
     return canvasEntry;
   }
   delete(id) {
-    delete this.cache[id];
+    this.#cache.delete(id);
   }
   clear() {
-    for (const id in this.cache) {
-      const canvasEntry = this.cache[id];
+    for (const canvasEntry of this.#cache.values()) {
       this.canvasFactory.destroy(canvasEntry);
-      delete this.cache[id];
     }
+    this.#cache.clear();
   }
 }
 function drawImageAtIntegerCoords(ctx, srcImg, srcX, srcY, srcW, srcH, destX, destY, destW, destH) {
@@ -10664,9 +10965,17 @@ class CanvasGraphics {
     const objs = this.objs;
     let fnId, fnArgs;
     while (true) {
-      if (stepper !== undefined && i === stepper.nextBreakPoint) {
-        stepper.breakIt(i, continueCallback);
-        return i;
+      if (stepper !== undefined) {
+        if (i === stepper.nextBreakPoint) {
+          stepper.breakIt(i, continueCallback);
+          return i;
+        }
+        if (stepper.shouldSkip(i)) {
+          if (++i === argsArrayLen) {
+            return i;
+          }
+          continue;
+        }
       }
       if (!operationsFilter || operationsFilter(i)) {
         fnId = fnArray[i];
@@ -12595,13 +12904,10 @@ class OptionalContentConfig {
 ;// ./src/display/pages_mapper.js
 
 class PagesMapper {
-  #idToPageNumber = null;
   #pageNumberToId = null;
   #prevPageNumbers = null;
   #pagesNumber = 0;
-  #listeners = [];
-  #copiedPageIds = null;
-  #copiedPageNumbers = null;
+  #clipboard = null;
   #savedData = null;
   get pagesNumber() {
     return this.#pagesNumber;
@@ -12611,45 +12917,23 @@ class PagesMapper {
       return;
     }
     this.#pagesNumber = n;
-    this.#reset();
-  }
-  #reset() {
     this.#pageNumberToId = null;
-    this.#idToPageNumber = null;
+    this.#prevPageNumbers = null;
   }
-  addListener(listener) {
-    this.#listeners.push(listener);
-  }
-  removeListener(listener) {
-    const index = this.#listeners.indexOf(listener);
-    if (index >= 0) {
-      this.#listeners.splice(index, 1);
-    }
-  }
-  #updateListeners(data) {
-    for (const listener of this.#listeners) {
-      listener(data);
-    }
-  }
-  #init(mustInit) {
+  #ensureInit() {
     if (this.#pageNumberToId) {
       return;
     }
     const n = this.#pagesNumber;
     const pageNumberToId = this.#pageNumberToId = new Uint32Array(n);
-    this.#prevPageNumbers = new Int32Array(pageNumberToId);
-    const idToPageNumber = this.#idToPageNumber = new Map();
-    if (mustInit) {
-      for (let i = 1; i <= n; i++) {
-        pageNumberToId[i - 1] = i;
-        idToPageNumber.set(i, [i]);
-      }
+    for (let i = 0; i < n; i++) {
+      pageNumberToId[i] = i + 1;
     }
+    this.#prevPageNumbers = new Int32Array(pageNumberToId);
   }
-  #updateIdToPageNumber() {
-    const idToPageNumber = this.#idToPageNumber;
+  #buildIdToPageNumber() {
+    const idToPageNumber = new Map();
     const pageNumberToId = this.#pageNumberToId;
-    idToPageNumber.clear();
     for (let i = 0, ii = this.#pagesNumber; i < ii; i++) {
       const id = pageNumberToId[i];
       const pageNumbers = idToPageNumber.get(id);
@@ -12659,11 +12943,12 @@ class PagesMapper {
         idToPageNumber.set(id, [i + 1]);
       }
     }
+    return idToPageNumber;
   }
   movePages(selectedPages, pagesToMove, index) {
-    this.#init(true);
+    this.#ensureInit();
     const pageNumberToId = this.#pageNumberToId;
-    const idToPageNumber = this.#idToPageNumber;
+    const prevIdToPageNumber = this.#buildIdToPageNumber();
     const movedCount = pagesToMove.length;
     const mappedPagesToMove = new Uint32Array(movedCount);
     let removedBeforeTarget = 0;
@@ -12671,13 +12956,12 @@ class PagesMapper {
       const pageIndex = pagesToMove[i] - 1;
       mappedPagesToMove[i] = pageNumberToId[pageIndex];
       if (pageIndex < index) {
-        removedBeforeTarget += 1;
+        removedBeforeTarget++;
       }
     }
     const pagesNumber = this.#pagesNumber;
-    let adjustedTarget = index - removedBeforeTarget;
     const remainingLen = pagesNumber - movedCount;
-    adjustedTarget = MathClamp(adjustedTarget, 0, remainingLen);
+    const adjustedTarget = MathClamp(index - removedBeforeTarget, 0, remainingLen);
     for (let i = 0, r = 0; i < pagesNumber; i++) {
       if (!selectedPages.has(i + 1)) {
         pageNumberToId[r++] = pageNumberToId[i];
@@ -12685,28 +12969,24 @@ class PagesMapper {
     }
     pageNumberToId.copyWithin(adjustedTarget + movedCount, adjustedTarget, remainingLen);
     pageNumberToId.set(mappedPagesToMove, adjustedTarget);
-    this.#setPrevPageNumbers(idToPageNumber, null);
-    this.#updateIdToPageNumber();
-    this.#updateListeners({
-      type: "move"
-    });
+    this.#updatePrevPageNumbers(prevIdToPageNumber);
     if (pageNumberToId.every((id, i) => id === i + 1)) {
-      this.#reset();
+      this.#pageNumberToId = null;
     }
   }
   deletePages(pagesToDelete) {
-    this.#init(true);
+    this.#ensureInit();
     const pageNumberToId = this.#pageNumberToId;
-    const prevIdToPageNumber = this.#idToPageNumber;
+    const prevIdToPageNumber = this.#buildIdToPageNumber();
     this.#savedData = {
       pageNumberToId: pageNumberToId.slice(),
-      idToPageNumber: new Map(prevIdToPageNumber),
-      pageNumber: this.#pagesNumber,
+      pagesNumber: this.#pagesNumber,
       prevPageNumbers: this.#prevPageNumbers.slice()
     };
-    this.pagesNumber -= pagesToDelete.length;
-    this.#init(false);
-    const newPageNumberToId = this.#pageNumberToId;
+    const newN = this.#pagesNumber - pagesToDelete.length;
+    this.#pagesNumber = newN;
+    const newPageNumberToId = this.#pageNumberToId = new Uint32Array(newN);
+    this.#prevPageNumbers = new Int32Array(newN);
     let sourceIndex = 0;
     let destIndex = 0;
     for (const pageNumber of pagesToDelete) {
@@ -12720,91 +13000,74 @@ class PagesMapper {
     if (sourceIndex < pageNumberToId.length) {
       newPageNumberToId.set(pageNumberToId.subarray(sourceIndex), destIndex);
     }
-    this.#setPrevPageNumbers(prevIdToPageNumber, null);
-    this.#updateIdToPageNumber();
-    this.#updateListeners({
-      type: "delete",
-      pageNumbers: pagesToDelete
-    });
+    this.#updatePrevPageNumbers(prevIdToPageNumber, new Set(pagesToDelete));
   }
   cancelDelete() {
     if (this.#savedData) {
       this.#pageNumberToId = this.#savedData.pageNumberToId;
-      this.#idToPageNumber = this.#savedData.idToPageNumber;
-      this.pagesNumber = this.#savedData.pageNumber;
+      this.#pagesNumber = this.#savedData.pagesNumber;
       this.#prevPageNumbers = this.#savedData.prevPageNumbers;
       this.#savedData = null;
-      this.#updateListeners({
-        type: "cancelDelete"
-      });
     }
   }
   cleanSavedData() {
     this.#savedData = null;
-    this.#updateListeners({
-      type: "cleanSavedData"
-    });
   }
   copyPages(pagesToCopy) {
-    this.#init(true);
-    this.#copiedPageNumbers = pagesToCopy;
-    this.#copiedPageIds = pagesToCopy.map(pageNumber => this.#pageNumberToId[pageNumber - 1]);
-    this.#updateListeners({
-      type: "copy",
-      pageNumbers: pagesToCopy
-    });
+    this.#ensureInit();
+    this.#clipboard = {
+      pageNumbers: pagesToCopy,
+      pageIds: pagesToCopy.map(n => this.#pageNumberToId[n - 1])
+    };
   }
   cancelCopy() {
-    this.#copiedPageIds = null;
-    this.#copiedPageNumbers = null;
-    this.#updateListeners({
-      type: "cancelCopy"
-    });
+    this.#clipboard = null;
   }
   pastePages(index) {
-    this.#init(true);
+    this.#ensureInit();
     const pageNumberToId = this.#pageNumberToId;
-    const prevIdToPageNumber = this.#idToPageNumber;
-    const copiedPageNumbers = this.#copiedPageNumbers;
-    const copiedPageMapping = new Map();
-    let base = index;
-    for (const pageNumber of copiedPageNumbers) {
-      copiedPageMapping.set(++base, pageNumber);
-    }
-    this.pagesNumber += copiedPageNumbers.length;
-    this.#init(false);
-    const newPageNumberToId = this.#pageNumberToId;
+    const prevIdToPageNumber = this.#buildIdToPageNumber();
+    const {
+      pageNumbers: copiedPageNumbers,
+      pageIds: copiedPageIds
+    } = this.#clipboard;
+    const newN = this.#pagesNumber + copiedPageNumbers.length;
+    this.#pagesNumber = newN;
+    const newPageNumberToId = this.#pageNumberToId = new Uint32Array(newN);
+    this.#prevPageNumbers = new Int32Array(newN);
     newPageNumberToId.set(pageNumberToId.subarray(0, index), 0);
-    newPageNumberToId.set(this.#copiedPageIds, index);
+    newPageNumberToId.set(copiedPageIds, index);
     newPageNumberToId.set(pageNumberToId.subarray(index), index + copiedPageNumbers.length);
-    this.#setPrevPageNumbers(prevIdToPageNumber, copiedPageMapping);
-    this.#updateIdToPageNumber();
-    this.#updateListeners({
-      type: "paste"
-    });
-    this.#copiedPageIds = null;
-    this.#copiedPageNumbers = null;
+    this.#updatePrevPageNumbers(prevIdToPageNumber, null, index, copiedPageNumbers);
+    this.#clipboard = null;
   }
-  #setPrevPageNumbers(prevIdToPageNumber, copiedPageMapping) {
+  #updatePrevPageNumbers(prevIdToPageNumber, deletedPageNumbers = null, pasteIndex = -1, copiedPageNumbers = null) {
     const prevPageNumbers = this.#prevPageNumbers;
     const newPageNumberToId = this.#pageNumberToId;
+    const pasteEnd = pasteIndex + (copiedPageNumbers?.length ?? 0);
     const idsIndices = new Map();
     for (let i = 0, ii = this.#pagesNumber; i < ii; i++) {
-      const oldPageNumber = copiedPageMapping?.get(i + 1);
-      if (oldPageNumber) {
-        prevPageNumbers[i] = -oldPageNumber;
+      if (i >= pasteIndex && i < pasteEnd) {
+        prevPageNumbers[i] = -copiedPageNumbers[i - pasteIndex];
         continue;
       }
       const id = newPageNumberToId[i];
-      const j = idsIndices.get(id) || 0;
-      prevPageNumbers[i] = prevIdToPageNumber.get(id)?.[j];
+      const oldPositions = prevIdToPageNumber.get(id);
+      let j = idsIndices.get(id) || 0;
+      if (deletedPageNumbers && oldPositions) {
+        while (j < oldPositions.length && deletedPageNumbers.has(oldPositions[j])) {
+          j++;
+        }
+      }
+      prevPageNumbers[i] = oldPositions?.[j];
       idsIndices.set(id, j + 1);
     }
   }
   hasBeenAltered() {
     return this.#pageNumberToId !== null;
   }
-  getPageMappingForSaving(idToPageNumber = this.#idToPageNumber) {
+  getPageMappingForSaving(idToPageNumber = null) {
+    idToPageNumber ??= this.#buildIdToPageNumber();
     let nCopy = 0;
     for (const pageNumbers of idToPageNumber.values()) {
       nCopy = Math.max(nCopy, pageNumbers.length);
@@ -12845,10 +13108,19 @@ class PagesMapper {
     return this.getPageMappingForSaving(usedIds);
   }
   getPrevPageNumber(pageNumber) {
-    return this.#prevPageNumbers[pageNumber - 1] ?? 0;
+    return this.#prevPageNumbers?.[pageNumber - 1] ?? 0;
   }
   getPageNumber(id) {
-    return this.#idToPageNumber ? this.#idToPageNumber.get(id)?.[0] ?? 0 : id;
+    if (!this.#pageNumberToId) {
+      return id;
+    }
+    const pageNumberToId = this.#pageNumberToId;
+    for (let i = 0, ii = this.#pagesNumber; i < ii; i++) {
+      if (pageNumberToId[i] === id) {
+        return i + 1;
+      }
+    }
+    return 0;
   }
   getPageId(pageNumber) {
     return this.#pageNumberToId?.[pageNumber - 1] ?? pageNumber;
@@ -13315,7 +13587,7 @@ function validateRangeRequestCapabilities({
   disableRange
 }) {
   const rv = {
-    contentLength: undefined,
+    contentLength: 0,
     isRangeSupported: false
   };
   const length = parseInt(responseHeaders.get("Content-Length"), 10);
@@ -13410,14 +13682,11 @@ class PDFFetchStreamReader extends BasePDFStreamReader {
     const {
       disableRange,
       disableStream,
-      length,
       rangeChunkSize,
       url,
       withCredentials
     } = stream._source;
-    this._contentLength = length;
     this._isStreamingSupported = !disableStream;
-    this._isRangeSupported = !disableRange;
     const headers = new Headers(stream.headers);
     fetchUrl(url, headers, withCredentials, this._abortController).then(response => {
       stream._responseOrigin = getResponseOrigin(response.url);
@@ -13433,8 +13702,8 @@ class PDFFetchStreamReader extends BasePDFStreamReader {
         rangeChunkSize,
         disableRange
       });
+      this._contentLength = contentLength;
       this._isRangeSupported = isRangeSupported;
-      this._contentLength = contentLength || this._contentLength;
       this._filename = extractFilenameFromHeader(responseHeaders);
       if (!this._isStreamingSupported && this._isRangeSupported) {
         this.cancel(new AbortException("Streaming is disabled."));
@@ -13627,10 +13896,6 @@ class PDFNetworkStreamReader extends BasePDFStreamReader {
   _storedError = null;
   constructor(stream) {
     super(stream);
-    const {
-      length
-    } = stream._source;
-    this._contentLength = length;
     this._fullRequestXhr = stream._request({
       onHeadersReceived: this.#onHeadersReceived.bind(this),
       onDone: this.#onDone.bind(this),
@@ -13660,10 +13925,8 @@ class PDFNetworkStreamReader extends BasePDFStreamReader {
       rangeChunkSize,
       disableRange
     });
-    if (isRangeSupported) {
-      this._isRangeSupported = true;
-    }
-    this._contentLength = contentLength || this._contentLength;
+    this._contentLength = contentLength;
+    this._isRangeSupported = isRangeSupported;
     this._filename = extractFilenameFromHeader(responseHeaders);
     if (this._isRangeSupported) {
       stream._abortRequest(fullRequestXhr);
@@ -13841,13 +14104,10 @@ class PDFNodeStreamReader extends BasePDFStreamReader {
     const {
       disableRange,
       disableStream,
-      length,
       rangeChunkSize,
       url
     } = stream._source;
-    this._contentLength = length;
     this._isStreamingSupported = !disableStream;
-    this._isRangeSupported = !disableRange;
     const fs = process.getBuiltinModule("fs");
     fs.promises.lstat(url).then(stat => {
       const readStream = fs.createReadStream(url);
@@ -13856,10 +14116,8 @@ class PDFNodeStreamReader extends BasePDFStreamReader {
       const {
         size
       } = stat;
-      if (size <= 2 * rangeChunkSize) {
-        this._isRangeSupported = false;
-      }
       this._contentLength = size;
+      this._isRangeSupported = !disableRange && size > 2 * rangeChunkSize;
       if (!this._isStreamingSupported && this._isRangeSupported) {
         this.cancel(new AbortException("Streaming is disabled."));
       }
@@ -14385,6 +14643,7 @@ class TextLayer {
 
 
 
+
 const RENDERING_CANCELLED_TIMEOUT = 100;
 function getDocument(src = {}) {
   if (typeof src === "string" || src instanceof URL) {
@@ -14435,9 +14694,9 @@ function getDocument(src = {}) {
   const CanvasFactory = src.CanvasFactory || (isNodeJS ? NodeCanvasFactory : DOMCanvasFactory);
   const FilterFactory = src.FilterFactory || (isNodeJS ? NodeFilterFactory : DOMFilterFactory);
   const enableHWA = src.enableHWA === true;
+  const enableWebGPU = src.enableWebGPU === true;
   const useWasm = src.useWasm !== false;
   const pagesMapper = src.pagesMapper || new PagesMapper();
-  const length = rangeTransport ? rangeTransport.length : src.length ?? NaN;
   const useSystemFonts = typeof src.useSystemFonts === "boolean" ? src.useSystemFonts : !isNodeJS && !disableFontFace;
   const useWorkerFetch = typeof src.useWorkerFetch === "boolean" ? src.useWorkerFetch : !!(CMapReaderFactory === DOMCMapReaderFactory && StandardFontDataFactory === DOMStandardFontDataFactory && WasmFactory === DOMWasmFactory && cMapUrl && standardFontDataUrl && wasmUrl && isValidFetchUrl(cMapUrl, document.baseURI) && isValidFetchUrl(standardFontDataUrl, document.baseURI) && isValidFetchUrl(wasmUrl, document.baseURI));
   const styleElement = null;
@@ -14471,12 +14730,11 @@ function getDocument(src = {}) {
   }
   const docParams = {
     docId,
-    apiVersion: "5.5.0",
+    apiVersion: "5.6.0",
     data,
     password,
     disableAutoFetch,
     rangeChunkSize,
-    length,
     docBaseUrl,
     enableXfa,
     evaluatorOptions: {
@@ -14494,7 +14752,8 @@ function getDocument(src = {}) {
       cMapUrl,
       iccUrl,
       standardFontDataUrl,
-      wasmUrl
+      wasmUrl,
+      enableWebGPU
     }
   };
   const transportParams = {
@@ -14516,26 +14775,24 @@ function getDocument(src = {}) {
     }
     const workerIdPromise = worker.messageHandler.sendWithPromise("GetDocRequest", docParams, data ? [data.buffer] : null);
     let networkStream;
-    if (rangeTransport) {
+    if (data) {} else if (rangeTransport) {
       networkStream = new PDFDataTransportStream({
         pdfDataRangeTransport: rangeTransport,
         disableRange,
         disableStream
       });
-    } else if (!data) {
-      if (!url) {
-        throw new Error("getDocument - no `url` parameter provided.");
-      }
+    } else if (url) {
       const NetworkStream = isValidFetchUrl(url) ? PDFFetchStream : isNodeJS ? PDFNodeStream : PDFNetworkStream;
       networkStream = new NetworkStream({
         url,
-        length,
         httpHeaders,
         withCredentials,
         rangeChunkSize,
         disableRange,
         disableStream
       });
+    } else {
+      throw new Error("getDocument - expected either `data`, `range`, or `url` parameter.");
     }
     return workerIdPromise.then(workerId => {
       if (task.destroyed) {
@@ -14779,11 +15036,18 @@ class PDFPageProxy {
     this.#pagesMapper = pagesMapper;
     this.imageCoordinates = null;
   }
+  clone(id) {
+    const clone = new PDFPageProxy(id, this._pageInfo, this._transport, this.#pagesMapper, this._pdfBug);
+    clone.clonedFromIndex = this.clonedFromIndex ?? this._pageIndex;
+    this._transport.updatePage(clone);
+    return clone;
+  }
   get pageNumber() {
     return this._pageIndex + 1;
   }
   set pageNumber(value) {
     this._pageIndex = value - 1;
+    this._transport.updatePage(this);
   }
   get rotate() {
     return this._pageInfo.rotate;
@@ -14877,8 +15141,8 @@ class PDFPageProxy {
       this._pumpOperatorList(intentArgs);
     }
     const recordForDebugger = !!(this._pdfBug && globalThis.StepperManager?.enabled);
-    const shouldRecordOperations = !this.recordedBBoxes && (recordOperations || recordForDebugger);
-    const shouldRecordImages = !this.imageCoordinates && recordImages;
+    const shouldRecordOperations = !!canvas && !this.recordedBBoxes && (recordOperations || recordForDebugger);
+    const shouldRecordImages = !!canvas && !this.imageCoordinates && recordImages;
     const complete = error => {
       intentState.renderTasks.delete(internalRenderTask);
       if (shouldRecordOperations) {
@@ -15426,8 +15690,6 @@ class WorkerTransport {
   #pagePromises = new Map();
   #pageRefCache = new Map();
   #passwordCapability = null;
-  #copiedPageInfo = null;
-  #savedPageInfo = null;
   constructor(messageHandler, loadingTask, networkStream, params, factory, pagesMapper) {
     this.messageHandler = messageHandler;
     this.loadingTask = loadingTask;
@@ -15445,84 +15707,17 @@ class WorkerTransport {
     this.cMapReaderFactory = factory.cMapReaderFactory;
     this.standardFontDataFactory = factory.standardFontDataFactory;
     this.wasmFactory = factory.wasmFactory;
+    this.pagesMapper = pagesMapper;
     this.destroyed = false;
     this.destroyCapability = null;
     this.setupMessageHandler();
-    this.pagesMapper = pagesMapper;
-    this.pagesMapper.addListener(this.#updateCaches.bind(this));
   }
-  #updateCaches({
-    type,
-    pageNumbers
-  }) {
-    if (type === "copy") {
-      this.#copiedPageInfo = new Map();
-      for (const pageNum of pageNumbers) {
-        this.#copiedPageInfo.set(pageNum, {
-          proxy: this.#pageCache.get(pageNum - 1) || null,
-          promise: this.#pagePromises.get(pageNum - 1) || null
-        });
-      }
-      return;
-    }
-    if (type === "cancelCopy") {
-      this.#copiedPageInfo = null;
-      return;
-    }
-    if (type === "delete") {
-      this.#savedPageInfo = {
-        pageCache: new Map(this.#pageCache),
-        pagePromises: new Map(this.#pagePromises)
-      };
-      for (const pageNum of pageNumbers) {
-        this.#pageCache.delete(pageNum - 1);
-        this.#pagePromises.delete(pageNum - 1);
-      }
-    }
-    if (type === "cancelDelete") {
-      if (this.#savedPageInfo) {
-        this.#pageCache = this.#savedPageInfo.pageCache;
-        this.#pagePromises = this.#savedPageInfo.pagePromises;
-        this.#savedPageInfo = null;
-      }
-      return;
-    }
-    if (type === "cleanSavedData") {
-      this.#savedPageInfo = null;
-      return;
-    }
-    const newPageCache = new Map();
-    const newPromiseCache = new Map();
+  updatePage(page) {
     const {
-      pagesMapper
-    } = this;
-    for (let i = 0, ii = pagesMapper.pagesNumber; i < ii; i++) {
-      const prevPageNumber = pagesMapper.getPrevPageNumber(i + 1);
-      if (prevPageNumber < 0) {
-        const {
-          proxy,
-          promise
-        } = this.#copiedPageInfo?.get(-prevPageNumber) || {};
-        if (proxy) {
-          newPageCache.set(i, proxy);
-        }
-        if (promise) {
-          newPromiseCache.set(i, promise);
-        }
-        continue;
-      }
-      const prevPageIndex = prevPageNumber - 1;
-      const page = this.#pageCache.get(prevPageIndex);
-      if (page) {
-        newPageCache.set(i, page);
-      }
-      const promise = this.#pagePromises.get(prevPageIndex);
-      if (promise) {
-        newPromiseCache.set(i, promise);
-      }
-    }
-    this.#pageCache = newPageCache;
-    this.#pagePromises = newPromiseCache;
+      _pageIndex
+    } = page;
+    this.#pageCache.set(_pageIndex, page);
+    this.#pagePromises.set(_pageIndex, Promise.resolve(page));
   }
   #cacheSimpleMethod(name, data = null) {
     return this.#methodPromises.getOrInsertComputed(name, () => this.messageHandler.sendWithPromise(name, data));
@@ -15768,7 +15963,7 @@ class WorkerTransport {
           }
           const fontData = new FontInfo(exportedData);
           const inspectFont = this._params.pdfBug && globalThis.FontInspector?.enabled ? (font, url) => globalThis.FontInspector.fontAdded(font, url) : null;
-          const font = new FontFaceObject(fontData, inspectFont, exportedData.extra, exportedData.charProcOperatorList);
+          const font = new FontFaceObject(fontData, inspectFont, exportedData.charProcOperatorList, exportedData.extra);
           this.fontLoader.bind(font).catch(() => messageHandler.sendWithPromise("FontFallback", {
             id
           })).finally(() => {
@@ -15838,6 +16033,12 @@ class WorkerTransport {
       }
       this.#onProgress(data);
     });
+    messageHandler.on("PrepareWebGPU", () => {
+      if (this.destroyed) {
+        return;
+      }
+      initWebGPUMesh();
+    });
     messageHandler.on("FetchBinaryData", async data => {
       if (this.destroyed) {
         throw new Error("Worker was destroyed.");
@@ -15870,8 +16071,20 @@ class WorkerTransport {
     });
   }
   extractPages(pageInfos) {
-    return this.messageHandler.sendWithPromise("ExtractPages", {
+    const params = {
       pageInfos
+    };
+    let transfer;
+    if (this.annotationStorage.size > 0) {
+      const {
+        map,
+        transfer: t
+      } = this.annotationStorage.serializable;
+      params.annotationStorage = map;
+      transfer = t;
+    }
+    return this.messageHandler.sendWithPromise("ExtractPages", params, transfer).finally(() => {
+      this.annotationStorage.resetModified();
     });
   }
   getPage(pageNumber) {
@@ -16220,8 +16433,8 @@ class InternalRenderTask {
     }
   }
 }
-const version = "5.5.0";
-const build = "8f7a615";
+const version = "5.6.0";
+const build = "918a319";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -22086,6 +22299,7 @@ class HighlightEditor extends AnnotationEditor {
       color,
       quadPoints,
       inkLists,
+      outlines,
       opacity
     } = data;
     const editor = await super.deserialize(data, parent, uiManager);
@@ -22113,9 +22327,9 @@ class HighlightEditor extends AnnotationEditor {
       editor.#createOutlines();
       editor.#addToDrawLayer();
       editor.rotate(editor.rotation);
-    } else if (inkLists) {
+    } else if (inkLists || outlines) {
       editor.#isFreeHighlight = true;
-      const points = inkLists[0];
+      const points = (inkLists || outlines.points)[0];
       const point = {
         x: points[0] - pageX,
         y: pageHeight - (points[1] - pageY)
@@ -25477,32 +25691,6 @@ class AnnotationEditorLayer {
     this._structTree = structTreeLayer;
     this.#uiManager.addLayer(this);
   }
-  updatePageIndex(newPageIndex) {
-    for (const editor of this.#allEditorsIterator) {
-      editor.updatePageIndex(newPageIndex);
-    }
-    this.pageIndex = newPageIndex;
-    this.#uiManager.addLayer(this);
-  }
-  async setClonedFrom(clonedFrom) {
-    if (!clonedFrom) {
-      return;
-    }
-    const promises = [];
-    for (const editor of clonedFrom.#allEditorsIterator) {
-      const serialized = editor.serialize(true);
-      if (!serialized) {
-        continue;
-      }
-      serialized.isCopy = false;
-      promises.push(this.deserialize(serialized).then(deserialized => {
-        if (deserialized) {
-          this.addOrRebuild(deserialized);
-        }
-      }));
-    }
-    await Promise.all(promises);
-  }
   get isEmpty() {
     return this.#editors.size === 0;
   }
@@ -25920,9 +26108,6 @@ class AnnotationEditorLayer {
     }
     return null;
   }
-  getNextId() {
-    return this.#uiManager.getId();
-  }
   get #currentEditorType() {
     return AnnotationEditorLayer.#editorTypes.get(this.#uiManager.getMode());
   }
@@ -25943,7 +26128,7 @@ class AnnotationEditorLayer {
       offsetX,
       offsetY
     } = this.#getCenterPoint();
-    const id = this.getNextId();
+    const id = this.#uiManager.getId();
     const editor = this.#createNewEditor({
       parent: this,
       id,
@@ -25961,7 +26146,7 @@ class AnnotationEditorLayer {
     return (await AnnotationEditorLayer.#editorTypes.get(data.annotationType ?? data.annotationEditorType)?.deserialize(data, this, this.#uiManager)) || null;
   }
   createAndAddNewEditor(event, isCentered, data = {}) {
-    const id = this.getNextId();
+    const id = this.#uiManager.getId();
     const editor = this.#createNewEditor({
       parent: this,
       id,
@@ -26161,7 +26346,7 @@ class AnnotationEditorLayer {
       }
     }
   }
-  render({
+  async render({
     viewport
   }) {
     this.viewport = viewport;
@@ -26170,6 +26355,8 @@ class AnnotationEditorLayer {
       this.add(editor);
       editor.rebuild();
     }
+    await this.#uiManager.findClonesForPage(this);
+    this.div.hidden = this.isEmpty;
     this.updateMode();
   }
   update({
