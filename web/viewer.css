@@ -990,6 +990,7 @@
       background-color:var(--highlight-selected-bg-color);
       -webkit-backdrop-filter:var(--highlight-selected-backdrop-filter);
               backdrop-filter:var(--highlight-selected-backdrop-filter);
+      scroll-margin-top:50px;
     }
 
 .textLayer ::-moz-selection{

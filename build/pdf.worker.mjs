@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.6.0
- * pdfjsBuild = 918a319
+ * pdfjsBuild = a9e439b
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -6732,7 +6732,7 @@ class JBig2CCITTFaxWasmImage {
           this.#buffer = await fetchBinaryData(`${this.#wasmUrl}${filename}`);
         } else {
           this.#buffer = await this.#handler.sendWithPromise("FetchBinaryData", {
-            type: "wasmFactory",
+            kind: "wasmUrl",
             filename
           });
         }
@@ -9067,7 +9067,7 @@ class JpxImage {
           this.#buffer = await fetchBinaryData(`${this.#wasmUrl}${filename}`);
         } else {
           this.#buffer = await this.#handler.sendWithPromise("FetchBinaryData", {
-            type: "wasmFactory",
+            kind: "wasmUrl",
             filename
           });
         }
@@ -32638,18 +32638,28 @@ function bidi(str, startLevel = -1, vertical = false) {
     if (types[i] === "ON") {
       const end = findUnequal(types, i + 1, "ON");
       let before = sor;
-      if (i > 0) {
-        before = types[i - 1];
+      for (let j = i - 1; j >= 0; j--) {
+        const tt = types[j];
+        if (tt === "L") {
+          before = "L";
+          break;
+        }
+        if (tt === "R" || tt === "EN" || tt === "AN") {
+          before = "R";
+          break;
+        }
       }
       let after = eor;
-      if (end + 1 < strLength) {
-        after = types[end + 1];
-      }
-      if (before !== "L") {
-        before = "R";
-      }
-      if (after !== "L") {
-        after = "R";
+      for (let j = end; j < strLength; j++) {
+        const tt = types[j];
+        if (tt === "L") {
+          after = "L";
+          break;
+        }
+        if (tt === "R" || tt === "EN" || tt === "AN") {
+          after = "R";
+          break;
+        }
       }
       if (before === after) {
         types.fill(before, i, end);
@@ -33106,37 +33116,6 @@ class MurmurHash3_64 {
 
 
 
-function resizeImageMask(src, bpc, w1, h1, w2, h2) {
-  const length = w2 * h2;
-  let dest;
-  if (bpc <= 8) {
-    dest = new Uint8Array(length);
-  } else if (bpc <= 16) {
-    dest = new Uint16Array(length);
-  } else {
-    dest = new Uint32Array(length);
-  }
-  const xRatio = w1 / w2;
-  const yRatio = h1 / h2;
-  let i,
-    j,
-    py,
-    newIndex = 0,
-    oldIndex;
-  const xScaled = new Uint16Array(w2);
-  const w1Scanline = w1;
-  for (i = 0; i < w2; i++) {
-    xScaled[i] = Math.floor(i * xRatio);
-  }
-  for (i = 0; i < h2; i++) {
-    py = Math.floor(i * yRatio) * w1Scanline;
-    for (j = 0; j < w2; j++) {
-      oldIndex = py + xScaled[j];
-      dest[newIndex++] = src[oldIndex];
-    }
-  }
-  return dest;
-}
 class PDFImage {
   constructor({
     xref,
@@ -33265,6 +33244,8 @@ class PDFImage {
         this.jpxDecoderOptions.numComponents = hasColorSpace ? this.numComps : 0;
         this.jpxDecoderOptions.isIndexedColormap = this.colorSpace.name === "Indexed";
       }
+    } else {
+      this.numComps = 1;
     }
     this.decode = dict.getArray("D", "Decode");
     this.needsDecode = false;
@@ -33548,59 +33529,60 @@ class PDFImage {
     return output;
   }
   async fillOpacity(rgbaBuf, width, height, actualHeight, image) {
-    const smask = this.smask;
-    const mask = this.mask;
-    let alphaBuf, sw, sh, i, ii, j;
-    if (smask) {
-      sw = smask.width;
-      sh = smask.height;
-      alphaBuf = new Uint8ClampedArray(sw * sh);
-      await smask.fillGrayBuffer(alphaBuf);
-      if (sw !== width || sh !== height) {
-        alphaBuf = resizeImageMask(alphaBuf, smask.bpc, sw, sh, width, height);
-      }
-    } else if (mask) {
-      if (mask instanceof PDFImage) {
-        sw = mask.width;
-        sh = mask.height;
-        alphaBuf = new Uint8ClampedArray(sw * sh);
-        mask.numComps = 1;
-        await mask.fillGrayBuffer(alphaBuf);
-        for (i = 0, ii = sw * sh; i < ii; ++i) {
-          alphaBuf[i] = 255 - alphaBuf[i];
-        }
-        if (sw !== width || sh !== height) {
-          alphaBuf = resizeImageMask(alphaBuf, mask.bpc, sw, sh, width, height);
-        }
-      } else if (Array.isArray(mask)) {
-        alphaBuf = new Uint8ClampedArray(width * height);
-        const numComps = this.numComps;
-        for (i = 0, ii = width * height; i < ii; ++i) {
-          let opacity = 0;
-          const imageOffset = i * numComps;
-          for (j = 0; j < numComps; ++j) {
-            const color = image[imageOffset + j];
-            const maskOffset = j * 2;
-            if (color < mask[maskOffset] || color > mask[maskOffset + 1]) {
-              opacity = 255;
-              break;
+    let apply;
+    if (this.smask) {
+      apply = (buffer, options) => this.smask.fillGrayBuffer(buffer, {
+        ...options,
+        destWidth: width,
+        destHeight: height
+      });
+    } else if (this.mask) {
+      if (this.mask instanceof PDFImage) {
+        apply = (buffer, options) => this.mask.fillGrayBuffer(buffer, {
+          ...options,
+          invertOutput: true,
+          destWidth: width,
+          destHeight: height
+        });
+      } else if (Array.isArray(this.mask)) {
+        apply = (buffer, {
+          maxRows,
+          offset,
+          stride
+        }) => {
+          for (let i = 0, ii = width * maxRows; i < ii; ++i) {
+            let opacity = 0;
+            const imageOffset = i * this.numComps;
+            for (let j = 0; j < this.numComps; ++j) {
+              const color = image[imageOffset + j];
+              const maskOffset = j * 2;
+              if (color < this.mask[maskOffset] || color > this.mask[maskOffset + 1]) {
+                opacity = 255;
+                break;
+              }
             }
+            buffer[i * stride + offset] = opacity;
           }
-          alphaBuf[i] = opacity;
-        }
+        };
       } else {
         throw new FormatError("Unknown mask format.");
       }
-    }
-    if (alphaBuf) {
-      for (i = 0, j = 3, ii = width * actualHeight; i < ii; ++i, j += 4) {
-        rgbaBuf[j] = alphaBuf[i];
-      }
     } else {
-      for (i = 0, j = 3, ii = width * actualHeight; i < ii; ++i, j += 4) {
-        rgbaBuf[j] = 255;
-      }
+      apply = (buffer, {
+        maxRows,
+        offset,
+        stride
+      }) => {
+        for (let i = 0, ii = width * maxRows; i < ii; ++i) {
+          buffer[i * stride + offset] = 255;
+        }
+      };
     }
+    await apply(rgbaBuf, {
+      maxRows: actualHeight,
+      offset: 3,
+      stride: 4
+    });
   }
   undoPreblend(buffer, width, height) {
     const matte = this.smask?.matte;
@@ -33644,7 +33626,9 @@ class PDFImage {
     const mustBeResized = isOffscreenCanvasSupported && ImageResizer.needsToBeResized(drawWidth, drawHeight);
     if (!this.smask && !this.mask && this.colorSpace.name === "DeviceRGBA") {
       imgData.kind = ImageKind.RGBA_32BPP;
-      const imgArray = imgData.data = await this.getImageBytes(originalHeight * originalWidth * 4, {});
+      const imgArray = imgData.data = await this.getImageBytes(originalHeight * originalWidth * 4, {
+        internal: isOffscreenCanvasSupported && mustBeResized
+      });
       if (isOffscreenCanvasSupported) {
         if (!mustBeResized) {
           return this.createBitmap(ImageKind.RGBA_32BPP, drawWidth, drawHeight, imgArray);
@@ -33665,7 +33649,9 @@ class PDFImage {
         if (image) {
           return image;
         }
-        const data = await this.getImageBytes(originalHeight * rowBytes, {});
+        const data = await this.getImageBytes(originalHeight * rowBytes, {
+          internal: isOffscreenCanvasSupported && mustBeResized
+        });
         if (isOffscreenCanvasSupported) {
           if (mustBeResized) {
             return ImageResizer.createImage({
@@ -33714,7 +33700,8 @@ class PDFImage {
             const rgba = await this.getImageBytes(imageLength, {
               drawWidth,
               drawHeight,
-              forceRGBA: true
+              forceRGBA: true,
+              internal: true
             });
             return this.createBitmap(ImageKind.RGBA_32BPP, drawWidth, drawHeight, rgba);
           }
@@ -33728,7 +33715,8 @@ class PDFImage {
               imgData.data = await this.getImageBytes(imageLength, {
                 drawWidth,
                 drawHeight,
-                forceRGB: true
+                forceRGB: true,
+                internal: mustBeResized
               });
               if (mustBeResized) {
                 return ImageResizer.createImage(imgData);
@@ -33795,29 +33783,74 @@ class PDFImage {
     }
     return imgData;
   }
-  async fillGrayBuffer(buffer) {
+  async fillGrayBuffer(buffer, {
+    destWidth,
+    destHeight,
+    invertOutput,
+    maxRows,
+    offset = 0,
+    stride = 1
+  } = {}) {
     const numComps = this.numComps;
     if (numComps !== 1) {
       throw new FormatError(`Reading gray scale from a color image: ${numComps}`);
     }
-    const width = this.width;
-    const height = this.height;
+    const srcWidth = this.width;
+    const srcHeight = this.height;
     const bpc = this.bpc;
-    const rowBytes = width * numComps * bpc + 7 >> 3;
-    const imgArray = await this.getImageBytes(height * rowBytes, {
+    const rowBytes = srcWidth * numComps * bpc + 7 >> 3;
+    const imgArray = await this.getImageBytes(srcHeight * rowBytes, {
       internal: true
     });
     const comps = this.getComponents(imgArray);
-    let i, length;
+    const resolvedDestWidth = destWidth ?? srcWidth;
+    const resolvedDestHeight = destHeight ?? srcHeight;
+    const needsResampling = resolvedDestWidth !== srcWidth || resolvedDestHeight !== srcHeight;
+    const rows = maxRows === undefined ? resolvedDestHeight : Math.min(resolvedDestHeight, maxRows);
+    let outputWidth = srcWidth;
+    let yRatio = 0;
+    let xScaled = null;
+    if (needsResampling) {
+      outputWidth = resolvedDestWidth;
+      yRatio = srcHeight / resolvedDestHeight;
+      const xRatio = srcWidth / resolvedDestWidth;
+      xScaled = new Uint32Array(resolvedDestWidth);
+      for (let i = 0; i < resolvedDestWidth; i++) {
+        xScaled[i] = Math.floor(i * xRatio);
+      }
+    }
+    const mask = invertOutput ? 0xff : 0;
     if (bpc === 1) {
-      length = width * height;
-      if (this.needsDecode) {
-        for (i = 0; i < length; ++i) {
-          buffer[i] = comps[i] - 1 & 255;
+      if (xScaled) {
+        const xMap = xScaled;
+        let destIndex = offset;
+        if (this.needsDecode) {
+          for (let row = 0; row < rows; row++) {
+            const py = Math.floor(row * yRatio) * srcWidth;
+            for (let col = 0; col < outputWidth; col++) {
+              buffer[destIndex] = comps[py + xMap[col]] - 1 & 255 ^ mask;
+              destIndex += stride;
+            }
+          }
+        } else {
+          for (let row = 0; row < rows; row++) {
+            const py = Math.floor(row * yRatio) * srcWidth;
+            for (let col = 0; col < outputWidth; col++) {
+              buffer[destIndex] = -comps[py + xMap[col]] & 255 ^ mask;
+              destIndex += stride;
+            }
+          }
         }
       } else {
-        for (i = 0; i < length; ++i) {
-          buffer[i] = -comps[i] & 255;
+        const length = outputWidth * rows;
+        if (this.needsDecode) {
+          for (let i = 0; i < length; ++i) {
+            buffer[i * stride + offset] = comps[i] - 1 & 255 ^ mask;
+          }
+        } else {
+          for (let i = 0; i < length; ++i) {
+            buffer[i * stride + offset] = -comps[i] & 255 ^ mask;
+          }
         }
       }
       return;
@@ -33825,10 +33858,22 @@ class PDFImage {
     if (this.needsDecode) {
       this.decodeBuffer(comps);
     }
-    length = width * height;
     const scale = 255 / ((1 << bpc) - 1);
-    for (i = 0; i < length; ++i) {
-      buffer[i] = scale * comps[i];
+    if (xScaled) {
+      const xMap = xScaled;
+      let destIndex = offset;
+      for (let row = 0; row < rows; row++) {
+        const py = Math.floor(row * yRatio) * srcWidth;
+        for (let col = 0; col < outputWidth; col++) {
+          buffer[destIndex] = scale * comps[py + xMap[col]] ^ mask;
+          destIndex += stride;
+        }
+      }
+    } else {
+      const length = outputWidth * rows;
+      for (let i = 0; i < length; ++i) {
+        buffer[i * stride + offset] = scale * comps[i] ^ mask;
+      }
     }
   }
   createBitmap(kind, width, height, src) {
@@ -33933,6 +33978,7 @@ const DefaultPartialEvaluatorOptions = Object.freeze({
   useWasm: true,
   useWorkerFetch: true,
   cMapUrl: null,
+  cMapPacked: true,
   iccUrl: null,
   standardFontDataUrl: null,
   wasmUrl: null,
@@ -34184,10 +34230,13 @@ class PartialEvaluator {
         isCompressed: true
       };
     } else {
-      data = await this.handler.sendWithPromise("FetchBinaryData", {
-        type: "cMapReaderFactory",
-        name
-      });
+      data = {
+        cMapData: await this.handler.sendWithPromise("FetchBinaryData", {
+          kind: "cMapUrl",
+          filename: `${name}${this.options.cMapPacked ? ".bcmap" : ""}`
+        }),
+        isCompressed: this.options.cMapPacked
+      };
     }
     this.builtInCMapCache.set(name, data);
     return data;
@@ -34208,7 +34257,7 @@ class PartialEvaluator {
         data = await fetchBinaryData(`${this.options.standardFontDataUrl}${filename}`);
       } else {
         data = await this.handler.sendWithPromise("FetchBinaryData", {
-          type: "standardFontDataFactory",
+          kind: "standardFontDataUrl",
           filename
         });
       }
@@ -34225,6 +34274,10 @@ class PartialEvaluator {
     } = xobj;
     const matrix = lookupMatrix(dict.getArray("Matrix"), null);
     const bbox = lookupNormalRect(dict.getArray("BBox"), null);
+    let f32bbox = bbox && new Float32Array(bbox);
+    if (f32bbox?.some(x => !isFinite(x))) {
+      f32bbox = null;
+    }
     let optionalContent, groupOptions;
     if (dict.has("OC")) {
       optionalContent = await this.parseMarkedContentProps(dict.get("OC"), resources);
@@ -34236,7 +34289,7 @@ class PartialEvaluator {
     if (group) {
       groupOptions = {
         matrix,
-        bbox,
+        bbox: f32bbox,
         smask,
         isolated: false,
         knockout: false
@@ -34258,8 +34311,7 @@ class PartialEvaluator {
       operatorList.addOp(OPS.beginGroup, [groupOptions]);
     }
     const f32matrix = matrix && new Float32Array(matrix);
-    const f32bbox = !group && bbox && new Float32Array(bbox) || null;
-    const args = [f32matrix, f32bbox];
+    const args = [f32matrix, !group && f32bbox || null];
     operatorList.addOp(OPS.paintFormXObjectBegin, args);
     const localResources = dict.get("Resources");
     await this.getOperatorList({
@@ -35656,6 +35708,7 @@ class PartialEvaluator {
       height: 0,
       vertical: false,
       prevTransform: null,
+      prevTextRise: 0,
       textAdvanceScale: 0,
       spaceInFlowMin: 0,
       spaceInFlowMax: 0,
@@ -35917,7 +35970,9 @@ class PartialEvaluator {
         flushTextContentItem();
         return true;
       }
-      if (Math.abs(advanceY) > textContentItem.height) {
+      const textRiseDelta = textState.textRise - textContentItem.prevTextRise;
+      const advanceYCorrected = textRiseDelta === 0 ? advanceY : advanceY - currentTransform[3] / textState.fontSize * textRiseDelta;
+      if (Math.abs(advanceYCorrected) > textContentItem.height) {
         appendEOL();
         return true;
       }
@@ -35953,7 +36008,7 @@ class PartialEvaluator {
       chars,
       extraSpacing
     }) {
-      if (currentTextState !== textState && (currentTextState.fontName !== textState.fontName || currentTextState.fontSize !== textState.fontSize)) {
+      if (currentTextState !== textState && (currentTextState.fontSize !== textState.fontSize || currentTextState.fontName !== textState.fontName && (currentTextState.font.name !== textState.font.name || currentTextState.font.vertical !== textState.font.vertical))) {
         flushTextContentItem();
         currentTextState = textState.clone();
       }
@@ -36029,6 +36084,7 @@ class PartialEvaluator {
         }
         if (scaledDim) {
           textChunk.prevTransform = getCurrentTextTransform();
+          textChunk.prevTextRise = textState.textRise;
         }
         const glyphUnicode = glyph.unicode;
         if (saveLastChar(glyphUnicode)) {
@@ -52977,12 +53033,16 @@ class Annotation {
       }
     } else if (borderStyle.has("Border")) {
       const array = borderStyle.getArray("Border");
-      if (Array.isArray(array) && array.length >= 3) {
-        this.borderStyle.setHorizontalCornerRadius(array[0]);
-        this.borderStyle.setVerticalCornerRadius(array[1]);
-        this.borderStyle.setWidth(array[2], this.rectangle);
-        if (array.length === 4) {
-          this.borderStyle.setDashArray(array[3], true);
+      if (Array.isArray(array)) {
+        if (array.length >= 3) {
+          this.borderStyle.setHorizontalCornerRadius(array[0]);
+          this.borderStyle.setVerticalCornerRadius(array[1]);
+          this.borderStyle.setWidth(array[2], this.rectangle);
+          if (array.length === 4) {
+            this.borderStyle.setDashArray(array[3], true);
+          }
+        } else if (array.length === 0) {
+          this.borderStyle.setWidth(0);
         }
       }
     } else {
@@ -62092,7 +62152,7 @@ class PDFEditor {
         newAnnots = newAnnotations;
       }
     }
-    const newAnnotations = this.#newAnnotationsParams?.newAnnotationsByPage.get(pageIndex);
+    const newAnnotations = this.#newAnnotationsParams?.newAnnotationsByPage?.get(pageIndex);
     if (newAnnotations) {
       const {
         handler,
