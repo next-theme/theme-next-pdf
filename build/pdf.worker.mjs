@@ -21,8 +21,8 @@
  */
 
 /**
- * pdfjsVersion = 5.6.0
- * pdfjsBuild = a9e439b
+ * pdfjsVersion = 5.7.0
+ * pdfjsBuild = ca85d73
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -503,20 +503,9 @@ function isLittleEndian() {
   const view32 = new Uint32Array(buffer8.buffer, 0, 1);
   return view32[0] === 1;
 }
-function isEvalSupported() {
-  try {
-    new Function("");
-    return true;
-  } catch {
-    return false;
-  }
-}
 class FeatureTest {
   static get isLittleEndian() {
     return shadow(this, "isLittleEndian", isLittleEndian());
-  }
-  static get isEvalSupported() {
-    return shadow(this, "isEvalSupported", isEvalSupported());
   }
   static get isOffscreenCanvasSupported() {
     return shadow(this, "isOffscreenCanvasSupported", typeof OffscreenCanvas !== "undefined");
@@ -900,9 +889,6 @@ function _isValidExplicitDest(validRef, validName, dest) {
 const makeArr = () => [];
 const makeMap = () => new Map();
 const makeObj = () => Object.create(null);
-function MathClamp(v, min, max) {
-  return Math.min(Math.max(v, min), max);
-}
 if (typeof Math.sumPrecise !== "function") {
   Math.sumPrecise = function (numbers) {
     return numbers.reduce((a, b) => a + b, 0);
@@ -2019,7 +2005,13 @@ async function __wbg_init(module_or_path) {
 }
 
 /* harmony default export */ const qcms = ((/* unused pure expression or super */ null && (__wbg_init)));
+;// ./src/shared/math_clamp.js
+function MathClamp(v, min, max) {
+  return Math.min(Math.max(v, min), max);
+}
+
 ;// ./src/core/colorspace.js
+
 
 
 function resizeRgbImage(src, dest, w1, h1, w2, h2, alpha01) {
@@ -2923,6 +2915,7 @@ class NullStream extends Stream {
 }
 
 ;// ./src/core/chunked_stream.js
+
 
 
 
@@ -6186,10 +6179,7 @@ class SimpleSegmentVisitor {
       huffmanTables = getSymbolDictionaryHuffmanTables(dictionary, referredSegments, this.customTables);
       huffmanInput = new Reader(data, start, end);
     }
-    let symbols = this.symbols;
-    if (!symbols) {
-      this.symbols = symbols = {};
-    }
+    const symbols = this.symbols ||= {};
     const inputSymbols = [];
     for (const referredSegment of referredSegments) {
       const referredSymbols = symbols[referredSegment];
@@ -6224,10 +6214,7 @@ class SimpleSegmentVisitor {
     this.onImmediateTextRegion(...arguments);
   }
   onPatternDictionary(dictionary, currentSegment, data, start, end) {
-    let patterns = this.patterns;
-    if (!patterns) {
-      this.patterns = patterns = {};
-    }
+    const patterns = this.patterns ||= {};
     const decodingContext = new DecodingContext(data, start, end);
     patterns[currentSegment] = decodePatternDictionary(dictionary.mmr, dictionary.patternWidth, dictionary.patternHeight, dictionary.maxPatternIndex, dictionary.template, decodingContext);
   }
@@ -6242,10 +6229,7 @@ class SimpleSegmentVisitor {
     this.onImmediateHalftoneRegion(...arguments);
   }
   onTables(currentSegment, data, start, end) {
-    let customTables = this.customTables;
-    if (!customTables) {
-      this.customTables = customTables = {};
-    }
+    const customTables = this.customTables ||= {};
     customTables[currentSegment] = decodeTablesSegment(data, start, end);
   }
 }
@@ -6286,10 +6270,7 @@ class HuffmanTreeNode {
     if (shift <= 0) {
       this.children[bit] = new HuffmanTreeNode(line);
     } else {
-      let node = this.children[bit];
-      if (!node) {
-        this.children[bit] = node = new HuffmanTreeNode(null);
-      }
+      const node = this.children[bit] ||= new HuffmanTreeNode(null);
       node.buildTree(line, shift - 1);
     }
   }
@@ -6994,6 +6975,7 @@ class StreamsSequenceStream extends DecodeStream {
 }
 
 ;// ./src/core/colorspace_utils.js
+
 
 
 
@@ -14687,7 +14669,7 @@ function compilePatternInfo(ir) {
       throw new Error(`Unsupported pattern type: ${ir[0]}`);
   }
   const nCoord = Math.floor(coords.length / 2);
-  const nColor = Math.floor(colors.length / 3);
+  const nColor = Math.floor(colors.length / 4);
   const nStop = colorStops.length;
   const nFigures = figures.length;
   let figuresSize = 0;
@@ -14700,7 +14682,7 @@ function compilePatternInfo(ir) {
       figuresSize += 4;
     }
   }
-  const byteLen = 20 + nCoord * 8 + nColor * 3 + nStop * 8 + (bbox ? 16 : 0) + (background ? 3 : 0) + figuresSize;
+  const byteLen = 20 + nCoord * 8 + nColor * 4 + nStop * 8 + (bbox ? 16 : 0) + (background ? 3 : 0) + figuresSize;
   const buffer = new ArrayBuffer(byteLen);
   const dataView = new DataView(buffer);
   const u8data = new Uint8Array(buffer);
@@ -14717,7 +14699,7 @@ function compilePatternInfo(ir) {
   coordsView.set(coords);
   offset += nCoord * 8;
   u8data.set(colors, offset);
-  offset += nColor * 3;
+  offset += nColor * 4;
   for (const [pos, hex] of colorStops) {
     dataView.setFloat32(offset, pos, true);
     offset += 4;
@@ -28899,7 +28881,7 @@ class Font {
         data[2] = 0;
         data[3] = 0;
       }
-      const indexToLocFormat = int16(data[50], data[51]);
+      const indexToLocFormat = signedInt16(data[50], data[51]);
       if (indexToLocFormat < 0 || indexToLocFormat > 1) {
         info("Attempting to fix invalid indexToLocFormat in head table: " + indexToLocFormat);
         const numGlyphsPlusOne = numGlyphs + 1;
@@ -29170,7 +29152,7 @@ class Font {
           } else {
             for (j = 0; j < n; j++) {
               b = data[i++];
-              stack.push(b << 8 | data[i++]);
+              stack.push(signedInt16(b, data[i++]));
             }
           }
         } else if ((op & 0xf8) === 0xb0) {
@@ -30023,6 +30005,7 @@ class ErrorFont {
 
 
 
+
 const ShadingType = {
   FUNCTION_BASED: 1,
   AXIAL: 2,
@@ -30041,6 +30024,9 @@ class Pattern {
     const type = dict.get("ShadingType");
     try {
       switch (type) {
+        case ShadingType.FUNCTION_BASED:
+          prepareWebGPU?.();
+          return new FunctionBasedShading(dict, xref, res, pdfFunctionFactory, globalColorSpaceCache, localColorSpaceCache);
         case ShadingType.AXIAL:
         case ShadingType.RADIAL:
           return new RadialAxialShading(dict, xref, res, pdfFunctionFactory, globalColorSpaceCache, localColorSpaceCache);
@@ -30203,6 +30189,122 @@ class RadialAxialShading extends BaseShading {
       unreachable(`getPattern type unknown: ${shadingType}`);
     }
     return ["RadialAxial", type, this.bbox, this.colorStops, p0, p1, r0, r1];
+  }
+}
+function meshUpdateBounds(self) {
+  let minX = self.coords[0][0],
+    minY = self.coords[0][1],
+    maxX = minX,
+    maxY = minY;
+  for (let i = 1, ii = self.coords.length; i < ii; i++) {
+    const x = self.coords[i][0],
+      y = self.coords[i][1];
+    minX = minX > x ? x : minX;
+    minY = minY > y ? y : minY;
+    maxX = maxX < x ? x : maxX;
+    maxY = maxY < y ? y : maxY;
+  }
+  self.bounds = [minX, minY, maxX, maxY];
+}
+function meshPackData(self) {
+  let i, j, ii;
+  const coords = self.coords;
+  const coordsPacked = new Float32Array(coords.length * 2);
+  for (i = 0, j = 0, ii = coords.length; i < ii; i++) {
+    const xy = coords[i];
+    coordsPacked[j++] = xy[0];
+    coordsPacked[j++] = xy[1];
+  }
+  self.coords = coordsPacked;
+  const colors = self.colors;
+  const colorsPacked = new Uint8Array(colors.length * 4);
+  for (i = 0, j = 0, ii = colors.length; i < ii; i++) {
+    const c = colors[i];
+    colorsPacked[j++] = c[0];
+    colorsPacked[j++] = c[1];
+    colorsPacked[j++] = c[2];
+    j++;
+  }
+  self.colors = colorsPacked;
+  for (const figure of self.figures) {
+    figure.coords = new Uint32Array(figure.coords);
+    figure.colors = new Uint32Array(figure.colors);
+  }
+}
+class FunctionBasedShading extends BaseShading {
+  static MAX_STEP_COUNT = 512;
+  constructor(dict, xref, resources, pdfFunctionFactory, globalColorSpaceCache, localColorSpaceCache) {
+    super();
+    this.bbox = lookupNormalRect(dict.getArray("BBox"), null);
+    const cs = ColorSpaceUtils.parse({
+      cs: dict.getRaw("CS") || dict.getRaw("ColorSpace"),
+      xref,
+      resources,
+      pdfFunctionFactory,
+      globalColorSpaceCache,
+      localColorSpaceCache
+    });
+    this.background = dict.has("Background") ? cs.getRgb(dict.get("Background"), 0) : null;
+    const fnObj = dict.getRaw("Function");
+    if (!fnObj) {
+      throw new FormatError("FunctionBasedShading: missing /Function");
+    }
+    const fn = pdfFunctionFactory.create(fnObj, true);
+    let x0 = 0,
+      x1 = 1,
+      y0 = 0,
+      y1 = 1;
+    const domainArr = lookupRect(dict.getArray("Domain"), null);
+    if (domainArr) {
+      [x0, x1, y0, y1] = domainArr;
+    }
+    const matrix = lookupMatrix(dict.getArray("Matrix"), IDENTITY_MATRIX);
+    this.bounds = [Infinity, Infinity, -Infinity, -Infinity];
+    Util.axialAlignedBoundingBox([x0, y0, x1, y1], matrix, this.bounds);
+    const bboxW = this.bounds[2] - this.bounds[0];
+    const bboxH = this.bounds[3] - this.bounds[1];
+    const stepsX = MathClamp(Math.ceil(bboxW), 1, FunctionBasedShading.MAX_STEP_COUNT);
+    const stepsY = MathClamp(Math.ceil(bboxH), 1, FunctionBasedShading.MAX_STEP_COUNT);
+    const verticesPerRow = stepsX + 1;
+    const totalVertices = (stepsY + 1) * verticesPerRow;
+    const coords = this.coords = new Float32Array(totalVertices * 2);
+    const colors = this.colors = new Uint8ClampedArray(totalVertices * 4);
+    const xyBuf = new Float32Array(2);
+    const colorBuf = new Float32Array(cs.numComps);
+    const rangeX = (x1 - x0) / stepsX;
+    const rangeY = (y1 - y0) / stepsY;
+    const halfStepX = rangeX / 2;
+    const halfStepY = rangeY / 2;
+    let coordOffset = 0;
+    let colorOffset = 0;
+    for (let row = 0; row <= stepsY; row++) {
+      const yDomain = y0 + rangeY * row;
+      xyBuf[1] = row === stepsY ? yDomain - halfStepY : yDomain;
+      for (let col = 0; col <= stepsX; col++) {
+        const xDomain = x0 + rangeX * col;
+        xyBuf[0] = col === stepsX ? xDomain - halfStepX : xDomain;
+        fn(xyBuf, 0, colorBuf, 0);
+        coords[coordOffset] = xDomain;
+        coords[coordOffset + 1] = yDomain;
+        Util.applyTransform(coords, matrix, coordOffset);
+        coordOffset += 2;
+        cs.getRgbItem(colorBuf, 0, colors, colorOffset);
+        colorOffset += 4;
+      }
+    }
+    const ps = new Uint32Array(totalVertices);
+    for (let i = 0; i < totalVertices; i++) {
+      ps[i] = i;
+    }
+    this.figures = [{
+      type: MeshFigureType.LATTICE,
+      coords: ps,
+      colors: new Uint32Array(ps),
+      verticesPerRow
+    }];
+  }
+  getIR() {
+    return ["Mesh", ShadingType.FUNCTION_BASED, this.coords, this.colors, this.figures, this.bounds, this.bbox, this.background];
   }
 }
 class MeshStreamReader {
@@ -30756,46 +30858,10 @@ class MeshShading extends BaseShading {
     };
   }
   _updateBounds() {
-    let minX = this.coords[0][0],
-      minY = this.coords[0][1],
-      maxX = minX,
-      maxY = minY;
-    for (let i = 1, ii = this.coords.length; i < ii; i++) {
-      const x = this.coords[i][0],
-        y = this.coords[i][1];
-      minX = minX > x ? x : minX;
-      minY = minY > y ? y : minY;
-      maxX = maxX < x ? x : maxX;
-      maxY = maxY < y ? y : maxY;
-    }
-    this.bounds = [minX, minY, maxX, maxY];
+    meshUpdateBounds(this);
   }
   _packData() {
-    let i, ii, j;
-    const coords = this.coords;
-    const coordsPacked = new Float32Array(coords.length * 2);
-    for (i = 0, j = 0, ii = coords.length; i < ii; i++) {
-      const xy = coords[i];
-      coordsPacked[j++] = xy[0];
-      coordsPacked[j++] = xy[1];
-    }
-    this.coords = coordsPacked;
-    const colors = this.colors;
-    const colorsPacked = new Uint8Array(colors.length * 4);
-    for (i = 0, j = 0, ii = colors.length; i < ii; i++) {
-      const c = colors[i];
-      colorsPacked[j++] = c[0];
-      colorsPacked[j++] = c[1];
-      colorsPacked[j++] = c[2];
-      j++;
-    }
-    this.colors = colorsPacked;
-    const figures = this.figures;
-    for (i = 0, ii = figures.length; i < ii; i++) {
-      const figure = figures[i];
-      figure.coords = new Uint32Array(figure.coords);
-      figure.colors = new Uint32Array(figure.colors);
-    }
+    meshPackData(this);
   }
   getIR() {
     return ["Mesh", this.shadingType, this.coords, this.colors, this.figures, this.bounds, this.bbox, this.background];
@@ -31127,192 +31193,2582 @@ function getXfaFontDict(name) {
   return dict;
 }
 
-;// ./src/core/ps_parser.js
-
-
-
-class PostScriptParser {
-  constructor(lexer) {
-    this.lexer = lexer;
-    this.operators = [];
-    this.token = null;
-    this.prev = null;
-  }
-  nextToken() {
-    this.prev = this.token;
-    this.token = this.lexer.getToken();
-  }
-  accept(type) {
-    if (this.token.type === type) {
-      this.nextToken();
-      return true;
-    }
-    return false;
-  }
-  expect(type) {
-    if (this.accept(type)) {
-      return true;
-    }
-    throw new FormatError(`Unexpected symbol: found ${this.token.type} expected ${type}.`);
-  }
-  parse() {
-    this.nextToken();
-    this.expect(PostScriptTokenTypes.LBRACE);
-    this.parseBlock();
-    this.expect(PostScriptTokenTypes.RBRACE);
-    return this.operators;
-  }
-  parseBlock() {
-    while (true) {
-      if (this.accept(PostScriptTokenTypes.NUMBER)) {
-        this.operators.push(this.prev.value);
-      } else if (this.accept(PostScriptTokenTypes.OPERATOR)) {
-        this.operators.push(this.prev.value);
-      } else if (this.accept(PostScriptTokenTypes.LBRACE)) {
-        this.parseCondition();
-      } else {
-        return;
-      }
-    }
-  }
-  parseCondition() {
-    const conditionLocation = this.operators.length;
-    this.operators.push(null, null);
-    this.parseBlock();
-    this.expect(PostScriptTokenTypes.RBRACE);
-    if (this.accept(PostScriptTokenTypes.IF)) {
-      this.operators[conditionLocation] = this.operators.length;
-      this.operators[conditionLocation + 1] = "jz";
-    } else if (this.accept(PostScriptTokenTypes.LBRACE)) {
-      const jumpLocation = this.operators.length;
-      this.operators.push(null, null);
-      const endOfTrue = this.operators.length;
-      this.parseBlock();
-      this.expect(PostScriptTokenTypes.RBRACE);
-      this.expect(PostScriptTokenTypes.IFELSE);
-      this.operators[jumpLocation] = this.operators.length;
-      this.operators[jumpLocation + 1] = "j";
-      this.operators[conditionLocation] = endOfTrue;
-      this.operators[conditionLocation + 1] = "jz";
-    } else {
-      throw new FormatError("PS Function: error parsing conditional.");
-    }
-  }
-}
-const PostScriptTokenTypes = {
-  LBRACE: 0,
-  RBRACE: 1,
-  NUMBER: 2,
-  OPERATOR: 3,
-  IF: 4,
-  IFELSE: 5
+;// ./src/core/postscript/lexer.js
+const TOKEN = {
+  number: 0,
+  lbrace: 1,
+  rbrace: 2,
+  true: 3,
+  false: 4,
+  add: 5,
+  sub: 6,
+  mul: 7,
+  div: 8,
+  idiv: 9,
+  mod: 10,
+  exp: 11,
+  eq: 12,
+  ne: 13,
+  gt: 14,
+  ge: 15,
+  lt: 16,
+  le: 17,
+  and: 18,
+  or: 19,
+  xor: 20,
+  bitshift: 21,
+  abs: 22,
+  neg: 23,
+  ceiling: 24,
+  floor: 25,
+  round: 26,
+  truncate: 27,
+  not: 28,
+  sqrt: 29,
+  sin: 30,
+  cos: 31,
+  ln: 32,
+  log: 33,
+  atan: 34,
+  cvi: 35,
+  cvr: 36,
+  dup: 37,
+  exch: 38,
+  pop: 39,
+  copy: 40,
+  index: 41,
+  roll: 42,
+  if: 43,
+  ifelse: 44,
+  eof: 45,
+  min: 46,
+  max: 47
 };
-class PostScriptToken {
-  static get opCache() {
-    return shadow(this, "opCache", Object.create(null));
-  }
-  constructor(type, value) {
-    this.type = type;
+class Token {
+  constructor(id, value = null) {
+    this.id = id;
     this.value = value;
   }
-  static getOperator(op) {
-    return PostScriptToken.opCache[op] ||= new PostScriptToken(PostScriptTokenTypes.OPERATOR, op);
+}
+class lexer_Lexer {
+  static #singletons = null;
+  static #operatorSingletons = null;
+  static #initSingletons() {
+    const singletons = Object.create(null);
+    const operatorSingletons = Object.create(null);
+    for (const [name, id] of Object.entries(TOKEN)) {
+      if (name === "number") {
+        continue;
+      }
+      const isOperator = id >= TOKEN.true && id <= TOKEN.ifelse;
+      const token = new Token(id, isOperator ? name : null);
+      singletons[name] = token;
+      if (isOperator) {
+        operatorSingletons[name] = token;
+      }
+    }
+    lexer_Lexer.#singletons = singletons;
+    lexer_Lexer.#operatorSingletons = operatorSingletons;
   }
-  static get LBRACE() {
-    return shadow(this, "LBRACE", new PostScriptToken(PostScriptTokenTypes.LBRACE, "{"));
+  constructor(data) {
+    if (!lexer_Lexer.#singletons) {
+      lexer_Lexer.#initSingletons();
+    }
+    this.data = data;
+    this.pos = 0;
+    this.len = data.length;
+    this._numberPattern = /[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/y;
+    this._identifierPattern = /[a-z]+/y;
   }
-  static get RBRACE() {
-    return shadow(this, "RBRACE", new PostScriptToken(PostScriptTokenTypes.RBRACE, "}"));
+  _skipComment() {
+    const lf = this.data.indexOf("\n", this.pos);
+    const cr = this.data.indexOf("\r", this.pos);
+    const eol = Math.min(lf < 0 ? this.len : lf, cr < 0 ? this.len : cr);
+    this.pos = Math.min(eol + 1, this.len);
   }
-  static get IF() {
-    return shadow(this, "IF", new PostScriptToken(PostScriptTokenTypes.IF, "IF"));
+  _getNumber() {
+    this._numberPattern.lastIndex = this.pos;
+    const match = this._numberPattern.exec(this.data);
+    if (!match) {
+      return new Token(TOKEN.number, 0);
+    }
+    const number = parseFloat(match[0]);
+    if (!Number.isFinite(number)) {
+      return new Token(TOKEN.number, 0);
+    }
+    this.pos = this._numberPattern.lastIndex;
+    return new Token(TOKEN.number, number);
   }
-  static get IFELSE() {
-    return shadow(this, "IFELSE", new PostScriptToken(PostScriptTokenTypes.IFELSE, "IFELSE"));
+  _getOperator() {
+    this._identifierPattern.lastIndex = this.pos;
+    const match = this._identifierPattern.exec(this.data);
+    if (!match) {
+      return new Token(TOKEN.number, 0);
+    }
+    this.pos = this._identifierPattern.lastIndex;
+    const op = match[0];
+    const token = lexer_Lexer.#operatorSingletons[op];
+    if (!token) {
+      return new Token(TOKEN.number, 0);
+    }
+    return token;
+  }
+  next() {
+    while (this.pos < this.len) {
+      const ch = this.data.charCodeAt(this.pos++);
+      switch (ch) {
+        case 0x00:
+        case 0x09:
+        case 0x0a:
+        case 0x0c:
+        case 0x0d:
+        case 0x20:
+          break;
+        case 0x25:
+          this._skipComment();
+          break;
+        case 0x7b:
+          return lexer_Lexer.#singletons.lbrace;
+        case 0x7d:
+          return lexer_Lexer.#singletons.rbrace;
+        case 0x2b:
+        case 0x2d:
+          this.pos--;
+          return this._getNumber();
+        case 0x2e:
+          this.pos--;
+          return this._getNumber();
+        default:
+          if (ch >= 0x30 && ch <= 0x39) {
+            this.pos--;
+            return this._getNumber();
+          }
+          if (ch >= 0x61 && ch <= 0x7a) {
+            this.pos--;
+            return this._getOperator();
+          }
+          return new Token(TOKEN.number, 0);
+      }
+    }
+    return lexer_Lexer.#singletons.eof;
   }
 }
-class PostScriptLexer {
-  constructor(stream) {
-    this.stream = stream;
-    this.nextChar();
-    this.strBuf = [];
+
+;// ./src/core/postscript/ast.js
+
+
+const PS_VALUE_TYPE = {
+  numeric: 0,
+  boolean: 1,
+  unknown: 2
+};
+const PS_NODE = {
+  program: 0,
+  block: 1,
+  number: 2,
+  operator: 3,
+  if: 4,
+  ifelse: 5,
+  arg: 6,
+  const: 7,
+  unary: 8,
+  binary: 9,
+  ternary: 10
+};
+class PsNode {
+  constructor(type) {
+    this.type = type;
   }
-  nextChar() {
-    return this.currentChar = this.stream.getByte();
+}
+class PsProgram extends PsNode {
+  constructor(body) {
+    super(PS_NODE.program);
+    this.body = body;
   }
-  getToken() {
-    let comment = false;
-    let ch = this.currentChar;
+}
+class PsBlock extends PsNode {
+  constructor(instructions) {
+    super(PS_NODE.block);
+    this.instructions = instructions;
+  }
+}
+class PsNumber extends PsNode {
+  constructor(value) {
+    super(PS_NODE.number);
+    this.value = value;
+  }
+}
+class PsOperator extends PsNode {
+  constructor(op) {
+    super(PS_NODE.operator);
+    this.op = op;
+  }
+}
+class PsIf extends PsNode {
+  constructor(then) {
+    super(PS_NODE.if);
+    this.then = then;
+  }
+}
+class PsIfElse extends PsNode {
+  constructor(then, otherwise) {
+    super(PS_NODE.ifelse);
+    this.then = then;
+    this.otherwise = otherwise;
+  }
+}
+class PsArgNode extends PsNode {
+  constructor(index) {
+    super(PS_NODE.arg);
+    this.index = index;
+    this.valueType = PS_VALUE_TYPE.numeric;
+  }
+}
+class PsConstNode extends PsNode {
+  constructor(value) {
+    super(PS_NODE.const);
+    this.value = value;
+    this.valueType = typeof value === "boolean" ? PS_VALUE_TYPE.boolean : PS_VALUE_TYPE.numeric;
+  }
+}
+class PsUnaryNode extends PsNode {
+  constructor(op, operand, valueType = PS_VALUE_TYPE.unknown) {
+    super(PS_NODE.unary);
+    this.op = op;
+    this.operand = operand;
+    this.valueType = valueType;
+  }
+}
+class PsBinaryNode extends PsNode {
+  constructor(op, first, second, valueType = PS_VALUE_TYPE.unknown) {
+    super(PS_NODE.binary);
+    this.op = op;
+    this.first = first;
+    this.second = second;
+    this.valueType = valueType;
+  }
+}
+class PsTernaryNode extends PsNode {
+  constructor(cond, then, otherwise, valueType = PS_VALUE_TYPE.unknown) {
+    super(PS_NODE.ternary);
+    this.cond = cond;
+    this.then = then;
+    this.otherwise = otherwise;
+    this.valueType = valueType;
+  }
+}
+class ast_Parser {
+  constructor(lexer) {
+    this.lexer = lexer;
+    this._token = null;
+  }
+  static _isRegularOperator(id) {
+    return id >= TOKEN.true && id < TOKEN.if;
+  }
+  _advance() {
+    this._token = this.lexer.next();
+  }
+  _expect(id) {
+    if (this._token.id !== id) {
+      throw new FormatError(`PostScript function: expected token id ${id}, got ${this._token.id}.`);
+    }
+    const tok = this._token;
+    this._advance();
+    return tok;
+  }
+  parse() {
+    this._advance();
+    this._expect(TOKEN.lbrace);
+    const block = this._parseBlock();
+    this._expect(TOKEN.rbrace);
+    if (this._token.id !== TOKEN.eof) {
+      warn("PostScript function: unexpected content after closing brace.");
+    }
+    return new PsProgram(block);
+  }
+  _parseBlock() {
+    const instructions = [];
     while (true) {
-      if (ch < 0) {
-        return EOF;
+      const tok = this._token;
+      switch (tok.id) {
+        case TOKEN.number:
+          instructions.push(new PsNumber(tok.value));
+          this._advance();
+          break;
+        case TOKEN.lbrace:
+          {
+            this._advance();
+            const thenBlock = this._parseBlock();
+            this._expect(TOKEN.rbrace);
+            if (this._token.id === TOKEN.if) {
+              this._advance();
+              instructions.push(new PsIf(thenBlock));
+            } else if (this._token.id === TOKEN.lbrace) {
+              this._advance();
+              const elseBlock = this._parseBlock();
+              this._expect(TOKEN.rbrace);
+              this._expect(TOKEN.ifelse);
+              instructions.push(new PsIfElse(thenBlock, elseBlock));
+            } else {
+              throw new FormatError("PostScript function: a procedure block must be followed by 'if' or '{…} ifelse'.");
+            }
+            break;
+          }
+        case TOKEN.rbrace:
+        case TOKEN.eof:
+          return new PsBlock(instructions);
+        case TOKEN.if:
+        case TOKEN.ifelse:
+          throw new FormatError(`PostScript function: unexpected '${tok.value}' operator.`);
+        default:
+          if (ast_Parser._isRegularOperator(tok.id)) {
+            instructions.push(new PsOperator(tok.id));
+            this._advance();
+            break;
+          }
+          throw new FormatError(`PostScript function: unexpected token id ${tok.id}.`);
       }
-      if (comment) {
-        if (ch === 0x0a || ch === 0x0d) {
-          comment = false;
-        }
-      } else if (ch === 0x25) {
-        comment = true;
-      } else if (!isWhiteSpace(ch)) {
-        break;
-      }
-      ch = this.nextChar();
-    }
-    switch (ch | 0) {
-      case 0x30:
-      case 0x31:
-      case 0x32:
-      case 0x33:
-      case 0x34:
-      case 0x35:
-      case 0x36:
-      case 0x37:
-      case 0x38:
-      case 0x39:
-      case 0x2b:
-      case 0x2d:
-      case 0x2e:
-        return new PostScriptToken(PostScriptTokenTypes.NUMBER, this.getNumber());
-      case 0x7b:
-        this.nextChar();
-        return PostScriptToken.LBRACE;
-      case 0x7d:
-        this.nextChar();
-        return PostScriptToken.RBRACE;
-    }
-    const strBuf = this.strBuf;
-    strBuf.length = 0;
-    strBuf[0] = String.fromCharCode(ch);
-    while ((ch = this.nextChar()) >= 0 && (ch >= 0x41 && ch <= 0x5a || ch >= 0x61 && ch <= 0x7a)) {
-      strBuf.push(String.fromCharCode(ch));
-    }
-    const str = strBuf.join("");
-    switch (str.toLowerCase()) {
-      case "if":
-        return PostScriptToken.IF;
-      case "ifelse":
-        return PostScriptToken.IFELSE;
-      default:
-        return PostScriptToken.getOperator(str);
     }
   }
-  getNumber() {
-    let ch = this.currentChar;
-    const strBuf = this.strBuf;
-    strBuf.length = 0;
-    strBuf[0] = String.fromCharCode(ch);
-    while ((ch = this.nextChar()) >= 0) {
-      if (ch >= 0x30 && ch <= 0x39 || ch === 0x2d || ch === 0x2e) {
-        strBuf.push(String.fromCharCode(ch));
-      } else {
-        break;
+}
+function parsePostScriptFunction(source) {
+  return new ast_Parser(new lexer_Lexer(source)).parse();
+}
+function _nodesEqual(a, b) {
+  if (a === b) {
+    return true;
+  }
+  if (a.type !== b.type) {
+    return false;
+  }
+  switch (a.type) {
+    case PS_NODE.arg:
+      return a.index === b.index;
+    case PS_NODE.const:
+      return a.value === b.value;
+    case PS_NODE.unary:
+      return a.op === b.op && _nodesEqual(a.operand, b.operand);
+    case PS_NODE.binary:
+      return a.op === b.op && _nodesEqual(a.first, b.first) && _nodesEqual(a.second, b.second);
+    case PS_NODE.ternary:
+      return _nodesEqual(a.cond, b.cond) && _nodesEqual(a.then, b.then) && _nodesEqual(a.otherwise, b.otherwise);
+    default:
+      return false;
+  }
+}
+function _evalBinaryConst(op, a, b) {
+  switch (op) {
+    case TOKEN.add:
+      return a + b;
+    case TOKEN.sub:
+      return a - b;
+    case TOKEN.mul:
+      return a * b;
+    case TOKEN.div:
+      return b !== 0 ? a / b : 0;
+    case TOKEN.idiv:
+      return b !== 0 ? Math.trunc(a / b) : 0;
+    case TOKEN.mod:
+      return b !== 0 ? a - Math.trunc(a / b) * b : 0;
+    case TOKEN.exp:
+      {
+        const r = a ** b;
+        return Number.isFinite(r) ? r : undefined;
+      }
+    case TOKEN.atan:
+      {
+        let deg = Math.atan2(a, b) * (180 / Math.PI);
+        if (deg < 0) {
+          deg += 360;
+        }
+        return deg;
+      }
+    case TOKEN.eq:
+      return a === b;
+    case TOKEN.ne:
+      return a !== b;
+    case TOKEN.gt:
+      return a > b;
+    case TOKEN.ge:
+      return a >= b;
+    case TOKEN.lt:
+      return a < b;
+    case TOKEN.le:
+      return a <= b;
+    case TOKEN.and:
+      return typeof a === "boolean" ? a && b : a & b | 0;
+    case TOKEN.or:
+      return typeof a === "boolean" ? a || b : a | b | 0;
+    case TOKEN.xor:
+      return typeof a === "boolean" ? a !== b : a ^ b | 0;
+    case TOKEN.bitshift:
+      return b >= 0 ? a << b | 0 : a >> -b | 0;
+    case TOKEN.min:
+      return Math.min(a, b);
+    case TOKEN.max:
+      return Math.max(a, b);
+    default:
+      return undefined;
+  }
+}
+function _evalUnaryConst(op, v) {
+  switch (op) {
+    case TOKEN.abs:
+      return Math.abs(v);
+    case TOKEN.neg:
+      return -v;
+    case TOKEN.ceiling:
+      return Math.ceil(v);
+    case TOKEN.floor:
+      return Math.floor(v);
+    case TOKEN.round:
+      return Math.round(v);
+    case TOKEN.truncate:
+      return Math.trunc(v);
+    case TOKEN.sqrt:
+      {
+        const r = Math.sqrt(v);
+        return Number.isFinite(r) ? r : undefined;
+      }
+    case TOKEN.sin:
+      return Math.sin(v % 360 * Math.PI / 180);
+    case TOKEN.cos:
+      return Math.cos(v % 360 * Math.PI / 180);
+    case TOKEN.ln:
+      {
+        const r = Math.log(v);
+        return Number.isFinite(r) ? r : undefined;
+      }
+    case TOKEN.log:
+      {
+        const r = Math.log10(v);
+        return Number.isFinite(r) ? r : undefined;
+      }
+    case TOKEN.cvi:
+      return Math.trunc(v);
+    case TOKEN.cvr:
+      return v;
+    case TOKEN.not:
+      return typeof v === "boolean" ? !v : ~v;
+    default:
+      return undefined;
+  }
+}
+const MAX_STACK_SIZE = 100;
+function _unaryValueType(op, operandType) {
+  return op === TOKEN.not ? operandType : PS_VALUE_TYPE.numeric;
+}
+function _binaryValueType(op, firstType, secondType) {
+  switch (op) {
+    case TOKEN.eq:
+    case TOKEN.ne:
+    case TOKEN.gt:
+    case TOKEN.ge:
+    case TOKEN.lt:
+    case TOKEN.le:
+      return PS_VALUE_TYPE.boolean;
+    case TOKEN.and:
+    case TOKEN.or:
+    case TOKEN.xor:
+      return firstType === secondType && firstType !== PS_VALUE_TYPE.unknown ? firstType : PS_VALUE_TYPE.unknown;
+    default:
+      return PS_VALUE_TYPE.numeric;
+  }
+}
+class PSStackToTree {
+  static #binaryOps = null;
+  static #unaryOps = null;
+  static #idempotentUnary = null;
+  static #negatedComparison = null;
+  static #init() {
+    PSStackToTree.#binaryOps = new Set([TOKEN.add, TOKEN.sub, TOKEN.mul, TOKEN.div, TOKEN.idiv, TOKEN.mod, TOKEN.exp, TOKEN.atan, TOKEN.eq, TOKEN.ne, TOKEN.gt, TOKEN.ge, TOKEN.lt, TOKEN.le, TOKEN.and, TOKEN.or, TOKEN.xor, TOKEN.bitshift]);
+    PSStackToTree.#unaryOps = new Set([TOKEN.abs, TOKEN.neg, TOKEN.ceiling, TOKEN.floor, TOKEN.round, TOKEN.truncate, TOKEN.sqrt, TOKEN.sin, TOKEN.cos, TOKEN.ln, TOKEN.log, TOKEN.cvi, TOKEN.cvr, TOKEN.not]);
+    PSStackToTree.#idempotentUnary = new Set([TOKEN.abs, TOKEN.ceiling, TOKEN.cvi, TOKEN.cvr, TOKEN.floor, TOKEN.round, TOKEN.truncate]);
+    PSStackToTree.#negatedComparison = new Map([[TOKEN.eq, TOKEN.ne], [TOKEN.ne, TOKEN.eq], [TOKEN.lt, TOKEN.ge], [TOKEN.le, TOKEN.gt], [TOKEN.gt, TOKEN.le], [TOKEN.ge, TOKEN.lt]]);
+  }
+  evaluate(program, numInputs) {
+    if (!PSStackToTree.#binaryOps) {
+      PSStackToTree.#init();
+    }
+    this._failed = false;
+    if (numInputs > MAX_STACK_SIZE) {
+      return null;
+    }
+    const stack = [];
+    for (let i = 0; i < numInputs; i++) {
+      stack.push(new PsArgNode(i));
+    }
+    this._evalBlock(program.body, stack);
+    if (this._failed) {
+      return null;
+    }
+    PSStackToTree.#markShared(stack);
+    return stack;
+  }
+  static #markShared(outputs) {
+    const refCount = new Map();
+    const visit = node => {
+      if (!node || node.type === PS_NODE.arg || node.type === PS_NODE.const) {
+        return;
+      }
+      const prev = refCount.get(node) ?? 0;
+      refCount.set(node, prev + 1);
+      if (prev > 0) {
+        return;
+      }
+      switch (node.type) {
+        case PS_NODE.unary:
+          visit(node.operand);
+          break;
+        case PS_NODE.binary:
+          visit(node.first);
+          visit(node.second);
+          break;
+        case PS_NODE.ternary:
+          visit(node.cond);
+          visit(node.then);
+          visit(node.otherwise);
+          break;
+      }
+    };
+    for (const output of outputs) {
+      visit(output);
+    }
+    for (const [node, count] of refCount) {
+      if (count > 1) {
+        node.shared = true;
+        node.sharedCount = count;
       }
     }
-    const value = parseFloat(strBuf.join(""));
-    if (isNaN(value)) {
-      throw new FormatError(`Invalid floating point number: ${value}`);
+  }
+  _evalBlock(block, stack) {
+    this._evalBlockFrom(block.instructions, 0, stack);
+  }
+  _evalBlockFrom(instructions, startIdx, stack) {
+    for (let idx = startIdx; idx < instructions.length; idx++) {
+      if (this._failed) {
+        break;
+      }
+      const instr = instructions[idx];
+      switch (instr.type) {
+        case PS_NODE.number:
+          stack.push(new PsConstNode(instr.value));
+          if (stack.length > MAX_STACK_SIZE) {
+            this._failed = true;
+          }
+          break;
+        case PS_NODE.operator:
+          this._evalOp(instr.op, stack);
+          break;
+        case PS_NODE.if:
+          {
+            if (stack.length < 1) {
+              this._failed = true;
+              break;
+            }
+            const cond = stack.pop();
+            const saved = stack.slice();
+            this._evalBlock(instr.then, stack);
+            if (this._failed) {
+              break;
+            }
+            if (stack.length === saved.length) {
+              for (let i = 0; i < stack.length; i++) {
+                if (stack[i] !== saved[i]) {
+                  stack[i] = this._makeTernary(cond, stack[i], saved[i]);
+                }
+              }
+            } else if (stack.length > saved.length) {
+              if (cond.type === PS_NODE.const) {
+                if (!cond.value) {
+                  stack.length = 0;
+                  stack.push(...saved);
+                }
+                break;
+              }
+              const trueStack = stack.slice();
+              this._evalBlockFrom(instructions, idx + 1, trueStack);
+              if (this._failed) {
+                break;
+              }
+              const falseStack = saved;
+              this._evalBlockFrom(instructions, idx + 1, falseStack);
+              if (this._failed) {
+                break;
+              }
+              if (trueStack.length !== falseStack.length) {
+                const zero = new PsConstNode(0);
+                while (trueStack.length < falseStack.length) {
+                  trueStack.push(zero);
+                }
+                while (falseStack.length < trueStack.length) {
+                  falseStack.push(zero);
+                }
+              }
+              stack.length = 0;
+              for (let i = 0; i < trueStack.length; i++) {
+                stack.push(this._makeTernary(cond, trueStack[i], falseStack[i]));
+              }
+              return;
+            } else {
+              this._failed = true;
+            }
+            break;
+          }
+        case PS_NODE.ifelse:
+          {
+            if (stack.length < 1) {
+              this._failed = true;
+              break;
+            }
+            const cond = stack.pop();
+            const snapshot = stack.slice();
+            const thenStack = snapshot.slice();
+            this._evalBlock(instr.then, thenStack);
+            if (this._failed) {
+              break;
+            }
+            const elseStack = snapshot.slice();
+            this._evalBlock(instr.otherwise, elseStack);
+            if (this._failed) {
+              break;
+            }
+            if (thenStack.length !== elseStack.length) {
+              const zero = new PsConstNode(0);
+              while (thenStack.length < elseStack.length) {
+                thenStack.push(zero);
+              }
+              while (elseStack.length < thenStack.length) {
+                elseStack.push(zero);
+              }
+            }
+            stack.length = 0;
+            for (let i = 0; i < thenStack.length; i++) {
+              stack.push(this._makeTernary(cond, thenStack[i], elseStack[i]));
+            }
+            break;
+          }
+      }
     }
-    return value;
+  }
+  _evalOp(op, stack) {
+    if (PSStackToTree.#binaryOps.has(op)) {
+      if (stack.length < 2) {
+        this._failed = true;
+        return;
+      }
+      const first = stack.pop();
+      const second = stack.pop();
+      stack.push(this._makeBinary(op, first, second));
+      return;
+    }
+    if (PSStackToTree.#unaryOps.has(op)) {
+      if (stack.length < 1) {
+        this._failed = true;
+        return;
+      }
+      stack.push(this._makeUnary(op, stack.pop()));
+      return;
+    }
+    switch (op) {
+      case TOKEN.true:
+        stack.push(new PsConstNode(true));
+        if (stack.length > MAX_STACK_SIZE) {
+          this._failed = true;
+        }
+        break;
+      case TOKEN.false:
+        stack.push(new PsConstNode(false));
+        if (stack.length > MAX_STACK_SIZE) {
+          this._failed = true;
+        }
+        break;
+      case TOKEN.dup:
+        if (stack.length < 1) {
+          this._failed = true;
+          break;
+        }
+        stack.push(stack.at(-1));
+        if (stack.length > MAX_STACK_SIZE) {
+          this._failed = true;
+        }
+        break;
+      case TOKEN.exch:
+        {
+          if (stack.length < 2) {
+            this._failed = true;
+            break;
+          }
+          const a = stack.pop();
+          const b = stack.pop();
+          stack.push(a, b);
+          break;
+        }
+      case TOKEN.pop:
+        if (stack.length < 1) {
+          this._failed = true;
+          break;
+        }
+        stack.pop();
+        break;
+      case TOKEN.copy:
+        {
+          if (stack.length < 1) {
+            this._failed = true;
+            break;
+          }
+          const nNode = stack.pop();
+          if (nNode.type === PS_NODE.const) {
+            const n = nNode.value | 0;
+            if (n === 0) {} else if (n < 0 || n > stack.length) {
+              this._failed = true;
+            } else {
+              stack.push(...stack.slice(-n));
+              if (stack.length > MAX_STACK_SIZE) {
+                this._failed = true;
+              }
+            }
+          } else {
+            this._failed = true;
+          }
+          break;
+        }
+      case TOKEN.index:
+        {
+          if (stack.length < 1) {
+            this._failed = true;
+            break;
+          }
+          const nNode = stack.pop();
+          if (nNode.type === PS_NODE.const) {
+            const n = nNode.value | 0;
+            if (n < 0 || n >= stack.length) {
+              this._failed = true;
+            } else {
+              stack.push(stack.at(-n - 1));
+            }
+          } else {
+            this._failed = true;
+          }
+          break;
+        }
+      case TOKEN.roll:
+        {
+          if (stack.length < 2) {
+            this._failed = true;
+            break;
+          }
+          const jNode = stack.pop();
+          const nNode = stack.pop();
+          if (nNode.type === PS_NODE.const && jNode.type === PS_NODE.const) {
+            const n = nNode.value | 0;
+            if (n === 0) {} else if (n < 0 || n > stack.length) {
+              this._failed = true;
+            } else {
+              const j = ((jNode.value | 0) % n + n) % n;
+              if (j > 0) {
+                const slice = stack.splice(-n, n);
+                stack.push(...slice.slice(n - j), ...slice.slice(0, n - j));
+              }
+            }
+          } else {
+            this._failed = true;
+          }
+          break;
+        }
+      default:
+        this._failed = true;
+        break;
+    }
+  }
+  _makeBinary(op, first, second) {
+    if (first.type === PS_NODE.const && second.type === PS_NODE.const) {
+      const v = _evalBinaryConst(op, second.value, first.value);
+      if (v !== undefined) {
+        return new PsConstNode(v);
+      }
+    }
+    if (_nodesEqual(first, second)) {
+      switch (op) {
+        case TOKEN.sub:
+          return new PsConstNode(0);
+        case TOKEN.xor:
+          return new PsConstNode(first.valueType === PS_VALUE_TYPE.boolean ? false : 0);
+        case TOKEN.and:
+        case TOKEN.or:
+          return first;
+        case TOKEN.min:
+        case TOKEN.max:
+          return first;
+        case TOKEN.eq:
+        case TOKEN.ge:
+        case TOKEN.le:
+          return new PsConstNode(true);
+        case TOKEN.ne:
+        case TOKEN.gt:
+        case TOKEN.lt:
+          return new PsConstNode(false);
+      }
+    }
+    if (first.type === PS_NODE.const) {
+      const b = first.value;
+      switch (op) {
+        case TOKEN.add:
+          if (b === 0) {
+            return second;
+          }
+          break;
+        case TOKEN.sub:
+          if (b === 0) {
+            return second;
+          }
+          break;
+        case TOKEN.mul:
+          if (b === 1) {
+            return second;
+          }
+          if (b === 0) {
+            return first;
+          }
+          if (b === -1) {
+            return this._makeUnary(TOKEN.neg, second);
+          }
+          break;
+        case TOKEN.div:
+          if (b !== 0) {
+            return this._makeBinary(TOKEN.mul, new PsConstNode(1 / b), second);
+          }
+          break;
+        case TOKEN.idiv:
+          if (b === 1) {
+            return second;
+          }
+          break;
+        case TOKEN.exp:
+          if (b === 1) {
+            return second;
+          }
+          if (b === -1) {
+            return this._makeBinary(TOKEN.div, second, new PsConstNode(1));
+          }
+          if (b === 0.5) {
+            return this._makeUnary(TOKEN.sqrt, second);
+          }
+          if (b === 0.25) {
+            const sqrtOnce = this._makeUnary(TOKEN.sqrt, second);
+            return this._makeUnary(TOKEN.sqrt, sqrtOnce);
+          }
+          if (b === 2) {
+            return this._makeBinary(TOKEN.mul, second, second);
+          }
+          if (b === 3) {
+            return this._makeBinary(TOKEN.mul, this._makeBinary(TOKEN.mul, second, second), second);
+          }
+          if (b === 4) {
+            const square = this._makeBinary(TOKEN.mul, second, second);
+            return this._makeBinary(TOKEN.mul, square, square);
+          }
+          if (b === 0) {
+            return new PsConstNode(1);
+          }
+          break;
+        case TOKEN.and:
+          if (b === true) {
+            return second;
+          }
+          if (b === false) {
+            return first;
+          }
+          break;
+        case TOKEN.or:
+          if (b === false) {
+            return second;
+          }
+          if (b === true) {
+            return first;
+          }
+          break;
+        case TOKEN.min:
+          if (second.type === PS_NODE.binary && second.op === TOKEN.max && second.first.type === PS_NODE.const && second.first.value >= b) {
+            return first;
+          }
+          break;
+        case TOKEN.max:
+          if (second.type === PS_NODE.binary && second.op === TOKEN.min && second.first.type === PS_NODE.const && second.first.value <= b) {
+            return first;
+          }
+          break;
+      }
+    }
+    if (second.type === PS_NODE.const) {
+      const a = second.value;
+      switch (op) {
+        case TOKEN.add:
+          if (a === 0) {
+            return first;
+          }
+          break;
+        case TOKEN.sub:
+          if (a === 0) {
+            return this._makeUnary(TOKEN.neg, first);
+          }
+          break;
+        case TOKEN.mul:
+          if (a === 1) {
+            return first;
+          }
+          if (a === 0) {
+            return second;
+          }
+          if (a === -1) {
+            return this._makeUnary(TOKEN.neg, first);
+          }
+          break;
+        case TOKEN.and:
+          if (a === true) {
+            return first;
+          }
+          if (a === false) {
+            return second;
+          }
+          break;
+        case TOKEN.or:
+          if (a === false) {
+            return first;
+          }
+          if (a === true) {
+            return second;
+          }
+          break;
+      }
+    }
+    return new PsBinaryNode(op, first, second, _binaryValueType(op, first.valueType, second.valueType));
+  }
+  _makeUnary(op, operand) {
+    if (operand.type === PS_NODE.const) {
+      const v = _evalUnaryConst(op, operand.value);
+      if (v !== undefined) {
+        return new PsConstNode(v);
+      }
+    }
+    if (op === TOKEN.not && operand.type === PS_NODE.binary) {
+      const negated = PSStackToTree.#negatedComparison.get(operand.op);
+      if (negated !== undefined) {
+        return new PsBinaryNode(negated, operand.first, operand.second, PS_VALUE_TYPE.boolean);
+      }
+    }
+    if (op === TOKEN.neg && operand.type === PS_NODE.binary && operand.op === TOKEN.sub) {
+      return this._makeBinary(TOKEN.sub, operand.second, operand.first);
+    }
+    if (operand.type === PS_NODE.unary) {
+      if (op === TOKEN.neg && operand.op === TOKEN.neg || op === TOKEN.not && operand.op === TOKEN.not) {
+        return operand.operand;
+      }
+      if (op === TOKEN.abs && operand.op === TOKEN.neg) {
+        return this._makeUnary(TOKEN.abs, operand.operand);
+      }
+      if (PSStackToTree.#idempotentUnary.has(op) && op === operand.op) {
+        return operand;
+      }
+    }
+    return new PsUnaryNode(op, operand, _unaryValueType(op, operand.valueType));
+  }
+  _makeTernary(cond, then, otherwise) {
+    if (cond.type === PS_NODE.const) {
+      return cond.value ? then : otherwise;
+    }
+    if (_nodesEqual(then, otherwise)) {
+      return then;
+    }
+    if (then.type === PS_NODE.const && otherwise.type === PS_NODE.const) {
+      if (then.value === true && otherwise.value === false) {
+        return cond;
+      }
+      if (then.value === false && otherwise.value === true) {
+        return this._makeUnary(TOKEN.not, cond);
+      }
+    }
+    if (cond.type === PS_NODE.binary) {
+      const {
+        op: cop,
+        first: cf,
+        second: cs
+      } = cond;
+      if (cop === TOKEN.gt || cop === TOKEN.ge) {
+        if (_nodesEqual(then, cf) && _nodesEqual(otherwise, cs)) {
+          return this._makeBinary(TOKEN.min, cf, cs);
+        }
+        if (_nodesEqual(then, cs) && _nodesEqual(otherwise, cf)) {
+          return this._makeBinary(TOKEN.max, cf, cs);
+        }
+      } else if (cop === TOKEN.lt || cop === TOKEN.le) {
+        if (_nodesEqual(then, cf) && _nodesEqual(otherwise, cs)) {
+          return this._makeBinary(TOKEN.max, cf, cs);
+        }
+        if (_nodesEqual(then, cs) && _nodesEqual(otherwise, cf)) {
+          return this._makeBinary(TOKEN.min, cf, cs);
+        }
+      }
+    }
+    return new PsTernaryNode(cond, then, otherwise, then.valueType === otherwise.valueType ? then.valueType : PS_VALUE_TYPE.unknown);
+  }
+}
+
+;// ./src/core/postscript/js_evaluator.js
+
+
+
+const OP = {
+  ARG: 0,
+  CONST: 1,
+  STORE: 2,
+  IF: 3,
+  JUMP: 4,
+  ABS: 5,
+  NEG: 6,
+  CEIL: 7,
+  FLOOR: 8,
+  ROUND: 9,
+  TRUNC: 10,
+  NOT_B: 11,
+  NOT_N: 12,
+  SQRT: 13,
+  SIN: 14,
+  COS: 15,
+  LN: 16,
+  LOG10: 17,
+  CVI: 18,
+  SHIFT: 19,
+  ADD: 20,
+  SUB: 21,
+  MUL: 22,
+  DIV: 23,
+  IDIV: 24,
+  MOD: 25,
+  POW: 26,
+  EQ: 27,
+  NE: 28,
+  GT: 29,
+  GE: 30,
+  LT: 31,
+  LE: 32,
+  AND: 33,
+  OR: 34,
+  XOR: 35,
+  ATAN: 36,
+  MIN: 37,
+  MAX: 38,
+  TEE_TMP: 39,
+  LOAD_TMP: 40
+};
+const _DEG_TO_RAD = Math.PI / 180;
+const _RAD_TO_DEG = 180 / Math.PI;
+class PsJsCompiler {
+  static #stack = new Float64Array(64);
+  static #tmp = new Float64Array(64);
+  constructor(domain, range) {
+    this.nIn = domain.length >> 1;
+    this.nOut = range.length >> 1;
+    this.range = range;
+    this.ir = [];
+    this._tmpMap = new Map();
+    this._nextTmp = 0;
+  }
+  _compileNode(node) {
+    if (node.shared) {
+      const cached = this._tmpMap.get(node);
+      if (cached !== undefined) {
+        this.ir.push(OP.LOAD_TMP, cached);
+        return true;
+      }
+      if (!this._compileNodeImpl(node)) {
+        return false;
+      }
+      const slot = this._nextTmp++;
+      this._tmpMap.set(node, slot);
+      this.ir.push(OP.TEE_TMP, slot);
+      return true;
+    }
+    return this._compileNodeImpl(node);
+  }
+  _compileNodeImpl(node) {
+    switch (node.type) {
+      case PS_NODE.arg:
+        this.ir.push(OP.ARG, node.index);
+        return true;
+      case PS_NODE.const:
+        {
+          const v = node.value;
+          this.ir.push(OP.CONST, typeof v === "boolean" ? Number(v) : v);
+          return true;
+        }
+      case PS_NODE.unary:
+        return this._compileUnary(node);
+      case PS_NODE.binary:
+        return this._compileBinary(node);
+      case PS_NODE.ternary:
+        return this._compileTernary(node);
+      default:
+        return false;
+    }
+  }
+  _compileUnary(node) {
+    const {
+      op,
+      operand,
+      valueType
+    } = node;
+    if (op === TOKEN.cvr) {
+      return this._compileNode(operand);
+    }
+    if (!this._compileNode(operand)) {
+      return false;
+    }
+    switch (op) {
+      case TOKEN.abs:
+        this.ir.push(OP.ABS);
+        break;
+      case TOKEN.neg:
+        this.ir.push(OP.NEG);
+        break;
+      case TOKEN.ceiling:
+        this.ir.push(OP.CEIL);
+        break;
+      case TOKEN.floor:
+        this.ir.push(OP.FLOOR);
+        break;
+      case TOKEN.round:
+        this.ir.push(OP.ROUND);
+        break;
+      case TOKEN.truncate:
+        this.ir.push(OP.TRUNC);
+        break;
+      case TOKEN.sqrt:
+        this.ir.push(OP.SQRT);
+        break;
+      case TOKEN.sin:
+        this.ir.push(OP.SIN);
+        break;
+      case TOKEN.cos:
+        this.ir.push(OP.COS);
+        break;
+      case TOKEN.ln:
+        this.ir.push(OP.LN);
+        break;
+      case TOKEN.log:
+        this.ir.push(OP.LOG10);
+        break;
+      case TOKEN.cvi:
+        this.ir.push(OP.CVI);
+        break;
+      case TOKEN.not:
+        if (valueType === PS_VALUE_TYPE.boolean) {
+          this.ir.push(OP.NOT_B);
+        } else if (valueType === PS_VALUE_TYPE.numeric) {
+          this.ir.push(OP.NOT_N);
+        } else {
+          return false;
+        }
+        break;
+      default:
+        return false;
+    }
+    return true;
+  }
+  _compileBinary(node) {
+    const {
+      op,
+      first,
+      second
+    } = node;
+    if (op === TOKEN.bitshift) {
+      if (first.type !== PS_NODE.const || !Number.isInteger(first.value)) {
+        return false;
+      }
+      if (!this._compileNode(second)) {
+        return false;
+      }
+      this.ir.push(OP.SHIFT, first.value);
+      return true;
+    }
+    if (!this._compileNode(second)) {
+      return false;
+    }
+    if (!this._compileNode(first)) {
+      return false;
+    }
+    switch (op) {
+      case TOKEN.add:
+        this.ir.push(OP.ADD);
+        break;
+      case TOKEN.sub:
+        this.ir.push(OP.SUB);
+        break;
+      case TOKEN.mul:
+        this.ir.push(OP.MUL);
+        break;
+      case TOKEN.div:
+        this.ir.push(OP.DIV);
+        break;
+      case TOKEN.idiv:
+        this.ir.push(OP.IDIV);
+        break;
+      case TOKEN.mod:
+        this.ir.push(OP.MOD);
+        break;
+      case TOKEN.exp:
+        this.ir.push(OP.POW);
+        break;
+      case TOKEN.eq:
+        this.ir.push(OP.EQ);
+        break;
+      case TOKEN.ne:
+        this.ir.push(OP.NE);
+        break;
+      case TOKEN.gt:
+        this.ir.push(OP.GT);
+        break;
+      case TOKEN.ge:
+        this.ir.push(OP.GE);
+        break;
+      case TOKEN.lt:
+        this.ir.push(OP.LT);
+        break;
+      case TOKEN.le:
+        this.ir.push(OP.LE);
+        break;
+      case TOKEN.and:
+        this.ir.push(OP.AND);
+        break;
+      case TOKEN.or:
+        this.ir.push(OP.OR);
+        break;
+      case TOKEN.xor:
+        this.ir.push(OP.XOR);
+        break;
+      case TOKEN.atan:
+        this.ir.push(OP.ATAN);
+        break;
+      case TOKEN.min:
+        this.ir.push(OP.MIN);
+        break;
+      case TOKEN.max:
+        this.ir.push(OP.MAX);
+        break;
+      default:
+        return false;
+    }
+    return true;
+  }
+  _compileTernary(node) {
+    if (!this._compileNode(node.cond)) {
+      return false;
+    }
+    this.ir.push(OP.IF, 0);
+    const ifPatch = this.ir.length - 1;
+    if (!this._compileNode(node.then)) {
+      return false;
+    }
+    this.ir.push(OP.JUMP, 0);
+    const jumpPatch = this.ir.length - 1;
+    this.ir[ifPatch] = this.ir.length;
+    if (!this._compileNode(node.otherwise)) {
+      return false;
+    }
+    this.ir[jumpPatch] = this.ir.length;
+    return true;
+  }
+  compile(program) {
+    const outputs = new PSStackToTree().evaluate(program, this.nIn);
+    if (!outputs || outputs.length < this.nOut) {
+      return null;
+    }
+    for (let i = 0; i < this.nOut; i++) {
+      if (!this._compileNode(outputs[i])) {
+        return null;
+      }
+      const min = this.range[i * 2];
+      const max = this.range[i * 2 + 1];
+      this.ir.push(OP.STORE, i, min, max);
+    }
+    return new Float64Array(this.ir);
+  }
+  static execute(ir, src, srcOffset, dest, destOffset) {
+    let ip = 0,
+      sp = 0;
+    const n = ir.length;
+    const stack = PsJsCompiler.#stack;
+    const tmp = PsJsCompiler.#tmp;
+    while (ip < n) {
+      switch (ir[ip++] | 0) {
+        case OP.ARG:
+          stack[sp++] = src[srcOffset + (ir[ip++] | 0)];
+          break;
+        case OP.CONST:
+          stack[sp++] = ir[ip++];
+          break;
+        case OP.STORE:
+          {
+            const slot = ir[ip++] | 0;
+            const min = ir[ip++];
+            const max = ir[ip++];
+            dest[destOffset + slot] = MathClamp(stack[--sp], min, max);
+            break;
+          }
+        case OP.IF:
+          {
+            const tgt = ir[ip++];
+            if (stack[--sp] === 0) {
+              ip = tgt;
+            }
+            break;
+          }
+        case OP.JUMP:
+          ip = ir[ip];
+          break;
+        case OP.ABS:
+          stack[sp - 1] = Math.abs(stack[sp - 1]);
+          break;
+        case OP.NEG:
+          stack[sp - 1] = -stack[sp - 1];
+          break;
+        case OP.CEIL:
+          stack[sp - 1] = Math.ceil(stack[sp - 1]);
+          break;
+        case OP.FLOOR:
+          stack[sp - 1] = Math.floor(stack[sp - 1]);
+          break;
+        case OP.ROUND:
+          stack[sp - 1] = Math.floor(stack[sp - 1] + 0.5);
+          break;
+        case OP.TRUNC:
+          stack[sp - 1] = Math.trunc(stack[sp - 1]);
+          break;
+        case OP.NOT_B:
+          stack[sp - 1] = stack[sp - 1] !== 0 ? 0 : 1;
+          break;
+        case OP.NOT_N:
+          stack[sp - 1] = ~(stack[sp - 1] | 0);
+          break;
+        case OP.SQRT:
+          stack[sp - 1] = Math.sqrt(stack[sp - 1]);
+          break;
+        case OP.SIN:
+          stack[sp - 1] = Math.sin(stack[sp - 1] % 360 * _DEG_TO_RAD);
+          break;
+        case OP.COS:
+          stack[sp - 1] = Math.cos(stack[sp - 1] % 360 * _DEG_TO_RAD);
+          break;
+        case OP.LN:
+          stack[sp - 1] = Math.log(stack[sp - 1]);
+          break;
+        case OP.LOG10:
+          stack[sp - 1] = Math.log10(stack[sp - 1]);
+          break;
+        case OP.CVI:
+          stack[sp - 1] = Math.trunc(stack[sp - 1]) | 0;
+          break;
+        case OP.SHIFT:
+          {
+            const amt = ir[ip++];
+            const v = stack[sp - 1] | 0;
+            if (amt > 0) {
+              stack[sp - 1] = v << amt;
+            } else if (amt < 0) {
+              stack[sp - 1] = v >> -amt;
+            } else {
+              stack[sp - 1] = v;
+            }
+            break;
+          }
+        case OP.ADD:
+          {
+            const b = stack[--sp];
+            stack[sp - 1] += b;
+            break;
+          }
+        case OP.SUB:
+          {
+            const b = stack[--sp];
+            stack[sp - 1] -= b;
+            break;
+          }
+        case OP.MUL:
+          {
+            const b = stack[--sp];
+            stack[sp - 1] *= b;
+            break;
+          }
+        case OP.DIV:
+          {
+            const b = stack[--sp];
+            stack[sp - 1] = b !== 0 ? stack[sp - 1] / b : 0;
+            break;
+          }
+        case OP.IDIV:
+          {
+            const b = stack[--sp];
+            stack[sp - 1] = b !== 0 ? Math.trunc(stack[sp - 1] / b) : 0;
+            break;
+          }
+        case OP.MOD:
+          {
+            const b = stack[--sp];
+            stack[sp - 1] = b !== 0 ? stack[sp - 1] % b : 0;
+            break;
+          }
+        case OP.POW:
+          {
+            const b = stack[--sp];
+            stack[sp - 1] **= b;
+            break;
+          }
+        case OP.EQ:
+          {
+            const b = stack[--sp];
+            stack[sp - 1] = stack[sp - 1] === b ? 1 : 0;
+            break;
+          }
+        case OP.NE:
+          {
+            const b = stack[--sp];
+            stack[sp - 1] = stack[sp - 1] !== b ? 1 : 0;
+            break;
+          }
+        case OP.GT:
+          {
+            const b = stack[--sp];
+            stack[sp - 1] = stack[sp - 1] > b ? 1 : 0;
+            break;
+          }
+        case OP.GE:
+          {
+            const b = stack[--sp];
+            stack[sp - 1] = stack[sp - 1] >= b ? 1 : 0;
+            break;
+          }
+        case OP.LT:
+          {
+            const b = stack[--sp];
+            stack[sp - 1] = stack[sp - 1] < b ? 1 : 0;
+            break;
+          }
+        case OP.LE:
+          {
+            const b = stack[--sp];
+            stack[sp - 1] = stack[sp - 1] <= b ? 1 : 0;
+            break;
+          }
+        case OP.AND:
+          {
+            const b = stack[--sp] | 0;
+            stack[sp - 1] = (stack[sp - 1] | 0) & b;
+            break;
+          }
+        case OP.OR:
+          {
+            const b = stack[--sp] | 0;
+            stack[sp - 1] = stack[sp - 1] | 0 | b;
+            break;
+          }
+        case OP.XOR:
+          {
+            const b = stack[--sp] | 0;
+            stack[sp - 1] = (stack[sp - 1] | 0) ^ b;
+            break;
+          }
+        case OP.ATAN:
+          {
+            const b = stack[--sp];
+            const deg = Math.atan2(stack[sp - 1], b) * _RAD_TO_DEG;
+            stack[sp - 1] = deg < 0 ? deg + 360 : deg;
+            break;
+          }
+        case OP.MIN:
+          {
+            const b = stack[--sp];
+            stack[sp - 1] = Math.min(stack[sp - 1], b);
+            break;
+          }
+        case OP.MAX:
+          {
+            const b = stack[--sp];
+            stack[sp - 1] = Math.max(stack[sp - 1], b);
+            break;
+          }
+        case OP.TEE_TMP:
+          tmp[ir[ip++] | 0] = stack[sp - 1];
+          break;
+        case OP.LOAD_TMP:
+          stack[sp++] = tmp[ir[ip++] | 0];
+          break;
+      }
+    }
+  }
+}
+class PSStackBasedInterpreter {
+  static #stack = new Float64Array(100);
+  static #sp = 0;
+  static #push(v) {
+    if (this.#sp < this.#stack.length) {
+      this.#stack[this.#sp++] = v;
+    }
+  }
+  static #execOp(op) {
+    const stack = this.#stack;
+    switch (op) {
+      case TOKEN.true:
+        this.#push(1);
+        break;
+      case TOKEN.false:
+        this.#push(0);
+        break;
+      case TOKEN.abs:
+        stack[this.#sp - 1] = Math.abs(stack[this.#sp - 1]);
+        break;
+      case TOKEN.neg:
+        stack[this.#sp - 1] = -stack[this.#sp - 1];
+        break;
+      case TOKEN.ceiling:
+        stack[this.#sp - 1] = Math.ceil(stack[this.#sp - 1]);
+        break;
+      case TOKEN.floor:
+        stack[this.#sp - 1] = Math.floor(stack[this.#sp - 1]);
+        break;
+      case TOKEN.round:
+        stack[this.#sp - 1] = Math.floor(stack[this.#sp - 1] + 0.5);
+        break;
+      case TOKEN.truncate:
+        stack[this.#sp - 1] = Math.trunc(stack[this.#sp - 1]);
+        break;
+      case TOKEN.sqrt:
+        stack[this.#sp - 1] = Math.sqrt(stack[this.#sp - 1]);
+        break;
+      case TOKEN.sin:
+        stack[this.#sp - 1] = Math.sin(stack[this.#sp - 1] % 360 * _DEG_TO_RAD);
+        break;
+      case TOKEN.cos:
+        stack[this.#sp - 1] = Math.cos(stack[this.#sp - 1] % 360 * _DEG_TO_RAD);
+        break;
+      case TOKEN.ln:
+        stack[this.#sp - 1] = Math.log(stack[this.#sp - 1]);
+        break;
+      case TOKEN.log:
+        stack[this.#sp - 1] = Math.log10(stack[this.#sp - 1]);
+        break;
+      case TOKEN.cvi:
+        stack[this.#sp - 1] = Math.trunc(stack[this.#sp - 1]) | 0;
+        break;
+      case TOKEN.cvr:
+        break;
+      case TOKEN.not:
+        {
+          const v = stack[this.#sp - 1];
+          stack[this.#sp - 1] = v === 0 || v === 1 ? 1 - v : ~(v | 0);
+          break;
+        }
+      case TOKEN.add:
+        {
+          const b = stack[--this.#sp];
+          stack[this.#sp - 1] += b;
+          break;
+        }
+      case TOKEN.sub:
+        {
+          const b = stack[--this.#sp];
+          stack[this.#sp - 1] -= b;
+          break;
+        }
+      case TOKEN.mul:
+        {
+          const b = stack[--this.#sp];
+          stack[this.#sp - 1] *= b;
+          break;
+        }
+      case TOKEN.div:
+        {
+          const b = stack[--this.#sp];
+          stack[this.#sp - 1] = b !== 0 ? stack[this.#sp - 1] / b : 0;
+          break;
+        }
+      case TOKEN.idiv:
+        {
+          const b = stack[--this.#sp];
+          stack[this.#sp - 1] = b !== 0 ? Math.trunc(stack[this.#sp - 1] / b) : 0;
+          break;
+        }
+      case TOKEN.mod:
+        {
+          const b = stack[--this.#sp];
+          stack[this.#sp - 1] = b !== 0 ? stack[this.#sp - 1] % b : 0;
+          break;
+        }
+      case TOKEN.exp:
+        {
+          const b = stack[--this.#sp];
+          stack[this.#sp - 1] **= b;
+          break;
+        }
+      case TOKEN.atan:
+        {
+          const dx = stack[--this.#sp];
+          const deg = Math.atan2(stack[this.#sp - 1], dx) * _RAD_TO_DEG;
+          stack[this.#sp - 1] = deg < 0 ? deg + 360 : deg;
+          break;
+        }
+      case TOKEN.eq:
+        {
+          const b = stack[--this.#sp];
+          stack[this.#sp - 1] = stack[this.#sp - 1] === b ? 1 : 0;
+          break;
+        }
+      case TOKEN.ne:
+        {
+          const b = stack[--this.#sp];
+          stack[this.#sp - 1] = stack[this.#sp - 1] !== b ? 1 : 0;
+          break;
+        }
+      case TOKEN.gt:
+        {
+          const b = stack[--this.#sp];
+          stack[this.#sp - 1] = stack[this.#sp - 1] > b ? 1 : 0;
+          break;
+        }
+      case TOKEN.ge:
+        {
+          const b = stack[--this.#sp];
+          stack[this.#sp - 1] = stack[this.#sp - 1] >= b ? 1 : 0;
+          break;
+        }
+      case TOKEN.lt:
+        {
+          const b = stack[--this.#sp];
+          stack[this.#sp - 1] = stack[this.#sp - 1] < b ? 1 : 0;
+          break;
+        }
+      case TOKEN.le:
+        {
+          const b = stack[--this.#sp];
+          stack[this.#sp - 1] = stack[this.#sp - 1] <= b ? 1 : 0;
+          break;
+        }
+      case TOKEN.and:
+        {
+          const b = stack[--this.#sp] | 0;
+          stack[this.#sp - 1] = (stack[this.#sp - 1] | 0) & b;
+          break;
+        }
+      case TOKEN.or:
+        {
+          const b = stack[--this.#sp] | 0;
+          stack[this.#sp - 1] = stack[this.#sp - 1] | 0 | b;
+          break;
+        }
+      case TOKEN.xor:
+        {
+          const b = stack[--this.#sp] | 0;
+          stack[this.#sp - 1] = (stack[this.#sp - 1] | 0) ^ b;
+          break;
+        }
+      case TOKEN.bitshift:
+        {
+          const amt = stack[--this.#sp] | 0;
+          const v = stack[this.#sp - 1] | 0;
+          stack[this.#sp - 1] = amt > 0 ? v << amt : v >> -amt;
+          break;
+        }
+      case TOKEN.min:
+        {
+          const b = stack[--this.#sp];
+          stack[this.#sp - 1] = Math.min(stack[this.#sp - 1], b);
+          break;
+        }
+      case TOKEN.max:
+        {
+          const b = stack[--this.#sp];
+          stack[this.#sp - 1] = Math.max(stack[this.#sp - 1], b);
+          break;
+        }
+      case TOKEN.dup:
+        this.#push(stack[this.#sp - 1]);
+        break;
+      case TOKEN.exch:
+        {
+          const a = stack[--this.#sp];
+          const b = stack[--this.#sp];
+          this.#push(a);
+          this.#push(b);
+          break;
+        }
+      case TOKEN.pop:
+        this.#sp--;
+        break;
+      case TOKEN.copy:
+        {
+          const n = Math.trunc(stack[--this.#sp]);
+          const base = this.#sp - n;
+          for (let k = 0; k < n; k++) {
+            this.#push(stack[base + k]);
+          }
+          break;
+        }
+      case TOKEN.index:
+        {
+          const i = Math.trunc(stack[--this.#sp]);
+          this.#push(stack[this.#sp - 1 - i]);
+          break;
+        }
+      case TOKEN.roll:
+        {
+          const j = Math.trunc(stack[--this.#sp]);
+          const n = Math.trunc(stack[--this.#sp]);
+          if (n > 1 && j !== 0) {
+            const mod = (j % n + n) % n;
+            if (mod !== 0) {
+              const base = this.#sp - n;
+              const sub = stack.slice(base, this.#sp);
+              for (let k = 0; k < n; k++) {
+                stack[base + k] = sub[(k - mod + n) % n];
+              }
+            }
+          }
+          break;
+        }
+    }
+  }
+  static #execBlock(instructions) {
+    for (const instr of instructions) {
+      switch (instr.type) {
+        case PS_NODE.number:
+          this.#push(instr.value);
+          break;
+        case PS_NODE.operator:
+          this.#execOp(instr.op);
+          break;
+        case PS_NODE.if:
+          if (this.#stack[--this.#sp] !== 0) {
+            this.#execBlock(instr.then.instructions);
+          }
+          break;
+        case PS_NODE.ifelse:
+          if (this.#stack[--this.#sp] !== 0) {
+            this.#execBlock(instr.then.instructions);
+          } else {
+            this.#execBlock(instr.otherwise.instructions);
+          }
+          break;
+      }
+    }
+  }
+  static build(program, domain, range) {
+    const nIn = domain.length >> 1;
+    const nOut = range.length >> 1;
+    const {
+      instructions
+    } = program.body;
+    return (src, srcOffset, dest, destOffset) => {
+      this.#sp = 0;
+      for (let i = 0; i < nIn; i++) {
+        this.#push(src[srcOffset + i]);
+      }
+      this.#execBlock(instructions);
+      const base = this.#sp - nOut;
+      for (let i = 0; i < nOut; i++) {
+        const v = base + i >= 0 ? this.#stack[base + i] : 0;
+        dest[destOffset + i] = MathClamp(range[i * 2 + 1], range[i * 2], v);
+      }
+    };
+  }
+}
+function buildPostScriptJsFunction(source, domain, range) {
+  const program = parsePostScriptFunction(source);
+  const ir = new PsJsCompiler(domain, range).compile(program);
+  if (ir) {
+    return (src, srcOffset, dest, destOffset) => {
+      PsJsCompiler.execute(ir, src, srcOffset, dest, destOffset);
+    };
+  }
+  return PSStackBasedInterpreter.build(program, domain, range);
+}
+function buildPostScriptProgramFunction(program, domain, range) {
+  return PSStackBasedInterpreter.build(program, domain, range);
+}
+
+;// ./src/core/postscript/wasm_compiler.js
+
+
+const wasm_compiler_OP = {
+  if: 0x04,
+  else: 0x05,
+  end: 0x0b,
+  select: 0x1b,
+  call: 0x10,
+  local_get: 0x20,
+  local_set: 0x21,
+  local_tee: 0x22,
+  i32_const: 0x41,
+  i32_eqz: 0x45,
+  i32_and: 0x71,
+  i32_or: 0x72,
+  i32_xor: 0x73,
+  i32_shl: 0x74,
+  i32_shr_s: 0x75,
+  i32_trunc_f64_s: 0xaa,
+  f64_const: 0x44,
+  f64_eq: 0x61,
+  f64_ne: 0x62,
+  f64_lt: 0x63,
+  f64_gt: 0x64,
+  f64_le: 0x65,
+  f64_ge: 0x66,
+  f64_abs: 0x99,
+  f64_neg: 0x9a,
+  f64_ceil: 0x9b,
+  f64_floor: 0x9c,
+  f64_trunc: 0x9d,
+  f64_nearest: 0x9e,
+  f64_sqrt: 0x9f,
+  f64_add: 0xa0,
+  f64_sub: 0xa1,
+  f64_mul: 0xa2,
+  f64_div: 0xa3,
+  f64_min: 0xa4,
+  f64_max: 0xa5,
+  f64_convert_i32_s: 0xb7,
+  f64_store: 0x39
+};
+const FUNC_TYPE = 0x60;
+const F64 = 0x7c;
+const SECTION = {
+  type: 0x01,
+  import: 0x02,
+  function: 0x03,
+  memory: 0x05,
+  export: 0x07,
+  code: 0x0a
+};
+const EXTERN_FUNC = 0x00;
+const EXTERN_MEM = 0x02;
+function unsignedLEB128(n) {
+  const out = [];
+  do {
+    let byte = n & 0x7f;
+    n >>>= 7;
+    if (n !== 0) {
+      byte |= 0x80;
+    }
+    out.push(byte);
+  } while (n !== 0);
+  return out;
+}
+function encodeASCIIString(s) {
+  return [...unsignedLEB128(s.length), ...Array.from(s, c => c.charCodeAt(0))];
+}
+function section(id, data) {
+  return [id, ...unsignedLEB128(data.length), ...data];
+}
+function vec(items) {
+  const out = unsignedLEB128(items.length);
+  for (const item of items) {
+    if (typeof item === "number") {
+      out.push(item);
+      continue;
+    }
+    for (const byte of item) {
+      out.push(byte);
+    }
+  }
+  return out;
+}
+const MATH_IMPORTS = [["sin", "Math", "sin", [F64], [F64]], ["cos", "Math", "cos", [F64], [F64]], ["atan2", "Math", "atan2", [F64, F64], [F64]], ["log", "Math", "log", [F64], [F64]], ["log10", "Math", "log10", [F64], [F64]], ["pow", "Math", "pow", [F64, F64], [F64]]];
+const _mathImportObject = {
+  Math: Object.fromEntries(MATH_IMPORTS.map(([name]) => [name, Math[name]]))
+};
+class PsWasmCompiler {
+  static #initialized = false;
+  static #comparisonToOp = null;
+  static #importIdx = null;
+  static #degToRad = 0;
+  static #radToDeg = 0;
+  static #importTypeEntries = null;
+  static #importSection = null;
+  static #functionSection = null;
+  static #memorySection = null;
+  static #exportSection = null;
+  static #wasmMagicVersion = null;
+  static #f64View = null;
+  static #f64Arr = null;
+  static #init() {
+    PsWasmCompiler.#comparisonToOp = new Map([[TOKEN.eq, wasm_compiler_OP.f64_eq], [TOKEN.ne, wasm_compiler_OP.f64_ne], [TOKEN.lt, wasm_compiler_OP.f64_lt], [TOKEN.le, wasm_compiler_OP.f64_le], [TOKEN.gt, wasm_compiler_OP.f64_gt], [TOKEN.ge, wasm_compiler_OP.f64_ge]]);
+    PsWasmCompiler.#importIdx = Object.create(null);
+    for (let i = 0; i < MATH_IMPORTS.length; i++) {
+      PsWasmCompiler.#importIdx[MATH_IMPORTS[i][0]] = i;
+    }
+    PsWasmCompiler.#degToRad = Math.PI / 180;
+    PsWasmCompiler.#radToDeg = 180 / Math.PI;
+    PsWasmCompiler.#importTypeEntries = MATH_IMPORTS.map(([,,, params, results]) => [FUNC_TYPE, ...vec(params), ...vec(results)]);
+    PsWasmCompiler.#importSection = new Uint8Array(section(SECTION.import, vec(MATH_IMPORTS.map(([, mod, field], i) => [...encodeASCIIString(mod), ...encodeASCIIString(field), EXTERN_FUNC, ...unsignedLEB128(i + 1)]))));
+    PsWasmCompiler.#functionSection = new Uint8Array(section(SECTION.function, vec([[0]])));
+    PsWasmCompiler.#memorySection = new Uint8Array(section(SECTION.memory, vec([[0x00, 0x01]])));
+    PsWasmCompiler.#exportSection = new Uint8Array(section(SECTION.export, vec([[...encodeASCIIString("fn"), EXTERN_FUNC, ...unsignedLEB128(MATH_IMPORTS.length)], [...encodeASCIIString("mem"), EXTERN_MEM, 0x00]])));
+    PsWasmCompiler.#wasmMagicVersion = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
+    const f64Buf = new ArrayBuffer(8);
+    PsWasmCompiler.#f64View = new DataView(f64Buf);
+    PsWasmCompiler.#f64Arr = new Uint8Array(f64Buf);
+    PsWasmCompiler.#initialized = true;
+  }
+  constructor(domain, range) {
+    if (!PsWasmCompiler.#initialized) {
+      PsWasmCompiler.#init();
+    }
+    this._nIn = domain.length >> 1;
+    this._nOut = range.length >> 1;
+    this._range = range;
+    this._code = [];
+    this._nextLocal = this._nIn;
+    this._freeLocals = [];
+    this._sharedLocals = new Map();
+  }
+  _allocLocal() {
+    return this._freeLocals.pop() ?? this._nextLocal++;
+  }
+  _releaseLocal(idx) {
+    this._freeLocals.push(idx);
+  }
+  _emitULEB128(n) {
+    do {
+      let b = n & 0x7f;
+      n >>>= 7;
+      if (n !== 0) {
+        b |= 0x80;
+      }
+      this._code.push(b);
+    } while (n !== 0);
+  }
+  _emitF64Const(value) {
+    this._code.push(wasm_compiler_OP.f64_const);
+    PsWasmCompiler.#f64View.setFloat64(0, value, true);
+    for (let i = 0; i < 8; i++) {
+      this._code.push(PsWasmCompiler.#f64Arr[i]);
+    }
+  }
+  _emitLocalGet(idx) {
+    this._code.push(wasm_compiler_OP.local_get);
+    this._emitULEB128(idx);
+  }
+  _emitLocalSet(idx) {
+    this._code.push(wasm_compiler_OP.local_set);
+    this._emitULEB128(idx);
+  }
+  _emitLocalTee(idx) {
+    this._code.push(wasm_compiler_OP.local_tee);
+    this._emitULEB128(idx);
+  }
+  _compileNode(node) {
+    if (node.shared) {
+      const entry = this._sharedLocals.get(node);
+      if (entry !== undefined) {
+        this._emitLocalGet(entry.local);
+        if (--entry.remaining === 0) {
+          this._releaseLocal(entry.local);
+        }
+        return true;
+      }
+      if (!this._compileNodeImpl(node)) {
+        return false;
+      }
+      const local = this._allocLocal();
+      this._sharedLocals.set(node, {
+        local,
+        remaining: node.sharedCount - 1
+      });
+      this._emitLocalTee(local);
+      return true;
+    }
+    return this._compileNodeImpl(node);
+  }
+  _compileNodeImpl(node) {
+    switch (node.type) {
+      case PS_NODE.arg:
+        this._emitLocalGet(node.index);
+        return true;
+      case PS_NODE.const:
+        {
+          let v = node.value;
+          if (typeof v === "boolean") {
+            v = v ? 1 : 0;
+          }
+          this._emitF64Const(v);
+          return true;
+        }
+      case PS_NODE.unary:
+        return this._compileUnaryNode(node);
+      case PS_NODE.binary:
+        return this._compileBinaryNode(node);
+      case PS_NODE.ternary:
+        return this._compileTernaryNode(node);
+      default:
+        return false;
+    }
+  }
+  _compileSinCosNode(node) {
+    const local = this._allocLocal();
+    try {
+      if (!this._compileNode(node.operand)) {
+        return false;
+      }
+      const code = this._code;
+      this._emitLocalSet(local);
+      this._emitLocalGet(local);
+      this._emitLocalGet(local);
+      this._emitF64Const(360);
+      code.push(wasm_compiler_OP.f64_div, wasm_compiler_OP.f64_trunc);
+      this._emitF64Const(360);
+      code.push(wasm_compiler_OP.f64_mul, wasm_compiler_OP.f64_sub);
+      this._emitF64Const(PsWasmCompiler.#degToRad);
+      code.push(wasm_compiler_OP.f64_mul, wasm_compiler_OP.call);
+      this._emitULEB128(PsWasmCompiler.#importIdx[node.op === TOKEN.sin ? "sin" : "cos"]);
+      return true;
+    } finally {
+      this._releaseLocal(local);
+    }
+  }
+  _compileUnaryNode(node) {
+    const code = this._code;
+    if (node.op === TOKEN.sin || node.op === TOKEN.cos) {
+      return this._compileSinCosNode(node);
+    }
+    if (node.op === TOKEN.not) {
+      if (node.valueType === PS_VALUE_TYPE.boolean) {
+        if (!this._compileNodeAsBoolI32(node.operand)) {
+          return false;
+        }
+        code.push(wasm_compiler_OP.i32_eqz, wasm_compiler_OP.f64_convert_i32_s);
+        return true;
+      }
+      if (node.valueType === PS_VALUE_TYPE.numeric) {
+        if (!this._compileNode(node.operand)) {
+          return false;
+        }
+        code.push(wasm_compiler_OP.i32_trunc_f64_s, wasm_compiler_OP.i32_const, 0x7f, wasm_compiler_OP.i32_xor, wasm_compiler_OP.f64_convert_i32_s);
+        return true;
+      }
+      return false;
+    }
+    if (!this._compileNode(node.operand)) {
+      return false;
+    }
+    switch (node.op) {
+      case TOKEN.abs:
+        code.push(wasm_compiler_OP.f64_abs);
+        break;
+      case TOKEN.neg:
+        code.push(wasm_compiler_OP.f64_neg);
+        break;
+      case TOKEN.sqrt:
+        code.push(wasm_compiler_OP.f64_sqrt);
+        break;
+      case TOKEN.floor:
+        code.push(wasm_compiler_OP.f64_floor);
+        break;
+      case TOKEN.ceiling:
+        code.push(wasm_compiler_OP.f64_ceil);
+        break;
+      case TOKEN.round:
+        this._emitF64Const(0.5);
+        code.push(wasm_compiler_OP.f64_add, wasm_compiler_OP.f64_floor);
+        break;
+      case TOKEN.truncate:
+        code.push(wasm_compiler_OP.f64_trunc);
+        break;
+      case TOKEN.cvi:
+        code.push(wasm_compiler_OP.i32_trunc_f64_s, wasm_compiler_OP.f64_convert_i32_s);
+        break;
+      case TOKEN.cvr:
+        break;
+      case TOKEN.ln:
+        code.push(wasm_compiler_OP.call);
+        this._emitULEB128(PsWasmCompiler.#importIdx.log);
+        break;
+      case TOKEN.log:
+        code.push(wasm_compiler_OP.call);
+        this._emitULEB128(PsWasmCompiler.#importIdx.log10);
+        break;
+      default:
+        return false;
+    }
+    return true;
+  }
+  _compileSafeDivNode(first, second) {
+    const tmp = this._allocLocal();
+    try {
+      if (!this._compileNode(second)) {
+        return false;
+      }
+      if (!this._compileNode(first)) {
+        return false;
+      }
+      const code = this._code;
+      this._emitLocalTee(tmp);
+      code.push(wasm_compiler_OP.f64_div);
+      this._emitF64Const(0);
+      this._emitLocalGet(tmp);
+      this._emitF64Const(0);
+      code.push(wasm_compiler_OP.f64_ne, wasm_compiler_OP.select);
+      return true;
+    } finally {
+      this._releaseLocal(tmp);
+    }
+  }
+  _compileSafeIdivNode(first, second) {
+    const tmp = this._allocLocal();
+    try {
+      if (!this._compileNode(second)) {
+        return false;
+      }
+      if (!this._compileNode(first)) {
+        return false;
+      }
+      const code = this._code;
+      this._emitLocalTee(tmp);
+      code.push(wasm_compiler_OP.f64_div, wasm_compiler_OP.f64_trunc);
+      this._emitF64Const(0);
+      this._emitLocalGet(tmp);
+      this._emitF64Const(0);
+      code.push(wasm_compiler_OP.f64_ne, wasm_compiler_OP.select);
+      return true;
+    } finally {
+      this._releaseLocal(tmp);
+    }
+  }
+  _compileBitshiftNode(first, second) {
+    if (first.type !== PS_NODE.const || !Number.isInteger(first.value)) {
+      return false;
+    }
+    if (!this._compileNode(second)) {
+      return false;
+    }
+    const code = this._code;
+    code.push(wasm_compiler_OP.i32_trunc_f64_s);
+    const shift = first.value;
+    if (shift > 0) {
+      code.push(wasm_compiler_OP.i32_const);
+      this._emitULEB128(shift);
+      code.push(wasm_compiler_OP.i32_shl);
+    } else if (shift < 0) {
+      code.push(wasm_compiler_OP.i32_const);
+      this._emitULEB128(-shift);
+      code.push(wasm_compiler_OP.i32_shr_s);
+    }
+    code.push(wasm_compiler_OP.f64_convert_i32_s);
+    return true;
+  }
+  _compileModNode(first, second) {
+    if (first.type === PS_NODE.const && first.value === 0) {
+      if (!this._compileNode(second)) {
+        return false;
+      }
+      this._code.push(wasm_compiler_OP.drop);
+      this._emitF64Const(0);
+      return true;
+    }
+    const localA = this._allocLocal();
+    try {
+      if (!this._compileNode(second)) {
+        return false;
+      }
+      this._emitLocalTee(localA);
+      const code = this._code;
+      if (first.type === PS_NODE.const) {
+        this._emitLocalGet(localA);
+        this._emitF64Const(first.value);
+        code.push(wasm_compiler_OP.f64_div, wasm_compiler_OP.f64_trunc);
+        this._emitF64Const(first.value);
+        code.push(wasm_compiler_OP.f64_mul, wasm_compiler_OP.f64_sub);
+      } else {
+        const localB = this._allocLocal();
+        try {
+          if (!this._compileNode(first)) {
+            return false;
+          }
+          this._emitLocalSet(localB);
+          this._emitLocalGet(localA);
+          this._emitLocalGet(localB);
+          code.push(wasm_compiler_OP.f64_div, wasm_compiler_OP.f64_trunc);
+          this._emitLocalGet(localB);
+          code.push(wasm_compiler_OP.f64_mul, wasm_compiler_OP.f64_sub);
+          this._emitF64Const(0);
+          this._emitLocalGet(localB);
+          this._emitF64Const(0);
+          code.push(wasm_compiler_OP.f64_ne, wasm_compiler_OP.select);
+        } finally {
+          this._releaseLocal(localB);
+        }
+      }
+      return true;
+    } finally {
+      this._releaseLocal(localA);
+    }
+  }
+  _compileAtanNode(first, second) {
+    const localR = this._allocLocal();
+    try {
+      if (!this._compileNode(second)) {
+        return false;
+      }
+      if (!this._compileNode(first)) {
+        return false;
+      }
+      const code = this._code;
+      code.push(wasm_compiler_OP.call);
+      this._emitULEB128(PsWasmCompiler.#importIdx.atan2);
+      this._emitF64Const(PsWasmCompiler.#radToDeg);
+      code.push(wasm_compiler_OP.f64_mul);
+      this._emitLocalTee(localR);
+      this._emitF64Const(0);
+      code.push(wasm_compiler_OP.f64_lt, wasm_compiler_OP.if, F64);
+      this._emitLocalGet(localR);
+      this._emitF64Const(360);
+      code.push(wasm_compiler_OP.f64_add, wasm_compiler_OP.else);
+      this._emitLocalGet(localR);
+      code.push(wasm_compiler_OP.end);
+      return true;
+    } finally {
+      this._releaseLocal(localR);
+    }
+  }
+  _compileBitwiseNode(op, first, second) {
+    if (!this._compileBitwiseOperandI32(second)) {
+      return false;
+    }
+    if (!this._compileBitwiseOperandI32(first)) {
+      return false;
+    }
+    const code = this._code;
+    switch (op) {
+      case TOKEN.and:
+        code.push(wasm_compiler_OP.i32_and);
+        break;
+      case TOKEN.or:
+        code.push(wasm_compiler_OP.i32_or);
+        break;
+      case TOKEN.xor:
+        code.push(wasm_compiler_OP.i32_xor);
+        break;
+      default:
+        return false;
+    }
+    code.push(wasm_compiler_OP.f64_convert_i32_s);
+    return true;
+  }
+  _compileBitwiseOperandI32(node) {
+    if (node.valueType === PS_VALUE_TYPE.boolean) {
+      return this._compileNodeAsBoolI32(node);
+    }
+    if (!this._compileNode(node)) {
+      return false;
+    }
+    this._code.push(wasm_compiler_OP.i32_trunc_f64_s);
+    return true;
+  }
+  _compileStandardBinaryNode(op, first, second) {
+    if (first === second && first.type !== PS_NODE.arg && first.type !== PS_NODE.const && !first.shared) {
+      const tmp = this._allocLocal();
+      try {
+        if (!this._compileNode(first)) {
+          return false;
+        }
+        this._emitLocalTee(tmp);
+        this._emitLocalGet(tmp);
+      } finally {
+        this._releaseLocal(tmp);
+      }
+    } else {
+      if (!this._compileNode(second)) {
+        return false;
+      }
+      if (!this._compileNode(first)) {
+        return false;
+      }
+    }
+    const code = this._code;
+    switch (op) {
+      case TOKEN.add:
+        code.push(wasm_compiler_OP.f64_add);
+        break;
+      case TOKEN.sub:
+        code.push(wasm_compiler_OP.f64_sub);
+        break;
+      case TOKEN.mul:
+        code.push(wasm_compiler_OP.f64_mul);
+        break;
+      case TOKEN.exp:
+        code.push(wasm_compiler_OP.call);
+        this._emitULEB128(PsWasmCompiler.#importIdx.pow);
+        break;
+      case TOKEN.eq:
+        code.push(wasm_compiler_OP.f64_eq, wasm_compiler_OP.f64_convert_i32_s);
+        break;
+      case TOKEN.ne:
+        code.push(wasm_compiler_OP.f64_ne, wasm_compiler_OP.f64_convert_i32_s);
+        break;
+      case TOKEN.lt:
+        code.push(wasm_compiler_OP.f64_lt, wasm_compiler_OP.f64_convert_i32_s);
+        break;
+      case TOKEN.le:
+        code.push(wasm_compiler_OP.f64_le, wasm_compiler_OP.f64_convert_i32_s);
+        break;
+      case TOKEN.gt:
+        code.push(wasm_compiler_OP.f64_gt, wasm_compiler_OP.f64_convert_i32_s);
+        break;
+      case TOKEN.ge:
+        code.push(wasm_compiler_OP.f64_ge, wasm_compiler_OP.f64_convert_i32_s);
+        break;
+      case TOKEN.min:
+        code.push(wasm_compiler_OP.f64_min);
+        break;
+      case TOKEN.max:
+        code.push(wasm_compiler_OP.f64_max);
+        break;
+      default:
+        return false;
+    }
+    return true;
+  }
+  _compileBinaryNode(node) {
+    const {
+      op,
+      first,
+      second
+    } = node;
+    if (op === TOKEN.bitshift) {
+      return this._compileBitshiftNode(first, second);
+    }
+    if (op === TOKEN.div) {
+      return this._compileSafeDivNode(first, second);
+    }
+    if (op === TOKEN.idiv) {
+      return this._compileSafeIdivNode(first, second);
+    }
+    if (op === TOKEN.mod) {
+      return this._compileModNode(first, second);
+    }
+    if (op === TOKEN.atan) {
+      return this._compileAtanNode(first, second);
+    }
+    if (op === TOKEN.and || op === TOKEN.or || op === TOKEN.xor) {
+      return this._compileBitwiseNode(op, first, second);
+    }
+    return this._compileStandardBinaryNode(op, first, second);
+  }
+  _compileNodeAsBoolI32(node) {
+    if (node.type === PS_NODE.binary) {
+      const wasmOp = PsWasmCompiler.#comparisonToOp.get(node.op);
+      if (wasmOp !== undefined) {
+        if (!this._compileNode(node.second)) {
+          return false;
+        }
+        if (!this._compileNode(node.first)) {
+          return false;
+        }
+        this._code.push(wasmOp);
+        return true;
+      }
+      if (node.valueType === PS_VALUE_TYPE.boolean && (node.op === TOKEN.and || node.op === TOKEN.or || node.op === TOKEN.xor)) {
+        if (!this._compileNodeAsBoolI32(node.second)) {
+          return false;
+        }
+        if (!this._compileNodeAsBoolI32(node.first)) {
+          return false;
+        }
+        switch (node.op) {
+          case TOKEN.and:
+            this._code.push(wasm_compiler_OP.i32_and);
+            break;
+          case TOKEN.or:
+            this._code.push(wasm_compiler_OP.i32_or);
+            break;
+          case TOKEN.xor:
+            this._code.push(wasm_compiler_OP.i32_xor);
+            break;
+        }
+        return true;
+      }
+    }
+    if (node.type === PS_NODE.unary && node.op === TOKEN.not && node.valueType === PS_VALUE_TYPE.boolean) {
+      if (!this._compileNodeAsBoolI32(node.operand)) {
+        return false;
+      }
+      this._code.push(wasm_compiler_OP.i32_eqz);
+      return true;
+    }
+    if (!this._compileNode(node)) {
+      return false;
+    }
+    if (node.valueType === PS_VALUE_TYPE.boolean) {
+      this._code.push(wasm_compiler_OP.i32_trunc_f64_s);
+    } else {
+      this._emitF64Const(0);
+      this._code.push(wasm_compiler_OP.f64_ne);
+    }
+    return true;
+  }
+  _compileTernaryNode(node) {
+    if (!this._compileNodeAsBoolI32(node.cond)) {
+      return false;
+    }
+    this._code.push(wasm_compiler_OP.if, F64);
+    if (!this._compileNode(node.then)) {
+      return false;
+    }
+    this._code.push(wasm_compiler_OP.else);
+    if (!this._compileNode(node.otherwise)) {
+      return false;
+    }
+    this._code.push(wasm_compiler_OP.end);
+    return true;
+  }
+  compile(program) {
+    const outputs = new PSStackToTree().evaluate(program, this._nIn);
+    if (!outputs || outputs.length < this._nOut) {
+      return null;
+    }
+    const code = this._code;
+    for (let i = 0; i < this._nOut; i++) {
+      const min = this._range[i * 2];
+      const max = this._range[i * 2 + 1];
+      code.push(wasm_compiler_OP.i32_const);
+      this._emitULEB128(i * 8);
+      if (!this._compileNode(outputs[i])) {
+        return null;
+      }
+      this._emitF64Const(max);
+      code.push(wasm_compiler_OP.f64_min);
+      this._emitF64Const(min);
+      code.push(wasm_compiler_OP.f64_max, wasm_compiler_OP.f64_store, 0x03, 0x00);
+    }
+    code.push(wasm_compiler_OP.end);
+    const nIn = this._nIn;
+    const nLocals = this._nextLocal - nIn;
+    const paramTypes = Array(nIn).fill(F64);
+    const resultTypes = [];
+    const funcType = [FUNC_TYPE, ...vec(paramTypes), ...vec(resultTypes)];
+    const typeSectionBytes = new Uint8Array(section(SECTION.type, vec([funcType, ...PsWasmCompiler.#importTypeEntries])));
+    const localDecls = nLocals > 0 ? vec([[...unsignedLEB128(nLocals), F64]]) : vec([]);
+    const funcBodyLen = localDecls.length + code.length;
+    const codeSectionBytes = new Uint8Array(section(SECTION.code, vec([[...unsignedLEB128(funcBodyLen), ...localDecls, ...code]])));
+    const magicVersion = PsWasmCompiler.#wasmMagicVersion;
+    const importSection = PsWasmCompiler.#importSection;
+    const functionSection = PsWasmCompiler.#functionSection;
+    const memorySection = PsWasmCompiler.#memorySection;
+    const exportSection = PsWasmCompiler.#exportSection;
+    const totalLen = magicVersion.length + typeSectionBytes.length + importSection.length + functionSection.length + memorySection.length + exportSection.length + codeSectionBytes.length;
+    const result = new Uint8Array(totalLen);
+    let off = 0;
+    result.set(magicVersion, off);
+    off += magicVersion.length;
+    result.set(typeSectionBytes, off);
+    off += typeSectionBytes.length;
+    result.set(importSection, off);
+    off += importSection.length;
+    result.set(functionSection, off);
+    off += functionSection.length;
+    result.set(memorySection, off);
+    off += memorySection.length;
+    result.set(exportSection, off);
+    off += exportSection.length;
+    result.set(codeSectionBytes, off);
+    return result;
+  }
+}
+function compilePostScriptToWasm(source, domain, range) {
+  return new PsWasmCompiler(domain, range).compile(parsePostScriptFunction(source));
+}
+function _makeWrapper(exports, nIn, nOut) {
+  const {
+    fn,
+    mem
+  } = exports;
+  const outView = new Float64Array(mem.buffer, 0, nOut);
+  let writeOut;
+  switch (nOut) {
+    case 1:
+      writeOut = (dest, destOffset) => {
+        dest[destOffset] = outView[0];
+      };
+      break;
+    case 2:
+      writeOut = (dest, destOffset) => {
+        dest[destOffset] = outView[0];
+        dest[destOffset + 1] = outView[1];
+      };
+      break;
+    case 3:
+      writeOut = (dest, destOffset) => {
+        dest[destOffset] = outView[0];
+        dest[destOffset + 1] = outView[1];
+        dest[destOffset + 2] = outView[2];
+      };
+      break;
+    case 4:
+      writeOut = (dest, destOffset) => {
+        dest[destOffset] = outView[0];
+        dest[destOffset + 1] = outView[1];
+        dest[destOffset + 2] = outView[2];
+        dest[destOffset + 3] = outView[3];
+      };
+      break;
+    default:
+      writeOut = (dest, destOffset) => {
+        for (let i = 0; i < nOut; i++) {
+          dest[destOffset + i] = outView[i];
+        }
+      };
+  }
+  switch (nIn) {
+    case 1:
+      return (src, srcOffset, dest, destOffset) => {
+        fn(src[srcOffset]);
+        writeOut(dest, destOffset);
+      };
+    case 2:
+      return (src, srcOffset, dest, destOffset) => {
+        fn(src[srcOffset], src[srcOffset + 1]);
+        writeOut(dest, destOffset);
+      };
+    case 3:
+      return (src, srcOffset, dest, destOffset) => {
+        fn(src[srcOffset], src[srcOffset + 1], src[srcOffset + 2]);
+        writeOut(dest, destOffset);
+      };
+    case 4:
+      return (src, srcOffset, dest, destOffset) => {
+        fn(src[srcOffset], src[srcOffset + 1], src[srcOffset + 2], src[srcOffset + 3]);
+        writeOut(dest, destOffset);
+      };
+    default:
+      {
+        const inBuf = new Float64Array(nIn);
+        return (src, srcOffset, dest, destOffset) => {
+          for (let i = 0; i < nIn; i++) {
+            inBuf[i] = src[srcOffset + i];
+          }
+          fn(...inBuf);
+          writeOut(dest, destOffset);
+        };
+      }
+  }
+}
+function buildPostScriptWasmFunction(source, domain, range) {
+  const bytes = compilePostScriptToWasm(source, domain, range);
+  if (!bytes) {
+    return null;
+  }
+  try {
+    const instance = new WebAssembly.Instance(new WebAssembly.Module(bytes), _mathImportObject);
+    return _makeWrapper(instance.exports, domain.length >> 1, range.length >> 1);
+  } catch {
+    return null;
   }
 }
 
@@ -31571,13 +34027,28 @@ class GlobalImageCache {
 
 
 
+
+
+const FunctionType = {
+  SAMPLED: 0,
+  EXPONENTIAL_INTERPOLATION: 2,
+  STITCHING: 3,
+  POSTSCRIPT_CALCULATOR: 4
+};
 class PDFFunctionFactory {
+  static #useWasm = true;
+  static setOptions({
+    useWasm
+  }) {
+    this.#useWasm = useWasm;
+  }
   constructor({
-    xref,
-    isEvalSupported = true
+    xref
   }) {
     this.xref = xref;
-    this.isEvalSupported = isEvalSupported !== false;
+  }
+  get useWasm() {
+    return PDFFunctionFactory.#useWasm;
   }
   create(fn, parseArray = false) {
     let fnRef, parsedFn;
@@ -31649,18 +34120,16 @@ class PDFFunction {
     const dict = fn.dict || fn;
     const typeNum = dict.get("FunctionType");
     switch (typeNum) {
-      case 0:
+      case FunctionType.SAMPLED:
         return this.constructSampled(factory, fn, dict);
-      case 1:
-        break;
-      case 2:
+      case FunctionType.EXPONENTIAL_INTERPOLATION:
         return this.constructInterpolated(factory, dict);
-      case 3:
+      case FunctionType.STITCHING:
         return this.constructStiched(factory, dict);
-      case 4:
+      case FunctionType.POSTSCRIPT_CALCULATOR:
         return this.constructPostScript(factory, fn, dict);
     }
-    throw new FormatError("Unknown type of function");
+    throw new FormatError(`Unknown function type: ${typeNum}`);
   }
   static parseArray(factory, fnObj) {
     const {
@@ -31677,27 +34146,16 @@ class PDFFunction {
     };
   }
   static constructSampled(factory, fn, dict) {
-    function toMultiArray(arr) {
-      const inputLength = arr.length;
-      const out = [];
-      let index = 0;
-      for (let i = 0; i < inputLength; i += 2) {
-        out[index++] = [arr[i], arr[i + 1]];
-      }
-      return out;
-    }
     function interpolate(x, xmin, xmax, ymin, ymax) {
       return ymin + (x - xmin) * ((ymax - ymin) / (xmax - xmin));
     }
-    let domain = toNumberArray(dict.getArray("Domain"));
-    let range = toNumberArray(dict.getArray("Range"));
+    const domain = toNumberArray(dict.getArray("Domain"));
+    const range = toNumberArray(dict.getArray("Range"));
     if (!domain || !range) {
       throw new FormatError("No domain or range");
     }
     const inputSize = domain.length / 2;
     const outputSize = range.length / 2;
-    domain = toMultiArray(domain);
-    range = toMultiArray(range);
     const size = toNumberArray(dict.getArray("Size"));
     const bps = dict.get("BitsPerSample");
     const order = dict.get("Order") || 1;
@@ -31708,13 +34166,10 @@ class PDFFunction {
     if (!encode) {
       encode = [];
       for (let i = 0; i < inputSize; ++i) {
-        encode.push([0, size[i] - 1]);
+        encode.push(0, size[i] - 1);
       }
-    } else {
-      encode = toMultiArray(encode);
     }
-    let decode = toNumberArray(dict.getArray("Decode"));
-    decode = !decode ? range : toMultiArray(decode);
+    const decode = toNumberArray(dict.getArray("Decode")) || range;
     const samples = this.getSampleArray(size, outputSize, bps, fn);
     return function constructSampledFn(src, srcOffset, dest, destOffset) {
       const cubeVertices = 1 << inputSize;
@@ -31724,10 +34179,10 @@ class PDFFunction {
       let k = outputSize,
         pos = 1;
       for (i = 0; i < inputSize; ++i) {
-        const domain_2i = domain[i][0];
-        const domain_2i_1 = domain[i][1];
+        const domain_2i = domain[2 * i];
+        const domain_2i_1 = domain[2 * i + 1];
         const xi = MathClamp(src[srcOffset + i], domain_2i, domain_2i_1);
-        let e = interpolate(xi, domain_2i, domain_2i_1, encode[i][0], encode[i][1]);
+        let e = interpolate(xi, domain_2i, domain_2i_1, encode[2 * i], encode[2 * i + 1]);
         const size_i = size[i];
         e = MathClamp(e, 0, size_i - 1);
         const e0 = e < size_i - 1 ? Math.floor(e) : e - 1;
@@ -31752,8 +34207,8 @@ class PDFFunction {
         for (i = 0; i < cubeVertices; i++) {
           rj += samples[cubeVertex[i] + j] * cubeN[i];
         }
-        rj = interpolate(rj, 0, 1, decode[j][0], decode[j][1]);
-        dest[destOffset + j] = MathClamp(rj, range[j][0], range[j][1]);
+        rj = interpolate(rj, 0, 1, decode[2 * j], decode[2 * j + 1]);
+        dest[destOffset + j] = MathClamp(rj, range[2 * j], range[2 * j + 1]);
       }
     };
   }
@@ -31818,49 +34273,17 @@ class PDFFunction {
     if (!range) {
       throw new FormatError("No range.");
     }
-    const lexer = new PostScriptLexer(fn);
-    const parser = new PostScriptParser(lexer);
-    const code = parser.parse();
-    if (factory.isEvalSupported && FeatureTest.isEvalSupported) {
-      const compiled = new PostScriptCompiler().compile(code, domain, range);
-      if (compiled) {
-        return new Function("src", "srcOffset", "dest", "destOffset", compiled);
+    const psCode = fn.getString();
+    try {
+      if (factory.useWasm) {
+        const wasmFn = buildPostScriptWasmFunction(psCode, domain, range);
+        if (wasmFn) {
+          return wasmFn;
+        }
       }
-    }
-    info("Unable to compile PS function");
-    const numOutputs = range.length >> 1;
-    const numInputs = domain.length >> 1;
-    const evaluator = new PostScriptEvaluator(code);
-    const cache = Object.create(null);
-    const MAX_CACHE_SIZE = 2048 * 4;
-    let cache_available = MAX_CACHE_SIZE;
-    const tmpBuf = new Float32Array(numInputs);
-    return function constructPostScriptFn(src, srcOffset, dest, destOffset) {
-      let i, value;
-      let key = "";
-      const input = tmpBuf;
-      for (i = 0; i < numInputs; i++) {
-        value = src[srcOffset + i];
-        input[i] = value;
-        key += value + "_";
-      }
-      const cachedValue = cache[key];
-      if (cachedValue !== undefined) {
-        dest.set(cachedValue, destOffset);
-        return;
-      }
-      const output = new Float32Array(numOutputs);
-      const stack = evaluator.execute(input);
-      const stackIndex = stack.length - numOutputs;
-      for (i = 0; i < numOutputs; i++) {
-        output[i] = MathClamp(stack[stackIndex + i], range[i * 2], range[i * 2 + 1]);
-      }
-      if (cache_available > 0) {
-        cache_available--;
-        cache[key] = output;
-      }
-      dest.set(output, destOffset);
-    };
+    } catch {}
+    warn("Failed to compile PostScript function to wasm, falling back to JS");
+    return buildPostScriptJsFunction(psCode, domain, range);
   }
 }
 function isPDFFunction(v) {
@@ -31873,611 +34296,6 @@ function isPDFFunction(v) {
     return false;
   }
   return fnDict.has("FunctionType");
-}
-class PostScriptStack {
-  static MAX_STACK_SIZE = 100;
-  constructor(initialStack) {
-    this.stack = initialStack ? Array.from(initialStack) : [];
-  }
-  push(value) {
-    if (this.stack.length >= PostScriptStack.MAX_STACK_SIZE) {
-      throw new Error("PostScript function stack overflow.");
-    }
-    this.stack.push(value);
-  }
-  pop() {
-    if (this.stack.length <= 0) {
-      throw new Error("PostScript function stack underflow.");
-    }
-    return this.stack.pop();
-  }
-  copy(n) {
-    if (this.stack.length + n >= PostScriptStack.MAX_STACK_SIZE) {
-      throw new Error("PostScript function stack overflow.");
-    }
-    const stack = this.stack;
-    for (let i = stack.length - n, j = n - 1; j >= 0; j--, i++) {
-      stack.push(stack[i]);
-    }
-  }
-  index(n) {
-    this.push(this.stack[this.stack.length - n - 1]);
-  }
-  roll(n, p) {
-    const stack = this.stack;
-    const l = stack.length - n;
-    const r = stack.length - 1;
-    const c = l + (p - Math.floor(p / n) * n);
-    for (let i = l, j = r; i < j; i++, j--) {
-      const t = stack[i];
-      stack[i] = stack[j];
-      stack[j] = t;
-    }
-    for (let i = l, j = c - 1; i < j; i++, j--) {
-      const t = stack[i];
-      stack[i] = stack[j];
-      stack[j] = t;
-    }
-    for (let i = c, j = r; i < j; i++, j--) {
-      const t = stack[i];
-      stack[i] = stack[j];
-      stack[j] = t;
-    }
-  }
-}
-class PostScriptEvaluator {
-  constructor(operators) {
-    this.operators = operators;
-  }
-  execute(initialStack) {
-    const stack = new PostScriptStack(initialStack);
-    let counter = 0;
-    const operators = this.operators;
-    const length = operators.length;
-    let operator, a, b;
-    while (counter < length) {
-      operator = operators[counter++];
-      if (typeof operator === "number") {
-        stack.push(operator);
-        continue;
-      }
-      switch (operator) {
-        case "jz":
-          b = stack.pop();
-          a = stack.pop();
-          if (!a) {
-            counter = b;
-          }
-          break;
-        case "j":
-          a = stack.pop();
-          counter = a;
-          break;
-        case "abs":
-          a = stack.pop();
-          stack.push(Math.abs(a));
-          break;
-        case "add":
-          b = stack.pop();
-          a = stack.pop();
-          stack.push(a + b);
-          break;
-        case "and":
-          b = stack.pop();
-          a = stack.pop();
-          if (typeof a === "boolean" && typeof b === "boolean") {
-            stack.push(a && b);
-          } else {
-            stack.push(a & b);
-          }
-          break;
-        case "atan":
-          b = stack.pop();
-          a = stack.pop();
-          a = Math.atan2(a, b) / Math.PI * 180;
-          if (a < 0) {
-            a += 360;
-          }
-          stack.push(a);
-          break;
-        case "bitshift":
-          b = stack.pop();
-          a = stack.pop();
-          if (a > 0) {
-            stack.push(a << b);
-          } else {
-            stack.push(a >> b);
-          }
-          break;
-        case "ceiling":
-          a = stack.pop();
-          stack.push(Math.ceil(a));
-          break;
-        case "copy":
-          a = stack.pop();
-          stack.copy(a);
-          break;
-        case "cos":
-          a = stack.pop();
-          stack.push(Math.cos(a % 360 / 180 * Math.PI));
-          break;
-        case "cvi":
-          a = stack.pop() | 0;
-          stack.push(a);
-          break;
-        case "cvr":
-          break;
-        case "div":
-          b = stack.pop();
-          a = stack.pop();
-          stack.push(a / b);
-          break;
-        case "dup":
-          stack.copy(1);
-          break;
-        case "eq":
-          b = stack.pop();
-          a = stack.pop();
-          stack.push(a === b);
-          break;
-        case "exch":
-          stack.roll(2, 1);
-          break;
-        case "exp":
-          b = stack.pop();
-          a = stack.pop();
-          stack.push(a ** b);
-          break;
-        case "false":
-          stack.push(false);
-          break;
-        case "floor":
-          a = stack.pop();
-          stack.push(Math.floor(a));
-          break;
-        case "ge":
-          b = stack.pop();
-          a = stack.pop();
-          stack.push(a >= b);
-          break;
-        case "gt":
-          b = stack.pop();
-          a = stack.pop();
-          stack.push(a > b);
-          break;
-        case "idiv":
-          b = stack.pop();
-          a = stack.pop();
-          stack.push(a / b | 0);
-          break;
-        case "index":
-          a = stack.pop();
-          stack.index(a);
-          break;
-        case "le":
-          b = stack.pop();
-          a = stack.pop();
-          stack.push(a <= b);
-          break;
-        case "ln":
-          a = stack.pop();
-          stack.push(Math.log(a));
-          break;
-        case "log":
-          a = stack.pop();
-          stack.push(Math.log10(a));
-          break;
-        case "lt":
-          b = stack.pop();
-          a = stack.pop();
-          stack.push(a < b);
-          break;
-        case "mod":
-          b = stack.pop();
-          a = stack.pop();
-          stack.push(a % b);
-          break;
-        case "mul":
-          b = stack.pop();
-          a = stack.pop();
-          stack.push(a * b);
-          break;
-        case "ne":
-          b = stack.pop();
-          a = stack.pop();
-          stack.push(a !== b);
-          break;
-        case "neg":
-          a = stack.pop();
-          stack.push(-a);
-          break;
-        case "not":
-          a = stack.pop();
-          if (typeof a === "boolean") {
-            stack.push(!a);
-          } else {
-            stack.push(~a);
-          }
-          break;
-        case "or":
-          b = stack.pop();
-          a = stack.pop();
-          if (typeof a === "boolean" && typeof b === "boolean") {
-            stack.push(a || b);
-          } else {
-            stack.push(a | b);
-          }
-          break;
-        case "pop":
-          stack.pop();
-          break;
-        case "roll":
-          b = stack.pop();
-          a = stack.pop();
-          stack.roll(a, b);
-          break;
-        case "round":
-          a = stack.pop();
-          stack.push(Math.round(a));
-          break;
-        case "sin":
-          a = stack.pop();
-          stack.push(Math.sin(a % 360 / 180 * Math.PI));
-          break;
-        case "sqrt":
-          a = stack.pop();
-          stack.push(Math.sqrt(a));
-          break;
-        case "sub":
-          b = stack.pop();
-          a = stack.pop();
-          stack.push(a - b);
-          break;
-        case "true":
-          stack.push(true);
-          break;
-        case "truncate":
-          a = stack.pop();
-          a = a < 0 ? Math.ceil(a) : Math.floor(a);
-          stack.push(a);
-          break;
-        case "xor":
-          b = stack.pop();
-          a = stack.pop();
-          if (typeof a === "boolean" && typeof b === "boolean") {
-            stack.push(a !== b);
-          } else {
-            stack.push(a ^ b);
-          }
-          break;
-        default:
-          throw new FormatError(`Unknown operator ${operator}`);
-      }
-    }
-    return stack.stack;
-  }
-}
-class AstNode {
-  constructor(type) {
-    this.type = type;
-  }
-  visit(visitor) {
-    unreachable("abstract method");
-  }
-}
-class AstArgument extends AstNode {
-  constructor(index, min, max) {
-    super("args");
-    this.index = index;
-    this.min = min;
-    this.max = max;
-  }
-  visit(visitor) {
-    visitor.visitArgument(this);
-  }
-}
-class AstLiteral extends AstNode {
-  constructor(number) {
-    super("literal");
-    this.number = number;
-    this.min = number;
-    this.max = number;
-  }
-  visit(visitor) {
-    visitor.visitLiteral(this);
-  }
-}
-class AstBinaryOperation extends AstNode {
-  constructor(op, arg1, arg2, min, max) {
-    super("binary");
-    this.op = op;
-    this.arg1 = arg1;
-    this.arg2 = arg2;
-    this.min = min;
-    this.max = max;
-  }
-  visit(visitor) {
-    visitor.visitBinaryOperation(this);
-  }
-}
-class AstMin extends AstNode {
-  constructor(arg, max) {
-    super("max");
-    this.arg = arg;
-    this.min = arg.min;
-    this.max = max;
-  }
-  visit(visitor) {
-    visitor.visitMin(this);
-  }
-}
-class AstVariable extends AstNode {
-  constructor(index, min, max) {
-    super("var");
-    this.index = index;
-    this.min = min;
-    this.max = max;
-  }
-  visit(visitor) {
-    visitor.visitVariable(this);
-  }
-}
-class AstVariableDefinition extends AstNode {
-  constructor(variable, arg) {
-    super("definition");
-    this.variable = variable;
-    this.arg = arg;
-  }
-  visit(visitor) {
-    visitor.visitVariableDefinition(this);
-  }
-}
-class ExpressionBuilderVisitor {
-  parts = [];
-  visitArgument(arg) {
-    this.parts.push("Math.max(", arg.min, ", Math.min(", arg.max, ", src[srcOffset + ", arg.index, "]))");
-  }
-  visitVariable(variable) {
-    this.parts.push("v", variable.index);
-  }
-  visitLiteral(literal) {
-    this.parts.push(literal.number);
-  }
-  visitBinaryOperation(operation) {
-    this.parts.push("(");
-    operation.arg1.visit(this);
-    this.parts.push(" ", operation.op, " ");
-    operation.arg2.visit(this);
-    this.parts.push(")");
-  }
-  visitVariableDefinition(definition) {
-    this.parts.push("var ");
-    definition.variable.visit(this);
-    this.parts.push(" = ");
-    definition.arg.visit(this);
-    this.parts.push(";");
-  }
-  visitMin(max) {
-    this.parts.push("Math.min(");
-    max.arg.visit(this);
-    this.parts.push(", ", max.max, ")");
-  }
-  toString() {
-    return this.parts.join("");
-  }
-}
-function buildAddOperation(num1, num2) {
-  if (num2.type === "literal" && num2.number === 0) {
-    return num1;
-  }
-  if (num1.type === "literal" && num1.number === 0) {
-    return num2;
-  }
-  if (num2.type === "literal" && num1.type === "literal") {
-    return new AstLiteral(num1.number + num2.number);
-  }
-  return new AstBinaryOperation("+", num1, num2, num1.min + num2.min, num1.max + num2.max);
-}
-function buildMulOperation(num1, num2) {
-  if (num2.type === "literal") {
-    if (num2.number === 0) {
-      return new AstLiteral(0);
-    } else if (num2.number === 1) {
-      return num1;
-    } else if (num1.type === "literal") {
-      return new AstLiteral(num1.number * num2.number);
-    }
-  }
-  if (num1.type === "literal") {
-    if (num1.number === 0) {
-      return new AstLiteral(0);
-    } else if (num1.number === 1) {
-      return num2;
-    }
-  }
-  const min = Math.min(num1.min * num2.min, num1.min * num2.max, num1.max * num2.min, num1.max * num2.max);
-  const max = Math.max(num1.min * num2.min, num1.min * num2.max, num1.max * num2.min, num1.max * num2.max);
-  return new AstBinaryOperation("*", num1, num2, min, max);
-}
-function buildSubOperation(num1, num2) {
-  if (num2.type === "literal") {
-    if (num2.number === 0) {
-      return num1;
-    } else if (num1.type === "literal") {
-      return new AstLiteral(num1.number - num2.number);
-    }
-  }
-  if (num2.type === "binary" && num2.op === "-" && num1.type === "literal" && num1.number === 1 && num2.arg1.type === "literal" && num2.arg1.number === 1) {
-    return num2.arg2;
-  }
-  return new AstBinaryOperation("-", num1, num2, num1.min - num2.max, num1.max - num2.min);
-}
-function buildMinOperation(num1, max) {
-  if (num1.min >= max) {
-    return new AstLiteral(max);
-  } else if (num1.max <= max) {
-    return num1;
-  }
-  return new AstMin(num1, max);
-}
-class PostScriptCompiler {
-  compile(code, domain, range) {
-    const stack = [];
-    const instructions = [];
-    const inputSize = domain.length >> 1,
-      outputSize = range.length >> 1;
-    let lastRegister = 0;
-    let n, j;
-    let num1, num2, ast1, ast2, tmpVar, item;
-    for (let i = 0; i < inputSize; i++) {
-      stack.push(new AstArgument(i, domain[i * 2], domain[i * 2 + 1]));
-    }
-    for (let i = 0, ii = code.length; i < ii; i++) {
-      item = code[i];
-      if (typeof item === "number") {
-        stack.push(new AstLiteral(item));
-        continue;
-      }
-      switch (item) {
-        case "add":
-          if (stack.length < 2) {
-            return null;
-          }
-          num2 = stack.pop();
-          num1 = stack.pop();
-          stack.push(buildAddOperation(num1, num2));
-          break;
-        case "cvr":
-          if (stack.length < 1) {
-            return null;
-          }
-          break;
-        case "mul":
-          if (stack.length < 2) {
-            return null;
-          }
-          num2 = stack.pop();
-          num1 = stack.pop();
-          stack.push(buildMulOperation(num1, num2));
-          break;
-        case "sub":
-          if (stack.length < 2) {
-            return null;
-          }
-          num2 = stack.pop();
-          num1 = stack.pop();
-          stack.push(buildSubOperation(num1, num2));
-          break;
-        case "exch":
-          if (stack.length < 2) {
-            return null;
-          }
-          ast1 = stack.pop();
-          ast2 = stack.pop();
-          stack.push(ast1, ast2);
-          break;
-        case "pop":
-          if (stack.length < 1) {
-            return null;
-          }
-          stack.pop();
-          break;
-        case "index":
-          if (stack.length < 1) {
-            return null;
-          }
-          num1 = stack.pop();
-          if (num1.type !== "literal") {
-            return null;
-          }
-          n = num1.number;
-          if (n < 0 || !Number.isInteger(n) || stack.length < n) {
-            return null;
-          }
-          ast1 = stack[stack.length - n - 1];
-          if (ast1.type === "literal" || ast1.type === "var") {
-            stack.push(ast1);
-            break;
-          }
-          tmpVar = new AstVariable(lastRegister++, ast1.min, ast1.max);
-          stack[stack.length - n - 1] = tmpVar;
-          stack.push(tmpVar);
-          instructions.push(new AstVariableDefinition(tmpVar, ast1));
-          break;
-        case "dup":
-          if (stack.length < 1) {
-            return null;
-          }
-          if (typeof code[i + 1] === "number" && code[i + 2] === "gt" && code[i + 3] === i + 7 && code[i + 4] === "jz" && code[i + 5] === "pop" && code[i + 6] === code[i + 1]) {
-            num1 = stack.pop();
-            stack.push(buildMinOperation(num1, code[i + 1]));
-            i += 6;
-            break;
-          }
-          ast1 = stack.at(-1);
-          if (ast1.type === "literal" || ast1.type === "var") {
-            stack.push(ast1);
-            break;
-          }
-          tmpVar = new AstVariable(lastRegister++, ast1.min, ast1.max);
-          stack[stack.length - 1] = tmpVar;
-          stack.push(tmpVar);
-          instructions.push(new AstVariableDefinition(tmpVar, ast1));
-          break;
-        case "roll":
-          if (stack.length < 2) {
-            return null;
-          }
-          num2 = stack.pop();
-          num1 = stack.pop();
-          if (num2.type !== "literal" || num1.type !== "literal") {
-            return null;
-          }
-          j = num2.number;
-          n = num1.number;
-          if (n <= 0 || !Number.isInteger(n) || !Number.isInteger(j) || stack.length < n) {
-            return null;
-          }
-          j = (j % n + n) % n;
-          if (j === 0) {
-            break;
-          }
-          stack.push(...stack.splice(stack.length - n, n - j));
-          break;
-        default:
-          return null;
-      }
-    }
-    if (stack.length !== outputSize) {
-      return null;
-    }
-    const result = [];
-    for (const instruction of instructions) {
-      const statementBuilder = new ExpressionBuilderVisitor();
-      instruction.visit(statementBuilder);
-      result.push(statementBuilder.toString());
-    }
-    for (let i = 0, ii = stack.length; i < ii; i++) {
-      const expr = stack[i],
-        statementBuilder = new ExpressionBuilderVisitor();
-      expr.visit(statementBuilder);
-      const min = range[i * 2],
-        max = range[i * 2 + 1];
-      const out = [statementBuilder.toString()];
-      if (min > expr.min) {
-        out.unshift("Math.max(", min, ", ");
-        out.push(")");
-      }
-      if (max < expr.max) {
-        out.unshift("Math.min(", max, ", ");
-        out.push(")");
-      }
-      out.unshift("dest[destOffset + ", i, "] = ");
-      out.push(";");
-      result.push(out.join(""));
-    }
-    return result.join("\n");
-  }
 }
 
 ;// ./src/core/bidi.js
@@ -33106,6 +34924,7 @@ class MurmurHash3_64 {
 }
 
 ;// ./src/core/image.js
+
 
 
 
@@ -33969,7 +35788,6 @@ const DefaultPartialEvaluatorOptions = Object.freeze({
   maxImageSize: -1,
   disableFontFace: false,
   ignoreErrors: false,
-  isEvalSupported: true,
   isOffscreenCanvasSupported: false,
   isImageDecoderSupported: false,
   canvasMaxAreaInBytes: -1,
@@ -34111,11 +35929,9 @@ class PartialEvaluator {
     this._fetchBuiltInCMapBound = this.fetchBuiltInCMap.bind(this);
   }
   get _pdfFunctionFactory() {
-    const pdfFunctionFactory = new PDFFunctionFactory({
-      xref: this.xref,
-      isEvalSupported: this.options.isEvalSupported
-    });
-    return shadow(this, "_pdfFunctionFactory", pdfFunctionFactory);
+    return shadow(this, "_pdfFunctionFactory", new PDFFunctionFactory({
+      xref: this.xref
+    }));
   }
   get parsingType3Font() {
     return !!this.type3FontRefs;
@@ -38183,10 +39999,9 @@ function parseDefaultAppearance(str) {
   return new DefaultAppearanceEvaluator(str).parse();
 }
 class AppearanceStreamEvaluator extends EvaluatorPreprocessor {
-  constructor(stream, evaluatorOptions, xref, globalColorSpaceCache) {
+  constructor(stream, xref, globalColorSpaceCache) {
     super(stream);
     this.stream = stream;
-    this.evaluatorOptions = evaluatorOptions;
     this.xref = xref;
     this.globalColorSpaceCache = globalColorSpaceCache;
     this.resources = stream.dict?.get("Resources");
@@ -38283,15 +40098,13 @@ class AppearanceStreamEvaluator extends EvaluatorPreprocessor {
     return shadow(this, "_localColorSpaceCache", new LocalColorSpaceCache());
   }
   get _pdfFunctionFactory() {
-    const pdfFunctionFactory = new PDFFunctionFactory({
-      xref: this.xref,
-      isEvalSupported: this.evaluatorOptions.isEvalSupported
-    });
-    return shadow(this, "_pdfFunctionFactory", pdfFunctionFactory);
+    return shadow(this, "_pdfFunctionFactory", new PDFFunctionFactory({
+      xref: this.xref
+    }));
   }
 }
-function parseAppearanceStream(stream, evaluatorOptions, xref, globalColorSpaceCache) {
-  return new AppearanceStreamEvaluator(stream, evaluatorOptions, xref, globalColorSpaceCache).parse();
+function parseAppearanceStream(stream, xref, globalColorSpaceCache) {
+  return new AppearanceStreamEvaluator(stream, xref, globalColorSpaceCache).parse();
 }
 function getPdfColor(color, isFill) {
   if (color[0] === color[1] && color[1] === color[2]) {
@@ -38308,6 +40121,7 @@ function createDefaultAppearance({
   return `/${escapePDFName(fontName)} ${fontSize} Tf ${getPdfColor(fontColor, true)}`;
 }
 class FakeUnicodeFont {
+  static #fontNameId = 1;
   constructor(xref, fontFamily) {
     this.xref = xref;
     this.widths = null;
@@ -38318,10 +40132,7 @@ class FakeUnicodeFont {
     this.ctxMeasure = canvas.getContext("2d", {
       willReadFrequently: true
     });
-    if (!FakeUnicodeFont._fontNameId) {
-      FakeUnicodeFont._fontNameId = 1;
-    }
-    this.fontName = Name.get(`InvalidPDFjsFont_${fontFamily}_${FakeUnicodeFont._fontNameId++}`);
+    this.fontName = Name.get(`InvalidPDFjsFont_${fontFamily}_${FakeUnicodeFont.#fontNameId++}`);
   }
   get fontDescriptorRef() {
     if (!FakeUnicodeFont._fontDescriptorRef) {
@@ -38508,11 +40319,13 @@ class FakeUnicodeFont {
 }
 
 ;// ./src/shared/scripting_utils.js
+/* unused harmony import specifier */ var scripting_utils_MathClamp;
+
 function makeColorComp(n) {
-  return Math.floor(Math.max(0, Math.min(1, n)) * 255).toString(16).padStart(2, "0");
+  return Math.floor(scripting_utils_MathClamp(n, 0, 1) * 255).toString(16).padStart(2, "0");
 }
 function scaleAndClamp(x) {
-  return Math.max(0, Math.min(255, 255 * x));
+  return scripting_utils_MathClamp(x, 0, 1) * 255;
 }
 class ColorConverters {
   static CMYK_G([c, y, m, k]) {
@@ -40705,7 +42518,7 @@ class Catalog {
     return shadow(this, "destinations", dests);
   }
   getDestination(id) {
-    if (this.hasOwnProperty("destinations")) {
+    if (Object.hasOwn(this, "destinations")) {
       return this.destinations[id] ?? null;
     }
     const rawDests = this.#readDests();
@@ -41016,6 +42829,14 @@ class Catalog {
       }
     }
     return shadow(this, "attachments", attachments);
+  }
+  get rawEmbeddedFiles() {
+    const obj = this.#catDict.get("Names");
+    if (!(obj instanceof Dict) || !obj.has("EmbeddedFiles")) {
+      return null;
+    }
+    const nameTree = new NameTree(obj.getRaw("EmbeddedFiles"), this.xref);
+    return nameTree.getAll(true);
   }
   get xfaImages() {
     const obj = this.#catDict.get("Names");
@@ -41397,7 +43218,7 @@ class Catalog {
         } else if (kids) {
           kidsArr = [kids];
         } else {
-          kidsArr = [];
+          continue;
         }
         for (const kid of kidsArr) {
           const kidObj = xref.fetchIfRef(kid);
@@ -41421,7 +43242,7 @@ class Catalog {
         if (!(parentRaw instanceof Ref)) {
           break;
         }
-        const parentDict = xref.fetchIfRef(parentRaw);
+        const parentDict = xref.fetch(parentRaw);
         if (!(parentDict instanceof Dict)) {
           break;
         }
@@ -41443,10 +43264,10 @@ class Catalog {
       y = null;
     const attrs = seDict.get("A");
     if (attrs instanceof Dict) {
-      const bboxArr = attrs.getArray("BBox");
-      if (isNumberArray(bboxArr, 4)) {
-        x = bboxArr[0];
-        y = bboxArr[3];
+      const bbox = lookupRect(attrs.getArray("BBox"), null);
+      if (bbox) {
+        x = bbox[0];
+        y = bbox[3];
       }
     }
     return [pageRef, {
@@ -41900,6 +43721,7 @@ const NamespaceIds = {
 
 ;// ./src/core/xfa/utils.js
 
+
 const dimConverters = {
   pt: x => x,
   cm: x => x / 2.54 * 72,
@@ -42307,9 +44129,7 @@ class FontSelector {
   pushData(xfaFont, margin, lineHeight) {
     const lastFont = this.stack.at(-1);
     for (const name of ["typeface", "posture", "weight", "size", "letterSpacing"]) {
-      if (!xfaFont[name]) {
-        xfaFont[name] = lastFont.xfaFont[name];
-      }
+      xfaFont[name] ||= lastFont.xfaFont[name];
     }
     for (const name of ["top", "bottom", "left", "right"]) {
       if (isNaN(margin[name])) {
@@ -42317,9 +44137,7 @@ class FontSelector {
       }
     }
     const fontInfo = new FontInfo(xfaFont, margin, lineHeight || lastFont.lineHeight, this.fontFinder);
-    if (!fontInfo.pdfFont) {
-      fontInfo.pdfFont = lastFont.pdfFont;
-    }
+    fontInfo.pdfFont ||= lastFont.pdfFont;
     this.stack.push(fontInfo);
   }
   popFont() {
@@ -42768,7 +44586,7 @@ class XFAObject {
     return false;
   }
   [$onChildCheck](child) {
-    return this.hasOwnProperty(child[$nodeName]) && child[$namespaceId] === this[$namespaceId];
+    return Object.hasOwn(this, child[$nodeName]) && child[$namespaceId] === this[$namespaceId];
   }
   [$isNsAgnostic]() {
     return false;
@@ -42816,7 +44634,7 @@ class XFAObject {
     this[_children].splice(i, 1);
   }
   [$hasSettableValue]() {
-    return this.hasOwnProperty("value");
+    return Object.hasOwn(this, "value");
   }
   [$setValue](_) {}
   [$onText](_) {}
@@ -43254,7 +45072,7 @@ class XmlObject extends XFAObject {
       for (const [attrName, value] of Object.entries(attributes)) {
         map.set(attrName, new XFAAttribute(this, attrName, value));
       }
-      if (attributes.hasOwnProperty($nsAttributes)) {
+      if (Object.hasOwn(attributes, $nsAttributes)) {
         const dataNode = attributes[$nsAttributes].xfa.dataNode;
         if (dataNode !== undefined) {
           if (dataNode === "dataGroup") {
@@ -43791,7 +45609,7 @@ function toStyle(node, ...names) {
     if (value === null) {
       continue;
     }
-    if (converters.hasOwnProperty(name)) {
+    if (Object.hasOwn(converters, name)) {
       converters[name](node, style);
       continue;
     }
@@ -48766,7 +50584,7 @@ class Variables extends XFAObject {
 }
 class TemplateNamespace {
   static [$buildXFAObject](name, attributes) {
-    if (TemplateNamespace.hasOwnProperty(name)) {
+    if (Object.hasOwn(TemplateNamespace, name)) {
       const node = TemplateNamespace[name](attributes);
       node[$setSetAttributes](attributes);
       return node;
@@ -49203,7 +51021,7 @@ class Binder {
     return null;
   }
   _setProperties(formNode, dataNode) {
-    if (!formNode.hasOwnProperty("setProperty")) {
+    if (!Object.hasOwn(formNode, "setProperty")) {
       return;
     }
     for (const {
@@ -49255,7 +51073,7 @@ class Binder {
         targetParent[name] = obj[name];
         continue;
       }
-      if (!targetNode.hasOwnProperty($content)) {
+      if (!Object.hasOwn(targetNode, $content)) {
         warn(`XFA - Invalid node to use in setProperty`);
         continue;
       }
@@ -49265,7 +51083,7 @@ class Binder {
     }
   }
   _bindItems(formNode, dataNode) {
-    if (!formNode.hasOwnProperty("items") || !formNode.hasOwnProperty("bindItems") || formNode.bindItems.isEmpty()) {
+    if (!Object.hasOwn(formNode, "items") || !Object.hasOwn(formNode, "bindItems") || formNode.bindItems.isEmpty()) {
       return;
     }
     for (const item of formNode.items.children) {
@@ -50587,7 +52405,7 @@ class Zpl extends XFAObject {
 }
 class ConfigNamespace {
   static [$buildXFAObject](name, attributes) {
-    if (ConfigNamespace.hasOwnProperty(name)) {
+    if (Object.hasOwn(ConfigNamespace, name)) {
       return ConfigNamespace[name](attributes);
     }
     return undefined;
@@ -51129,7 +52947,7 @@ class XsdConnection extends XFAObject {
 }
 class ConnectionSetNamespace {
   static [$buildXFAObject](name, attributes) {
-    if (ConnectionSetNamespace.hasOwnProperty(name)) {
+    if (Object.hasOwn(ConnectionSetNamespace, name)) {
       return ConnectionSetNamespace[name](attributes);
     }
     return undefined;
@@ -51201,7 +53019,7 @@ class Datasets extends XFAObject {
 }
 class DatasetsNamespace {
   static [$buildXFAObject](name, attributes) {
-    if (DatasetsNamespace.hasOwnProperty(name)) {
+    if (Object.hasOwn(DatasetsNamespace, name)) {
       return DatasetsNamespace[name](attributes);
     }
     return undefined;
@@ -51383,7 +53201,7 @@ class TypeFaces extends XFAObject {
 }
 class LocaleSetNamespace {
   static [$buildXFAObject](name, attributes) {
-    if (LocaleSetNamespace.hasOwnProperty(name)) {
+    if (Object.hasOwn(LocaleSetNamespace, name)) {
       return LocaleSetNamespace[name](attributes);
     }
     return undefined;
@@ -51473,7 +53291,7 @@ class signature_Signature extends XFAObject {
 }
 class SignatureNamespace {
   static [$buildXFAObject](name, attributes) {
-    if (SignatureNamespace.hasOwnProperty(name)) {
+    if (Object.hasOwn(SignatureNamespace, name)) {
       return SignatureNamespace[name](attributes);
     }
     return undefined;
@@ -51494,7 +53312,7 @@ class Stylesheet extends XFAObject {
 }
 class StylesheetNamespace {
   static [$buildXFAObject](name, attributes) {
-    if (StylesheetNamespace.hasOwnProperty(name)) {
+    if (Object.hasOwn(StylesheetNamespace, name)) {
       return StylesheetNamespace[name](attributes);
     }
     return undefined;
@@ -51528,7 +53346,7 @@ class xdp_Xdp extends XFAObject {
 }
 class XdpNamespace {
   static [$buildXFAObject](name, attributes) {
-    if (XdpNamespace.hasOwnProperty(name)) {
+    if (Object.hasOwn(XdpNamespace, name)) {
       return XdpNamespace[name](attributes);
     }
     return undefined;
@@ -51891,7 +53709,7 @@ class Ul extends XhtmlObject {
 }
 class XhtmlNamespace {
   static [$buildXFAObject](name, attributes) {
-    if (XhtmlNamespace.hasOwnProperty(name)) {
+    if (Object.hasOwn(XhtmlNamespace, name)) {
       return XhtmlNamespace[name](attributes);
     }
     return undefined;
@@ -52035,7 +53853,7 @@ class Builder {
     if (prefixes) {
       this._addNamespacePrefix(prefixes);
     }
-    if (attributes.hasOwnProperty($nsAttributes)) {
+    if (Object.hasOwn(attributes, $nsAttributes)) {
       const dataTemplate = NamespaceSetUp.datasets;
       const nsAttrs = attributes[$nsAttributes];
       let xfaAttrs = null;
@@ -54983,7 +56801,6 @@ class FreeTextAnnotation extends MarkupAnnotation {
     this.data.noHTML = false;
     const {
       annotationGlobals,
-      evaluatorOptions,
       xref
     } = params;
     this.setDefaultAppearance(params);
@@ -54992,7 +56809,7 @@ class FreeTextAnnotation extends MarkupAnnotation {
       const {
         fontColor,
         fontSize
-      } = parseAppearanceStream(this.appearance, evaluatorOptions, xref, annotationGlobals.globalColorSpaceCache);
+      } = parseAppearanceStream(this.appearance, xref, annotationGlobals.globalColorSpaceCache);
       this.data.defaultAppearanceData.fontColor = fontColor;
       this.data.defaultAppearanceData.fontSize = fontSize || 10;
     } else {
@@ -58239,7 +60056,6 @@ class XRef {
 
 const LETTER_SIZE_MEDIABOX = [0, 0, 612, 792];
 class Page {
-  #areAnnotationsCached = false;
   #resourcesPromise = null;
   constructor({
     pdfManager,
@@ -58777,7 +60593,6 @@ class Page {
       }
       return sortedAnnotations;
     });
-    this.#areAnnotationsCached = true;
     return shadow(this, "_parsedAnnotations", promise);
   }
   get jsActions() {
@@ -58788,7 +60603,7 @@ class Page {
     const {
       pageIndex
     } = this;
-    if (this.#areAnnotationsCached) {
+    if (Object.hasOwn(this, "_parsedAnnotations")) {
       const cachedAnnotations = await this._parsedAnnotations;
       for (const {
         data
@@ -58801,6 +60616,7 @@ class Page {
       return;
     }
     const annots = await this.pdfManager.ensure(this, "annotations");
+    let partialEvaluator;
     for (const annotationRef of annots) {
       promises.push(AnnotationFactory.create(this.xref, annotationRef, annotationGlobals, this._localIdFactory, false, null, types, this.ref).then(async annotation => {
         if (!annotation) {
@@ -58808,7 +60624,7 @@ class Page {
         }
         annotation.data.pageIndex = pageIndex;
         if (annotation.hasTextContent && annotation.viewable) {
-          const partialEvaluator = this.#createPartialEvaluator(handler);
+          partialEvaluator ??= this.#createPartialEvaluator(handler);
           await annotation.extractTextContent(partialEvaluator, task, [-Infinity, -Infinity, Infinity, Infinity]);
         }
         return annotation.data;
@@ -59663,6 +61479,7 @@ class PDFDocument {
 
 
 
+
 function parseDocBaseUrl(url) {
   if (url) {
     const absoluteUrl = createValidAbsoluteUrl(url);
@@ -59710,6 +61527,7 @@ class BasePdfManager {
     IccColorSpace.setOptions(options);
     CmykICCBasedCS.setOptions(options);
     JBig2CCITTFaxWasmImage.setOptions(options);
+    PDFFunctionFactory.setOptions(options);
   }
   get docId() {
     return this._docId;
@@ -60681,6 +62499,7 @@ class DocumentData {
     this.hasSignatureAnnotations = false;
     this.fieldToParent = new RefSetCache();
     this.outline = null;
+    this.embeddedFiles = null;
   }
 }
 class XRefWrapper {
@@ -60706,6 +62525,7 @@ class XRefWrapper {
 }
 class PDFEditor {
   hasSingleFile = false;
+  isSingleFile = false;
   #newAnnotationsParams = null;
   currentDocument = null;
   oldPages = [];
@@ -60733,6 +62553,7 @@ class PDFEditor {
   acroFormCalculationOrder = null;
   acroFormQ = 0;
   outlineItems = null;
+  embeddedFiles = new Map();
   constructor({
     useObjectStreams = true,
     title = "",
@@ -61018,6 +62839,7 @@ class PDFEditor {
   async extractPages(pageInfos, annotationStorage, handler, task) {
     const promises = [];
     let newIndex = 0;
+    this.isSingleFile = pageInfos.length === 1 || pageInfos.every(info => info.document === pageInfos[0].document);
     this.hasSingleFile = pageInfos.length === 1;
     const allDocumentData = [];
     if (annotationStorage) {
@@ -61128,6 +62950,7 @@ class PDFEditor {
     await this.#mergeStructTrees(allDocumentData);
     await this.#mergeAcroForms(allDocumentData);
     this.#buildOutline(allDocumentData);
+    await this.#collectEmbeddedFiles(allDocumentData);
     return this.writePDF();
   }
   async #collectDocumentData(documentData) {
@@ -61137,7 +62960,7 @@ class PDFEditor {
         xref
       }
     } = documentData;
-    await Promise.all([pdfManager.ensureCatalog("destinations").then(destinations => documentData.destinations = destinations), pdfManager.ensureCatalog("rawPageLabels").then(pageLabels => documentData.pageLabels = pageLabels), pdfManager.ensureCatalog("structTreeRoot").then(structTreeRoot => documentData.structTreeRoot = structTreeRoot), pdfManager.ensureCatalog("acroForm").then(acroForm => documentData.acroForm = acroForm), pdfManager.ensureCatalog("documentOutlineForEditor").then(outline => documentData.outline = outline)]);
+    await Promise.all([pdfManager.ensureCatalog("destinations").then(destinations => documentData.destinations = destinations), pdfManager.ensureCatalog("rawPageLabels").then(pageLabels => documentData.pageLabels = pageLabels), pdfManager.ensureCatalog("structTreeRoot").then(structTreeRoot => documentData.structTreeRoot = structTreeRoot), pdfManager.ensureCatalog("acroForm").then(acroForm => documentData.acroForm = acroForm), pdfManager.ensureCatalog("documentOutlineForEditor").then(outline => documentData.outline = outline), pdfManager.ensureCatalog("rawEmbeddedFiles").then(ef => documentData.embeddedFiles = ef)]);
     const structTreeRoot = documentData.structTreeRoot;
     if (structTreeRoot) {
       const rootDict = structTreeRoot.dict;
@@ -62249,16 +64072,20 @@ class PDFEditor {
     const [treeRef, treeDict] = this.newDict;
     const stack = [{
       dict: treeDict,
-      entries: allEntries
+      entries: allEntries,
+      isRoot: true
     }];
     const valueType = areNames ? "Names" : "Nums";
     while (stack.length > 0) {
       const {
         dict,
-        entries
+        entries,
+        isRoot
       } = stack.pop();
       if (entries.length <= maxLeaves) {
-        dict.set("Limits", [entries[0][0], entries.at(-1)[0]]);
+        if (!isRoot) {
+          dict.set("Limits", [entries[0][0], entries.at(-1)[0]]);
+        }
         dict.set(valueType, entries.flat());
         continue;
       }
@@ -62293,6 +64120,51 @@ class PDFEditor {
     } = this;
     const pageLabelsRef = this.#makeNameNumTree(this.pageLabels, false);
     rootDict.set("PageLabels", pageLabelsRef);
+  }
+  async #collectEmbeddedFiles(allDocumentData) {
+    const {
+      embeddedFiles
+    } = this;
+    for (const documentData of allDocumentData) {
+      const {
+        embeddedFiles: docEmbeddedFiles,
+        document: {
+          xref
+        }
+      } = documentData;
+      if (!docEmbeddedFiles?.size) {
+        continue;
+      }
+      this.currentDocument = documentData;
+      for (const [key, valueRef] of docEmbeddedFiles) {
+        let name = key;
+        if (embeddedFiles.has(name)) {
+          const displayName = stringToPDFString(key, true);
+          for (let i = 1;; i++) {
+            const deduped = `${displayName}_${i}`;
+            if (!embeddedFiles.has(deduped)) {
+              name = deduped;
+              break;
+            }
+          }
+        }
+        embeddedFiles.set(name, await this.#collectDependencies(valueRef, true, xref));
+      }
+      this.currentDocument = null;
+    }
+  }
+  #makeEmbeddedFilesTree() {
+    const {
+      embeddedFiles
+    } = this;
+    if (embeddedFiles.size === 0) {
+      return;
+    }
+    if (!this.namesDict) {
+      [this.namesRef, this.namesDict] = this.newDict;
+      this.rootDict.set("Names", this.namesRef);
+    }
+    this.namesDict.set("EmbeddedFiles", this.#makeNameNumTree(Array.from(embeddedFiles.entries()), true));
   }
   #makeDestinationsTree() {
     const {
@@ -62403,13 +64275,14 @@ class PDFEditor {
     this.#makeAcroForm();
     this.#makePageTree();
     this.#makePageLabelsTree();
+    this.#makeEmbeddedFilesTree();
     this.#makeDestinationsTree();
     this.#makeStructTree();
     await this.#makeOutline();
   }
   #makeInfo() {
     const infoMap = new Map();
-    if (this.hasSingleFile) {
+    if (this.isSingleFile) {
       const {
         xref: {
           trailer
@@ -62438,7 +64311,7 @@ class PDFEditor {
     return infoMap;
   }
   async #makeEncrypt() {
-    if (!this.hasSingleFile) {
+    if (!this.isSingleFile) {
       return [null, null, null];
     }
     const {
@@ -62765,7 +64638,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = "5.6.0";
+    const workerVersion = "5.7.0";
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }

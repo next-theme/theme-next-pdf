@@ -21,8 +21,8 @@
  */
 
 /**
- * pdfjsVersion = 5.6.0
- * pdfjsBuild = a9e439b
+ * pdfjsVersion = 5.7.0
+ * pdfjsBuild = ca85d73
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -854,10 +854,6 @@ const defaultOptions = {
   },
   iccUrl: {
     value: "../web/iccs/",
-    kind: OptionKind.API
-  },
-  isEvalSupported: {
-    value: true,
     kind: OptionKind.API
   },
   isOffscreenCanvasSupported: {
@@ -4619,7 +4615,7 @@ class CommentManager {
     return CommentManager._makeCommentColor(color, opacity);
   }
   static _makeCommentColor(color, opacity) {
-    return this.#hasForcedColors ? null : findContrastColor(applyOpacity(...color, opacity ?? 1), CSSConstants.commentForegroundColor);
+    return this.#hasForcedColors ? null : findContrastColor(applyOpacity(color, opacity ?? 1), CSSConstants.commentForegroundColor);
   }
   destroy() {
     this.#dialog.destroy();
@@ -9835,25 +9831,16 @@ class Menu {
 const DRAW_UPSCALE_FACTOR = 2;
 const MAX_NUM_SCALING_STEPS = 3;
 const THUMBNAIL_WIDTH = 126;
-class TempImageFactory {
-  static getCanvas(width, height) {
-    let tempCanvas;
-    if (FeatureTest.isOffscreenCanvasSupported) {
-      tempCanvas = new OffscreenCanvas(width, height);
-    } else {
-      tempCanvas = document.createElement("canvas");
-      tempCanvas.width = width;
-      tempCanvas.height = height;
-    }
-    const ctx = tempCanvas.getContext("2d", {
-      alpha: false
-    });
-    ctx.save();
-    ctx.fillStyle = "rgb(255, 255, 255)";
-    ctx.fillRect(0, 0, width, height);
-    ctx.restore();
-    return [tempCanvas, ctx];
-  }
+function getTempCanvas(width, height) {
+  const canvas = new OffscreenCanvas(width, height);
+  const ctx = canvas.getContext("2d", {
+    alpha: false
+  });
+  ctx.save();
+  ctx.fillStyle = "rgb(255, 255, 255)";
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+  return [canvas, ctx];
 }
 class PDFThumbnailView extends RenderableView {
   #renderingState = RenderingStates.INITIAL;
@@ -10100,9 +10087,6 @@ class PDFThumbnailView extends RenderableView {
     image.setAttribute("data-l10n-id", "pdfjs-thumb-page-canvas");
     image.setAttribute("data-l10n-args", this.#getPageL10nArgs());
     imageContainer.classList.remove("missingThumbnailImage");
-    if (!FeatureTest.isOffscreenCanvasSupported) {
-      reducedCanvas.width = reducedCanvas.height = 0;
-    }
   }
   async draw() {
     if (this.renderingState !== RenderingStates.INITIAL) {
@@ -10211,7 +10195,7 @@ class PDFThumbnailView extends RenderableView {
       return canvas;
     }
     let [reducedWidth, reducedHeight] = this.#getReducedImageDims(canvas);
-    const [reducedImage, reducedImageCtx] = TempImageFactory.getCanvas(reducedWidth, reducedHeight);
+    const [reducedImage, reducedImageCtx] = getTempCanvas(reducedWidth, reducedHeight);
     while (reducedWidth > img.width || reducedHeight > img.height) {
       reducedWidth >>= 1;
       reducedHeight >>= 1;
@@ -14195,7 +14179,7 @@ class PDFViewer {
   #savedPageViews = null;
   #deletedPageNumbers = null;
   constructor(options) {
-    const viewerVersion = "5.6.0";
+    const viewerVersion = "5.7.0";
     if (version !== viewerVersion) {
       throw new Error(`The API version "${version}" does not match the Viewer version "${viewerVersion}".`);
     }
