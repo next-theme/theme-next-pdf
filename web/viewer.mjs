@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.7.0
- * pdfjsBuild = ca85d73
+ * pdfjsBuild = 5089cce
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -8963,6 +8963,12 @@ class PDFPrintService {
       this.pageStyleSheet.remove();
       this.pageStyleSheet = null;
     }
+    if (this._blobURLs) {
+      for (const url of this._blobURLs) {
+        URL.revokeObjectURL(url);
+      }
+      this._blobURLs = null;
+    }
     this.scratchCanvas.width = this.scratchCanvas.height = 0;
     this.scratchCanvas = null;
     activeService = null;
@@ -8995,7 +9001,9 @@ class PDFPrintService {
     this.throwIfInactive();
     const img = document.createElement("img");
     this.scratchCanvas.toBlob(blob => {
-      img.src = URL.createObjectURL(blob);
+      const blobURL = URL.createObjectURL(blob);
+      img.src = blobURL;
+      (this._blobURLs ??= []).push(blobURL);
     });
     const wrapper = document.createElement("div");
     wrapper.className = "printedPage";
@@ -9008,9 +9016,7 @@ class PDFPrintService {
     } = Promise.withResolvers();
     img.onload = resolve;
     img.onerror = reject;
-    promise.catch(() => {}).then(() => {
-      URL.revokeObjectURL(img.src);
-    });
+    promise.catch(() => {});
     return promise;
   }
   performPrint() {
@@ -10708,7 +10714,7 @@ class PDFThumbnailViewer {
       const currentPageNumber = isNaN(this.#pageNumberToRemove) ? pagesToMove[0] : this.#pageNumberToRemove;
       pagesMapper.movePages(selectedPages, pagesToMove, newIndex);
       this.#updateCurrentPage(this.#updateThumbnails(currentPageNumber));
-      this.#computeThumbnailsPosition();
+      this.#thumbnailsPositions = null;
       selectedPages.clear();
       this.#pageNumberToRemove = NaN;
       this.#toggleMenuEntries(false);
@@ -10892,7 +10898,7 @@ class PDFThumbnailViewer {
     pagesMapper.pastePages(index);
     this.#updateThumbnails(currentPageNumber);
     this.#updateCurrentPage(index + 1, true);
-    this.#computeThumbnailsPosition();
+    this.#thumbnailsPositions = null;
     this.eventBus.dispatch("pagesedited", {
       source: this,
       pagesMapper,
@@ -10921,6 +10927,7 @@ class PDFThumbnailViewer {
     const pagesToDelete = this.#deletedPageNumbers = Uint32Array.from(selectedPages).sort((a, b) => a - b);
     pagesMapper.deletePages(pagesToDelete);
     this.#updateCurrentPage(this.#updateThumbnails(currentPageNumber));
+    this.#thumbnailsPositions = null;
     selectedPages.clear();
     this.#updateMenuEntries();
     this.eventBus.dispatch("pagesedited", {
@@ -17521,7 +17528,7 @@ class ViewsManager extends Sidebar {
       attachmentsTitle: "pdfjs-views-manager-attachments-title",
       layersTitle: "pdfjs-views-manager-layers-title1",
       notificationButton: "pdfjs-toggle-views-manager-notification-button",
-      toggleButton: "pdfjs-toggle-views-manager-button"
+      toggleButton: "pdfjs-toggle-views-manager-button1"
     });
     this.#addEventListeners();
   }
