@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.7.0
- * pdfjsBuild = 5089cce
+ * pdfjsBuild = 92f862b
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -46,7 +46,6 @@
 /******/ })();
 /******/ 
 /************************************************************************/
-var __webpack_exports__ = {};
 
 ;// ./external/quickjs/quickjs-eval.js
 async function Module(moduleArg = {}) {
