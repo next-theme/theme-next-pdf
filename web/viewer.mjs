@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 5.7.0
- * pdfjsBuild = 92f862b
+ * pdfjsBuild = 1591ddf
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -1012,6 +1012,7 @@ const {
   getFilenameFromUrl,
   getPdfFilenameFromUrl,
   getRGB,
+  getRGBA,
   getUuid,
   getXfaPageViewport,
   GlobalWorkerOptions,
@@ -1202,11 +1203,18 @@ class PDFLinkService {
     }
     const target = newWindow ? LinkTarget.BLANK : this.externalLinkTarget,
       rel = this.externalLinkRel;
+    let displayUrl = url;
+    const parsedUrl = URL.parse(url);
+    if (parsedUrl?.username || parsedUrl?.password) {
+      parsedUrl.username = parsedUrl.password = "";
+      displayUrl = parsedUrl.href;
+    }
     if (this.externalLinkEnabled) {
-      link.href = link.title = url;
+      link.href = url;
+      link.title = displayUrl;
     } else {
       link.href = "";
-      link.title = `Disabled: ${url}`;
+      link.title = `Disabled: ${displayUrl}`;
       link.onclick = () => false;
     }
     let targetStr = "";
@@ -3151,14 +3159,14 @@ async function docProperties(pdfDocument) {
   };
 }
 class GenericScripting {
-  constructor(sandboxBundleSrc) {
+  constructor(sandboxBundleSrc, wasmUrl) {
     this._ready = new Promise((resolve, reject) => {
       const sandbox = import(
       /*webpackIgnore: true*/
       /*@vite-ignore*/
       sandboxBundleSrc);
       sandbox.then(pdfjsSandbox => {
-        resolve(pdfjsSandbox.QuickJSSandbox());
+        resolve(pdfjsSandbox.QuickJSSandbox(new URL(wasmUrl, location.href).href));
       }).catch(reject);
     });
   }
@@ -3266,7 +3274,7 @@ class ExternalServices extends BaseExternalServices {
     return new genericl10n_GenericL10n(AppOptions.get("localeProperties")?.lang);
   }
   createScripting() {
-    return new GenericScripting(AppOptions.get("sandboxBundleSrc"));
+    return new GenericScripting(AppOptions.get("sandboxBundleSrc"), AppOptions.get("wasmUrl"));
   }
   createSignatureStorage(eventBus, signal) {
     return new SignatureStorage(eventBus, signal);
@@ -4123,14 +4131,51 @@ class AnnotationEditorParams {
     editorFreeTextColor.addEventListener("input", function () {
       dispatchEvent("FREETEXT_COLOR", this.value);
     });
-    editorInkColor.addEventListener("input", function () {
-      dispatchEvent("INK_COLOR", this.value);
-    });
+    let updateInkColor, updateInkOpacity;
+    if (FeatureTest.isAlphaColorInputSupported) {
+      editorInkColor.setAttribute("alpha", "");
+      editorInkOpacity.closest(".editorParamsSetter").remove();
+      let currentInkColor = "#000000";
+      let currentInkOpacity = 1;
+      const toAlphaHex = opacity => Math.round(opacity * 255).toString(16).padStart(2, "0");
+      editorInkColor.addEventListener("input", function () {
+        const rgba = getRGBA(this.value);
+        if (!rgba) {
+          return;
+        }
+        const [r, g, b, opacity] = rgba;
+        const hex = Util.makeHexColor(r, g, b);
+        currentInkColor = hex;
+        currentInkOpacity = opacity;
+        dispatchEvent("INK_COLOR_AND_OPACITY", {
+          color: hex,
+          opacity
+        });
+      });
+      updateInkColor = value => {
+        currentInkColor = value;
+        editorInkColor.value = currentInkColor + toAlphaHex(currentInkOpacity);
+      };
+      updateInkOpacity = value => {
+        currentInkOpacity = value;
+        editorInkColor.value = currentInkColor + toAlphaHex(currentInkOpacity);
+      };
+    } else {
+      editorInkColor.addEventListener("input", function () {
+        dispatchEvent("INK_COLOR", this.value);
+      });
+      editorInkOpacity.addEventListener("input", function () {
+        dispatchEvent("INK_OPACITY", this.valueAsNumber);
+      });
+      updateInkColor = value => {
+        editorInkColor.value = value;
+      };
+      updateInkOpacity = value => {
+        editorInkOpacity.value = value;
+      };
+    }
     editorInkThickness.addEventListener("input", function () {
       dispatchEvent("INK_THICKNESS", this.valueAsNumber);
-    });
-    editorInkOpacity.addEventListener("input", function () {
-      dispatchEvent("INK_OPACITY", this.valueAsNumber);
     });
     editorStampAddImage.addEventListener("click", () => {
       eventBus.dispatch("reporttelemetry", {
@@ -4165,13 +4210,13 @@ class AnnotationEditorParams {
             editorFreeTextColor.value = value;
             break;
           case AnnotationEditorParamsType.INK_COLOR:
-            editorInkColor.value = value;
+            updateInkColor(value);
             break;
           case AnnotationEditorParamsType.INK_THICKNESS:
             editorInkThickness.value = value;
             break;
           case AnnotationEditorParamsType.INK_OPACITY:
-            editorInkOpacity.value = value;
+            updateInkOpacity(value);
             break;
           case AnnotationEditorParamsType.HIGHLIGHT_COLOR:
             eventBus.dispatch("mainhighlightcolorpickerupdatecolor", {
@@ -4330,7 +4375,7 @@ class CaretBrowsingMode {
   #getNodeOnNextPage(textLayer, isUp) {
     while (true) {
       const page = textLayer.closest(".page");
-      const pageNumber = parseInt(page.getAttribute("data-page-number"));
+      const pageNumber = parseInt(page.getAttribute("data-page-number"), 10);
       const nextPage = isUp ? pageNumber - 1 : pageNumber + 1;
       textLayer = this.#viewerContainer.querySelector(`.page[data-page-number="${nextPage}"] .textLayer`);
       if (!textLayer) {
@@ -10381,7 +10426,7 @@ class PDFThumbnailViewer {
         this.eventBus.dispatch("editingstateschanged", {
           source: this,
           details: {
-            thumbnailId: parseInt(e.target.closest(".thumbnailImageContainer")?.parentElement.getAttribute("page-number")) ?? -1,
+            thumbnailId: parseInt(e.target.closest(".thumbnailImageContainer")?.parentElement.getAttribute("page-number"), 10) ?? -1,
             hasSelectedPages: !!this.#selectedPages?.size,
             canDeletePages: this.#canDelete()
           }
@@ -10426,12 +10471,17 @@ class PDFThumbnailViewer {
             insertAfter: currentPageIndex ?? -1
           });
           this.eventBus._on("thumbnailsloaded", () => {
+            this.#selectedPages = null;
+            this.#updateMenuEntries();
             this.#toggleBar("status");
             const newPagesCount = this.#pagesMapper.pagesNumber;
             const insertedPagesCount = newPagesCount - pagesCount;
             for (let i = currentPageIndex + 1, ii = currentPageIndex + 1 + insertedPagesCount; i < ii; i++) {
               this._thumbnails[i].checkbox.checked = true;
               this.#selectPage(i + 1, true);
+            }
+            if (insertedPagesCount) {
+              this.#updateCurrentPage(currentPageIndex + 2);
             }
           }, {
             once: true
@@ -11417,11 +11467,9 @@ class PDFThumbnailViewer {
     });
   }
   #goToPage(e) {
-    const {
-      target
-    } = e;
-    if (target.classList.contains("thumbnailImageContainer")) {
-      const pageNumber = parseInt(target.parentElement.getAttribute("page-number"), 10);
+    const container = e.target.closest(".thumbnailImageContainer");
+    if (container) {
+      const pageNumber = parseInt(container.getAttribute("page-number"), 10);
       this.linkService.goToPage(pageNumber);
       stopEvent(e);
     }
@@ -16555,7 +16603,7 @@ class SignatureManager {
         this.#drawCurves = {
           width: drawWidth,
           height: drawHeight,
-          thickness: parseInt(this.#drawThickness.value),
+          thickness: parseInt(this.#drawThickness.value, 10),
           curves: []
         };
         this.#disableButtons(true);
@@ -18686,6 +18734,8 @@ const PDFViewerApplication = {
     } else {
       await (this.pdfDocument?.annotationStorage.size > 0 ? this.save() : this.download());
     }
+    delete this._mergedDocumentNeedsSaving;
+    this.setTitle();
     classList.remove("wait");
   },
   async _documentError(key, moreInfo = null) {
@@ -19046,7 +19096,7 @@ const PDFViewerApplication = {
     }
   },
   _hasChanges() {
-    return this.pdfDocument?.annotationStorage.size > 0 || this.pdfThumbnailViewer?.hasStructuralChanges();
+    return this.pdfDocument?.annotationStorage.size > 0 || this.pdfThumbnailViewer?.hasStructuralChanges() || this._mergedDocumentNeedsSaving === true;
   },
   _initializeAnnotationStorageCallbacks(pdfDocument) {
     if (pdfDocument !== this.pdfDocument) {
@@ -19408,6 +19458,7 @@ const PDFViewerApplication = {
       console.error("Something wrong happened when saving the edited PDF.\nPlease file a bug.");
       return;
     }
+    this._mergedDocumentNeedsSaving = true;
     this.open({
       data: modifiedPdfBytes,
       filename: this._docFilename

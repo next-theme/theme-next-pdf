@@ -4969,10 +4969,12 @@
 
 .basicColorPicker::-moz-color-swatch{
     border-radius:100%;
+    margin:0;
   }
 
 .basicColorPicker::-webkit-color-swatch{
     border-radius:100%;
+    margin:0;
   }
 
 .annotationEditorLayer[data-main-rotation="0"] .highlightEditor:not(.free) > .editToolbar{
@@ -6234,6 +6236,7 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
                   mask-repeat:no-repeat;
           -webkit-mask-image:var(--views-manager-add-file-button-icon);
                   mask-image:var(--views-manager-add-file-button-icon);
+          background-color:var(--button-fg);
         }
 
 :is(:is(:is(#viewsManager #viewsManagerHeader) #viewsManagerTitle) #viewsManagerAddFileButton)  > input{
@@ -6255,6 +6258,7 @@ button.hasPopupMenu[aria-expanded="false"] + menu{
                   mask-repeat:no-repeat;
           -webkit-mask-image:var(--current-outline-button-icon);
                   mask-image:var(--current-outline-button-icon);
+          background-color:var(--button-fg);
         }
 
 :is(#viewsManager #viewsManagerHeader) #viewsManagerStatus{
