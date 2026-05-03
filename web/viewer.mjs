@@ -21,8 +21,8 @@
  */
 
 /**
- * pdfjsVersion = 5.7.0
- * pdfjsBuild = 1591ddf
+ * pdfjsVersion = 6.0.0
+ * pdfjsBuild = 6d5e869
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -4137,7 +4137,6 @@ class AnnotationEditorParams {
       editorInkOpacity.closest(".editorParamsSetter").remove();
       let currentInkColor = "#000000";
       let currentInkOpacity = 1;
-      const toAlphaHex = opacity => Math.round(opacity * 255).toString(16).padStart(2, "0");
       editorInkColor.addEventListener("input", function () {
         const rgba = getRGBA(this.value);
         if (!rgba) {
@@ -4154,11 +4153,13 @@ class AnnotationEditorParams {
       });
       updateInkColor = value => {
         currentInkColor = value;
-        editorInkColor.value = currentInkColor + toAlphaHex(currentInkOpacity);
+        const alphaHex = Util.hexNums[Math.round(currentInkOpacity * 255)];
+        editorInkColor.value = currentInkColor + alphaHex;
       };
       updateInkOpacity = value => {
         currentInkOpacity = value;
-        editorInkColor.value = currentInkColor + toAlphaHex(currentInkOpacity);
+        const alphaHex = Util.hexNums[Math.round(currentInkOpacity * 255)];
+        editorInkColor.value = currentInkColor + alphaHex;
       };
     } else {
       editorInkColor.addEventListener("input", function () {
@@ -6606,7 +6607,6 @@ const FindState = {
   WRAPPED: 2,
   PENDING: 3
 };
-const FIND_TIMEOUT = 250;
 const CHARACTERS_TO_NORMALIZE = {
   "\u2010": "-",
   "\u2018": "'",
@@ -6819,17 +6819,20 @@ function getOriginalIndex(diffs, pos, len) {
 class PDFFindController {
   #state = null;
   #updateMatchesCountOnProgress = true;
+  #delay = 0;
   #visitedPagesCount = 0;
   #copiedPageData = null;
   #savedPageData = null;
   constructor({
     linkService,
     eventBus,
+    delay = 250,
     updateMatchesCountOnProgress = true
   }) {
     this._linkService = linkService;
     this._eventBus = eventBus;
     this.#updateMatchesCountOnProgress = updateMatchesCountOnProgress;
+    this.#delay = delay;
     this.onIsPageVisible = null;
     this.#reset();
     eventBus._on("find", this.#onFind.bind(this));
@@ -6891,7 +6894,7 @@ class PDFFindController {
         this._findTimeout = setTimeout(() => {
           this.#nextMatch();
           this._findTimeout = null;
-        }, FIND_TIMEOUT);
+        }, this.#delay);
       } else if (this._dirtyMatch) {
         this.#nextMatch();
       } else if (type === "again") {
@@ -7163,7 +7166,13 @@ class PDFFindController {
           resolve();
           return;
         }
-        await pdfDoc.getPage(i + 1).then(pdfPage => pdfPage.getTextContent(textOptions)).then(textContent => {
+        try {
+          const pdfPage = await pdfDoc.getPage(i + 1);
+          const textContent = await pdfPage.getTextContent(textOptions);
+          if (pdfDoc !== this._pdfDocument) {
+            resolve();
+            return;
+          }
           const strBuf = [];
           for (const textItem of textContent.items) {
             strBuf.push(textItem.str);
@@ -7172,14 +7181,15 @@ class PDFFindController {
             }
           }
           [this._pageContents[i], this._pageDiffs[i], this._hasDiacritics[i]] = normalize(strBuf.join(""));
-          resolve();
-        }, reason => {
-          console.error(`Unable to get text content for page ${i + 1}`, reason);
-          this._pageContents[i] = "";
-          this._pageDiffs[i] = null;
-          this._hasDiacritics[i] = false;
-          resolve();
-        });
+        } catch (ex) {
+          if (pdfDoc !== this._pdfDocument) {
+            resolve();
+            return;
+          }
+          console.error(`Unable to get text content for page ${i + 1}`, ex);
+          [this._pageContents[i], this._pageDiffs[i], this._hasDiacritics[i]] = ["", null, false];
+        }
+        resolve();
       });
     }
   }
@@ -14311,7 +14321,7 @@ class PDFViewer {
   #savedPageViews = null;
   #deletedPageNumbers = null;
   constructor(options) {
-    const viewerVersion = "5.7.0";
+    const viewerVersion = "6.0.0";
     if (version !== viewerVersion) {
       throw new Error(`The API version "${version}" does not match the Viewer version "${viewerVersion}".`);
     }

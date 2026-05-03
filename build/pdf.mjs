@@ -21,8 +21,8 @@
  */
 
 /**
- * pdfjsVersion = 5.7.0
- * pdfjsBuild = 1591ddf
+ * pdfjsVersion = 6.0.0
+ * pdfjsBuild = 6d5e869
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -496,15 +496,12 @@ function stringToBytes(str) {
 function objectSize(obj) {
   return Object.keys(obj).length;
 }
-function isLittleEndian() {
-  const buffer8 = new Uint8Array(4);
-  buffer8[0] = 1;
-  const view32 = new Uint32Array(buffer8.buffer, 0, 1);
-  return view32[0] === 1;
-}
 class FeatureTest {
   static get isLittleEndian() {
-    return shadow(this, "isLittleEndian", isLittleEndian());
+    const buffer8 = new Uint8Array(4);
+    buffer8[0] = 1;
+    const view32 = new Uint32Array(buffer8.buffer, 0, 1);
+    return shadow(this, "isLittleEndian", view32[0] === 1);
   }
   static get isOffscreenCanvasSupported() {
     return shadow(this, "isOffscreenCanvasSupported", typeof OffscreenCanvas !== "undefined");
@@ -531,9 +528,6 @@ class FeatureTest {
       isFirefox: userAgent.includes("Firefox")
     });
   }
-  static get isCSSRoundSupported() {
-    return shadow(this, "isCSSRoundSupported", globalThis.CSS?.supports?.("width: round(1.5px, 1px)"));
-  }
   static get isAlphaColorInputSupported() {
     return shadow(this, "isAlphaColorInputSupported", (() => {
       if (typeof document === "undefined") {
@@ -547,10 +541,12 @@ class FeatureTest {
     })());
   }
 }
-const hexNumbers = Array.from(Array(256).keys(), n => n.toString(16).padStart(2, "0"));
 class Util {
+  static get hexNums() {
+    return shadow(this, "hexNums", Array.from(Array(256).keys(), n => n.toString(16).padStart(2, "0")));
+  }
   static makeHexColor(r, g, b) {
-    return `#${hexNumbers[r]}${hexNumbers[g]}${hexNumbers[b]}`;
+    return `#${this.hexNums[r]}${this.hexNums[g]}${this.hexNums[b]}`;
   }
   static domMatrixToTransform(dm) {
     return [dm.a, dm.b, dm.c, dm.d, dm.e, dm.f];
@@ -1581,11 +1577,8 @@ function setLayerDimensions(div, viewport, mustFlip = false, mustRotate = true) 
     const {
       style
     } = div;
-    const useRound = FeatureTest.isCSSRoundSupported;
-    const w = `var(--total-scale-factor) * ${pageWidth}px`,
-      h = `var(--total-scale-factor) * ${pageHeight}px`;
-    const widthStr = useRound ? `round(down, ${w}, var(--scale-round-x))` : `calc(${w})`,
-      heightStr = useRound ? `round(down, ${h}, var(--scale-round-y))` : `calc(${h})`;
+    const widthStr = `round(down, var(--total-scale-factor) * ${pageWidth}px, var(--scale-round-x))`,
+      heightStr = `round(down, var(--total-scale-factor) * ${pageHeight}px, var(--scale-round-y))`;
     if (!mustFlip || viewport.rotation % 180 === 0) {
       style.width = widthStr;
       style.height = heightStr;
@@ -6971,9 +6964,15 @@ class AnnotationStorage {
         ids.push(value.annotationElementId);
       }
     }
+    let hash = "";
+    if (ids.length) {
+      const h = new MurmurHash3_64();
+      h.update(ids.join(","));
+      hash = h.hexdigest();
+    }
     return this.#modifiedIds = {
       ids: new Set(ids),
-      hash: ids.join(",")
+      hash
     };
   }
   [Symbol.iterator]() {
@@ -14769,7 +14768,7 @@ function getDocument(src = {}) {
   const ignoreErrors = src.stopAtErrors !== true;
   const maxImageSize = Number.isInteger(src.maxImageSize) && src.maxImageSize > -1 ? src.maxImageSize : -1;
   const isOffscreenCanvasSupported = typeof src.isOffscreenCanvasSupported === "boolean" ? src.isOffscreenCanvasSupported : !isNodeJS;
-  const isImageDecoderSupported = typeof src.isImageDecoderSupported === "boolean" ? src.isImageDecoderSupported : !isNodeJS && (FeatureTest.platform.isFirefox || !globalThis.chrome);
+  const isImageDecoderSupported = typeof src.isImageDecoderSupported === "boolean" ? src.isImageDecoderSupported : !isNodeJS;
   const canvasMaxAreaInBytes = Number.isInteger(src.canvasMaxAreaInBytes) ? src.canvasMaxAreaInBytes : -1;
   const disableFontFace = typeof src.disableFontFace === "boolean" ? src.disableFontFace : isNodeJS;
   const fontExtraProperties = src.fontExtraProperties === true;
@@ -14815,7 +14814,7 @@ function getDocument(src = {}) {
   }
   const docParams = {
     docId,
-    apiVersion: "5.7.0",
+    apiVersion: "6.0.0",
     data,
     password,
     disableAutoFetch,
@@ -14852,9 +14851,6 @@ function getDocument(src = {}) {
     }
   };
   Promise.all([worker.promise, gpuPromise]).then(function ([, hasGPU]) {
-    if (task.destroyed) {
-      throw new Error("Loading aborted");
-    }
     if (worker.destroyed) {
       throw new Error("Worker was destroyed");
     }
@@ -14881,23 +14877,24 @@ function getDocument(src = {}) {
       throw new Error("getDocument - expected either `data`, `range`, or `url` parameter.");
     }
     return workerIdPromise.then(workerId => {
-      if (task.destroyed) {
-        throw new Error("Loading aborted");
-      }
       if (worker.destroyed) {
         throw new Error("Worker was destroyed");
       }
       const messageHandler = new MessageHandler(docId, workerId, worker.port);
       const transport = new WorkerTransport(messageHandler, task, networkStream, transportParams, transportFactory, pagesMapper);
       task._transport = transport;
+      if (task.destroyed) {
+        throw new Error("Loading aborted");
+      }
       messageHandler.send("Ready", null);
     });
-  }).catch(task._capability.reject);
+  }).catch(task._capability.reject).finally(task._setupCapability.resolve);
   return task;
 }
 class PDFDocumentLoadingTask {
   static #docId = 0;
   _capability = Promise.withResolvers();
+  _setupCapability = Promise.withResolvers();
   _transport = null;
   _worker = null;
   docId = `d${PDFDocumentLoadingTask.#docId++}`;
@@ -14909,10 +14906,12 @@ class PDFDocumentLoadingTask {
   }
   async destroy() {
     this.destroyed = true;
+    this._capability.promise.catch(() => {});
     try {
       if (this._worker?.port) {
         this._worker._pendingDestroy = true;
       }
+      await this._setupCapability.promise;
       await this._transport?.destroy();
     } catch (ex) {
       if (this._worker?.port) {
@@ -14936,11 +14935,6 @@ class PDFDataRangeTransport {
     this.initialData = initialData;
     this.progressiveDone = progressiveDone;
     this.contentDispositionFilename = contentDispositionFilename;
-    Object.defineProperty(this, "onDataProgress", {
-      value: () => {
-        deprecated("`PDFDataRangeTransport.prototype.onDataProgress` - method was " + "removed, since loading progress is now reported automatically " + "through the `PDFDataTransportStream` class (and related code).");
-      }
-    });
   }
   onDataRange(begin, chunk) {
     this.#listener({
@@ -16497,8 +16491,8 @@ class InternalRenderTask {
     }
   }
 }
-const version = "5.7.0";
-const build = "1591ddf";
+const version = "6.0.0";
+const build = "6d5e869";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -16765,7 +16759,7 @@ class BasicColorPicker {
     input.type = "color";
     if (hasAlpha) {
       input.setAttribute("alpha", "");
-      const alphaHex = Math.round((opacity ?? 1) * 255).toString(16).padStart(2, "0");
+      const alphaHex = Util.hexNums[Math.round((opacity ?? 1) * 255)];
       input.value = (color || "#000000") + alphaHex;
     } else {
       input.value = color || "#000000";
@@ -16803,7 +16797,7 @@ class BasicColorPicker {
       return;
     }
     if (this.#hasAlpha) {
-      const alphaHex = Math.round(this.#editor.opacity * 255).toString(16).padStart(2, "0");
+      const alphaHex = Util.hexNums[Math.round(this.#editor.opacity * 255)];
       this.#input.value = value + alphaHex;
     } else {
       this.#input.value = value;
@@ -16813,7 +16807,7 @@ class BasicColorPicker {
     if (!this.#input || !this.#hasAlpha) {
       return;
     }
-    const alphaHex = Math.round(value * 255).toString(16).padStart(2, "0");
+    const alphaHex = Util.hexNums[Math.round(value * 255)];
     this.#input.value = this.#editor.color + alphaHex;
   }
   destroy() {
@@ -19018,7 +19012,7 @@ class PopupElement {
       const button = this.#commentButton = document.createElement("button");
       button.className = "annotationCommentButton";
       const parentContainer = this.#firstElement.container;
-      button.style.zIndex = parentContainer.style.zIndex + 1;
+      button.style.zIndex = parseInt(parentContainer.style.zIndex, 10) + 1;
       button.tabIndex = 0;
       button.ariaHasPopup = "dialog";
       button.ariaControls = "commentPopup";
@@ -20003,6 +19997,7 @@ class AnnotationLayer {
   #linkService = null;
   #elements = [];
   #hasAriaAttributesFromStructTree = false;
+  zIndex = 0;
   constructor({
     div,
     accessibilityManager,
@@ -20023,7 +20018,6 @@ class AnnotationLayer {
     this.#annotationStorage = annotationStorage || new AnnotationStorage();
     this.page = page;
     this.viewport = viewport;
-    this.zIndex = 0;
     this._annotationEditorUIManager = annotationEditorUIManager;
     this._commentManager = commentManager || null;
   }
@@ -26115,7 +26109,7 @@ class AnnotationEditorLayer {
     const {
       target
     } = event;
-    if (target === this.#textLayer.div || (target.getAttribute("role") === "img" || target.classList.contains("endOfContent")) && this.#textLayer.div.contains(target)) {
+    if (target === this.#textLayer.div || (target.getAttribute("role") === "img" || target.classList.contains("endOfContent") || target.classList.contains("textLayerImages") || target.classList.contains("textLayerImagePlaceholder")) && this.#textLayer.div.contains(target)) {
       const {
         isMac
       } = FeatureTest.platform;

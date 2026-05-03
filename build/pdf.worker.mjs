@@ -21,8 +21,8 @@
  */
 
 /**
- * pdfjsVersion = 5.7.0
- * pdfjsBuild = 1591ddf
+ * pdfjsVersion = 6.0.0
+ * pdfjsBuild = 6d5e869
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -496,15 +496,12 @@ function stringToBytes(str) {
 function objectSize(obj) {
   return Object.keys(obj).length;
 }
-function isLittleEndian() {
-  const buffer8 = new Uint8Array(4);
-  buffer8[0] = 1;
-  const view32 = new Uint32Array(buffer8.buffer, 0, 1);
-  return view32[0] === 1;
-}
 class FeatureTest {
   static get isLittleEndian() {
-    return shadow(this, "isLittleEndian", isLittleEndian());
+    const buffer8 = new Uint8Array(4);
+    buffer8[0] = 1;
+    const view32 = new Uint32Array(buffer8.buffer, 0, 1);
+    return shadow(this, "isLittleEndian", view32[0] === 1);
   }
   static get isOffscreenCanvasSupported() {
     return shadow(this, "isOffscreenCanvasSupported", typeof OffscreenCanvas !== "undefined");
@@ -531,9 +528,6 @@ class FeatureTest {
       isFirefox: userAgent.includes("Firefox")
     });
   }
-  static get isCSSRoundSupported() {
-    return shadow(this, "isCSSRoundSupported", globalThis.CSS?.supports?.("width: round(1.5px, 1px)"));
-  }
   static get isAlphaColorInputSupported() {
     return shadow(this, "isAlphaColorInputSupported", (() => {
       if (typeof document === "undefined") {
@@ -547,10 +541,12 @@ class FeatureTest {
     })());
   }
 }
-const hexNumbers = Array.from(Array(256).keys(), n => n.toString(16).padStart(2, "0"));
 class Util {
+  static get hexNums() {
+    return shadow(this, "hexNums", Array.from(Array(256).keys(), n => n.toString(16).padStart(2, "0")));
+  }
   static makeHexColor(r, g, b) {
-    return `#${hexNumbers[r]}${hexNumbers[g]}${hexNumbers[b]}`;
+    return `#${this.hexNums[r]}${this.hexNums[g]}${this.hexNums[b]}`;
   }
   static domMatrixToTransform(dm) {
     return [dm.a, dm.b, dm.c, dm.d, dm.e, dm.f];
@@ -1718,7 +1714,7 @@ function stringToUTF16HexString(str) {
   const buf = [];
   for (let i = 0, ii = str.length; i < ii; i++) {
     const char = str.charCodeAt(i);
-    buf.push(hexNumbers[char >> 8 & 0xff], hexNumbers[char & 0xff]);
+    buf.push(Util.hexNums[char >> 8 & 0xff], Util.hexNums[char & 0xff]);
   }
   return buf.join("");
 }
@@ -2814,7 +2810,7 @@ class IccColorSpace extends ColorSpace {
           });
           isUsable = !!this._module;
           QCMS._memory = this._module.memory;
-          QCMS._makeHexColor = Util.makeHexColor;
+          QCMS._makeHexColor = Util.makeHexColor.bind(Util);
         } catch (e) {
           warn(`ICCBased color space: "${e}".`);
         }
@@ -4241,21 +4237,25 @@ class JBig2CCITTFaxImage {
 ;// ./src/core/decode_stream.js
 
 
+
 const emptyBuffer = new Uint8Array(0);
 class DecodeStream extends BaseStream {
+  buffer = emptyBuffer;
+  bufferLength = 0;
+  eof = false;
+  minBufferLength = 512;
+  pos = 0;
   constructor(maybeMinBufferLength) {
     super();
     this._rawMinBufferLength = maybeMinBufferLength || 0;
-    this.pos = 0;
-    this.bufferLength = 0;
-    this.eof = false;
-    this.buffer = emptyBuffer;
-    this.minBufferLength = 512;
     if (maybeMinBufferLength) {
       while (this.minBufferLength < maybeMinBufferLength) {
         this.minBufferLength *= 2;
       }
     }
+  }
+  readBlock() {
+    unreachable("Abstract method `readBlock` called");
   }
   get isEmpty() {
     while (!this.eof && this.bufferLength === 0) {
@@ -10561,9 +10561,6 @@ class CCITTFaxStream extends DecodeStream {
   get bytes() {
     return shadow(this, "bytes", this.stream.getBytes(this.maybeLength));
   }
-  readBlock() {
-    unreachable("CCITTFaxStream.readBlock");
-  }
   get isImageStream() {
     return true;
   }
@@ -10881,9 +10878,6 @@ class Jbig2Stream extends DecodeStream {
     return shadow(this, "bytes", this.stream.getBytes(this.maybeLength));
   }
   ensureBuffer(requested) {}
-  readBlock() {
-    unreachable("Jbig2Stream.readBlock");
-  }
   get isAsyncDecoder() {
     return true;
   }
@@ -10917,20 +10911,16 @@ class Jbig2Stream extends DecodeStream {
 
 
 class JpxStream extends DecodeStream {
-  constructor(stream, maybeLength, params) {
+  constructor(stream, maybeLength) {
     super(maybeLength);
     this.stream = stream;
     this.dict = stream.dict;
     this.maybeLength = maybeLength;
-    this.params = params;
   }
   get bytes() {
     return shadow(this, "bytes", this.stream.getBytes(this.maybeLength));
   }
   ensureBuffer(requested) {}
-  readBlock(decoderOptions) {
-    unreachable("JpxStream.readBlock");
-  }
   get isAsyncDecoder() {
     return true;
   }
@@ -11882,7 +11872,7 @@ class Parser {
           return new JpegStream(stream, maybeLength, params);
         case "JPX":
         case "JPXDecode":
-          return new JpxStream(stream, maybeLength, params);
+          return new JpxStream(stream, maybeLength);
         case "A85":
         case "ASCII85Decode":
           return new Ascii85Stream(stream, maybeLength);
@@ -40801,77 +40791,73 @@ class Catalog {
     }
     return map;
   }
-  getPageIndex(pageRef) {
+  async getPageIndex(pageRef) {
     const cachedPageIndex = this.pageIndexCache.get(pageRef);
     if (cachedPageIndex !== undefined) {
-      return Promise.resolve(cachedPageIndex);
+      return cachedPageIndex;
     }
     const xref = this.xref;
-    function pagesBeforeRef(kidRef) {
-      let total = 0,
-        parentRef;
-      return xref.fetchAsync(kidRef).then(function (node) {
-        if (isRefsEqual(kidRef, pageRef) && !isDict(node, "Page") && !(node instanceof Dict && !node.has("Type") && node.has("Contents"))) {
-          throw new FormatError("The reference does not point to a /Page dictionary.");
-        }
-        if (!node) {
-          return null;
-        }
-        if (!(node instanceof Dict)) {
-          throw new FormatError("Node must be a dictionary.");
-        }
-        parentRef = node.getRaw("Parent");
-        return node.getAsync("Parent");
-      }).then(function (parent) {
-        if (!parent) {
-          return null;
-        }
-        if (!(parent instanceof Dict)) {
-          throw new FormatError("Parent must be a dictionary.");
-        }
-        return parent.getAsync("Kids");
-      }).then(function (kids) {
-        if (!kids) {
-          return null;
-        }
-        const kidPromises = [];
-        let found = false;
-        for (const kid of kids) {
-          if (!(kid instanceof Ref)) {
-            throw new FormatError("Kid must be a reference.");
-          }
-          if (isRefsEqual(kid, kidRef)) {
-            found = true;
-            break;
-          }
-          kidPromises.push(xref.fetchAsync(kid).then(function (obj) {
-            if (!(obj instanceof Dict)) {
-              throw new FormatError("Kid node must be a dictionary.");
-            }
-            if (obj.has("Count")) {
-              total += obj.get("Count");
-            } else {
-              total++;
-            }
-          }));
-        }
-        if (!found) {
-          throw new FormatError("Kid reference not found in parent's kids.");
-        }
-        return Promise.all(kidPromises).then(() => [total, parentRef]);
-      });
-    }
-    let total = 0;
-    const next = ref => pagesBeforeRef(ref).then(args => {
-      if (!args) {
-        this.pageIndexCache.put(pageRef, total);
-        return total;
+    let total = 0,
+      ref = pageRef;
+    while (true) {
+      const node = await xref.fetchAsync(ref);
+      if (isRefsEqual(ref, pageRef) && !isDict(node, "Page") && !(node instanceof Dict && !node.has("Type") && node.has("Contents"))) {
+        throw new FormatError("The reference does not point to a /Page dictionary.");
       }
-      const [count, parentRef] = args;
-      total += count;
-      return next(parentRef);
-    });
-    return next(pageRef);
+      if (!node) {
+        break;
+      }
+      if (!(node instanceof Dict)) {
+        throw new FormatError("Node must be a dictionary.");
+      }
+      const parentRef = node.getRaw("Parent");
+      const parent = await node.getAsync("Parent");
+      if (!parent) {
+        break;
+      }
+      if (!(parent instanceof Dict)) {
+        throw new FormatError("Parent must be a dictionary.");
+      }
+      const kids = await parent.getAsync("Kids");
+      if (!kids) {
+        break;
+      }
+      if (!Array.isArray(kids)) {
+        throw new FormatError("Kids must be an array.");
+      }
+      const kidPromises = [];
+      let found = false;
+      for (const kid of kids) {
+        if (!(kid instanceof Ref)) {
+          throw new FormatError("Kid must be a reference.");
+        }
+        if (isRefsEqual(kid, ref)) {
+          found = true;
+          break;
+        }
+        kidPromises.push(xref.fetchAsync(kid).then(obj => {
+          if (!(obj instanceof Dict)) {
+            throw new FormatError("Kid node must be a dictionary.");
+          }
+          if (obj.has("Count")) {
+            const count = obj.get("Count");
+            if (Number.isInteger(count) && count >= 0) {
+              total += count;
+              return;
+            }
+            throw new FormatError("Count must be a (positive) integer.");
+          }
+          total++;
+        }));
+      }
+      if (!found) {
+        throw new FormatError("Kid reference not found in parent's kids.");
+      }
+      await Promise.all(kidPromises);
+      ref = parentRef;
+    }
+    this.pageIndexCache.put(pageRef, total);
+    return total;
   }
   get baseUrl() {
     const uri = this.#catDict.get("URI");
@@ -53116,9 +53102,10 @@ class WidgetAnnotation extends Annotation {
   }
   _decodeFormValue(formValue) {
     if (Array.isArray(formValue)) {
-      return formValue.filter(item => typeof item === "string").map(item => stringToPDFString(item));
+      const arr = formValue.map(item => this._decodeFormValue(item)).filter(item => item !== null);
+      return arr.length > 0 ? arr : null;
     } else if (formValue instanceof Name) {
-      return stringToPDFString(formValue.name);
+      return formValue.name;
     } else if (typeof formValue === "string") {
       return stringToPDFString(formValue);
     }
@@ -54040,7 +54027,7 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
       this.data.fieldValue = asValue;
     }
     const yes = this.data.fieldValue !== null && this.data.fieldValue !== "Off" ? this.data.fieldValue : "Yes";
-    const exportValues = this._decodeFormValue([...normalAppearance.getKeys()]);
+    const exportValues = [...normalAppearance.getKeys()];
     if (exportValues.length === 0) {
       exportValues.push("Off", yes);
     } else if (exportValues.length === 1) {
@@ -54098,7 +54085,7 @@ class ButtonWidgetAnnotation extends WidgetAnnotation {
     }
     for (const key of normalAppearance.getKeys()) {
       if (key !== "Off") {
-        this.data.buttonValue = this._decodeFormValue(key);
+        this.data.buttonValue = key;
         break;
       }
     }
@@ -55761,11 +55748,7 @@ class Intersector {
       const h = Math.floor((iMax - iMin) / STEPS);
       for (let i = iMin; i <= iMin + h * STEPS; i += STEPS) {
         for (let j = 0; j <= w; j++) {
-          let existing = this.#grid[i + j];
-          if (!existing) {
-            this.#grid[i + j] = existing = [];
-          }
-          existing.push(intersector);
+          (this.#grid[i + j] ??= []).push(intersector);
         }
       }
     }
@@ -56172,28 +56155,21 @@ function calculateSHA256(data, offset, length) {
 
 const chunkSize = 512;
 class DecryptStream extends DecodeStream {
+  #nextChunk = null;
   constructor(str, maybeLength, decrypt) {
     super(maybeLength);
     this.stream = str;
     this.dict = str.dict;
     this.decrypt = decrypt;
-    this.nextChunk = null;
-    this.initialized = false;
   }
   readBlock() {
-    let chunk;
-    if (this.initialized) {
-      chunk = this.nextChunk;
-    } else {
-      chunk = this.stream.getBytes(chunkSize);
-      this.initialized = true;
-    }
+    let chunk = this.#nextChunk ?? this.stream.getBytes(chunkSize);
     if (!chunk?.length) {
       this.eof = true;
       return;
     }
-    this.nextChunk = this.stream.getBytes(chunkSize);
-    const hasMoreData = this.nextChunk?.length > 0;
+    this.#nextChunk = this.stream.getBytes(chunkSize);
+    const hasMoreData = this.#nextChunk?.length > 0;
     const decrypt = this.decrypt;
     chunk = decrypt(chunk, !hasMoreData);
     const bufferLength = this.bufferLength,
@@ -60612,6 +60588,62 @@ class PDFEditor {
       }
     }
     insertAfterList.sort((a, b) => a.insertAfter - b.insertAfter);
+    if (insertAfterList.length > 0) {
+      for (const info of pageInfos) {
+        if (!info.document || !info.pageIndices) {
+          continue;
+        }
+        const filteredCount = this.#getFilteredPageIndices(info).length;
+        if (info.pageIndices.length < filteredCount) {
+          throw new Error("extractPages: partial pageIndices cannot be combined with insertAfter entries.");
+        }
+      }
+    }
+    const hasExplicitLayout = insertAfterList.length > 0 && pageInfos.some(info => info.document && info.pageIndices);
+    if (sequence.length === 0 && hasExplicitLayout) {
+      const updatedPageInfos = pageInfos.slice();
+      let maxExistingPos = -1;
+      for (const info of pageInfos) {
+        if (info.document && info.pageIndices) {
+          for (const idx of info.pageIndices) {
+            if (idx > maxExistingPos) {
+              maxExistingPos = idx;
+            }
+          }
+        }
+      }
+      let offset = 0;
+      for (const {
+        i,
+        insertAfter,
+        count
+      } of insertAfterList) {
+        const threshold = Math.min(Math.max(insertAfter, -1) + offset, maxExistingPos);
+        for (let j = 0; j < updatedPageInfos.length; j++) {
+          const existingInfo = updatedPageInfos[j];
+          if (!existingInfo.document || !existingInfo.pageIndices || existingInfo.pageIndices.every(idx => idx <= threshold)) {
+            continue;
+          }
+          updatedPageInfos[j] = {
+            ...existingInfo,
+            pageIndices: existingInfo.pageIndices.map(idx => idx > threshold ? idx + count : idx)
+          };
+        }
+        const insertedIndices = [];
+        for (let k = 0; k < count; k++) {
+          insertedIndices.push(threshold + 1 + k);
+        }
+        const newInfo = {
+          ...updatedPageInfos[i],
+          pageIndices: insertedIndices
+        };
+        delete newInfo.insertAfter;
+        updatedPageInfos[i] = newInfo;
+        offset += count;
+        maxExistingPos += count;
+      }
+      return updatedPageInfos;
+    }
     let offset = 0;
     for (const {
       i,
@@ -61606,7 +61638,7 @@ class PDFEditor {
     const resourcesValuesCache = new Map();
     for (const field of drToFix) {
       const ap = field.get("AP");
-      for (const value of ap.getValues()) {
+      for (const [, value] of ap) {
         if (!(value instanceof BaseStream)) {
           continue;
         }
@@ -62401,7 +62433,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = "5.7.0";
+    const workerVersion = "6.0.0";
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }
@@ -62810,7 +62842,7 @@ class WorkerMessageHandler {
         const buffer = await pdfEditor.extractPages(pageInfos, annotationStorage, handler, task);
         return buffer;
       } catch (reason) {
-        console.error(reason);
+        warn(`extractPages: "${reason}".`);
         return null;
       } finally {
         if (task) {
