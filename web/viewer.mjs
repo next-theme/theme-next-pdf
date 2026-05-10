@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 6.0.0
- * pdfjsBuild = 6d5e869
+ * pdfjsBuild = e86e9d9
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -10480,7 +10480,7 @@ class PDFThumbnailViewer {
             document: buffer,
             insertAfter: currentPageIndex ?? -1
           });
-          this.eventBus._on("thumbnailsloaded", () => {
+          this.eventBus._on("pagesloaded", () => {
             this.#selectedPages = null;
             this.#updateMenuEntries();
             this.#toggleBar("status");
@@ -10491,7 +10491,7 @@ class PDFThumbnailViewer {
               this.#selectPage(i + 1, true);
             }
             if (insertedPagesCount) {
-              this.#updateCurrentPage(currentPageIndex + 2);
+              this.#updateCurrentPage(currentPageIndex + 2, true);
             }
           }, {
             once: true
@@ -13233,6 +13233,8 @@ class TextLayerBuilder {
   cancel() {
     this.#textLayer?.cancel();
     this.#textLayer = null;
+    this.#renderingDone = false;
+    this.div.replaceChildren();
     this.highlighter?.disable();
     this.accessibilityManager?.disable();
     TextLayerBuilder.#removeGlobalSelectionListener(this.div);
@@ -19090,7 +19092,7 @@ const PDFViewerApplication = {
     }
     this.pdfHistory.initialize({
       fingerprint,
-      resetHistory: viewOnLoad === ViewOnLoad.INITIAL,
+      resetHistory: viewOnLoad === ViewOnLoad.INITIAL || !!this._mergedDocumentNeedsSaving,
       updateUrl: AppOptions.get("historyUpdateUrl")
     });
     if (this.pdfHistory.initialBookmark) {
