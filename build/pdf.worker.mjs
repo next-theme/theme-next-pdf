@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 6.0.0
- * pdfjsBuild = 65b8aec
+ * pdfjsBuild = ea18e73
  */
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
@@ -547,50 +547,6 @@ class Util {
   }
   static makeHexColor(r, g, b) {
     return `#${this.hexNums[r]}${this.hexNums[g]}${this.hexNums[b]}`;
-  }
-  static scaleMinMax(transform, minMax) {
-    let temp;
-    if (transform[0]) {
-      if (transform[0] < 0) {
-        temp = minMax[0];
-        minMax[0] = minMax[2];
-        minMax[2] = temp;
-      }
-      minMax[0] *= transform[0];
-      minMax[2] *= transform[0];
-      if (transform[3] < 0) {
-        temp = minMax[1];
-        minMax[1] = minMax[3];
-        minMax[3] = temp;
-      }
-      minMax[1] *= transform[3];
-      minMax[3] *= transform[3];
-    } else {
-      temp = minMax[0];
-      minMax[0] = minMax[1];
-      minMax[1] = temp;
-      temp = minMax[2];
-      minMax[2] = minMax[3];
-      minMax[3] = temp;
-      if (transform[1] < 0) {
-        temp = minMax[1];
-        minMax[1] = minMax[3];
-        minMax[3] = temp;
-      }
-      minMax[1] *= transform[1];
-      minMax[3] *= transform[1];
-      if (transform[2] < 0) {
-        temp = minMax[0];
-        minMax[0] = minMax[2];
-        minMax[2] = temp;
-      }
-      minMax[0] *= transform[2];
-      minMax[2] *= transform[2];
-    }
-    minMax[0] += transform[4];
-    minMax[1] += transform[5];
-    minMax[2] += transform[4];
-    minMax[3] += transform[5];
   }
   static transform(m1, m2) {
     return [m1[0] * m2[0] + m1[2] * m2[1], m1[1] * m2[0] + m1[3] * m2[1], m1[0] * m2[2] + m1[2] * m2[3], m1[1] * m2[2] + m1[3] * m2[3], m1[0] * m2[4] + m1[2] * m2[5] + m1[4], m1[1] * m2[4] + m1[3] * m2[5] + m1[5]];
@@ -18035,6 +17991,10 @@ class DataBuilder {
 const MAX_SUBR_NESTING = 10;
 const CFFStandardStrings = [".notdef", "space", "exclam", "quotedbl", "numbersign", "dollar", "percent", "ampersand", "quoteright", "parenleft", "parenright", "asterisk", "plus", "comma", "hyphen", "period", "slash", "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "colon", "semicolon", "less", "equal", "greater", "question", "at", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "bracketleft", "backslash", "bracketright", "asciicircum", "underscore", "quoteleft", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "braceleft", "bar", "braceright", "asciitilde", "exclamdown", "cent", "sterling", "fraction", "yen", "florin", "section", "currency", "quotesingle", "quotedblleft", "guillemotleft", "guilsinglleft", "guilsinglright", "fi", "fl", "endash", "dagger", "daggerdbl", "periodcentered", "paragraph", "bullet", "quotesinglbase", "quotedblbase", "quotedblright", "guillemotright", "ellipsis", "perthousand", "questiondown", "grave", "acute", "circumflex", "tilde", "macron", "breve", "dotaccent", "dieresis", "ring", "cedilla", "hungarumlaut", "ogonek", "caron", "emdash", "AE", "ordfeminine", "Lslash", "Oslash", "OE", "ordmasculine", "ae", "dotlessi", "lslash", "oslash", "oe", "germandbls", "onesuperior", "logicalnot", "mu", "trademark", "Eth", "onehalf", "plusminus", "Thorn", "onequarter", "divide", "brokenbar", "degree", "thorn", "threequarters", "twosuperior", "registered", "minus", "eth", "multiply", "threesuperior", "copyright", "Aacute", "Acircumflex", "Adieresis", "Agrave", "Aring", "Atilde", "Ccedilla", "Eacute", "Ecircumflex", "Edieresis", "Egrave", "Iacute", "Icircumflex", "Idieresis", "Igrave", "Ntilde", "Oacute", "Ocircumflex", "Odieresis", "Ograve", "Otilde", "Scaron", "Uacute", "Ucircumflex", "Udieresis", "Ugrave", "Yacute", "Ydieresis", "Zcaron", "aacute", "acircumflex", "adieresis", "agrave", "aring", "atilde", "ccedilla", "eacute", "ecircumflex", "edieresis", "egrave", "iacute", "icircumflex", "idieresis", "igrave", "ntilde", "oacute", "ocircumflex", "odieresis", "ograve", "otilde", "scaron", "uacute", "ucircumflex", "udieresis", "ugrave", "yacute", "ydieresis", "zcaron", "exclamsmall", "Hungarumlautsmall", "dollaroldstyle", "dollarsuperior", "ampersandsmall", "Acutesmall", "parenleftsuperior", "parenrightsuperior", "twodotenleader", "onedotenleader", "zerooldstyle", "oneoldstyle", "twooldstyle", "threeoldstyle", "fouroldstyle", "fiveoldstyle", "sixoldstyle", "sevenoldstyle", "eightoldstyle", "nineoldstyle", "commasuperior", "threequartersemdash", "periodsuperior", "questionsmall", "asuperior", "bsuperior", "centsuperior", "dsuperior", "esuperior", "isuperior", "lsuperior", "msuperior", "nsuperior", "osuperior", "rsuperior", "ssuperior", "tsuperior", "ff", "ffi", "ffl", "parenleftinferior", "parenrightinferior", "Circumflexsmall", "hyphensuperior", "Gravesmall", "Asmall", "Bsmall", "Csmall", "Dsmall", "Esmall", "Fsmall", "Gsmall", "Hsmall", "Ismall", "Jsmall", "Ksmall", "Lsmall", "Msmall", "Nsmall", "Osmall", "Psmall", "Qsmall", "Rsmall", "Ssmall", "Tsmall", "Usmall", "Vsmall", "Wsmall", "Xsmall", "Ysmall", "Zsmall", "colonmonetary", "onefitted", "rupiah", "Tildesmall", "exclamdownsmall", "centoldstyle", "Lslashsmall", "Scaronsmall", "Zcaronsmall", "Dieresissmall", "Brevesmall", "Caronsmall", "Dotaccentsmall", "Macronsmall", "figuredash", "hypheninferior", "Ogoneksmall", "Ringsmall", "Cedillasmall", "questiondownsmall", "oneeighth", "threeeighths", "fiveeighths", "seveneighths", "onethird", "twothirds", "zerosuperior", "foursuperior", "fivesuperior", "sixsuperior", "sevensuperior", "eightsuperior", "ninesuperior", "zeroinferior", "oneinferior", "twoinferior", "threeinferior", "fourinferior", "fiveinferior", "sixinferior", "seveninferior", "eightinferior", "nineinferior", "centinferior", "dollarinferior", "periodinferior", "commainferior", "Agravesmall", "Aacutesmall", "Acircumflexsmall", "Atildesmall", "Adieresissmall", "Aringsmall", "AEsmall", "Ccedillasmall", "Egravesmall", "Eacutesmall", "Ecircumflexsmall", "Edieresissmall", "Igravesmall", "Iacutesmall", "Icircumflexsmall", "Idieresissmall", "Ethsmall", "Ntildesmall", "Ogravesmall", "Oacutesmall", "Ocircumflexsmall", "Otildesmall", "Odieresissmall", "OEsmall", "Oslashsmall", "Ugravesmall", "Uacutesmall", "Ucircumflexsmall", "Udieresissmall", "Yacutesmall", "Thornsmall", "Ydieresissmall", "001.000", "001.001", "001.002", "001.003", "Black", "Bold", "Book", "Light", "Medium", "Regular", "Roman", "Semibold"];
 const NUM_STANDARD_CFF_STRINGS = 391;
+const DEFAULT_BLUE_SCALE = 0.039625;
+const DEFAULT_BLUE_SHIFT = 7;
+const DEFAULT_BLUE_FUZZ = 1;
+const DEFAULT_EXPANSION_FACTOR = 0.06;
 const CharstringValidationData = [null, {
   id: "hstem",
   min: 2,
@@ -18272,8 +18232,12 @@ class CFFParser {
     if (fontMatrix) {
       properties.fontMatrix = fontMatrix;
     }
-    const fontBBox = topDict.getByName("FontBBox");
-    if (fontBBox) {
+    let fontBBox = topDict.getByName("FontBBox");
+    if (fontBBox?.every(coord => coord === 0) && properties.bbox) {
+      fontBBox = Util.normalizeRect(properties.bbox.map(coord => coord > 0x7fff && coord <= 0xffff ? coord - 0x10000 : coord));
+      topDict.setByName("FontBBox", fontBBox);
+    }
+    if (fontBBox?.some(coord => coord !== 0)) {
       properties.ascent = Math.max(fontBBox[3], fontBBox[1]);
       properties.descent = Math.min(fontBBox[1], fontBBox[3]);
       properties.ascentScaled = true;
@@ -18686,8 +18650,17 @@ class CFFParser {
     const dict = this.parseDict(dictData);
     const privateDict = this.createDict(CFFPrivateDict, dict, parentDict.strings);
     parentDict.privateDict = privateDict;
-    if (privateDict.getByName("ExpansionFactor") === 0) {
-      privateDict.setByName("ExpansionFactor", 0.06);
+    const blueScale = privateDict.getByName("BlueScale");
+    const blueShift = privateDict.getByName("BlueShift");
+    const blueFuzz = privateDict.getByName("BlueFuzz");
+    const expansionFactor = privateDict.getByName("ExpansionFactor");
+    if (blueScale === 0 && blueShift === 0 && blueFuzz === 0 && expansionFactor === 0) {
+      privateDict.setByName("BlueScale", DEFAULT_BLUE_SCALE);
+      privateDict.setByName("BlueShift", DEFAULT_BLUE_SHIFT);
+      privateDict.setByName("BlueFuzz", DEFAULT_BLUE_FUZZ);
+    }
+    if (expansionFactor === 0) {
+      privateDict.setByName("ExpansionFactor", DEFAULT_EXPANSION_FACTOR);
     }
     if (!privateDict.getByName("Subrs")) {
       return;
@@ -19015,7 +18988,7 @@ class CFFTopDict extends CFFDict {
     this.privateDict = null;
   }
 }
-const CFFPrivateDictLayout = [[6, "BlueValues", "delta", null], [7, "OtherBlues", "delta", null], [8, "FamilyBlues", "delta", null], [9, "FamilyOtherBlues", "delta", null], [[12, 9], "BlueScale", "num", 0.039625], [[12, 10], "BlueShift", "num", 7], [[12, 11], "BlueFuzz", "num", 1], [10, "StdHW", "num", null], [11, "StdVW", "num", null], [[12, 12], "StemSnapH", "delta", null], [[12, 13], "StemSnapV", "delta", null], [[12, 14], "ForceBold", "num", 0], [[12, 17], "LanguageGroup", "num", 0], [[12, 18], "ExpansionFactor", "num", 0.06], [[12, 19], "initialRandomSeed", "num", 0], [20, "defaultWidthX", "num", 0], [21, "nominalWidthX", "num", 0], [19, "Subrs", "offset", null]];
+const CFFPrivateDictLayout = [[6, "BlueValues", "delta", null], [7, "OtherBlues", "delta", null], [8, "FamilyBlues", "delta", null], [9, "FamilyOtherBlues", "delta", null], [[12, 9], "BlueScale", "num", DEFAULT_BLUE_SCALE], [[12, 10], "BlueShift", "num", DEFAULT_BLUE_SHIFT], [[12, 11], "BlueFuzz", "num", DEFAULT_BLUE_FUZZ], [10, "StdHW", "num", null], [11, "StdVW", "num", null], [[12, 12], "StemSnapH", "delta", null], [[12, 13], "StemSnapV", "delta", null], [[12, 14], "ForceBold", "num", 0], [[12, 17], "LanguageGroup", "num", 0], [[12, 18], "ExpansionFactor", "num", DEFAULT_EXPANSION_FACTOR], [[12, 19], "initialRandomSeed", "num", 0], [20, "defaultWidthX", "num", 0], [21, "nominalWidthX", "num", 0], [19, "Subrs", "offset", null]];
 class CFFPrivateDict extends CFFDict {
   static get tables() {
     return shadow(this, "tables", this.createTables(CFFPrivateDictLayout));
@@ -20394,6 +20367,648 @@ function isKnownFontName(name) {
   return !!(getStdFontMap()[fontName] || getNonStdFontMap()[fontName] || getSerifFonts()[fontName] || getSymbolsFonts()[fontName]);
 }
 
+;// ./src/core/glyf.js
+const ON_CURVE_POINT = 1 << 0;
+const X_SHORT_VECTOR = 1 << 1;
+const Y_SHORT_VECTOR = 1 << 2;
+const REPEAT_FLAG = 1 << 3;
+const X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR = 1 << 4;
+const Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR = 1 << 5;
+const OVERLAP_SIMPLE = 1 << 6;
+const ARG_1_AND_2_ARE_WORDS = 1 << 0;
+const ARGS_ARE_XY_VALUES = 1 << 1;
+const WE_HAVE_A_SCALE = 1 << 3;
+const MORE_COMPONENTS = 1 << 5;
+const WE_HAVE_AN_X_AND_Y_SCALE = 1 << 6;
+const WE_HAVE_A_TWO_BY_TWO = 1 << 7;
+const WE_HAVE_INSTRUCTIONS = 1 << 8;
+const GLYPH_HEADER_SIZE = 10;
+class GlyfTable {
+  constructor({
+    glyfTable,
+    isGlyphLocationsLong,
+    locaTable,
+    numGlyphs
+  }) {
+    this.glyphs = [];
+    const loca = new DataView(locaTable.buffer, locaTable.byteOffset, locaTable.byteLength);
+    const glyf = new DataView(glyfTable.buffer, glyfTable.byteOffset, glyfTable.byteLength);
+    const offsetSize = isGlyphLocationsLong ? 4 : 2;
+    let prev = isGlyphLocationsLong ? loca.getUint32(0) : 2 * loca.getUint16(0);
+    let pos = 0;
+    for (let i = 0; i < numGlyphs; i++) {
+      pos += offsetSize;
+      const next = isGlyphLocationsLong ? loca.getUint32(pos) : 2 * loca.getUint16(pos);
+      if (next === prev) {
+        this.glyphs.push(new Glyph({}));
+        continue;
+      }
+      const glyph = Glyph.parse(prev, glyf);
+      this.glyphs.push(glyph);
+      prev = next;
+    }
+  }
+  getSize() {
+    return Math.sumPrecise(this.glyphs.map(g => g.getSize() + 3 & ~3));
+  }
+  write() {
+    const totalSize = this.getSize();
+    const glyfTable = new DataView(new ArrayBuffer(totalSize));
+    const isLocationLong = totalSize > 0x1fffe;
+    const offsetSize = isLocationLong ? 4 : 2;
+    const locaTable = new DataView(new ArrayBuffer((this.glyphs.length + 1) * offsetSize));
+    if (isLocationLong) {
+      locaTable.setUint32(0, 0);
+    } else {
+      locaTable.setUint16(0, 0);
+    }
+    let pos = 0;
+    let locaIndex = 0;
+    for (const glyph of this.glyphs) {
+      pos += glyph.write(pos, glyfTable);
+      pos = pos + 3 & ~3;
+      locaIndex += offsetSize;
+      if (isLocationLong) {
+        locaTable.setUint32(locaIndex, pos);
+      } else {
+        locaTable.setUint16(locaIndex, pos >> 1);
+      }
+    }
+    return {
+      isLocationLong,
+      loca: new Uint8Array(locaTable.buffer),
+      glyf: new Uint8Array(glyfTable.buffer)
+    };
+  }
+  scale(factors) {
+    for (let i = 0, ii = this.glyphs.length; i < ii; i++) {
+      this.glyphs[i].scale(factors[i]);
+    }
+  }
+}
+class Glyph {
+  constructor({
+    header = null,
+    simple = null,
+    composites = null
+  }) {
+    this.header = header;
+    this.simple = simple;
+    this.composites = composites;
+  }
+  static parse(pos, glyf) {
+    const [read, header] = GlyphHeader.parse(pos, glyf);
+    pos += read;
+    if (header.numberOfContours < 0) {
+      const composites = [];
+      while (true) {
+        const [n, composite] = CompositeGlyph.parse(pos, glyf);
+        pos += n;
+        composites.push(composite);
+        if (!(composite.flags & MORE_COMPONENTS)) {
+          break;
+        }
+      }
+      return new Glyph({
+        header,
+        composites
+      });
+    }
+    const simple = SimpleGlyph.parse(pos, glyf, header.numberOfContours);
+    return new Glyph({
+      header,
+      simple
+    });
+  }
+  getSize() {
+    if (!this.header) {
+      return 0;
+    }
+    const size = this.simple ? this.simple.getSize() : Math.sumPrecise(this.composites.map(c => c.getSize()));
+    return this.header.getSize() + size;
+  }
+  write(pos, buf) {
+    if (!this.header) {
+      return 0;
+    }
+    const spos = pos;
+    pos += this.header.write(pos, buf);
+    if (this.simple) {
+      pos += this.simple.write(pos, buf);
+    } else {
+      for (const composite of this.composites) {
+        pos += composite.write(pos, buf);
+      }
+    }
+    return pos - spos;
+  }
+  scale(factor) {
+    if (!this.header) {
+      return;
+    }
+    const xMiddle = (this.header.xMin + this.header.xMax) / 2;
+    this.header.scale(xMiddle, factor);
+    if (this.simple) {
+      this.simple.scale(xMiddle, factor);
+    } else {
+      for (const composite of this.composites) {
+        composite.scale(xMiddle, factor);
+      }
+    }
+  }
+}
+class GlyphHeader {
+  constructor({
+    numberOfContours,
+    xMin,
+    yMin,
+    xMax,
+    yMax
+  }) {
+    this.numberOfContours = numberOfContours;
+    this.xMin = xMin;
+    this.yMin = yMin;
+    this.xMax = xMax;
+    this.yMax = yMax;
+  }
+  static parse(pos, glyf) {
+    return [GLYPH_HEADER_SIZE, new GlyphHeader({
+      numberOfContours: glyf.getInt16(pos),
+      xMin: glyf.getInt16(pos + 2),
+      yMin: glyf.getInt16(pos + 4),
+      xMax: glyf.getInt16(pos + 6),
+      yMax: glyf.getInt16(pos + 8)
+    })];
+  }
+  getSize() {
+    return GLYPH_HEADER_SIZE;
+  }
+  write(pos, buf) {
+    buf.setInt16(pos, this.numberOfContours);
+    buf.setInt16(pos + 2, this.xMin);
+    buf.setInt16(pos + 4, this.yMin);
+    buf.setInt16(pos + 6, this.xMax);
+    buf.setInt16(pos + 8, this.yMax);
+    return GLYPH_HEADER_SIZE;
+  }
+  scale(x, factor) {
+    this.xMin = Math.round(x + (this.xMin - x) * factor);
+    this.xMax = Math.round(x + (this.xMax - x) * factor);
+  }
+}
+class Contour {
+  constructor({
+    flags,
+    xCoordinates,
+    yCoordinates
+  }) {
+    this.xCoordinates = xCoordinates;
+    this.yCoordinates = yCoordinates;
+    this.flags = flags;
+  }
+}
+class SimpleGlyph {
+  constructor({
+    contours,
+    instructions
+  }) {
+    this.contours = contours;
+    this.instructions = instructions;
+  }
+  static parse(pos, glyf, numberOfContours) {
+    const endPtsOfContours = [];
+    for (let i = 0; i < numberOfContours; i++) {
+      const endPt = glyf.getUint16(pos);
+      pos += 2;
+      endPtsOfContours.push(endPt);
+    }
+    const numberOfPt = endPtsOfContours[numberOfContours - 1] + 1;
+    const instructionLength = glyf.getUint16(pos);
+    pos += 2;
+    const instructions = new Uint8Array(glyf).slice(pos, pos + instructionLength);
+    pos += instructionLength;
+    const flags = [];
+    for (let i = 0; i < numberOfPt; pos++, i++) {
+      let flag = glyf.getUint8(pos);
+      flags.push(flag);
+      if (flag & REPEAT_FLAG) {
+        const count = glyf.getUint8(++pos);
+        flag ^= REPEAT_FLAG;
+        for (let m = 0; m < count; m++) {
+          flags.push(flag);
+        }
+        i += count;
+      }
+    }
+    const allXCoordinates = [];
+    let xCoordinates = [];
+    let yCoordinates = [];
+    let pointFlags = [];
+    const contours = [];
+    let endPtsOfContoursIndex = 0;
+    let lastCoordinate = 0;
+    for (let i = 0; i < numberOfPt; i++) {
+      const flag = flags[i];
+      if (flag & X_SHORT_VECTOR) {
+        const x = glyf.getUint8(pos++);
+        lastCoordinate += flag & X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR ? x : -x;
+        xCoordinates.push(lastCoordinate);
+      } else if (flag & X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR) {
+        xCoordinates.push(lastCoordinate);
+      } else {
+        lastCoordinate += glyf.getInt16(pos);
+        pos += 2;
+        xCoordinates.push(lastCoordinate);
+      }
+      if (endPtsOfContours[endPtsOfContoursIndex] === i) {
+        endPtsOfContoursIndex++;
+        allXCoordinates.push(xCoordinates);
+        xCoordinates = [];
+      }
+    }
+    lastCoordinate = 0;
+    endPtsOfContoursIndex = 0;
+    for (let i = 0; i < numberOfPt; i++) {
+      const flag = flags[i];
+      if (flag & Y_SHORT_VECTOR) {
+        const y = glyf.getUint8(pos++);
+        lastCoordinate += flag & Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR ? y : -y;
+        yCoordinates.push(lastCoordinate);
+      } else if (flag & Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR) {
+        yCoordinates.push(lastCoordinate);
+      } else {
+        lastCoordinate += glyf.getInt16(pos);
+        pos += 2;
+        yCoordinates.push(lastCoordinate);
+      }
+      pointFlags.push(flag & ON_CURVE_POINT | flag & OVERLAP_SIMPLE);
+      if (endPtsOfContours[endPtsOfContoursIndex] === i) {
+        xCoordinates = allXCoordinates[endPtsOfContoursIndex];
+        endPtsOfContoursIndex++;
+        contours.push(new Contour({
+          flags: pointFlags,
+          xCoordinates,
+          yCoordinates
+        }));
+        yCoordinates = [];
+        pointFlags = [];
+      }
+    }
+    return new SimpleGlyph({
+      contours,
+      instructions
+    });
+  }
+  getSize() {
+    let size = this.contours.length * 2 + 2 + this.instructions.length;
+    let lastX = 0;
+    let lastY = 0;
+    for (const contour of this.contours) {
+      size += contour.flags.length;
+      for (let i = 0, ii = contour.xCoordinates.length; i < ii; i++) {
+        const x = contour.xCoordinates[i];
+        const y = contour.yCoordinates[i];
+        let abs = Math.abs(x - lastX);
+        if (abs > 255) {
+          size += 2;
+        } else if (abs > 0) {
+          size += 1;
+        }
+        lastX = x;
+        abs = Math.abs(y - lastY);
+        if (abs > 255) {
+          size += 2;
+        } else if (abs > 0) {
+          size += 1;
+        }
+        lastY = y;
+      }
+    }
+    return size;
+  }
+  write(pos, buf) {
+    const spos = pos;
+    const xCoordinates = [];
+    const yCoordinates = [];
+    const flags = [];
+    let lastX = 0;
+    let lastY = 0;
+    for (const contour of this.contours) {
+      for (let i = 0, ii = contour.xCoordinates.length; i < ii; i++) {
+        let flag = contour.flags[i];
+        const x = contour.xCoordinates[i];
+        let delta = x - lastX;
+        if (delta === 0) {
+          flag |= X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR;
+          xCoordinates.push(0);
+        } else {
+          const abs = Math.abs(delta);
+          if (abs <= 255) {
+            flag |= delta >= 0 ? X_SHORT_VECTOR | X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR : X_SHORT_VECTOR;
+            xCoordinates.push(abs);
+          } else {
+            xCoordinates.push(delta);
+          }
+        }
+        lastX = x;
+        const y = contour.yCoordinates[i];
+        delta = y - lastY;
+        if (delta === 0) {
+          flag |= Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR;
+          yCoordinates.push(0);
+        } else {
+          const abs = Math.abs(delta);
+          if (abs <= 255) {
+            flag |= delta >= 0 ? Y_SHORT_VECTOR | Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR : Y_SHORT_VECTOR;
+            yCoordinates.push(abs);
+          } else {
+            yCoordinates.push(delta);
+          }
+        }
+        lastY = y;
+        flags.push(flag);
+      }
+      buf.setUint16(pos, xCoordinates.length - 1);
+      pos += 2;
+    }
+    buf.setUint16(pos, this.instructions.length);
+    pos += 2;
+    if (this.instructions.length) {
+      new Uint8Array(buf.buffer, 0, buf.buffer.byteLength).set(this.instructions, pos);
+      pos += this.instructions.length;
+    }
+    for (const flag of flags) {
+      buf.setUint8(pos++, flag);
+    }
+    for (let i = 0, ii = xCoordinates.length; i < ii; i++) {
+      const x = xCoordinates[i];
+      const flag = flags[i];
+      if (flag & X_SHORT_VECTOR) {
+        buf.setUint8(pos++, x);
+      } else if (!(flag & X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR)) {
+        buf.setInt16(pos, x);
+        pos += 2;
+      }
+    }
+    for (let i = 0, ii = yCoordinates.length; i < ii; i++) {
+      const y = yCoordinates[i];
+      const flag = flags[i];
+      if (flag & Y_SHORT_VECTOR) {
+        buf.setUint8(pos++, y);
+      } else if (!(flag & Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR)) {
+        buf.setInt16(pos, y);
+        pos += 2;
+      }
+    }
+    return pos - spos;
+  }
+  scale(x, factor) {
+    for (const contour of this.contours) {
+      if (contour.xCoordinates.length === 0) {
+        continue;
+      }
+      for (let i = 0, ii = contour.xCoordinates.length; i < ii; i++) {
+        contour.xCoordinates[i] = Math.round(x + (contour.xCoordinates[i] - x) * factor);
+      }
+    }
+  }
+}
+class CompositeGlyph {
+  constructor({
+    flags,
+    glyphIndex,
+    argument1,
+    argument2,
+    transf,
+    instructions
+  }) {
+    this.flags = flags;
+    this.glyphIndex = glyphIndex;
+    this.argument1 = argument1;
+    this.argument2 = argument2;
+    this.transf = transf;
+    this.instructions = instructions;
+  }
+  static parse(pos, glyf) {
+    const spos = pos;
+    const transf = [];
+    let flags = glyf.getUint16(pos);
+    const glyphIndex = glyf.getUint16(pos + 2);
+    pos += 4;
+    let argument1, argument2;
+    if (flags & ARG_1_AND_2_ARE_WORDS) {
+      if (flags & ARGS_ARE_XY_VALUES) {
+        argument1 = glyf.getInt16(pos);
+        argument2 = glyf.getInt16(pos + 2);
+      } else {
+        argument1 = glyf.getUint16(pos);
+        argument2 = glyf.getUint16(pos + 2);
+      }
+      pos += 4;
+      flags ^= ARG_1_AND_2_ARE_WORDS;
+    } else {
+      if (flags & ARGS_ARE_XY_VALUES) {
+        argument1 = glyf.getInt8(pos);
+        argument2 = glyf.getInt8(pos + 1);
+      } else {
+        argument1 = glyf.getUint8(pos);
+        argument2 = glyf.getUint8(pos + 1);
+      }
+      pos += 2;
+    }
+    if (flags & WE_HAVE_A_SCALE) {
+      transf.push(glyf.getUint16(pos));
+      pos += 2;
+    } else if (flags & WE_HAVE_AN_X_AND_Y_SCALE) {
+      transf.push(glyf.getUint16(pos), glyf.getUint16(pos + 2));
+      pos += 4;
+    } else if (flags & WE_HAVE_A_TWO_BY_TWO) {
+      transf.push(glyf.getUint16(pos), glyf.getUint16(pos + 2), glyf.getUint16(pos + 4), glyf.getUint16(pos + 6));
+      pos += 8;
+    }
+    let instructions = null;
+    if (flags & WE_HAVE_INSTRUCTIONS) {
+      const instructionLength = glyf.getUint16(pos);
+      pos += 2;
+      instructions = new Uint8Array(glyf).slice(pos, pos + instructionLength);
+      pos += instructionLength;
+    }
+    return [pos - spos, new CompositeGlyph({
+      flags,
+      glyphIndex,
+      argument1,
+      argument2,
+      transf,
+      instructions
+    })];
+  }
+  getSize() {
+    let size = 2 + 2 + this.transf.length * 2;
+    if (this.flags & WE_HAVE_INSTRUCTIONS) {
+      size += 2 + this.instructions.length;
+    }
+    size += 2;
+    if (this.flags & 2) {
+      if (!(this.argument1 >= -128 && this.argument1 <= 127 && this.argument2 >= -128 && this.argument2 <= 127)) {
+        size += 2;
+      }
+    } else if (!(this.argument1 >= 0 && this.argument1 <= 255 && this.argument2 >= 0 && this.argument2 <= 255)) {
+      size += 2;
+    }
+    return size;
+  }
+  write(pos, buf) {
+    const spos = pos;
+    if (this.flags & ARGS_ARE_XY_VALUES) {
+      if (!(this.argument1 >= -128 && this.argument1 <= 127 && this.argument2 >= -128 && this.argument2 <= 127)) {
+        this.flags |= ARG_1_AND_2_ARE_WORDS;
+      }
+    } else if (!(this.argument1 >= 0 && this.argument1 <= 255 && this.argument2 >= 0 && this.argument2 <= 255)) {
+      this.flags |= ARG_1_AND_2_ARE_WORDS;
+    }
+    buf.setUint16(pos, this.flags);
+    buf.setUint16(pos + 2, this.glyphIndex);
+    pos += 4;
+    if (this.flags & ARG_1_AND_2_ARE_WORDS) {
+      if (this.flags & ARGS_ARE_XY_VALUES) {
+        buf.setInt16(pos, this.argument1);
+        buf.setInt16(pos + 2, this.argument2);
+      } else {
+        buf.setUint16(pos, this.argument1);
+        buf.setUint16(pos + 2, this.argument2);
+      }
+      pos += 4;
+    } else {
+      buf.setUint8(pos, this.argument1);
+      buf.setUint8(pos + 1, this.argument2);
+      pos += 2;
+    }
+    if (this.flags & WE_HAVE_INSTRUCTIONS) {
+      buf.setUint16(pos, this.instructions.length);
+      pos += 2;
+      if (this.instructions.length) {
+        new Uint8Array(buf.buffer, 0, buf.buffer.byteLength).set(this.instructions, pos);
+        pos += this.instructions.length;
+      }
+    }
+    return pos - spos;
+  }
+  scale(x, factor) {}
+}
+function pruneCompositeGlyphCycles(glyfTable, locaEntries, numGlyphs) {
+  const glyf = new DataView(glyfTable.buffer, glyfTable.byteOffset, glyfTable.byteLength);
+  const components = new Array(numGlyphs);
+  for (let i = 0; i < numGlyphs; i++) {
+    const offset = locaEntries[i].offset;
+    const endOffset = Math.min(locaEntries[i].endOffset, glyf.byteLength);
+    if (endOffset - offset <= GLYPH_HEADER_SIZE || glyf.getInt16(offset) >= 0) {
+      continue;
+    }
+    const comps = [];
+    let p = offset + GLYPH_HEADER_SIZE;
+    while (p + 4 <= endOffset) {
+      const flags = glyf.getUint16(p);
+      const gid = glyf.getUint16(p + 2);
+      let size = 4 + (flags & ARG_1_AND_2_ARE_WORDS ? 4 : 2);
+      if (flags & WE_HAVE_A_SCALE) {
+        size += 2;
+      } else if (flags & WE_HAVE_AN_X_AND_Y_SCALE) {
+        size += 4;
+      } else if (flags & WE_HAVE_A_TWO_BY_TWO) {
+        size += 8;
+      }
+      comps.push({
+        gid,
+        offset: p,
+        size,
+        flags
+      });
+      p += size;
+      if (!(flags & MORE_COMPONENTS)) {
+        break;
+      }
+    }
+    if (comps.length) {
+      components[i] = comps;
+    }
+  }
+  const WHITE = 0,
+    GRAY = 1,
+    BLACK = 2;
+  const state = new Uint8Array(numGlyphs);
+  const backEdges = new Map();
+  for (let start = 0; start < numGlyphs; start++) {
+    if (state[start] !== WHITE || !components[start]) {
+      continue;
+    }
+    const stack = [{
+      node: start,
+      idx: 0
+    }];
+    state[start] = GRAY;
+    while (stack.length > 0) {
+      const top = stack.at(-1);
+      const comps = components[top.node];
+      if (!comps || top.idx >= comps.length) {
+        state[top.node] = BLACK;
+        stack.pop();
+        continue;
+      }
+      const compIdx = top.idx++;
+      const next = comps[compIdx].gid;
+      if (next >= numGlyphs || state[next] === BLACK) {
+        continue;
+      }
+      if (state[next] === WHITE) {
+        state[next] = GRAY;
+        stack.push({
+          node: next,
+          idx: 0
+        });
+        continue;
+      }
+      let removeSet = backEdges.get(top.node);
+      if (!removeSet) {
+        removeSet = new Set();
+        backEdges.set(top.node, removeSet);
+      }
+      removeSet.add(compIdx);
+    }
+  }
+  const droppedGlyphs = new Set();
+  for (const [gIdx, removeSet] of backEdges) {
+    const comps = components[gIdx];
+    const remaining = [];
+    for (let ci = 0; ci < comps.length; ci++) {
+      if (!removeSet.has(ci)) {
+        remaining.push(comps[ci]);
+      }
+    }
+    if (remaining.length === 0) {
+      droppedGlyphs.add(gIdx);
+      continue;
+    }
+    const start = locaEntries[gIdx].offset;
+    const endOffset = Math.min(locaEntries[gIdx].endOffset, glyf.byteLength);
+    let writePos = start + GLYPH_HEADER_SIZE;
+    for (let ci = 0; ci < remaining.length; ci++) {
+      const c = remaining[ci];
+      const isLast = ci === remaining.length - 1;
+      let newFlags = c.flags & ~WE_HAVE_INSTRUCTIONS;
+      newFlags = isLast ? newFlags & ~MORE_COMPONENTS : newFlags | MORE_COMPONENTS;
+      if (writePos !== c.offset) {
+        glyfTable.copyWithin(writePos, c.offset, c.offset + c.size);
+      }
+      glyf.setUint16(writePos, newFlags);
+      writePos += c.size;
+    }
+    if (writePos < endOffset) {
+      glyfTable.fill(0, writePos, endOffset);
+    }
+  }
+  return droppedGlyphs;
+}
+
 ;// ./src/core/to_unicode_map.js
 
 class ToUnicodeMap {
@@ -20689,6 +21304,9 @@ function lookupCmap(ranges, unicode) {
   };
 }
 function compileGlyf(code, cmds, font, visitedGlyphs = new Set()) {
+  if (!code?.length) {
+    return;
+  }
   if (visitedGlyphs.has(code)) {
     warn("compileGlyf: skipping recursive composite glyph reference.");
     return;
@@ -24402,534 +25020,6 @@ const getFontBasicMetrics = getLookupTableFactory(function (t) {
   };
 });
 
-;// ./src/core/glyf.js
-const ON_CURVE_POINT = 1 << 0;
-const X_SHORT_VECTOR = 1 << 1;
-const Y_SHORT_VECTOR = 1 << 2;
-const REPEAT_FLAG = 1 << 3;
-const X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR = 1 << 4;
-const Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR = 1 << 5;
-const OVERLAP_SIMPLE = 1 << 6;
-const ARG_1_AND_2_ARE_WORDS = 1 << 0;
-const ARGS_ARE_XY_VALUES = 1 << 1;
-const WE_HAVE_A_SCALE = 1 << 3;
-const MORE_COMPONENTS = 1 << 5;
-const WE_HAVE_AN_X_AND_Y_SCALE = 1 << 6;
-const WE_HAVE_A_TWO_BY_TWO = 1 << 7;
-const WE_HAVE_INSTRUCTIONS = 1 << 8;
-class GlyfTable {
-  constructor({
-    glyfTable,
-    isGlyphLocationsLong,
-    locaTable,
-    numGlyphs
-  }) {
-    this.glyphs = [];
-    const loca = new DataView(locaTable.buffer, locaTable.byteOffset, locaTable.byteLength);
-    const glyf = new DataView(glyfTable.buffer, glyfTable.byteOffset, glyfTable.byteLength);
-    const offsetSize = isGlyphLocationsLong ? 4 : 2;
-    let prev = isGlyphLocationsLong ? loca.getUint32(0) : 2 * loca.getUint16(0);
-    let pos = 0;
-    for (let i = 0; i < numGlyphs; i++) {
-      pos += offsetSize;
-      const next = isGlyphLocationsLong ? loca.getUint32(pos) : 2 * loca.getUint16(pos);
-      if (next === prev) {
-        this.glyphs.push(new Glyph({}));
-        continue;
-      }
-      const glyph = Glyph.parse(prev, glyf);
-      this.glyphs.push(glyph);
-      prev = next;
-    }
-  }
-  getSize() {
-    return Math.sumPrecise(this.glyphs.map(g => g.getSize() + 3 & ~3));
-  }
-  write() {
-    const totalSize = this.getSize();
-    const glyfTable = new DataView(new ArrayBuffer(totalSize));
-    const isLocationLong = totalSize > 0x1fffe;
-    const offsetSize = isLocationLong ? 4 : 2;
-    const locaTable = new DataView(new ArrayBuffer((this.glyphs.length + 1) * offsetSize));
-    if (isLocationLong) {
-      locaTable.setUint32(0, 0);
-    } else {
-      locaTable.setUint16(0, 0);
-    }
-    let pos = 0;
-    let locaIndex = 0;
-    for (const glyph of this.glyphs) {
-      pos += glyph.write(pos, glyfTable);
-      pos = pos + 3 & ~3;
-      locaIndex += offsetSize;
-      if (isLocationLong) {
-        locaTable.setUint32(locaIndex, pos);
-      } else {
-        locaTable.setUint16(locaIndex, pos >> 1);
-      }
-    }
-    return {
-      isLocationLong,
-      loca: new Uint8Array(locaTable.buffer),
-      glyf: new Uint8Array(glyfTable.buffer)
-    };
-  }
-  scale(factors) {
-    for (let i = 0, ii = this.glyphs.length; i < ii; i++) {
-      this.glyphs[i].scale(factors[i]);
-    }
-  }
-}
-class Glyph {
-  constructor({
-    header = null,
-    simple = null,
-    composites = null
-  }) {
-    this.header = header;
-    this.simple = simple;
-    this.composites = composites;
-  }
-  static parse(pos, glyf) {
-    const [read, header] = GlyphHeader.parse(pos, glyf);
-    pos += read;
-    if (header.numberOfContours < 0) {
-      const composites = [];
-      while (true) {
-        const [n, composite] = CompositeGlyph.parse(pos, glyf);
-        pos += n;
-        composites.push(composite);
-        if (!(composite.flags & MORE_COMPONENTS)) {
-          break;
-        }
-      }
-      return new Glyph({
-        header,
-        composites
-      });
-    }
-    const simple = SimpleGlyph.parse(pos, glyf, header.numberOfContours);
-    return new Glyph({
-      header,
-      simple
-    });
-  }
-  getSize() {
-    if (!this.header) {
-      return 0;
-    }
-    const size = this.simple ? this.simple.getSize() : Math.sumPrecise(this.composites.map(c => c.getSize()));
-    return this.header.getSize() + size;
-  }
-  write(pos, buf) {
-    if (!this.header) {
-      return 0;
-    }
-    const spos = pos;
-    pos += this.header.write(pos, buf);
-    if (this.simple) {
-      pos += this.simple.write(pos, buf);
-    } else {
-      for (const composite of this.composites) {
-        pos += composite.write(pos, buf);
-      }
-    }
-    return pos - spos;
-  }
-  scale(factor) {
-    if (!this.header) {
-      return;
-    }
-    const xMiddle = (this.header.xMin + this.header.xMax) / 2;
-    this.header.scale(xMiddle, factor);
-    if (this.simple) {
-      this.simple.scale(xMiddle, factor);
-    } else {
-      for (const composite of this.composites) {
-        composite.scale(xMiddle, factor);
-      }
-    }
-  }
-}
-class GlyphHeader {
-  constructor({
-    numberOfContours,
-    xMin,
-    yMin,
-    xMax,
-    yMax
-  }) {
-    this.numberOfContours = numberOfContours;
-    this.xMin = xMin;
-    this.yMin = yMin;
-    this.xMax = xMax;
-    this.yMax = yMax;
-  }
-  static parse(pos, glyf) {
-    return [10, new GlyphHeader({
-      numberOfContours: glyf.getInt16(pos),
-      xMin: glyf.getInt16(pos + 2),
-      yMin: glyf.getInt16(pos + 4),
-      xMax: glyf.getInt16(pos + 6),
-      yMax: glyf.getInt16(pos + 8)
-    })];
-  }
-  getSize() {
-    return 10;
-  }
-  write(pos, buf) {
-    buf.setInt16(pos, this.numberOfContours);
-    buf.setInt16(pos + 2, this.xMin);
-    buf.setInt16(pos + 4, this.yMin);
-    buf.setInt16(pos + 6, this.xMax);
-    buf.setInt16(pos + 8, this.yMax);
-    return 10;
-  }
-  scale(x, factor) {
-    this.xMin = Math.round(x + (this.xMin - x) * factor);
-    this.xMax = Math.round(x + (this.xMax - x) * factor);
-  }
-}
-class Contour {
-  constructor({
-    flags,
-    xCoordinates,
-    yCoordinates
-  }) {
-    this.xCoordinates = xCoordinates;
-    this.yCoordinates = yCoordinates;
-    this.flags = flags;
-  }
-}
-class SimpleGlyph {
-  constructor({
-    contours,
-    instructions
-  }) {
-    this.contours = contours;
-    this.instructions = instructions;
-  }
-  static parse(pos, glyf, numberOfContours) {
-    const endPtsOfContours = [];
-    for (let i = 0; i < numberOfContours; i++) {
-      const endPt = glyf.getUint16(pos);
-      pos += 2;
-      endPtsOfContours.push(endPt);
-    }
-    const numberOfPt = endPtsOfContours[numberOfContours - 1] + 1;
-    const instructionLength = glyf.getUint16(pos);
-    pos += 2;
-    const instructions = new Uint8Array(glyf).slice(pos, pos + instructionLength);
-    pos += instructionLength;
-    const flags = [];
-    for (let i = 0; i < numberOfPt; pos++, i++) {
-      let flag = glyf.getUint8(pos);
-      flags.push(flag);
-      if (flag & REPEAT_FLAG) {
-        const count = glyf.getUint8(++pos);
-        flag ^= REPEAT_FLAG;
-        for (let m = 0; m < count; m++) {
-          flags.push(flag);
-        }
-        i += count;
-      }
-    }
-    const allXCoordinates = [];
-    let xCoordinates = [];
-    let yCoordinates = [];
-    let pointFlags = [];
-    const contours = [];
-    let endPtsOfContoursIndex = 0;
-    let lastCoordinate = 0;
-    for (let i = 0; i < numberOfPt; i++) {
-      const flag = flags[i];
-      if (flag & X_SHORT_VECTOR) {
-        const x = glyf.getUint8(pos++);
-        lastCoordinate += flag & X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR ? x : -x;
-        xCoordinates.push(lastCoordinate);
-      } else if (flag & X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR) {
-        xCoordinates.push(lastCoordinate);
-      } else {
-        lastCoordinate += glyf.getInt16(pos);
-        pos += 2;
-        xCoordinates.push(lastCoordinate);
-      }
-      if (endPtsOfContours[endPtsOfContoursIndex] === i) {
-        endPtsOfContoursIndex++;
-        allXCoordinates.push(xCoordinates);
-        xCoordinates = [];
-      }
-    }
-    lastCoordinate = 0;
-    endPtsOfContoursIndex = 0;
-    for (let i = 0; i < numberOfPt; i++) {
-      const flag = flags[i];
-      if (flag & Y_SHORT_VECTOR) {
-        const y = glyf.getUint8(pos++);
-        lastCoordinate += flag & Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR ? y : -y;
-        yCoordinates.push(lastCoordinate);
-      } else if (flag & Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR) {
-        yCoordinates.push(lastCoordinate);
-      } else {
-        lastCoordinate += glyf.getInt16(pos);
-        pos += 2;
-        yCoordinates.push(lastCoordinate);
-      }
-      pointFlags.push(flag & ON_CURVE_POINT | flag & OVERLAP_SIMPLE);
-      if (endPtsOfContours[endPtsOfContoursIndex] === i) {
-        xCoordinates = allXCoordinates[endPtsOfContoursIndex];
-        endPtsOfContoursIndex++;
-        contours.push(new Contour({
-          flags: pointFlags,
-          xCoordinates,
-          yCoordinates
-        }));
-        yCoordinates = [];
-        pointFlags = [];
-      }
-    }
-    return new SimpleGlyph({
-      contours,
-      instructions
-    });
-  }
-  getSize() {
-    let size = this.contours.length * 2 + 2 + this.instructions.length;
-    let lastX = 0;
-    let lastY = 0;
-    for (const contour of this.contours) {
-      size += contour.flags.length;
-      for (let i = 0, ii = contour.xCoordinates.length; i < ii; i++) {
-        const x = contour.xCoordinates[i];
-        const y = contour.yCoordinates[i];
-        let abs = Math.abs(x - lastX);
-        if (abs > 255) {
-          size += 2;
-        } else if (abs > 0) {
-          size += 1;
-        }
-        lastX = x;
-        abs = Math.abs(y - lastY);
-        if (abs > 255) {
-          size += 2;
-        } else if (abs > 0) {
-          size += 1;
-        }
-        lastY = y;
-      }
-    }
-    return size;
-  }
-  write(pos, buf) {
-    const spos = pos;
-    const xCoordinates = [];
-    const yCoordinates = [];
-    const flags = [];
-    let lastX = 0;
-    let lastY = 0;
-    for (const contour of this.contours) {
-      for (let i = 0, ii = contour.xCoordinates.length; i < ii; i++) {
-        let flag = contour.flags[i];
-        const x = contour.xCoordinates[i];
-        let delta = x - lastX;
-        if (delta === 0) {
-          flag |= X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR;
-          xCoordinates.push(0);
-        } else {
-          const abs = Math.abs(delta);
-          if (abs <= 255) {
-            flag |= delta >= 0 ? X_SHORT_VECTOR | X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR : X_SHORT_VECTOR;
-            xCoordinates.push(abs);
-          } else {
-            xCoordinates.push(delta);
-          }
-        }
-        lastX = x;
-        const y = contour.yCoordinates[i];
-        delta = y - lastY;
-        if (delta === 0) {
-          flag |= Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR;
-          yCoordinates.push(0);
-        } else {
-          const abs = Math.abs(delta);
-          if (abs <= 255) {
-            flag |= delta >= 0 ? Y_SHORT_VECTOR | Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR : Y_SHORT_VECTOR;
-            yCoordinates.push(abs);
-          } else {
-            yCoordinates.push(delta);
-          }
-        }
-        lastY = y;
-        flags.push(flag);
-      }
-      buf.setUint16(pos, xCoordinates.length - 1);
-      pos += 2;
-    }
-    buf.setUint16(pos, this.instructions.length);
-    pos += 2;
-    if (this.instructions.length) {
-      new Uint8Array(buf.buffer, 0, buf.buffer.byteLength).set(this.instructions, pos);
-      pos += this.instructions.length;
-    }
-    for (const flag of flags) {
-      buf.setUint8(pos++, flag);
-    }
-    for (let i = 0, ii = xCoordinates.length; i < ii; i++) {
-      const x = xCoordinates[i];
-      const flag = flags[i];
-      if (flag & X_SHORT_VECTOR) {
-        buf.setUint8(pos++, x);
-      } else if (!(flag & X_IS_SAME_OR_POSITIVE_X_SHORT_VECTOR)) {
-        buf.setInt16(pos, x);
-        pos += 2;
-      }
-    }
-    for (let i = 0, ii = yCoordinates.length; i < ii; i++) {
-      const y = yCoordinates[i];
-      const flag = flags[i];
-      if (flag & Y_SHORT_VECTOR) {
-        buf.setUint8(pos++, y);
-      } else if (!(flag & Y_IS_SAME_OR_POSITIVE_Y_SHORT_VECTOR)) {
-        buf.setInt16(pos, y);
-        pos += 2;
-      }
-    }
-    return pos - spos;
-  }
-  scale(x, factor) {
-    for (const contour of this.contours) {
-      if (contour.xCoordinates.length === 0) {
-        continue;
-      }
-      for (let i = 0, ii = contour.xCoordinates.length; i < ii; i++) {
-        contour.xCoordinates[i] = Math.round(x + (contour.xCoordinates[i] - x) * factor);
-      }
-    }
-  }
-}
-class CompositeGlyph {
-  constructor({
-    flags,
-    glyphIndex,
-    argument1,
-    argument2,
-    transf,
-    instructions
-  }) {
-    this.flags = flags;
-    this.glyphIndex = glyphIndex;
-    this.argument1 = argument1;
-    this.argument2 = argument2;
-    this.transf = transf;
-    this.instructions = instructions;
-  }
-  static parse(pos, glyf) {
-    const spos = pos;
-    const transf = [];
-    let flags = glyf.getUint16(pos);
-    const glyphIndex = glyf.getUint16(pos + 2);
-    pos += 4;
-    let argument1, argument2;
-    if (flags & ARG_1_AND_2_ARE_WORDS) {
-      if (flags & ARGS_ARE_XY_VALUES) {
-        argument1 = glyf.getInt16(pos);
-        argument2 = glyf.getInt16(pos + 2);
-      } else {
-        argument1 = glyf.getUint16(pos);
-        argument2 = glyf.getUint16(pos + 2);
-      }
-      pos += 4;
-      flags ^= ARG_1_AND_2_ARE_WORDS;
-    } else {
-      if (flags & ARGS_ARE_XY_VALUES) {
-        argument1 = glyf.getInt8(pos);
-        argument2 = glyf.getInt8(pos + 1);
-      } else {
-        argument1 = glyf.getUint8(pos);
-        argument2 = glyf.getUint8(pos + 1);
-      }
-      pos += 2;
-    }
-    if (flags & WE_HAVE_A_SCALE) {
-      transf.push(glyf.getUint16(pos));
-      pos += 2;
-    } else if (flags & WE_HAVE_AN_X_AND_Y_SCALE) {
-      transf.push(glyf.getUint16(pos), glyf.getUint16(pos + 2));
-      pos += 4;
-    } else if (flags & WE_HAVE_A_TWO_BY_TWO) {
-      transf.push(glyf.getUint16(pos), glyf.getUint16(pos + 2), glyf.getUint16(pos + 4), glyf.getUint16(pos + 6));
-      pos += 8;
-    }
-    let instructions = null;
-    if (flags & WE_HAVE_INSTRUCTIONS) {
-      const instructionLength = glyf.getUint16(pos);
-      pos += 2;
-      instructions = new Uint8Array(glyf).slice(pos, pos + instructionLength);
-      pos += instructionLength;
-    }
-    return [pos - spos, new CompositeGlyph({
-      flags,
-      glyphIndex,
-      argument1,
-      argument2,
-      transf,
-      instructions
-    })];
-  }
-  getSize() {
-    let size = 2 + 2 + this.transf.length * 2;
-    if (this.flags & WE_HAVE_INSTRUCTIONS) {
-      size += 2 + this.instructions.length;
-    }
-    size += 2;
-    if (this.flags & 2) {
-      if (!(this.argument1 >= -128 && this.argument1 <= 127 && this.argument2 >= -128 && this.argument2 <= 127)) {
-        size += 2;
-      }
-    } else if (!(this.argument1 >= 0 && this.argument1 <= 255 && this.argument2 >= 0 && this.argument2 <= 255)) {
-      size += 2;
-    }
-    return size;
-  }
-  write(pos, buf) {
-    const spos = pos;
-    if (this.flags & ARGS_ARE_XY_VALUES) {
-      if (!(this.argument1 >= -128 && this.argument1 <= 127 && this.argument2 >= -128 && this.argument2 <= 127)) {
-        this.flags |= ARG_1_AND_2_ARE_WORDS;
-      }
-    } else if (!(this.argument1 >= 0 && this.argument1 <= 255 && this.argument2 >= 0 && this.argument2 <= 255)) {
-      this.flags |= ARG_1_AND_2_ARE_WORDS;
-    }
-    buf.setUint16(pos, this.flags);
-    buf.setUint16(pos + 2, this.glyphIndex);
-    pos += 4;
-    if (this.flags & ARG_1_AND_2_ARE_WORDS) {
-      if (this.flags & ARGS_ARE_XY_VALUES) {
-        buf.setInt16(pos, this.argument1);
-        buf.setInt16(pos + 2, this.argument2);
-      } else {
-        buf.setUint16(pos, this.argument1);
-        buf.setUint16(pos + 2, this.argument2);
-      }
-      pos += 4;
-    } else {
-      buf.setUint8(pos, this.argument1);
-      buf.setUint8(pos + 1, this.argument2);
-      pos += 2;
-    }
-    if (this.flags & WE_HAVE_INSTRUCTIONS) {
-      buf.setUint16(pos, this.instructions.length);
-      pos += 2;
-      if (this.instructions.length) {
-        new Uint8Array(buf.buffer, 0, buf.buffer.byteLength).set(this.instructions, pos);
-        pos += this.instructions.length;
-      }
-    }
-    return pos - spos;
-  }
-  scale(x, factor) {}
-}
-
 ;// ./src/core/opentype_file_builder.js
 
 const OTF_HEADER_SIZE = 12;
@@ -26357,6 +26447,10 @@ function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
 function validateOS2Table(os2, file) {
   file.pos = (file.start || 0) + os2.offset;
   const version = file.getUint16();
+  const minLength = [78, 86, 96, 96, 96, 100][version];
+  if (minLength === undefined || os2.length < minLength) {
+    return false;
+  }
   file.skip(60);
   const selection = file.getUint16();
   if (version < 4 && selection & 0x0300) {
@@ -27404,11 +27498,15 @@ class Font {
       if (last.offset !== 0 && last.endOffset === 0) {
         last.endOffset = oldGlyfDataLength;
       }
+      const droppedGlyphs = pruneCompositeGlyphCycles(oldGlyfData, locaEntries, numGlyphs);
       const missingGlyphs = Object.create(null);
       let writeOffset = 0;
       itemEncode(locaData, 0, writeOffset);
       for (i = 0, j = itemSize; i < numGlyphs; i++, j += itemSize) {
-        const glyphProfile = sanitizeGlyph(oldGlyfData, locaEntries[i].offset, locaEntries[i].endOffset, newGlyfData, writeOffset, hintsValid);
+        const glyphProfile = droppedGlyphs.has(i) ? {
+          length: 0,
+          sizeOfInstructions: 0
+        } : sanitizeGlyph(oldGlyfData, locaEntries[i].offset, locaEntries[i].endOffset, newGlyfData, writeOffset, hintsValid);
         const newLength = glyphProfile.length;
         if (newLength === 0) {
           missingGlyphs[i] = true;
@@ -27810,8 +27908,14 @@ class Font {
       tables = readTables(font, header.numTables);
     }
     const isTrueType = !tables["CFF "];
+    let parsedCff = null;
     if (!isTrueType) {
-      if (header.version === "OTTO" && !properties.composite || !tables.head || !tables.hhea || !tables.maxp || !tables.post) {
+      try {
+        parsedCff = new CFFParser(new Stream(tables["CFF "].data), properties, SEAC_ANALYSIS_ENABLED).parse();
+      } catch {
+        warn("Failed to parse font " + properties.loadedName);
+      }
+      if (header.version === "OTTO" && (!properties.composite || properties.fontFileN === 3 && parsedCff?.isCIDFont) || !tables.head || !tables.hhea || !tables.maxp || !tables.post) {
         return this.convert(name, new CFFFont(new Stream(tables["CFF "].data), properties), properties);
       }
       delete tables.glyf;
@@ -27837,14 +27941,11 @@ class Font {
       throw new FormatError('Required "maxp" table is not found');
     }
     let numGlyphsFromCFF;
-    if (!isTrueType) {
+    if (parsedCff) {
       try {
-        const parser = new CFFParser(new Stream(tables["CFF "].data), properties, SEAC_ANALYSIS_ENABLED);
-        const cff = parser.parse();
-        cff.duplicateFirstGlyph();
-        const compiler = new CFFCompiler(cff);
-        tables["CFF "].data = compiler.compile();
-        numGlyphsFromCFF = cff.charStringCount;
+        parsedCff.duplicateFirstGlyph();
+        tables["CFF "].data = new CFFCompiler(parsedCff).compile();
+        numGlyphsFromCFF = parsedCff.charStringCount;
       } catch {
         warn("Failed to compile font " + properties.loadedName);
       }
@@ -27936,6 +28037,19 @@ class Font {
       maxFunctionDefs = font.getUint16();
       font.pos += 4;
       maxSizeOfInstructions = font.getUint16();
+    } else if (isTrueType && version === 0x00005000) {
+      const newMaxp = new Uint8Array(32);
+      writeUint32(newMaxp, 0, 0x00010000);
+      newMaxp[4] = numGlyphs >> 8 & 0xff;
+      newMaxp[5] = numGlyphs & 0xff;
+      newMaxp.fill(0xff, 6, 14);
+      newMaxp[15] = 2;
+      newMaxp[28] = 0xff;
+      newMaxp[29] = 0xff;
+      newMaxp[31] = 0x10;
+      tables.maxp.data = newMaxp;
+      tables.maxp.length = 32;
+      version = 0x00010000;
     }
     tables.maxp.data[4] = numGlyphsOut >> 8;
     tables.maxp.data[5] = numGlyphsOut & 255;
@@ -36624,9 +36738,22 @@ class PartialEvaluator {
     if (!(fontName instanceof Name)) {
       throw new FormatError("invalid font name");
     }
-    let fontFile, subtype, length1, length2, length3;
+    let fontFile, fontFileN, subtype, length1, length2, length3;
     try {
-      fontFile = descriptor.get("FontFile", "FontFile2", "FontFile3");
+      fontFile = descriptor.get("FontFile");
+      if (fontFile) {
+        fontFileN = 1;
+      } else {
+        fontFile = descriptor.get("FontFile2");
+        if (fontFile) {
+          fontFileN = 2;
+        } else {
+          fontFile = descriptor.get("FontFile3");
+          if (fontFile) {
+            fontFileN = 3;
+          }
+        }
+      }
       if (fontFile) {
         if (!(fontFile instanceof BaseStream)) {
           throw new FormatError("FontFile should be a stream");
@@ -36714,6 +36841,7 @@ class PartialEvaluator {
       name: fontName.name,
       subtype,
       file: fontFile,
+      fontFileN,
       length1,
       length2,
       length3,

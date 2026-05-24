@@ -639,6 +639,9 @@
     white-space:pre;
     cursor:text;
     transform-origin:0% 0%;
+    -webkit-user-select:text;
+       -moz-user-select:text;
+            user-select:text;
   }
   --min-font-size:1;
   --text-scale-factor:calc(var(--total-scale-factor) * var(--min-font-size));
@@ -712,13 +715,11 @@
   }
 
   ::-moz-selection{
-    background:rgba(0 0 255 / 0.25);
-    background:color-mix(in srgb, AccentColor, transparent 75%);
+    background:transparent;
   }
 
   ::selection{
-    background:rgba(0 0 255 / 0.25);
-    background:color-mix(in srgb, AccentColor, transparent 75%);
+    background:transparent;
   }
   br::-moz-selection{
     background:transparent;
@@ -1473,6 +1474,16 @@
 }
 
 .canvasWrapper{
+  .selection{
+    position:absolute;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    pointer-events:none;
+    background:rgb(0 90 255 / 0.22);
+  }
+
   svg{
     transform:none;
 
@@ -3525,6 +3536,9 @@
     pointer-events:auto;
     box-sizing:content-box;
     padding:var(--editor-toolbar-padding);
+    -webkit-user-select:none;
+       -moz-user-select:none;
+            user-select:none;
 
     position:absolute;
     inset-inline-end:0;
@@ -5644,14 +5658,15 @@ button.hasPopupMenu{
             pointer-events:none;
           }
         }
+      }
 
-        > .dragMarker{
-          position:absolute;
-          top:0;
-          left:0;
-          border:2px solid var(--indicator-color);
-          contain:strict;
-        }
+      &.isDragging > .dragMarker,
+      &.isDraggingFile > .dragMarker{
+        position:absolute;
+        top:0;
+        left:0;
+        border:2px solid var(--indicator-color);
+        contain:strict;
       }
 
       &.pasteMode{
@@ -6954,6 +6969,10 @@ dialog :link{
 
 #documentPropertiesDialog .buttonRow{
   margin-top:10px;
+}
+
+#printServiceDialog{
+  min-width:200px;
 }
 
 .grab-to-pan-grab{
