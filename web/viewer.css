@@ -621,6 +621,8 @@
   overflow:clip;
   opacity:1;
   line-height:1;
+  letter-spacing:normal;
+  word-spacing:normal;
   -webkit-text-size-adjust:none;
      -moz-text-size-adjust:none;
           text-size-adjust:none;
