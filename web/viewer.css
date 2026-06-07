@@ -717,11 +717,22 @@
   }
 
   ::-moz-selection{
-    background:transparent;
+    background:rgba(0 0 255 / 0.25);
+    background:color-mix(in srgb, AccentColor, transparent 50%);
   }
 
   ::selection{
-    background:transparent;
+    background:rgba(0 0 255 / 0.25);
+    background:color-mix(in srgb, AccentColor, transparent 50%);
+  }
+
+  &.selectionRendering{
+    ::-moz-selection{
+      background:transparent;
+    }
+    ::selection{
+      background:transparent;
+    }
   }
   br::-moz-selection{
     background:transparent;
