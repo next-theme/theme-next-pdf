@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 6.0.0
- * pdfjsBuild = 86a18bd
+ * pdfjsBuild = 124228e
  */
 
 ;// ./web/ui_utils.js
@@ -570,6 +570,10 @@ const defaultOptions = {
     value: true,
     kind: OptionKind.BROWSER
   },
+  supportsDownloading: {
+    value: true,
+    kind: OptionKind.BROWSER
+  },
   supportsIntegratedFind: {
     value: false,
     kind: OptionKind.BROWSER
@@ -1037,7 +1041,7 @@ const {
 } = globalThis.pdfjsLib;
 
 ;// ./web/internal_evt.js
-const INTERNAL_EVT = "5b35a763-5e7b-4c3c-b24e-87696c6fc678";
+const INTERNAL_EVT = "a99164ce-90af-487b-b48d-c630da877469";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });
@@ -6037,7 +6041,7 @@ class PDFAttachmentViewer extends BaseTreeViewer {
     const openAttachment = async () => {
       const content = attachmentId ? await this.linkService.getAttachmentContent(attachmentId) : fallbackContent;
       if (content) {
-        this.downloadManager.openOrDownloadData(content, filename);
+        this.downloadManager?.openOrDownloadData(content, filename);
       }
     };
     element.onclick = () => {
@@ -8377,7 +8381,7 @@ class PDFOutlineViewer extends BaseTreeViewer {
       const openAttachment = async () => {
         const content = await linkService.getAttachmentContent(attachmentId);
         if (content) {
-          this.downloadManager.openOrDownloadData(content, attachment.filename);
+          this.downloadManager?.openOrDownloadData(content, attachment.filename);
         }
       };
       element.onclick = () => {
@@ -12147,7 +12151,7 @@ class AnnotationLayerBuilder {
     return inferredLinks.filter(link => {
       let linkAreaRects;
       for (const annotation of this.#annotations) {
-        if (annotation.annotationType !== AnnotationType.LINK || !annotation.url) {
+        if (annotation.annotationType !== AnnotationType.LINK) {
           continue;
         }
         const intersections = intersectAnnotations(annotation, link);
@@ -18489,7 +18493,14 @@ const PDFViewerApplication = {
       externalLinkRel: AppOptions.get("externalLinkRel"),
       ignoreDestinationZoom: AppOptions.get("ignoreDestinationZoom")
     });
-    const downloadManager = this.downloadManager = new DownloadManager();
+    const supportsDownloading = AppOptions.get("supportsDownloading");
+    const downloadManager = this.downloadManager = supportsDownloading ? new DownloadManager() : null;
+    if (appConfig.secondaryToolbar?.downloadButton) {
+      appConfig.secondaryToolbar.downloadButton.hidden = !supportsDownloading;
+    }
+    if (appConfig.toolbar?.download) {
+      appConfig.toolbar.download.hidden = !supportsDownloading;
+    }
     const findController = this.findController = new PDFFindController({
       linkService,
       eventBus,
@@ -19018,6 +19029,9 @@ const PDFViewerApplication = {
     });
   },
   async download() {
+    if (!this.downloadManager) {
+      return;
+    }
     let data;
     try {
       data = await (this.pdfDocument ? this.pdfDocument.getData() : this.pdfLoadingTask.getData());
@@ -19025,6 +19039,9 @@ const PDFViewerApplication = {
     this.downloadManager.download(data, this._downloadUrl, this._docFilename);
   },
   async save() {
+    if (!this.downloadManager) {
+      return;
+    }
     if (this._saveInProgress) {
       return;
     }
@@ -19052,6 +19069,9 @@ const PDFViewerApplication = {
     }
   },
   async downloadOrSave() {
+    if (!this.downloadManager) {
+      return;
+    }
     const {
       classList
     } = this.appConfig.appContainer;
@@ -19776,6 +19796,9 @@ const PDFViewerApplication = {
   async onSavePages({
     data: extractParams
   }) {
+    if (!this.downloadManager) {
+      return;
+    }
     if (!this.pdfDocument) {
       return;
     }
