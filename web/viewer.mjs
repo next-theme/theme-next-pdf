@@ -21,8 +21,8 @@
  */
 
 /**
- * pdfjsVersion = 6.0.0
- * pdfjsBuild = 124228e
+ * pdfjsVersion = 6.1.0
+ * pdfjsBuild = f2f3a7f
  */
 
 ;// ./web/ui_utils.js
@@ -1041,7 +1041,7 @@ const {
 } = globalThis.pdfjsLib;
 
 ;// ./web/internal_evt.js
-const INTERNAL_EVT = "a99164ce-90af-487b-b48d-c630da877469";
+const INTERNAL_EVT = "0314a0f2-1425-421e-b35f-808b23827468";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });
@@ -5833,6 +5833,7 @@ class PasswordPrompt {
     this.input.addEventListener("keydown", e => {
       if (e.keyCode === 13) {
         this.#verify();
+        e.preventDefault();
       }
     });
     this.overlayManager.register(this.dialog, true);
@@ -8648,6 +8649,9 @@ class PDFPresentationMode {
     if (!this.active) {
       return;
     }
+    if (evt.target.closest?.(".mediaAnnotation")) {
+      return;
+    }
     evt.preventDefault();
     const delta = normalizeWheelEventDelta(evt);
     const currentTime = Date.now();
@@ -8732,6 +8736,9 @@ class PDFPresentationMode {
     if (evt.target.href && evt.target.parentNode?.hasAttribute("data-internal-link")) {
       return;
     }
+    if (evt.target.closest?.(".mediaAnnotation")) {
+      return;
+    }
     evt.preventDefault();
     if (evt.shiftKey) {
       this.pdfViewer.previousPage();
@@ -8767,6 +8774,10 @@ class PDFPresentationMode {
   }
   #touchSwipe(evt) {
     if (!this.active) {
+      return;
+    }
+    if (evt.target.closest?.(".mediaAnnotation")) {
+      this.touchSwipeState = null;
       return;
     }
     if (evt.touches.length > 1) {
@@ -12064,6 +12075,7 @@ class AnnotationLayerBuilder {
     this._cancelled = true;
     this.#eventAC?.abort();
     this.#eventAC = null;
+    this.annotationLayer?.destroy();
   }
   refreshCanvases() {
     this.annotationLayer?.refreshCanvases();
@@ -12106,7 +12118,7 @@ class AnnotationLayerBuilder {
         return;
     }
     for (const section of this.div.childNodes) {
-      if (section.hasAttribute("data-internal-link")) {
+      if (section.hasAttribute("data-internal-link") || section.classList.contains("mediaAnnotation")) {
         continue;
       }
       section.inert = disableFormElements;
@@ -12331,7 +12343,7 @@ class BasePDFPageView extends RenderableView {
     this.pageColors = options.pageColors || null;
     this.renderingQueue = options.renderingQueue;
     this.enableOptimizedPartialRendering = options.enableOptimizedPartialRendering ?? false;
-    this.enableSelectionRendering = options.enableSelectionRendering !== false;
+    this.enableSelectionRendering = options.enableSelectionRendering !== false && FeatureTest.isBackdropFilterSupported;
     this.imagesRightClickMinSize = options.imagesRightClickMinSize ?? -1;
     this.minDurationToUpdateCanvas = options.minDurationToUpdateCanvas ?? 500;
   }
@@ -13128,7 +13140,7 @@ class TextAccessibilityManager {
       return;
     }
     const children = this.#textChildren;
-    if (!children || children.length === 0) {
+    if (!children?.length) {
       return;
     }
     const {
@@ -13173,7 +13185,7 @@ class TextAccessibilityManager {
       this.removePointerInTextLayer(element);
     }
     const children = this.#textChildren;
-    if (!children || children.length === 0) {
+    if (!children?.length) {
       return null;
     }
     const index = binarySearchFirstItem(children, node => TextAccessibilityManager.#compareElementPositions(element, node) < 0);
@@ -14614,7 +14626,7 @@ class PDFViewer {
   #savedPageViews = null;
   #deletedPageNumbers = null;
   constructor(options) {
-    const viewerVersion = "6.0.0";
+    const viewerVersion = "6.1.0";
     if (version !== viewerVersion) {
       throw new Error(`The API version "${version}" does not match the Viewer version "${viewerVersion}".`);
     }
@@ -18741,7 +18753,7 @@ const PDFViewerApplication = {
       const {
         files
       } = evt.target;
-      if (!files || files.length === 0) {
+      if (!files?.length) {
         return;
       }
       eventBus.dispatch("fileinputchange", {
