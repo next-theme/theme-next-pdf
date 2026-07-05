@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 6.1.0
- * pdfjsBuild = f2f3a7f
+ * pdfjsBuild = 36835d9
  */
 
 ;// ./src/shared/util.js
@@ -2034,7 +2034,7 @@ class FloatingToolbar {
 }
 
 ;// ./src/shared/internal_evt.js
-const INTERNAL_EVT = "0314a0f2-1425-421e-b35f-808b23827468";
+const INTERNAL_EVT = "246509c2-b4b5-4823-a5f5-29538d09e120";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });
@@ -15484,6 +15484,12 @@ class PDFDocumentProxy {
   getFieldObjects() {
     return this._transport.getFieldObjects();
   }
+  getSignatures() {
+    return this._transport.getSignatures();
+  }
+  getSignatureData(id) {
+    return this._transport.getSignatureData(id);
+  }
   hasJSActions() {
     return this._transport.hasJSActions();
   }
@@ -16626,6 +16632,12 @@ class WorkerTransport {
   getFieldObjects() {
     return this.#cacheSimpleMethod("GetFieldObjects");
   }
+  getSignatures() {
+    return this.#cacheSimpleMethod("GetSignatures");
+  }
+  getSignatureData(id) {
+    return this.messageHandler.sendWithPromise("GetSignatureData", id);
+  }
   hasJSActions() {
     return this.#cacheSimpleMethod("HasJSActions");
   }
@@ -16927,7 +16939,7 @@ class InternalRenderTask {
   }
 }
 const version = "6.1.0";
-const build = "f2f3a7f";
+const build = "36835d9";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -17414,6 +17426,7 @@ class AnnotationElementFactory {
         return new FileAttachmentAnnotationElement(parameters);
       case AnnotationType.RICHMEDIA:
       case AnnotationType.SCREEN:
+      case AnnotationType.SOUND:
         return new MediaAnnotationElement(parameters);
       default:
         return new AnnotationElement(parameters);
@@ -18267,9 +18280,7 @@ class LinkAnnotationElement extends AnnotationElement {
     if (data.overlaidText) {
       link.title = data.overlaidText;
     }
-    if (!link.onclick) {
-      link.onclick = () => false;
-    }
+    link.onclick ||= () => false;
     this.#setInternalLink();
   }
   _bindResetFormAction(link, resetForm) {
@@ -26057,9 +26068,7 @@ class StampEditor extends AnnotationEditor {
     }
   }
   copyCanvas(maxDataDimension, maxPreviewDimension, createImageData = false) {
-    if (!maxDataDimension) {
-      maxDataDimension = 224;
-    }
+    maxDataDimension ||= 224;
     const {
       width: bitmapWidth,
       height: bitmapHeight
