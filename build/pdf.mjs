@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 6.1.0
- * pdfjsBuild = 54af145
+ * pdfjsBuild = dd7e373
  */
 
 ;// ./src/shared/util.js
@@ -794,6 +794,7 @@ function _isValidExplicitDest(validRef, validName, dest) {
 const makeArr = () => [];
 const makeMap = () => new Map();
 const makeObj = () => Object.create(null);
+const makeSet = () => new Set();
 
 ;// ./src/shared/math_clamp.js
 function MathClamp(v, min, max) {
@@ -2034,7 +2035,7 @@ class FloatingToolbar {
 }
 
 ;// ./src/shared/internal_evt.js
-const INTERNAL_EVT = "0b58185e-2ae2-4354-95fe-8f5f728b6d10";
+const INTERNAL_EVT = "4242df1a-2121-4eb3-bfc3-4c8cd10a0f2d";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });
@@ -2658,7 +2659,7 @@ class AnnotationEditorUIManager {
       capture: true,
       signal
     });
-    window.addEventListener("beforeunload", this.#beforeUnload.bind(this), {
+    window.addEventListener("beforeunload", this.endCurrentEditing.bind(this), {
       capture: true,
       signal
     });
@@ -3014,7 +3015,7 @@ class AnnotationEditorUIManager {
   commentSelection(methodOfCreation = "") {
     this.highlightSelection(methodOfCreation, true);
   }
-  #beforeUnload(e) {
+  endCurrentEditing() {
     this.commitOrRemove();
     this.currentLayer?.endDrawingSession(false);
   }
@@ -16945,7 +16946,7 @@ class InternalRenderTask {
   }
 }
 const version = "6.1.0";
-const build = "54af145";
+const build = "dd7e373";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -27904,6 +27905,7 @@ globalThis.pdfjsLib = {
   makeArr: makeArr,
   makeMap: makeMap,
   makeObj: makeObj,
+  makeSet: makeSet,
   MathClamp: MathClamp,
   noContextMenu: noContextMenu,
   normalizeUnicode: normalizeUnicode,
@@ -27935,6 +27937,6 @@ globalThis.pdfjsLib = {
 };
 
 const __webpack_exports__version = (/* inlined export .version */"6.1.0");
-export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, CSSConstants, ColorPicker, DOMSVGFactory, DrawLayer, FeatureTest, GlobalWorkerOptions, ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordException, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TextLayerImages, TouchManager, Util, VerbosityLevel, XfaLayer, applyOpacity, build, createValidAbsoluteUrl, fetchData, findContrastColor, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getRGBA, getUuid, isDataScheme, isPdfFile, isValidExplicitDest, makeArr, makeMap, makeObj, noContextMenu, normalizeUnicode, renderRichText, setLayerDimensions, shadow, stopEvent, updateUrlHash, __webpack_exports__version as version };
+export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, CSSConstants, ColorPicker, DOMSVGFactory, DrawLayer, FeatureTest, GlobalWorkerOptions, ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordException, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TextLayerImages, TouchManager, Util, VerbosityLevel, XfaLayer, applyOpacity, build, createValidAbsoluteUrl, fetchData, findContrastColor, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getRGBA, getUuid, isDataScheme, isPdfFile, isValidExplicitDest, makeArr, makeMap, makeObj, makeSet, noContextMenu, normalizeUnicode, renderRichText, setLayerDimensions, shadow, stopEvent, updateUrlHash, __webpack_exports__version as version };
 
 //# sourceMappingURL=pdf.mjs.map

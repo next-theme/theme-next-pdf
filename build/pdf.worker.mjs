@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 6.1.0
- * pdfjsBuild = 54af145
+ * pdfjsBuild = dd7e373
  */
 
 ;// ./src/shared/util.js
@@ -785,6 +785,7 @@ function _isValidExplicitDest(validRef, validName, dest) {
 const makeArr = () => [];
 const makeMap = () => new Map();
 const makeObj = () => Object.create(null);
+const makeSet = () => new Set();
 
 ;// ./src/core/primitives.js
 
@@ -1036,6 +1037,14 @@ class RefSetCache {
   }
   putAlias(ref, aliasRef) {
     this._map.set(ref.toString(), this.get(aliasRef));
+  }
+  getOrPutComputed(ref, callback) {
+    const map = this._map,
+      refStr = ref.toString();
+    if (!map.has(refStr)) {
+      map.set(refStr, callback(ref));
+    }
+    return map.get(refStr);
   }
   [Symbol.iterator]() {
     return this._map.values();
@@ -20396,6 +20405,7 @@ function isKnownFontName(name) {
 }
 
 ;// ./src/core/glyf.js
+
 const ON_CURVE_POINT = 1 << 0;
 const X_SHORT_VECTOR = 1 << 1;
 const Y_SHORT_VECTOR = 1 << 2;
@@ -20995,12 +21005,7 @@ function pruneCompositeGlyphCycles(glyfTable, locaEntries, numGlyphs) {
         });
         continue;
       }
-      let removeSet = backEdges.get(top.node);
-      if (!removeSet) {
-        removeSet = new Set();
-        backEdges.set(top.node, removeSet);
-      }
-      removeSet.add(compIdx);
+      backEdges.getOrInsertComputed(top.node, makeSet).add(compIdx);
     }
   }
   const droppedGlyphs = new Set();
@@ -31931,11 +31936,7 @@ class GlobalImageCache {
     return true;
   }
   shouldCache(ref, pageIndex) {
-    let pageIndexSet = this._refCache.get(ref);
-    if (!pageIndexSet) {
-      pageIndexSet = new Set();
-      this._refCache.put(ref, pageIndexSet);
-    }
+    const pageIndexSet = this._refCache.getOrPutComputed(ref, makeSet);
     pageIndexSet.add(pageIndex);
     if (pageIndexSet.size < GlobalImageCache.NUM_PAGES_THRESHOLD) {
       return false;
@@ -35288,40 +35289,64 @@ class PartialEvaluator {
               return;
             }
           case OPS.setFillColor:
+            if (!isNumberArray(args, null)) {
+              continue;
+            }
             cs = stateManager.state.fillColorSpace;
             args = [cs.getRgbHex(args, 0)];
             fn = OPS.setFillRGBColor;
             break;
           case OPS.setStrokeColor:
+            if (!isNumberArray(args, null)) {
+              continue;
+            }
             cs = stateManager.state.strokeColorSpace;
             args = [cs.getRgbHex(args, 0)];
             fn = OPS.setStrokeRGBColor;
             break;
           case OPS.setFillGray:
+            if (!isNumberArray(args, null)) {
+              continue;
+            }
             stateManager.state.fillColorSpace = ColorSpaceUtils.gray;
             args = [ColorSpaceUtils.gray.getRgbHex(args, 0)];
             fn = OPS.setFillRGBColor;
             break;
           case OPS.setStrokeGray:
+            if (!isNumberArray(args, null)) {
+              continue;
+            }
             stateManager.state.strokeColorSpace = ColorSpaceUtils.gray;
             args = [ColorSpaceUtils.gray.getRgbHex(args, 0)];
             fn = OPS.setStrokeRGBColor;
             break;
           case OPS.setFillCMYKColor:
+            if (!isNumberArray(args, null)) {
+              continue;
+            }
             stateManager.state.fillColorSpace = ColorSpaceUtils.cmyk;
             args = [ColorSpaceUtils.cmyk.getRgbHex(args, 0)];
             fn = OPS.setFillRGBColor;
             break;
           case OPS.setStrokeCMYKColor:
+            if (!isNumberArray(args, null)) {
+              continue;
+            }
             stateManager.state.strokeColorSpace = ColorSpaceUtils.cmyk;
             args = [ColorSpaceUtils.cmyk.getRgbHex(args, 0)];
             fn = OPS.setStrokeRGBColor;
             break;
           case OPS.setFillRGBColor:
+            if (!isNumberArray(args, null)) {
+              continue;
+            }
             stateManager.state.fillColorSpace = ColorSpaceUtils.rgb;
             args = [ColorSpaceUtils.rgb.getRgbHex(args, 0)];
             break;
           case OPS.setStrokeRGBColor:
+            if (!isNumberArray(args, null)) {
+              continue;
+            }
             stateManager.state.strokeColorSpace = ColorSpaceUtils.rgb;
             args = [ColorSpaceUtils.rgb.getRgbHex(args, 0)];
             break;
@@ -35338,8 +35363,14 @@ class PartialEvaluator {
               break;
             }
             if (cs.name === "Pattern") {
+              if (!Array.isArray(args)) {
+                continue;
+              }
               next(self.handleColorN(operatorList, OPS.setFillColorN, args, cs, patterns, resources, task, localColorSpaceCache, localTilingPatternCache, localShadingPatternCache, seenRefs));
               return;
+            }
+            if (!isNumberArray(args, null)) {
+              continue;
             }
             args = [cs.getRgbHex(args, 0)];
             fn = OPS.setFillRGBColor;
@@ -35357,8 +35388,14 @@ class PartialEvaluator {
               break;
             }
             if (cs.name === "Pattern") {
+              if (!Array.isArray(args)) {
+                continue;
+              }
               next(self.handleColorN(operatorList, OPS.setStrokeColorN, args, cs, patterns, resources, task, localColorSpaceCache, localTilingPatternCache, localShadingPatternCache, seenRefs));
               return;
+            }
+            if (!isNumberArray(args, null)) {
+              continue;
             }
             args = [cs.getRgbHex(args, 0)];
             fn = OPS.setStrokeRGBColor;
@@ -39375,12 +39412,7 @@ class StructTreeRoot {
       return;
     }
     this.structParentIds ||= new RefSetCache();
-    let ids = this.structParentIds.get(pageRef);
-    if (!ids) {
-      ids = [];
-      this.structParentIds.put(pageRef, ids);
-    }
-    ids.push([id, type]);
+    this.structParentIds.getOrPutComputed(pageRef, makeArr).push([id, type]);
   }
   addAnnotationIdToPage(pageRef, id) {
     this.#addIdToPage(pageRef, id, StructElementType.ANNOTATION);
@@ -39780,11 +39812,7 @@ class StructTreeRoot {
       fallbackKids.push(newTagRef);
       return;
     }
-    let cachedParentDict = cache.get(parentRef);
-    if (!cachedParentDict) {
-      cachedParentDict = parentDict.clone();
-      cache.put(parentRef, cachedParentDict);
-    }
+    const cachedParentDict = cache.getOrPutComputed(parentRef, () => parentDict.clone());
     const parentKidsRaw = cachedParentDict.getRaw("K");
     let cachedParentKids = parentKidsRaw instanceof Ref ? cache.get(parentKidsRaw) : null;
     if (!cachedParentKids) {
@@ -52800,8 +52828,7 @@ class AnnotationFactory {
       const pageRef = annotDict.getRaw("P");
       if (pageRef instanceof Ref) {
         try {
-          const pageIndex = await pdfManager.ensureCatalog("getPageIndex", [pageRef]);
-          return pageIndex;
+          return await pdfManager.ensureCatalog("getPageIndex", [pageRef]);
         } catch (ex) {
           info(`_getPageIndex -- not a valid page reference: "${ex}".`);
         }
@@ -57280,7 +57307,24 @@ class DecryptStream extends DecodeStream {
   }
 }
 
+;// ./src/core/sasl_prep.js
+const NON_ASCII_SPACES = new Set([0x00a0, 0x1680, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a, 0x200b, 0x202f, 0x205f, 0x3000]);
+const COMMONLY_MAPPED_TO_NOTHING = new Set([0x00ad, 0x034f, 0x1806, 0x180b, 0x180c, 0x180d, 0x200b, 0x200c, 0x200d, 0x2060, 0xfe00, 0xfe01, 0xfe02, 0xfe03, 0xfe04, 0xfe05, 0xfe06, 0xfe07, 0xfe08, 0xfe09, 0xfe0a, 0xfe0b, 0xfe0c, 0xfe0d, 0xfe0e, 0xfe0f, 0xfeff]);
+function saslPrep(str) {
+  let mapped = "";
+  for (const char of str) {
+    const code = char.codePointAt(0);
+    if (NON_ASCII_SPACES.has(code)) {
+      mapped += " ";
+    } else if (!COMMONLY_MAPPED_TO_NOTHING.has(code)) {
+      mapped += char;
+    }
+  }
+  return mapped.normalize("NFKC");
+}
+
 ;// ./src/core/crypto.js
+
 
 
 
@@ -57803,6 +57847,14 @@ class CipherTransform {
     return bytesToString(data);
   }
 }
+function utf8PasswordToBytes(password) {
+  try {
+    password = utf8StringToString(password);
+  } catch {
+    warn("CipherTransformFactory: Unable to convert UTF8 encoded password.");
+  }
+  return stringToBytes(password);
+}
 class CipherTransformFactory {
   #fileId;
   static get _defaultPasswordBytes() {
@@ -57996,16 +58048,19 @@ class CipherTransformFactory {
     const encryptMetadata = (algorithm === 4 || algorithm === 5) && dict.get("EncryptMetadata") !== false;
     this.encryptMetadata = encryptMetadata;
     const fileIdBytes = stringToBytes(fileId);
-    let passwordBytes;
+    let passwordBytes, rawPasswordBytes;
     if (password) {
       if (revision === 6) {
-        try {
-          password = utf8StringToString(password);
-        } catch {
-          warn("CipherTransformFactory: Unable to convert UTF8 encoded password.");
+        const preppedPassword = saslPrep(password);
+        passwordBytes = utf8PasswordToBytes(preppedPassword);
+        if (preppedPassword !== password) {
+          rawPasswordBytes = utf8PasswordToBytes(password);
         }
+      } else if (algorithm === 5) {
+        passwordBytes = utf8PasswordToBytes(password);
+      } else {
+        passwordBytes = stringToBytes(password);
       }
-      passwordBytes = stringToBytes(password);
     }
     let encryptionKey;
     if (algorithm !== 5) {
@@ -58019,7 +58074,12 @@ class CipherTransformFactory {
       const ownerEncryption = stringToBytes(dict.get("OE"));
       const userEncryption = stringToBytes(dict.get("UE"));
       const perms = stringToBytes(dict.get("Perms"));
-      encryptionKey = this.#createEncryptionKey20(revision, passwordBytes, ownerPassword, ownerValidationSalt, ownerKeySalt, uBytes, userPassword, userValidationSalt, userKeySalt, ownerEncryption, userEncryption, perms);
+      for (const candidate of rawPasswordBytes ? [passwordBytes, rawPasswordBytes] : [passwordBytes]) {
+        encryptionKey = this.#createEncryptionKey20(revision, candidate, ownerPassword, ownerValidationSalt, ownerKeySalt, uBytes, userPassword, userValidationSalt, userKeySalt, ownerEncryption, userEncryption, perms);
+        if (encryptionKey) {
+          break;
+        }
+      }
     }
     if (!encryptionKey) {
       if (!password) {
@@ -58064,7 +58124,7 @@ class CipherTransformFactory {
         if (!this.encryptionKey) {
           throw new PasswordException("No password given", PasswordResponses.NEED_PASSWORD);
         }
-        if (this.algorithm === 5) {
+        if (this.algorithm === 5 || cfm.name === "AESV3") {
           return AES256Cipher.bind(null, this.encryptionKey);
         }
         if (cfm.name === "V2") {
@@ -58072,9 +58132,6 @@ class CipherTransformFactory {
         }
         if (cfm.name === "AESV2") {
           return AES128Cipher.bind(null, this.#buildObjectKey(num, gen, this.encryptionKey, true));
-        }
-        if (cfm.name === "AESV3") {
-          return AES256Cipher.bind(null, this.encryptionKey);
         }
         throw new FormatError("Unknown crypto method");
       };
@@ -60244,20 +60301,17 @@ class PDFDocument {
       if (!(field instanceof Dict)) {
         continue;
       }
+      if (isName(field.get("FT"), "Sig")) {
+        const sigDict = this.xref.fetchIfRef(field.get("V"));
+        if (sigDict instanceof Dict) {
+          const parsed = this.#parseSignatureDict(field, sigDict, fieldRef);
+          if (parsed) {
+            out.push(parsed);
+          }
+        }
+      }
       if (field.has("Kids")) {
         this.#collectSignatureFields(field.get("Kids"), out, visitedRefs);
-        continue;
-      }
-      if (!isName(field.get("FT"), "Sig")) {
-        continue;
-      }
-      const sigDict = this.xref.fetchIfRef(field.get("V"));
-      if (!(sigDict instanceof Dict)) {
-        continue;
-      }
-      const parsed = this.#parseSignatureDict(field, sigDict, fieldRef);
-      if (parsed) {
-        out.push(parsed);
       }
     }
   }
@@ -61638,12 +61692,7 @@ class PDFEditor {
       }
     } = this;
     if (resourceStreamPath.has(oldRef)) {
-      let ref = oldRefMapping.get(oldRef);
-      if (!ref) {
-        ref = this.newRef;
-        oldRefMapping.put(oldRef, ref);
-      }
-      return ref;
+      return oldRefMapping.getOrPutComputed(oldRef, () => this.newRef);
     }
     const key = oldRef.toString();
     const pending = resourceStreamPromises.get(key);
@@ -61691,6 +61740,13 @@ class PDFEditor {
     });
     return ref;
   }
+  async #resolveStructKids(rawKids, xref) {
+    if (rawKids instanceof Ref) {
+      const fetched = await xref.fetchAsync(rawKids);
+      return Array.isArray(fetched) ? fetched : [rawKids];
+    }
+    return Array.isArray(rawKids) ? rawKids : [rawKids];
+  }
   async #cloneStructTreeNode(parentStructRef, node, xref, removedStructElements, dedupIDs, dedupClasses, dedupRoles, visited = new RefSet()) {
     const {
       currentDocument: {
@@ -61702,18 +61758,11 @@ class PDFEditor {
     if (pg instanceof Ref && !pagesMap.has(pg)) {
       return null;
     }
-    let kids;
-    const k = kids = node.getRaw("K");
-    if (k instanceof Ref) {
-      if (visited.has(k)) {
-        return null;
-      }
-      kids = await xref.fetchAsync(k);
-      if (!Array.isArray(kids)) {
-        kids = [k];
-      }
+    const k = node.getRaw("K");
+    if (k instanceof Ref && visited.has(k)) {
+      return null;
     }
-    kids = Array.isArray(kids) ? kids : [kids];
+    const kids = await this.#resolveStructKids(k, xref);
     const newKids = [];
     const structElemIndices = [];
     for (let kid of kids) {
@@ -61762,10 +61811,11 @@ class PDFEditor {
         if (!kidRef) {
           continue;
         }
-        const newKidRef = oldRefMapping.get(kidRef);
-        if (!newKidRef) {
+        const oldObjRef = kid.getRaw("Obj");
+        if (oldObjRef instanceof Ref && !oldRefMapping.get(oldObjRef)) {
           continue;
         }
+        const newKidRef = oldRefMapping.get(kidRef) || (await this.#collectDependencies(kidRef, true, xref));
         const newKid = this.xref[newKidRef.num];
         const objRef = newKid.getRaw("Obj");
         if (objRef instanceof Ref) {
@@ -62211,11 +62261,15 @@ class PDFEditor {
           return;
         }
         const action = annotationDict.get("A");
+        if (action instanceof Dict && !isName(action.get("S"), "GoTo")) {
+          newAnnotations[newAnnotationIndex] = annotationRef;
+          return;
+        }
         const dest = action instanceof Dict ? action.get("D") : annotationDict.get("Dest");
         if (!dest || Array.isArray(dest) && (!(dest[0] instanceof Ref) || pagesMap.has(dest[0]))) {
           newAnnotations[newAnnotationIndex] = annotationRef;
-        } else if (typeof dest === "string") {
-          const destString = stringToPDFString(dest, true);
+        } else if (dest instanceof Name || typeof dest === "string") {
+          const destString = stringToPDFString(dest instanceof Name ? dest.name : dest, true);
           if (destinations.has(destString)) {
             newAnnotations[newAnnotationIndex] = annotationRef;
             usedNamedDestinations.add(destString);
@@ -62456,20 +62510,33 @@ class PDFEditor {
           newStructTreePronunciationLexicon.push(await this.#collectDependencies(lexiconRef, true, xref));
         }
       }
-      let kids = structTreeRoot.dict.get("K");
-      if (!kids) {
+      const rawKids = structTreeRoot.dict.getRaw("K");
+      if (!rawKids) {
         continue;
       }
-      kids = Array.isArray(kids) ? kids : [kids];
+      const kids = await this.#resolveStructKids(rawKids, xref);
       for (let kid of kids) {
         const kidRef = kid instanceof Ref ? kid : null;
-        if (kidRef && removedStructElements.has(kidRef)) {
+        kid = await xref.fetchIfRefAsync(kid);
+        if (!(kid instanceof Dict)) {
           continue;
         }
-        kid = await xref.fetchIfRefAsync(kid);
+        let setAsSpan = false;
+        if (kidRef && removedStructElements.has(kidRef)) {
+          if (!isName(kid.get("S"), "Link")) {
+            continue;
+          }
+          setAsSpan = true;
+        }
         const newKidRef = await this.#cloneStructTreeNode(kidRef, kid, xref, removedStructElements, dedupIDs, dedupClasses, dedupRoles);
         if (newKidRef) {
           structTreeKids.push(newKidRef);
+          if (kidRef) {
+            oldRefMapping.put(kidRef, newKidRef);
+          }
+          if (setAsSpan) {
+            this.xref[newKidRef.num].setIfName("S", "Span");
+          }
         }
       }
       for (const [id, nodeRef] of idTree || []) {
@@ -63038,28 +63105,37 @@ class PDFEditor {
       }
     }
     const resourcesValuesCache = new Map();
+    const fixAppearanceResources = async stream => {
+      let resources = stream.dict.getRaw("Resources");
+      resources &&= this.xrefWrapper.fetchIfRef(resources);
+      if (!(resources instanceof Dict)) {
+        const newResourcesRef = await resourcesValuesCache.getOrInsertComputed(acroFormDefaultResources, () => this.#cloneObject(acroFormDefaultResources, xref));
+        stream.dict.set("Resources", newResourcesRef);
+        return;
+      }
+      for (const [resKey, resValue] of acroFormDefaultResources.getRawEntries()) {
+        if (resources.has(resKey)) {
+          continue;
+        }
+        let newResValue = resValue;
+        if (resValue instanceof Ref) {
+          newResValue = await this.#collectDependencies(resValue, true, xref);
+        } else if (resValue instanceof Dict || resValue instanceof BaseStream || Array.isArray(resValue)) {
+          newResValue = await resourcesValuesCache.getOrInsertComputed(resValue, () => this.#cloneObject(resValue, xref));
+        }
+        resources.set(resKey, newResValue);
+      }
+    };
     for (const field of drToFix) {
       const ap = field.get("AP");
       for (const [, value] of ap) {
-        if (!(value instanceof BaseStream)) {
-          continue;
-        }
-        let resources = value.dict.getRaw("Resources");
-        if (!resources) {
-          const newResourcesRef = await resourcesValuesCache.getOrInsertComputed(acroFormDefaultResources, () => this.#cloneObject(acroFormDefaultResources, xref));
-          value.dict.set("Resources", newResourcesRef);
-          continue;
-        }
-        resources = xref.fetchIfRef(resources);
-        for (const [resKey, resValue] of acroFormDefaultResources.getRawEntries()) {
-          if (!resources.has(resKey)) {
-            let newResValue = resValue;
-            if (resValue instanceof Ref) {
-              newResValue = await this.#collectDependencies(resValue, true, xref);
-            } else if (resValue instanceof Dict || resValue instanceof BaseStream || Array.isArray(resValue)) {
-              newResValue = await resourcesValuesCache.getOrInsertComputed(resValue, () => this.#cloneObject(resValue, xref));
+        if (value instanceof BaseStream) {
+          await fixAppearanceResources(value);
+        } else if (value instanceof Dict) {
+          for (const [, stream] of value) {
+            if (stream instanceof BaseStream) {
+              await fixAppearanceResources(stream);
             }
-            resources.set(resKey, newResValue);
           }
         }
       }
@@ -63384,7 +63460,15 @@ class PDFEditor {
     }
   }
   #makeNameNumTree(map, areNames) {
-    const allEntries = map.sort(areNames ? ([keyA], [keyB]) => keyA.localeCompare(keyB) : ([keyA], [keyB]) => keyA - keyB);
+    const allEntries = map.sort(areNames ? ([keyA], [keyB]) => {
+      if (keyA < keyB) {
+        return -1;
+      }
+      if (keyA > keyB) {
+        return 1;
+      }
+      return 0;
+    } : ([keyA], [keyB]) => keyA - keyB);
     const maxLeaves =  false ? 0 : MAX_IN_NAME_TREE_NODE;
     const [treeRef, treeDict] = this.newDict;
     const stack = [{
@@ -63458,7 +63542,7 @@ class PDFEditor {
         if (embeddedFiles.has(name)) {
           const displayName = stringToPDFString(key, true);
           for (let i = 1;; i++) {
-            const deduped = `${displayName}_${i}`;
+            const deduped = stringToAsciiOrUTF16BE(`${displayName}_${i}`);
             if (!embeddedFiles.has(deduped)) {
               name = deduped;
               break;
@@ -63494,7 +63578,7 @@ class PDFEditor {
       [this.namesRef, this.namesDict] = this.newDict;
       this.rootDict.set("Names", this.namesRef);
     }
-    this.namesDict.set("Dests", this.#makeNameNumTree(Array.from(namedDestinations.entries()), true));
+    this.namesDict.set("Dests", this.#makeNameNumTree(Array.from(namedDestinations, ([name, dest]) => [stringToAsciiOrUTF16BE(name), dest]), true));
   }
   #makeStructTree() {
     const {
@@ -64384,8 +64468,7 @@ class WorkerMessageHandler {
         const pdfEditor = new PDFEditor();
         task = new WorkerTask(`ExtractPages: ${pageInfos.length} page(s)`);
         startWorkerTask(task);
-        const buffer = await pdfEditor.extractPages(pageInfos, annotationStorage, pdfManager.pdfDocument, handler, task);
-        return buffer;
+        return await pdfEditor.extractPages(pageInfos, annotationStorage, pdfManager.pdfDocument, handler, task);
       } catch (reason) {
         warn(`extractPages: "${reason}".`);
         return null;

@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 6.1.0
- * pdfjsBuild = 54af145
+ * pdfjsBuild = dd7e373
  */
 
 ;// ./web/ui_utils.js
@@ -1014,6 +1014,7 @@ const {
   makeArr,
   makeMap,
   makeObj,
+  makeSet,
   MathClamp,
   noContextMenu,
   normalizeUnicode,
@@ -1045,7 +1046,7 @@ const {
 } = globalThis.pdfjsLib;
 
 ;// ./web/internal_evt.js
-const INTERNAL_EVT = "0b58185e-2ae2-4354-95fe-8f5f728b6d10";
+const INTERNAL_EVT = "4242df1a-2121-4eb3-bfc3-4c8cd10a0f2d";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });
@@ -6683,11 +6684,7 @@ function normalize(text, options = {}) {
       return replacement;
     }
     if (p2) {
-      let replacement = NFKC_CHARS_TO_NORMALIZE.get(p2);
-      if (!replacement) {
-        replacement = p2.normalize("NFKC");
-        NFKC_CHARS_TO_NORMALIZE.set(p2, replacement);
-      }
+      const replacement = NFKC_CHARS_TO_NORMALIZE.getOrInsertComputed(p2, () => p2.normalize("NFKC"));
       const jj = replacement.length;
       for (let j = 1; j < jj; j++) {
         positions.push(i - shift + j, shift - j);
@@ -19546,6 +19543,7 @@ const PDFViewerApplication = {
     if (!this.downloadManager) {
       return;
     }
+    this.pdfViewer._layerProperties.annotationEditorUIManager?.endCurrentEditing();
     const {
       classList
     } = this.appConfig.appContainer;
