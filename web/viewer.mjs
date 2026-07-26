@@ -21,8 +21,8 @@
  */
 
 /**
- * pdfjsVersion = 6.1.0
- * pdfjsBuild = dd7e373
+ * pdfjsVersion = 6.2.0
+ * pdfjsBuild = e2d6021
  */
 
 ;// ./web/ui_utils.js
@@ -1046,7 +1046,7 @@ const {
 } = globalThis.pdfjsLib;
 
 ;// ./web/internal_evt.js
-const INTERNAL_EVT = "4242df1a-2121-4eb3-bfc3-4c8cd10a0f2d";
+const INTERNAL_EVT = "915d15d3-c2e5-4520-9304-469767d84fa0";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });
@@ -6599,20 +6599,7 @@ const FindState = {
   WRAPPED: 2,
   PENDING: 3
 };
-const CHARACTERS_TO_NORMALIZE = {
-  "\u2010": "-",
-  "\u2018": "'",
-  "\u2019": "'",
-  "\u201A": "'",
-  "\u201B": "'",
-  "\u201C": '"',
-  "\u201D": '"',
-  "\u201E": '"',
-  "\u201F": '"',
-  "\u00BC": "1/4",
-  "\u00BD": "1/2",
-  "\u00BE": "3/4"
-};
+const CHARACTERS_TO_NORMALIZE = new Map([["\u2010", "-"], ["\u2018", "'"], ["\u2019", "'"], ["\u201A", "'"], ["\u201B", "'"], ["\u201C", '"'], ["\u201D", '"'], ["\u201E", '"'], ["\u201F", '"'], ["\u00BC", "1/4"], ["\u00BD", "1/2"], ["\u00BE", "3/4"]]);
 const DIACRITICS_EXCEPTION = new Set([0x3099, 0x309a, 0x094d, 0x09cd, 0x0a4d, 0x0acd, 0x0b4d, 0x0bcd, 0x0c4d, 0x0ccd, 0x0d3b, 0x0d3c, 0x0d4d, 0x0dca, 0x0e3a, 0x0eba, 0x0f84, 0x1039, 0x103a, 0x1714, 0x1734, 0x17d2, 0x1a60, 0x1b44, 0x1baa, 0x1bab, 0x1bf2, 0x1bf3, 0x2d7f, 0xa806, 0xa82c, 0xa8c4, 0xa953, 0xa9c0, 0xaaf6, 0xabed, 0x0c56, 0x0f71, 0x0f72, 0x0f7a, 0x0f7b, 0x0f7c, 0x0f7d, 0x0f80, 0x0f74]);
 let DIACRITICS_EXCEPTION_STR;
 const DIACRITICS_REG_EXP = /\p{M}+/gu;
@@ -6647,7 +6634,7 @@ function normalize(text, options = {}) {
   } else if (hasSyllables && withSyllablesRegExp) {
     normalizationRegex = withSyllablesRegExp;
   } else {
-    const replace = Object.keys(CHARACTERS_TO_NORMALIZE).join("");
+    const replace = CHARACTERS_TO_NORMALIZE.keys().join("");
     const toNormalizeWithNFKC = getNormalizeWithNFKC();
     const CJK = "(?:\\p{Ideographic}|[\u3040-\u30FF])";
     const HKDiacritics = "(?:\u3099|\u309A)";
@@ -6675,7 +6662,7 @@ function normalize(text, options = {}) {
   normalized = normalized.replace(normalizationRegex, (match, p1, p2, p3, p4, p5, p6, p7, p8, p9, i) => {
     i -= shiftOrigin;
     if (p1) {
-      const replacement = CHARACTERS_TO_NORMALIZE[p1];
+      const replacement = CHARACTERS_TO_NORMALIZE.get(p1);
       const jj = replacement.length;
       for (let j = 1; j < jj; j++) {
         positions.push(i - shift + j, shift - j);
@@ -12755,7 +12742,7 @@ const MathMLNamespace = "http://www.w3.org/1998/Math/MathML";
 class MathMLSanitizer {
   static get sanitizer() {
     return shadow(this, "sanitizer", FeatureTest.isSanitizerSupported ? new Sanitizer({
-      elements: [...MathMLElements].map(name => ({
+      elements: Array.from(MathMLElements.keys(), name => ({
         name,
         namespace: MathMLNamespace
       })),
@@ -14566,7 +14553,7 @@ class PDFViewer {
   #savedPageViews = null;
   #deletedPageNumbers = null;
   constructor(options) {
-    const viewerVersion = "6.1.0";
+    const viewerVersion = "6.2.0";
     if (version !== viewerVersion) {
       throw new Error(`The API version "${version}" does not match the Viewer version "${viewerVersion}".`);
     }
@@ -17646,7 +17633,8 @@ class SignaturePropertiesManager {
         errorCode: null,
         message: null,
         certificate: null,
-        documentModifiedAfterSigning: !sig.coversWholeDocument
+        documentModifiedAfterSigning: !sig.coversWholeDocument,
+        modificationsAfterSignature: sig.modificationsAfterSignature
       });
     }
     this.#render();
@@ -17947,7 +17935,8 @@ class SignaturePropertiesManager {
         errorCode: "BRIDGE_ERROR",
         message: ex?.message ?? null,
         certificate: null,
-        documentModifiedAfterSigning: !signature.coversWholeDocument
+        documentModifiedAfterSigning: !signature.coversWholeDocument,
+        modificationsAfterSignature: signature.modificationsAfterSignature
       };
     }
     this.#pendingVerify.delete(signature.id);
@@ -19658,7 +19647,7 @@ const PDFViewerApplication = {
         this._initializePdfHistory({
           fingerprint: pdfDocument.fingerprints[0],
           viewOnLoad,
-          initialDest: openAction?.dest
+          initialDest: openAction?.get("dest")
         });
         const initialBookmark = this.initialBookmark;
         const zoom = AppOptions.get("defaultZoomValue");
@@ -19802,7 +19791,7 @@ const PDFViewerApplication = {
     if (pdfDocument !== this.pdfDocument) {
       return;
     }
-    let triggerAutoPrint = openAction?.action === "Print";
+    let triggerAutoPrint = openAction?.get("action") === "Print";
     if (jsActions) {
       console.warn("Warning: JavaScript support is not enabled");
       for (const name in jsActions) {

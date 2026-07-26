@@ -21,8 +21,8 @@
  */
 
 /**
- * pdfjsVersion = 6.1.0
- * pdfjsBuild = dd7e373
+ * pdfjsVersion = 6.2.0
+ * pdfjsBuild = e2d6021
  */
 
 ;// ./src/shared/util.js
@@ -481,9 +481,6 @@ function stringToBytes(str) {
   }
   return bytes;
 }
-function objectSize(obj) {
-  return Object.keys(obj).length;
-}
 class FeatureTest {
   static get isLittleEndian() {
     const buffer8 = new Uint8Array(4);
@@ -795,6 +792,11 @@ const makeArr = () => [];
 const makeMap = () => new Map();
 const makeObj = () => Object.create(null);
 const makeSet = () => new Set();
+if (typeof Iterator.prototype.join !== "function") {
+  Iterator.prototype.join = function (separator) {
+    return [...this].join(separator);
+  };
+}
 
 ;// ./src/shared/math_clamp.js
 function MathClamp(v, min, max) {
@@ -2035,7 +2037,7 @@ class FloatingToolbar {
 }
 
 ;// ./src/shared/internal_evt.js
-const INTERNAL_EVT = "4242df1a-2121-4eb3-bfc3-4c8cd10a0f2d";
+const INTERNAL_EVT = "915d15d3-c2e5-4520-9304-469767d84fa0";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });
@@ -9809,6 +9811,7 @@ function applyBoundingBox(ctx, bbox) {
   ctx.clip(region);
 }
 class BaseShadingPattern {
+  matrix = null;
   isModifyingCurrentTransform() {
     return false;
   }
@@ -9826,7 +9829,6 @@ class RadialAxialShadingPattern extends BaseShadingPattern {
     this._p1 = IR[5];
     this._r0 = IR[6];
     this._r1 = IR[7];
-    this.matrix = null;
   }
   isOriginBased() {
     return this._p0[0] === 0 && this._p0[1] === 0 && (!this.isRadial() || this._p1[0] === 0 && this._p1[1] === 0);
@@ -10065,7 +10067,6 @@ class MeshShadingPattern extends BaseShadingPattern {
     this._bounds = IR[5];
     this._bbox = IR[6];
     this._background = IR[7];
-    this.matrix = null;
     loadMeshShader();
   }
   _createMeshCanvas(combinedScale, backgroundColor, canvasFactory) {
@@ -12256,13 +12257,7 @@ class CanvasGraphics {
     this.current.tilingPatternDims = null;
   }
   _getPattern(opIdx, objId, matrix = null) {
-    let pattern;
-    if (this.cachedPatterns.has(objId)) {
-      pattern = this.cachedPatterns.get(objId);
-    } else {
-      pattern = getShadingPattern(this.getObject(opIdx, objId));
-      this.cachedPatterns.set(objId, pattern);
-    }
+    const pattern = this.cachedPatterns.getOrInsertComputed(objId, () => getShadingPattern(this.getObject(opIdx, objId)));
     if (matrix) {
       pattern.matrix = matrix;
     }
@@ -12395,7 +12390,9 @@ class CanvasGraphics {
     }
     groupCtx.translate(-offsetX, -offsetY);
     groupCtx.transform(...currentTransform);
-    if (!group.isolated && !group.smask && inSMaskMode && group.needsIsolation) {
+    const needsBackdropCopy = !group.isolated && !group.smask && group.needsIsolation;
+    const replaceBackdrop = needsBackdropCopy && !inSMaskMode && savedKnockoutLevel === 0 && !group.knockout && !group.isGray && group.hasSoftMask && currentCtx.globalAlpha === 1 && currentCtx.globalCompositeOperation === "source-over" && this.current.transferMaps === "none";
+    if (needsBackdropCopy && (inSMaskMode || replaceBackdrop)) {
       groupCtx.save();
       groupCtx.setTransform(1, 0, 0, 1, 0, 0);
       groupCtx.drawImage(currentCtx.canvas, -offsetX, -offsetY);
@@ -12439,6 +12436,7 @@ class CanvasGraphics {
       offsetX,
       offsetY,
       hasInnerBackdrop,
+      replaceBackdrop,
       knockoutMaskEntry,
       knockoutTempEntry: null,
       knockoutBackdropEntry: null
@@ -12530,6 +12528,12 @@ class CanvasGraphics {
           });
         }
       } else {
+        if (groupMeta.replaceBackdrop) {
+          const clip = new Path2D();
+          clip.rect(0, 0, groupCtx.canvas.width, groupCtx.canvas.height);
+          this.ctx.clip(clip);
+          this.ctx.globalCompositeOperation = "copy";
+        }
         this.ctx.drawImage(groupCtx.canvas, 0, 0);
       }
       this.ctx.restore();
@@ -15220,7 +15224,7 @@ function getDocument(src = {}) {
   }
   const docParams = {
     docId,
-    apiVersion: "6.1.0",
+    apiVersion: "6.2.0",
     data,
     password,
     disableAutoFetch,
@@ -16945,8 +16949,8 @@ class InternalRenderTask {
     }
   }
 }
-const version = "6.1.0";
-const build = "dd7e373";
+const version = "6.2.0";
+const build = "e2d6021";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -27335,7 +27339,7 @@ class DrawLayer {
     return !!selection && !selection.isCollapsed;
   }
   static #getOrderedTextLayers() {
-    return [...this.#textLayerSet].filter(textLayer => textLayer.isConnected).sort(compareTextLayers);
+    return this.#textLayerSet.keys().filter(textLayer => textLayer.isConnected).toArray().sort(compareTextLayers);
   }
   static #selectionChange() {
     const selection = document.getSelection();
@@ -27932,11 +27936,11 @@ globalThis.pdfjsLib = {
   updateUrlHash: updateUrlHash,
   Util: Util,
   VerbosityLevel: VerbosityLevel,
-  version: (/* inlined export .version */"6.1.0"),
+  version: (/* inlined export .version */"6.2.0"),
   XfaLayer: XfaLayer
 };
 
-const __webpack_exports__version = (/* inlined export .version */"6.1.0");
+const __webpack_exports__version = (/* inlined export .version */"6.2.0");
 export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, CSSConstants, ColorPicker, DOMSVGFactory, DrawLayer, FeatureTest, GlobalWorkerOptions, ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordException, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TextLayerImages, TouchManager, Util, VerbosityLevel, XfaLayer, applyOpacity, build, createValidAbsoluteUrl, fetchData, findContrastColor, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getRGBA, getUuid, isDataScheme, isPdfFile, isValidExplicitDest, makeArr, makeMap, makeObj, makeSet, noContextMenu, normalizeUnicode, renderRichText, setLayerDimensions, shadow, stopEvent, updateUrlHash, __webpack_exports__version as version };
 
 //# sourceMappingURL=pdf.mjs.map
