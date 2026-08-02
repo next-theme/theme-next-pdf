@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 6.2.0
- * pdfjsBuild = e2d6021
+ * pdfjsBuild = 7fc7072
  */
 
 ;// ./src/shared/util.js
@@ -1183,10 +1183,7 @@ function isAscii(str) {
   return typeof str === "string" && (!str || /^[\x00-\x7F]*$/.test(str));
 }
 function stringToAsciiOrUTF16BE(str) {
-  if (str === null || str === undefined) {
-    return str;
-  }
-  return isAscii(str) ? str : stringToUTF16String(str, true);
+  return str === null || str === undefined || isAscii(str) ? str : stringToUTF16String(str, true);
 }
 function stringToUTF16HexString(str) {
   const buf = [];
@@ -1518,7 +1515,7 @@ function _collectJS(entry, xref, list, parents) {
   }
 }
 function collectActions(xref, dict, eventType) {
-  const actions = Object.create(null);
+  const actions = new Map();
   const additionalActionsDicts = getInheritableProperty({
     dict,
     key: "AA",
@@ -1539,7 +1536,7 @@ function collectActions(xref, dict, eventType) {
         const list = [];
         _collectJS(rawActionDict, xref, list, parents);
         if (list.length > 0) {
-          actions[action] = list;
+          actions.set(action, list);
         }
       }
     }
@@ -1550,10 +1547,10 @@ function collectActions(xref, dict, eventType) {
     const list = [];
     _collectJS(actionDict, xref, list, parents);
     if (list.length > 0) {
-      actions.Action = list;
+      actions.set("Action", list);
     }
   }
-  return Object.keys(actions).length ? actions : null;
+  return actions.size ? actions : null;
 }
 const XMLEntities = {
   0x3c: "&lt;",
@@ -1706,15 +1703,14 @@ function getSizeInBytes(x) {
 }
 
 ;// ./external/qcms/qcms_utils.js
+const ALPHA_MASK = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1 ? 0xff000000 : 0x000000ff;
+const RGB_MASK = ~ALPHA_MASK;
 class QCMS {
   static #memoryArray = null;
   static _memory = null;
-  static _mustAddAlpha = false;
   static _destBuffer = null;
   static _destOffset = 0;
-  static _destLength = 0;
-  static _cssColor = "";
-  static _makeHexColor = null;
+  static _keepAlpha = false;
   static get _memoryArray() {
     const array = this.#memoryArray;
     if (array?.byteLength) {
@@ -1725,46 +1721,30 @@ class QCMS {
 }
 function copy_result(ptr, len) {
   const {
-    _mustAddAlpha,
     _destBuffer,
     _destOffset,
-    _destLength,
+    _keepAlpha,
     _memoryArray
   } = QCMS;
-  if (len === _destLength) {
+  if (!_keepAlpha) {
     _destBuffer.set(_memoryArray.subarray(ptr, ptr + len), _destOffset);
     return;
   }
-  if (_mustAddAlpha) {
-    for (let i = ptr, ii = ptr + len, j = _destOffset; i < ii; i += 3, j += 4) {
-      _destBuffer[j] = _memoryArray[i];
-      _destBuffer[j + 1] = _memoryArray[i + 1];
-      _destBuffer[j + 2] = _memoryArray[i + 2];
-      _destBuffer[j + 3] = 255;
+  const count = len >> 2;
+  const destStart = _destBuffer.byteOffset + _destOffset;
+  if (((destStart | ptr) & 3) === 0) {
+    const dest32 = new Uint32Array(_destBuffer.buffer, destStart, count);
+    const src32 = new Uint32Array(QCMS._memory.buffer, ptr, count);
+    for (let i = 0; i < count; i++) {
+      dest32[i] = dest32[i] & ALPHA_MASK | src32[i] & RGB_MASK;
     }
-  } else {
-    for (let i = ptr, ii = ptr + len, j = _destOffset; i < ii; i += 3, j += 4) {
-      _destBuffer[j] = _memoryArray[i];
-      _destBuffer[j + 1] = _memoryArray[i + 1];
-      _destBuffer[j + 2] = _memoryArray[i + 2];
-    }
+    return;
   }
-}
-function copy_rgb(ptr) {
-  const {
-    _destBuffer,
-    _destOffset,
-    _memoryArray
-  } = QCMS;
-  _destBuffer[_destOffset] = _memoryArray[ptr];
-  _destBuffer[_destOffset + 1] = _memoryArray[ptr + 1];
-  _destBuffer[_destOffset + 2] = _memoryArray[ptr + 2];
-}
-function make_cssRGB(ptr) {
-  const {
-    _memoryArray
-  } = QCMS;
-  QCMS._cssColor = QCMS._makeHexColor(_memoryArray[ptr], _memoryArray[ptr + 1], _memoryArray[ptr + 2]);
+  for (let i = ptr, ii = ptr + len, j = _destOffset; i < ii; i += 4, j += 4) {
+    _destBuffer[j] = _memoryArray[i];
+    _destBuffer[j + 1] = _memoryArray[i + 1];
+    _destBuffer[j + 2] = _memoryArray[i + 2];
+  }
 }
 
 ;// ./external/qcms/qcms.js
@@ -1793,19 +1773,22 @@ const Intent = Object.freeze({
   AbsoluteColorimetric: 3,
   "3": "AbsoluteColorimetric"
 });
-function qcms_convert_array(transformer, src) {
+function qcms_convert_array(transformer, src, add_alpha) {
   const ptr0 = passArray8ToWasm0(src, wasm.__wbindgen_malloc);
   const len0 = WASM_VECTOR_LEN;
-  wasm.qcms_convert_array(transformer, ptr0, len0);
+  wasm.qcms_convert_array(transformer, ptr0, len0, add_alpha);
 }
-function qcms_convert_four(transformer, src1, src2, src3, src4, css) {
-  wasm.qcms_convert_four(transformer, src1, src2, src3, src4, css);
+function qcms_convert_four(transformer, src1, src2, src3, src4) {
+  const ret = wasm.qcms_convert_four(transformer, src1, src2, src3, src4);
+  return ret >>> 0;
 }
-function qcms_convert_one(transformer, src, css) {
-  wasm.qcms_convert_one(transformer, src, css);
+function qcms_convert_one(transformer, src) {
+  const ret = wasm.qcms_convert_one(transformer, src);
+  return ret >>> 0;
 }
-function qcms_convert_three(transformer, src1, src2, src3, css) {
-  wasm.qcms_convert_three(transformer, src1, src2, src3, css);
+function qcms_convert_three(transformer, src1, src2, src3) {
+  const ret = wasm.qcms_convert_three(transformer, src1, src2, src3);
+  return ret >>> 0;
 }
 function qcms_drop_transformer(transformer) {
   wasm.qcms_drop_transformer(transformer);
@@ -1819,17 +1802,11 @@ function qcms_transformer_from_memory(mem, in_type, intent) {
 function __wbg_get_imports() {
   const import0 = {
     __proto__: null,
-    __wbg___wbindgen_throw_6b64449b9b9ed33c: function (arg0, arg1) {
+    __wbg___wbindgen_throw_344f42d3211c4765: function (arg0, arg1) {
       throw new Error(getStringFromWasm0(arg0, arg1));
     },
     __wbg_copy_result_0d15f3bf9d9012ae: function (arg0, arg1) {
       copy_result(arg0 >>> 0, arg1 >>> 0);
-    },
-    __wbg_copy_rgb_0106d9d9464fce43: function (arg0) {
-      copy_rgb(arg0 >>> 0);
-    },
-    __wbg_make_cssRGB_8e24b34f71f5363e: function (arg0) {
-      make_cssRGB(arg0 >>> 0);
     },
     __wbindgen_init_externref_table: function () {
       const table = wasm.__wbindgen_externrefs;
@@ -1847,8 +1824,7 @@ function __wbg_get_imports() {
   };
 }
 function getStringFromWasm0(ptr, len) {
-  ptr = ptr >>> 0;
-  return decodeText(ptr, len);
+  return decodeText(ptr >>> 0, len);
 }
 let cachedUint8ArrayMemory0 = null;
 function getUint8ArrayMemory0() {
@@ -1883,8 +1859,9 @@ function decodeText(ptr, len) {
   return cachedTextDecoder.decode(getUint8ArrayMemory0().subarray(ptr, ptr + len));
 }
 let WASM_VECTOR_LEN = 0;
-let wasmModule, wasm;
+let wasmModule, wasmInstance, wasm;
 function __wbg_finalize_init(instance, module) {
+  wasmInstance = instance;
   wasm = instance.exports;
   wasmModule = module;
   cachedUint8ArrayMemory0 = null;
@@ -2087,6 +2064,15 @@ class ColorSpace {
   getRgbBuffer(src, srcOffset, count, dest, destOffset, bits, alpha01) {
     unreachable("Should not call ColorSpace.getRgbBuffer");
   }
+  getRgbItems(src, count, dest, destOffset, alpha01) {
+    const {
+      numComps
+    } = this;
+    for (let i = 0, srcOffset = 0; i < count; i++, srcOffset += numComps) {
+      this.getRgbItem(src, srcOffset, dest, destOffset);
+      destOffset += 3 + alpha01;
+    }
+  }
   getOutputLength(inputLength, alpha01) {
     unreachable("Should not call ColorSpace.getOutputLength");
   }
@@ -2177,6 +2163,21 @@ class AlternateCS extends ColorSpace {
     this.tintFn(src, srcOffset, tmpBuf, 0);
     this.base.getRgbItem(tmpBuf, 0, dest, destOffset);
   }
+  getRgbItems(src, count, dest, destOffset, alpha01) {
+    const {
+      base,
+      numComps,
+      tintFn
+    } = this;
+    const baseNumComps = base.numComps;
+    const tinted = new Float32Array(count * baseNumComps);
+    for (let i = 0, srcOffset = 0, tintedOffset = 0; i < count; i++) {
+      tintFn(src, srcOffset, tinted, tintedOffset);
+      srcOffset += numComps;
+      tintedOffset += baseNumComps;
+    }
+    base.getRgbItems(tinted, count, dest, destOffset, alpha01);
+  }
   getRgbBuffer(src, srcOffset, count, dest, destOffset, bits, alpha01) {
     const tintFn = this.tintFn;
     const base = this.base;
@@ -2222,50 +2223,47 @@ class PatternCS extends ColorSpace {
   }
 }
 class IndexedCS extends ColorSpace {
+  #rgbLookup;
   constructor(base, highVal, lookup) {
     super("Indexed", 1);
-    this.base = base;
     this.highVal = highVal;
-    const length = base.numComps * (highVal + 1);
-    this.lookup = new Uint8Array(length);
+    const count = highVal + 1;
+    const length = base.numComps * count;
+    const palette = new Uint8Array(length);
     if (lookup instanceof BaseStream) {
-      const bytes = lookup.getBytes(length);
-      this.lookup.set(bytes);
+      palette.set(lookup.getBytes(length));
     } else if (typeof lookup === "string") {
       for (let i = 0; i < length; ++i) {
-        this.lookup[i] = lookup.charCodeAt(i) & 0xff;
+        palette[i] = lookup.charCodeAt(i);
       }
     } else {
       throw new FormatError(`IndexedCS - unrecognized lookup table: ${lookup}`);
     }
+    this.#rgbLookup = new Uint8ClampedArray(count * 3);
+    base.getRgbBuffer(palette, 0, count, this.#rgbLookup, 0, 8, 0);
   }
   getRgbItem(src, srcOffset, dest, destOffset) {
-    const {
-      base,
-      highVal,
-      lookup
-    } = this;
-    const start = MathClamp(Math.round(src[srcOffset]), 0, highVal) * base.numComps;
-    base.getRgbBuffer(lookup, start, 1, dest, destOffset, 8, 0);
+    const rgbLookup = this.#rgbLookup;
+    const pos = MathClamp(Math.round(src[srcOffset]), 0, this.highVal) * 3;
+    dest[destOffset] = rgbLookup[pos];
+    dest[destOffset + 1] = rgbLookup[pos + 1];
+    dest[destOffset + 2] = rgbLookup[pos + 2];
   }
   getRgbBuffer(src, srcOffset, count, dest, destOffset, bits, alpha01) {
     const {
-      base,
-      highVal,
-      lookup
+      highVal
     } = this;
-    const {
-      numComps
-    } = base;
-    const outputDelta = base.getOutputLength(numComps, alpha01);
+    const rgbLookup = this.#rgbLookup;
     for (let i = 0; i < count; ++i) {
-      const lookupPos = MathClamp(Math.round(src[srcOffset++]), 0, highVal) * numComps;
-      base.getRgbBuffer(lookup, lookupPos, 1, dest, destOffset, 8, alpha01);
-      destOffset += outputDelta;
+      const pos = MathClamp(Math.round(src[srcOffset++]), 0, highVal) * 3;
+      dest[destOffset++] = rgbLookup[pos];
+      dest[destOffset++] = rgbLookup[pos + 1];
+      dest[destOffset++] = rgbLookup[pos + 2];
+      destOffset += alpha01;
     }
   }
   getOutputLength(inputLength, alpha01) {
-    return this.base.getOutputLength(inputLength * this.base.numComps, alpha01);
+    return inputLength * (3 + alpha01);
   }
   isDefaultDecode(decode, bpc) {
     if (isDefaultDecodeHelper(decode, 2)) {
@@ -2696,15 +2694,15 @@ class IccColorSpace extends ColorSpace {
     switch (numComps) {
       case 1:
         inType = DataType.Gray8;
-        this.#convertPixel = (src, srcOffset, css) => qcms_convert_one(this.#transformer, src[srcOffset] * 255, css);
+        this.#convertPixel = (src, srcOffset) => qcms_convert_one(this.#transformer, src[srcOffset] * 255);
         break;
       case 3:
         inType = DataType.RGB8;
-        this.#convertPixel = (src, srcOffset, css) => qcms_convert_three(this.#transformer, src[srcOffset] * 255, src[srcOffset + 1] * 255, src[srcOffset + 2] * 255, css);
+        this.#convertPixel = (src, srcOffset) => qcms_convert_three(this.#transformer, src[srcOffset] * 255, src[srcOffset + 1] * 255, src[srcOffset + 2] * 255);
         break;
       case 4:
         inType = DataType.CMYK;
-        this.#convertPixel = (src, srcOffset, css) => qcms_convert_four(this.#transformer, src[srcOffset] * 255, src[srcOffset + 1] * 255, src[srcOffset + 2] * 255, src[srcOffset + 3] * 255, css);
+        this.#convertPixel = (src, srcOffset) => qcms_convert_four(this.#transformer, src[srcOffset] * 255, src[srcOffset + 1] * 255, src[srcOffset + 2] * 255, src[srcOffset + 3] * 255);
         break;
       default:
         throw new Error(`Unsupported number of components: ${numComps}`);
@@ -2719,14 +2717,28 @@ class IccColorSpace extends ColorSpace {
     IccColorSpace.#finalizer.register(this, this.#transformer);
   }
   getRgbHex(src, srcOffset) {
-    this.#convertPixel(src, srcOffset, true);
-    return QCMS._cssColor;
+    const color = this.#convertPixel(src, srcOffset);
+    return Util.makeHexColor(color >> 16, color >> 8 & 0xff, color & 0xff);
   }
   getRgbItem(src, srcOffset, dest, destOffset) {
+    const color = this.#convertPixel(src, srcOffset);
+    dest[destOffset] = color >> 16;
+    dest[destOffset + 1] = color >> 8 & 0xff;
+    dest[destOffset + 2] = color & 0xff;
+  }
+  getRgbItems(src, count, dest, destOffset, alpha01) {
+    const {
+      numComps
+    } = this;
+    const length = count * numComps;
+    const scaled = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+      scaled[i] = src[i] * 255;
+    }
     QCMS._destBuffer = dest;
     QCMS._destOffset = destOffset;
-    QCMS._destLength = 3;
-    this.#convertPixel(src, srcOffset, false);
+    QCMS._keepAlpha = alpha01 === 1;
+    qcms_convert_array(this.#transformer, scaled, alpha01 === 1);
     QCMS._destBuffer = null;
   }
   getRgbBuffer(src, srcOffset, count, dest, destOffset, bits, alpha01) {
@@ -2737,12 +2749,10 @@ class IccColorSpace extends ColorSpace {
         src[i] *= scale;
       }
     }
-    QCMS._mustAddAlpha = alpha01 && dest.buffer === src.buffer;
     QCMS._destBuffer = dest;
     QCMS._destOffset = destOffset;
-    QCMS._destLength = count * (3 + alpha01);
-    qcms_convert_array(this.#transformer, src);
-    QCMS._mustAddAlpha = false;
+    QCMS._keepAlpha = alpha01 === 1 && dest.buffer !== src.buffer;
+    qcms_convert_array(this.#transformer, src, alpha01 === 1);
     QCMS._destBuffer = null;
   }
   getOutputLength(inputLength, alpha01) {
@@ -2770,7 +2780,6 @@ class IccColorSpace extends ColorSpace {
           });
           isUsable = !!this._module;
           QCMS._memory = this._module.memory;
-          QCMS._makeHexColor = Util.makeHexColor.bind(Util);
         } catch (e) {
           warn(`ICCBased color space: "${e}".`);
         }
@@ -2824,10 +2833,7 @@ class Stream extends BaseStream {
     return this.length === 0;
   }
   getByte() {
-    if (this.pos >= this.end) {
-      return -1;
-    }
-    return this.bytes[this.pos++];
+    return this.pos >= this.end ? -1 : this.bytes[this.pos++];
   }
   getBytes(length) {
     const pos = this.pos;
@@ -3027,10 +3033,7 @@ class ChunkedStream extends Stream {
     };
     Object.defineProperty(ChunkedStreamSubstream.prototype, "isDataLoaded", {
       get() {
-        if (this.numChunksLoaded === this.numChunks) {
-          return true;
-        }
-        return this.getMissingChunks().length === 0;
+        return this.numChunksLoaded === this.numChunks || this.getMissingChunks().length === 0;
       },
       configurable: true
     });
@@ -3820,10 +3823,7 @@ class DecodeStream extends BaseStream {
   }
   async getImageData(length, decoderOptions) {
     if (!this.canAsyncDecodeImageFromBuffer) {
-      if (this.isAsyncDecoder) {
-        return this.decodeImage(null, length, decoderOptions);
-      }
-      return this.getBytes(length, decoderOptions);
+      return this.isAsyncDecoder ? this.decodeImage(null, length, decoderOptions) : this.getBytes(length, decoderOptions);
     }
     const data = await this.stream.asyncGetBytes();
     return this.decodeImage(data, length, decoderOptions);
@@ -6058,6 +6058,10 @@ const ShadingType = {
   COONS_PATCH_MESH: 6,
   TENSOR_PATCH_MESH: 7
 };
+const MAX_SAMPLED_COLOR_COMPONENTS = 1 << 16;
+function getColorConversionBatchSize(count, numComps) {
+  return MathClamp(Math.floor(MAX_SAMPLED_COLOR_COMPONENTS / numComps), 1, count);
+}
 class Pattern {
   static #hasGPU = false;
   constructor() {
@@ -6147,20 +6151,30 @@ class RadialAxialShading extends BaseShading {
       info("Bad shading domain.");
       return;
     }
-    const color = new Float32Array(cs.numComps),
-      ratio = new Float32Array(1);
+    const {
+      numComps
+    } = cs;
+    const ratio = new Float32Array(1);
+    const batchSize = getColorConversionBatchSize(NUMBER_OF_SAMPLES, numComps);
+    const comps = new Float32Array(batchSize * numComps);
+    const rgb = new Uint8ClampedArray(NUMBER_OF_SAMPLES * 3);
+    for (let start = 0; start < NUMBER_OF_SAMPLES; start += batchSize) {
+      const count = Math.min(batchSize, NUMBER_OF_SAMPLES - start);
+      for (let i = 0, offset = 0; i < count; i++, offset += numComps) {
+        ratio[0] = t0 + (start + i) * step;
+        fn(ratio, 0, comps, offset);
+      }
+      cs.getRgbItems(comps, count, rgb, start * 3, 0);
+    }
     let iBase = 0;
-    ratio[0] = t0;
-    fn(ratio, 0, color, 0);
-    const rgbBuffer = new Uint8ClampedArray(3);
-    cs.getRgb(color, 0, rgbBuffer);
-    let [rBase, gBase, bBase] = rgbBuffer;
+    let rBase = rgb[0],
+      gBase = rgb[1],
+      bBase = rgb[2];
     colorStops.push([0, Util.makeHexColor(rBase, gBase, bBase)]);
     let iPrev = 1;
-    ratio[0] = t0 + step;
-    fn(ratio, 0, color, 0);
-    cs.getRgb(color, 0, rgbBuffer);
-    let [rPrev, gPrev, bPrev] = rgbBuffer;
+    let rPrev = rgb[3],
+      gPrev = rgb[4],
+      bPrev = rgb[5];
     let maxSlopeR = rPrev - rBase + 1;
     let maxSlopeG = gPrev - gBase + 1;
     let maxSlopeB = bPrev - bBase + 1;
@@ -6168,10 +6182,10 @@ class RadialAxialShading extends BaseShading {
     let minSlopeG = gPrev - gBase - 1;
     let minSlopeB = bPrev - bBase - 1;
     for (let i = 2; i < NUMBER_OF_SAMPLES; i++) {
-      ratio[0] = t0 + i * step;
-      fn(ratio, 0, color, 0);
-      cs.getRgb(color, 0, rgbBuffer);
-      const [r, g, b] = rgbBuffer;
+      const rgbOffset = i * 3;
+      const r = rgb[rgbOffset],
+        g = rgb[rgbOffset + 1],
+        b = rgb[rgbOffset + 2];
       const run = i - iBase;
       maxSlopeR = Math.min(maxSlopeR, (r - rBase + 1) / run);
       maxSlopeG = Math.min(maxSlopeG, (g - gBase + 1) / run);
@@ -6358,13 +6372,19 @@ class FunctionBasedShading extends BaseShading {
     const totalVertices = (stepsY + 1) * verticesPerRow;
     const coords = this.coords = new Float32Array(totalVertices * 2);
     const colors = this.colors = new Uint8ClampedArray(totalVertices * 4);
+    const {
+      numComps
+    } = cs;
     const xyBuf = new Float32Array(2);
-    const colorBuf = new Float32Array(cs.numComps);
+    const batchSize = getColorConversionBatchSize(totalVertices, numComps);
+    const comps = new Float32Array(batchSize * numComps);
     const rangeX = (x1 - x0) / stepsX;
     const rangeY = (y1 - y0) / stepsY;
     const halfStepX = rangeX / 2;
     const halfStepY = rangeY / 2;
     let coordOffset = 0;
+    let compOffset = 0;
+    let batchCount = 0;
     let colorOffset = 0;
     for (let row = 0; row <= stepsY; row++) {
       const yDomain = y0 + rangeY * row;
@@ -6372,14 +6392,22 @@ class FunctionBasedShading extends BaseShading {
       for (let col = 0; col <= stepsX; col++) {
         const xDomain = x0 + rangeX * col;
         xyBuf[0] = col === stepsX ? xDomain - halfStepX : xDomain;
-        fn(xyBuf, 0, colorBuf, 0);
+        fn(xyBuf, 0, comps, compOffset);
+        compOffset += numComps;
+        batchCount++;
         coords[coordOffset] = xDomain;
         coords[coordOffset + 1] = yDomain;
         Util.applyTransform(coords, matrix, coordOffset);
         coordOffset += 2;
-        cs.getRgbItem(colorBuf, 0, colors, colorOffset);
-        colorOffset += 4;
+        if (batchCount === batchSize) {
+          cs.getRgbItems(comps, batchCount, colors, colorOffset, 1);
+          colorOffset += batchCount * 4;
+          compOffset = batchCount = 0;
+        }
       }
+    }
+    if (batchCount > 0) {
+      cs.getRgbItems(comps, batchCount, colors, colorOffset, 1);
     }
     const ps = new Uint32Array(totalVertices);
     for (let i = 0; i < totalVertices; i++) {
@@ -11292,10 +11320,7 @@ class Parser {
       return buf1;
     }
     if (typeof buf1 === "string") {
-      if (cipherTransform) {
-        return cipherTransform.decryptString(buf1);
-      }
-      return buf1;
+      return cipherTransform ? cipherTransform.decryptString(buf1) : buf1;
     }
     return buf1;
   }
@@ -18776,10 +18801,7 @@ class CFFFDSelect {
     this.fdSelect = fdSelect;
   }
   getFDIndex(glyphIndex) {
-    if (glyphIndex < 0 || glyphIndex >= this.fdSelect.length) {
-      return -1;
-    }
-    return this.fdSelect[glyphIndex];
+    return glyphIndex < 0 || glyphIndex >= this.fdSelect.length ? -1 : this.fdSelect[glyphIndex];
   }
 }
 class CFFOffsetTracker {
@@ -20816,10 +20838,7 @@ class IdentityToUnicodeMap {
     return this.firstChar <= i && i <= this.lastChar;
   }
   get(i) {
-    if (this.firstChar <= i && i <= this.lastChar) {
-      return String.fromCharCode(i);
-    }
-    return undefined;
+    return this.firstChar <= i && i <= this.lastChar ? String.fromCharCode(i) : undefined;
   }
   charCodeOf(v) {
     return Number.isInteger(v) && v >= this.firstChar && v <= this.lastChar ? v : -1;
@@ -34000,52 +34019,45 @@ function normalizeBlendMode(value, parsingArray = false) {
     warn(`Unsupported blend mode Array: ${value}`);
     return "source-over";
   }
-  if (!(value instanceof Name)) {
-    if (parsingArray) {
-      return null;
+  if (value instanceof Name) {
+    switch (value.name) {
+      case "Normal":
+      case "Compatible":
+        return "source-over";
+      case "Multiply":
+        return "multiply";
+      case "Screen":
+        return "screen";
+      case "Overlay":
+        return "overlay";
+      case "Darken":
+        return "darken";
+      case "Lighten":
+        return "lighten";
+      case "ColorDodge":
+        return "color-dodge";
+      case "ColorBurn":
+        return "color-burn";
+      case "HardLight":
+        return "hard-light";
+      case "SoftLight":
+        return "soft-light";
+      case "Difference":
+        return "difference";
+      case "Exclusion":
+        return "exclusion";
+      case "Hue":
+        return "hue";
+      case "Saturation":
+        return "saturation";
+      case "Color":
+        return "color";
+      case "Luminosity":
+        return "luminosity";
     }
-    return "source-over";
+    warn(`Unsupported blend mode: ${value.name}`);
   }
-  switch (value.name) {
-    case "Normal":
-    case "Compatible":
-      return "source-over";
-    case "Multiply":
-      return "multiply";
-    case "Screen":
-      return "screen";
-    case "Overlay":
-      return "overlay";
-    case "Darken":
-      return "darken";
-    case "Lighten":
-      return "lighten";
-    case "ColorDodge":
-      return "color-dodge";
-    case "ColorBurn":
-      return "color-burn";
-    case "HardLight":
-      return "hard-light";
-    case "SoftLight":
-      return "soft-light";
-    case "Difference":
-      return "difference";
-    case "Exclusion":
-      return "exclusion";
-    case "Hue":
-      return "hue";
-    case "Saturation":
-      return "saturation";
-    case "Color":
-      return "color";
-    case "Luminosity":
-      return "luminosity";
-  }
-  if (parsingArray) {
-    return null;
-  }
-  warn(`Unsupported blend mode: ${value.name}`);
-  return "source-over";
+  return parsingArray ? null : "source-over";
 }
 function addCachedImageOps(opList, {
   objId,
@@ -39022,10 +39034,7 @@ class SimpleDOMNode {
     return childNodes[index + 1];
   }
   get textContent() {
-    if (!this.childNodes) {
-      return this.nodeValue || "";
-    }
-    return this.childNodes.map(child => child.textContent).join("");
+    return !this.childNodes ? this.nodeValue || "" : this.childNodes.map(child => child.textContent).join("");
   }
   get children() {
     return this.childNodes || [];
@@ -41128,10 +41137,7 @@ class Catalog {
     const obj = this.#catDict.get("Names");
     let javaScript = null;
     function appendIfJavaScriptDict(name, jsDict) {
-      if (!(jsDict instanceof Dict)) {
-        return;
-      }
-      if (!isName(jsDict.get("S"), "JavaScript")) {
+      if (!(jsDict instanceof Dict) || !isName(jsDict.get("S"), "JavaScript")) {
         return;
       }
       let js = jsDict.get("JS");
@@ -41142,7 +41148,7 @@ class Catalog {
       }
       js = stringToPDFString(js, true).replaceAll("\x00", "");
       if (js) {
-        (javaScript ||= new Map()).set(name, js);
+        (javaScript ??= new Map()).set(name, js);
       }
     }
     if (obj instanceof Dict && obj.has("JavaScript")) {
@@ -41161,13 +41167,9 @@ class Catalog {
     const javaScript = this.#collectJavaScript();
     let actions = collectActions(this.xref, this.#catDict, DocumentActionEventType);
     if (javaScript) {
-      actions ||= Object.create(null);
+      actions ??= new Map();
       for (const [key, val] of javaScript) {
-        if (key in actions) {
-          actions[key].push(val);
-        } else {
-          actions[key] = [val];
-        }
+        actions.getOrInsertComputed(key, makeArr).push(val);
       }
     }
     return shadow(this, "jsActions", actions);
@@ -41403,6 +41405,8 @@ class Catalog {
     const xref = this.xref;
     let total = 0,
       ref = pageRef;
+    const visited = new RefSet();
+    visited.put(pageRef);
     while (true) {
       const node = await xref.fetchAsync(ref);
       if (isRefsEqual(ref, pageRef) && !isDict(node, "Page") && !(node instanceof Dict && !node.has("Type") && node.has("Contents"))) {
@@ -41415,6 +41419,12 @@ class Catalog {
         throw new FormatError("Node must be a dictionary.");
       }
       const parentRef = node.getRaw("Parent");
+      if (parentRef instanceof Ref) {
+        if (visited.has(parentRef)) {
+          throw new FormatError("Pages tree contains circular reference.");
+        }
+        visited.put(parentRef);
+      }
       const parent = await node.getAsync("Parent");
       if (!parent) {
         break;
@@ -41490,9 +41500,18 @@ class Catalog {
     }
     if (!pageRef) {
       const queue = [seDict];
+      const visited = new RefSet();
+      visited.put(seRef);
       while (queue.length > 0 && !pageRef) {
         const node = queue.shift();
-        const kids = node.get("K");
+        let kids = node.getRaw("K");
+        if (kids instanceof Ref) {
+          if (visited.has(kids)) {
+            continue;
+          }
+          visited.put(kids);
+          kids = xref.fetch(kids);
+        }
         let kidsArr;
         if (Array.isArray(kids)) {
           kidsArr = kids;
@@ -41502,6 +41521,12 @@ class Catalog {
           continue;
         }
         for (const kid of kidsArr) {
+          if (kid instanceof Ref) {
+            if (visited.has(kid)) {
+              continue;
+            }
+            visited.put(kid);
+          }
           const kidObj = xref.fetchIfRef(kid);
           if (!(kidObj instanceof Dict)) {
             continue;
@@ -42505,10 +42530,7 @@ class FontFinder {
 }
 function selectFont(xfaFont, typeface) {
   if (xfaFont.posture === "italic") {
-    if (xfaFont.weight === "bold") {
-      return typeface.bolditalic;
-    }
-    return typeface.italic;
+    return xfaFont.weight === "bold" ? typeface.bolditalic : typeface.italic;
   } else if (xfaFont.weight === "bold") {
     return typeface.bold;
   }
@@ -43137,10 +43159,7 @@ class XFAObject {
     return "";
   }
   [$text]() {
-    if (this[_children].length === 0) {
-      return this[$content];
-    }
-    return this[_children].map(c => c[$text]()).join("");
+    return this[_children].length === 0 ? this[$content] : this[_children].map(c => c[$text]()).join("");
   }
   get [_attributeNames]() {
     const proto = Object.getPrototypeOf(this);
@@ -43172,10 +43191,7 @@ class XFAObject {
     return this[$getParent]();
   }
   [$getChildren](name = null) {
-    if (!name) {
-      return this[_children];
-    }
-    return this[name];
+    return !name ? this[_children] : this[name];
   }
   [$dump]() {
     const dumped = Object.create(null);
@@ -43435,10 +43451,7 @@ class XFAObject {
     return clone;
   }
   [$getChildren](name = null) {
-    if (!name) {
-      return this[_children];
-    }
-    return this[_children].filter(c => c[$nodeName] === name);
+    return !name ? this[_children] : this[_children].filter(c => c[$nodeName] === name);
   }
   [$getChildrenByClass](name) {
     return this[name];
@@ -43626,10 +43639,7 @@ class XmlObject extends XFAObject {
     return HTMLResult.EMPTY;
   }
   [$getChildren](name = null) {
-    if (!name) {
-      return this[_children];
-    }
-    return this[_children].filter(c => c[$nodeName] === name);
+    return !name ? this[_children] : this[_children].filter(c => c[$nodeName] === name);
   }
   [$getAttributes]() {
     return this[_attributes];
@@ -49003,10 +49013,7 @@ class Value extends XFAObject {
   }
   [$text]() {
     if (this.exData) {
-      if (typeof this.exData[$content] === "string") {
-        return this.exData[$content].trim();
-      }
-      return this.exData[$content][$text]().trim();
+      return typeof this.exData[$content] === "string" ? this.exData[$content].trim() : this.exData[$content][$text]().trim();
     }
     for (const name of Object.getOwnPropertyNames(this)) {
       if (name === "image") {
@@ -52410,13 +52417,11 @@ class Builder {
     if (hasNamespace) {
       this._currentNamespace = this._namespaceStack.pop();
     }
-    if (prefixes) {
-      prefixes.forEach(({
-        prefix
-      }) => {
-        this._namespacePrefixes.get(prefix).pop();
-      });
-    }
+    prefixes?.forEach(({
+      prefix
+    }) => {
+      this._namespacePrefixes.get(prefix).pop();
+    });
     if (nsAgnostic) {
       this._nsAgnosticLevel--;
     }
@@ -54435,28 +54440,28 @@ class TextWidgetAnnotation extends WidgetAnnotation {
     this.data.comb = this.hasFieldFlag(AnnotationFieldFlag.COMB) && !this.data.multiLine && !this.data.password && !this.hasFieldFlag(AnnotationFieldFlag.FILESELECT) && this.data.maxLen !== 0;
     this.data.doNotScroll = this.hasFieldFlag(AnnotationFieldFlag.DONOTSCROLL);
     const {
-      data: {
-        actions
-      }
-    } = this;
+      actions
+    } = this.data;
     if (!actions) {
       return;
     }
     const AFDateTime = /^AF(Date|Time)_(?:Keystroke|Format)(?:Ex)?\(['"]?([^'"]+)['"]?\);$/;
     let canUseHTMLDateTime = false;
-    if (actions.Format?.length === 1 && actions.Keystroke?.length === 1 && AFDateTime.test(actions.Format[0]) && AFDateTime.test(actions.Keystroke[0]) || actions.Format?.length === 0 && actions.Keystroke?.length === 1 && AFDateTime.test(actions.Keystroke[0]) || actions.Keystroke?.length === 0 && actions.Format?.length === 1 && AFDateTime.test(actions.Format[0])) {
+    const aFormat = actions.get("Format"),
+      aKeystroke = actions.get("Keystroke");
+    if (aFormat?.length === 1 && aKeystroke?.length === 1 && AFDateTime.test(aFormat[0]) && AFDateTime.test(aKeystroke[0]) || aFormat?.length === 0 && aKeystroke?.length === 1 && AFDateTime.test(aKeystroke[0]) || aKeystroke?.length === 0 && aFormat?.length === 1 && AFDateTime.test(aFormat[0])) {
       canUseHTMLDateTime = true;
     }
     const actionsToVisit = [];
-    if (actions.Format) {
-      actionsToVisit.push(...actions.Format);
+    if (aFormat) {
+      actionsToVisit.push(...aFormat);
     }
-    if (actions.Keystroke) {
-      actionsToVisit.push(...actions.Keystroke);
+    if (aKeystroke) {
+      actionsToVisit.push(...aKeystroke);
     }
     if (canUseHTMLDateTime) {
-      delete actions.Keystroke;
-      actions.Format = actionsToVisit;
+      actions.delete("Keystroke");
+      actions.set("Format", actionsToVisit);
     }
     for (const formatAction of actionsToVisit) {
       const m = formatAction.match(AFDateTime);
@@ -59685,7 +59690,10 @@ class PDFDocument {
         }
         return this.#hasOnlyDocumentSignatures(field.get("Kids"), recursionDepth);
       }
-      const isSignature = isName(field.get("FT"), "Sig");
+      const isSignature = isName(getInheritableProperty({
+        dict: field,
+        key: "FT"
+      }), "Sig");
       const rectangle = field.get("Rect");
       const isInvisible = Array.isArray(rectangle) && rectangle.every(value => value === 0);
       return isSignature && isInvisible;
@@ -60229,12 +60237,14 @@ class PDFDocument {
       name = name === "" ? partName : `${name}.${partName}`;
     } else {
       let obj = field;
+      const walkedRefs = new RefSet();
       while (true) {
         obj = obj.getRaw("Parent") || parentRef;
         if (obj instanceof Ref) {
-          if (visitedRefs.has(obj)) {
+          if (visitedRefs.has(obj) || walkedRefs.has(obj)) {
             break;
           }
+          walkedRefs.put(obj);
           obj = await xref.fetchAsync(obj);
         }
         if (!(obj instanceof Dict)) {
@@ -60300,7 +60310,7 @@ class PDFDocument {
     });
     return shadow(this, "fieldObjects", promise);
   }
-  #collectSignatureFields(fields, out, visitedRefs) {
+  async #collectSignatureFields(fields, out, visitedRefs) {
     if (!Array.isArray(fields)) {
       return;
     }
@@ -60311,21 +60321,21 @@ class PDFDocument {
         }
         visitedRefs.put(fieldRef);
       }
-      const field = this.xref.fetchIfRef(fieldRef);
+      const field = await this.xref.fetchIfRefAsync(fieldRef);
       if (!(field instanceof Dict)) {
         continue;
       }
-      if (isName(field.get("FT"), "Sig")) {
-        const sigDict = this.xref.fetchIfRef(field.get("V"));
+      if (isName(await field.getAsync("FT"), "Sig")) {
+        const sigDict = await field.getAsync("V");
         if (sigDict instanceof Dict) {
-          const parsed = this.#parseSignatureDict(field, sigDict, fieldRef);
+          const parsed = await this.#parseSignatureDict(field, sigDict, fieldRef);
           if (parsed) {
             out.push(parsed);
           }
         }
       }
       if (field.has("Kids")) {
-        this.#collectSignatureFields(field.get("Kids"), out, visitedRefs);
+        await this.#collectSignatureFields(await field.getAsync("Kids"), out, visitedRefs);
       }
     }
   }
@@ -60356,44 +60366,33 @@ class PDFDocument {
     }
     return true;
   }
-  #parseSignatureDict(field, sigDict, fieldRef) {
-    const byteRange = sigDict.get("ByteRange");
+  async #parseSignatureDict(field, sigDict, fieldRef) {
+    const byteRange = await sigDict.getAsync("ByteRange");
     if (!Array.isArray(byteRange) || byteRange.length !== 4 || byteRange.some(n => !Number.isInteger(n) || n < 0)) {
       return null;
     }
-    const contents = sigDict.get("Contents");
+    const [a, b, c, d] = byteRange;
+    const fileLength = this.stream.end || 0;
+    if (a !== 0 || b <= 0 || a + b > c || c + d > fileLength || fileLength === 0) {
+      return null;
+    }
+    const contents = await sigDict.getAsync("Contents");
     if (typeof contents !== "string" || contents.length === 0) {
       return null;
     }
-    const filterName = sigDict.get("Filter");
-    const filter = filterName instanceof Name ? filterName.name : null;
-    const subFilterName = sigDict.get("SubFilter");
-    const subFilter = subFilterName instanceof Name ? subFilterName.name : null;
+    const [filterName, subFilterName, t, name, reason, location, contactInfo, m] = await Promise.all([sigDict.getAsync("Filter"), sigDict.getAsync("SubFilter"), field.getAsync("T"), sigDict.getAsync("Name"), sigDict.getAsync("Reason"), sigDict.getAsync("Location"), sigDict.getAsync("ContactInfo"), sigDict.getAsync("M")]);
+    const filter = filterName instanceof Name ? filterName.name : null,
+      subFilter = subFilterName instanceof Name ? subFilterName.name : null;
     let signatureType = null;
     if (subFilter === "adbe.pkcs7.detached") {
       signatureType = 0;
     } else if (subFilter === "adbe.pkcs7.sha1") {
       signatureType = 1;
     }
-    const [a, b, c, d] = byteRange;
-    const stream = this.stream;
-    const fileLength = stream.end || 0;
-    if (a !== 0 || b <= 0 || a + b > c || c + d > fileLength || fileLength === 0) {
-      return null;
-    }
-    const pkcs7 = stringToBytes(contents);
-    const t = field.get("T");
-    const fieldName = typeof t === "string" ? stringToPDFString(t) : "";
-    const name = sigDict.get("Name");
-    const reason = sigDict.get("Reason");
-    const location = sigDict.get("Location");
-    const contactInfo = sigDict.get("ContactInfo");
-    const m = sigDict.get("M");
     const refKey = fieldRef instanceof Ref ? fieldRef.toString() : "inline";
-    const id = `${refKey}:${a}-${b}-${c}-${d}`;
     return {
-      id,
-      fieldName,
+      id: `${refKey}:${a}-${b}-${c}-${d}`,
+      fieldName: typeof t === "string" ? stringToPDFString(t) : "",
       signerName: typeof name === "string" ? stringToPDFString(name) : null,
       reason: typeof reason === "string" ? stringToPDFString(reason) : null,
       location: typeof location === "string" ? stringToPDFString(location) : null,
@@ -60403,7 +60402,7 @@ class PDFDocument {
       subFilter,
       signatureType,
       byteRange,
-      pkcs7,
+      pkcs7: stringToBytes(contents),
       revisionIndex: 0,
       parentId: null
     };
@@ -60419,7 +60418,7 @@ class PDFDocument {
       }
       const fields = annotationGlobals.acroForm.get("Fields");
       const collected = [];
-      this.#collectSignatureFields(fields, collected, new RefSet());
+      await this.#collectSignatureFields(fields, collected, new RefSet());
       await Promise.all(collected.map(async signature => {
         const signedEnd = signature.byteRange[2] + signature.byteRange[3];
         signature.modificationsAfterSignature = this.xref.countUpdatesAfter(signedEnd);
@@ -61639,6 +61638,7 @@ class PDFEditor {
     if (obj instanceof Ref) {
       const {
         currentDocument: {
+          fieldToParent,
           oldRefMapping
         }
       } = this;
@@ -61648,6 +61648,10 @@ class PDFEditor {
       }
       const oldRef = obj;
       obj = await xref.fetchAsync(oldRef);
+      const mappedRef = oldRefMapping.get(oldRef);
+      if (mappedRef) {
+        return mappedRef;
+      }
       if (typeof obj === "number") {
         return obj;
       }
@@ -61656,7 +61660,13 @@ class PDFEditor {
       }
       const newRef = this.newRef;
       oldRefMapping.put(oldRef, newRef);
-      this.xref[newRef.num] = await this.#collectDependencies(obj, true, xref, resourceStreamPath);
+      let cloneSource = true;
+      if (fieldToParent.has(oldRef) && obj instanceof Dict) {
+        obj = this.cloneDict(obj);
+        obj.delete("Parent");
+        cloneSource = false;
+      }
+      this.xref[newRef.num] = await this.#collectDependencies(obj, cloneSource, xref, resourceStreamPath);
       return newRef;
     }
     const promises = [];
@@ -62315,9 +62325,11 @@ class PDFEditor {
       promises.push(xref.fetchIfRefAsync(annotationRef).then(async annotationDict => {
         if (!isName(annotationDict.get("Subtype"), "Link")) {
           if (isName(annotationDict.get("Subtype"), "Widget")) {
-            hasSignatureAnnotations ||= isName(annotationDict.get("FT"), "Sig");
+            hasSignatureAnnotations ||= isName(getInheritableProperty({
+              dict: annotationDict,
+              key: "FT"
+            }), "Sig");
             const parentRef = annotationDict.getRaw("Parent") || null;
-            annotationDict.delete("Parent");
             fieldToParent.put(annotationRef, parentRef);
           }
           newAnnotations[newAnnotationIndex] = annotationRef;

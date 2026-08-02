@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 6.2.0
- * pdfjsBuild = e2d6021
+ * pdfjsBuild = 7fc7072
  */
 
 ;// ./web/ui_utils.js
@@ -535,385 +535,289 @@ const Type = {
   STRING: 0x08,
   UNDEFINED: 0x10
 };
-const defaultOptions = {
-  allowedGlobalEvents: {
-    value: null,
-    kind: OptionKind.BROWSER
-  },
-  canvasMaxAreaInBytes: {
-    value: -1,
-    kind: OptionKind.BROWSER + OptionKind.API
-  },
-  isInAutomation: {
-    value: false,
-    kind: OptionKind.BROWSER
-  },
-  localeProperties: {
-    value: {
-      lang: navigator.language || "en-US"
-    },
-    kind: OptionKind.BROWSER
-  },
-  maxCanvasDim: {
-    value: 32767,
-    kind: OptionKind.BROWSER + OptionKind.VIEWER
-  },
-  nimbusDataStr: {
-    value: "",
-    kind: OptionKind.BROWSER
-  },
-  supportsCaretBrowsingMode: {
-    value: false,
-    kind: OptionKind.BROWSER
-  },
-  supportsDocumentFonts: {
-    value: true,
-    kind: OptionKind.BROWSER
-  },
-  supportsDownloading: {
-    value: true,
-    kind: OptionKind.BROWSER
-  },
-  supportsIntegratedFind: {
-    value: false,
-    kind: OptionKind.BROWSER
-  },
-  supportsMouseWheelZoomCtrlKey: {
-    value: true,
-    kind: OptionKind.BROWSER
-  },
-  supportsMouseWheelZoomMetaKey: {
-    value: true,
-    kind: OptionKind.BROWSER
-  },
-  supportsPinchToZoom: {
-    value: true,
-    kind: OptionKind.BROWSER
-  },
-  supportsPrinting: {
-    value: true,
-    kind: OptionKind.BROWSER
-  },
-  toolbarDensity: {
-    value: 0,
-    kind: OptionKind.BROWSER + OptionKind.EVENT_DISPATCH
-  },
-  altTextLearnMoreUrl: {
-    value: "",
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  annotationEditorMode: {
-    value: 0,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  annotationMode: {
-    value: 2,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  capCanvasAreaFactor: {
-    value: 200,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  commentLearnMoreUrl: {
-    value: "",
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  cursorToolOnLoad: {
-    value: 0,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  debuggerSrc: {
-    value: "./debugger.mjs",
-    kind: OptionKind.VIEWER
-  },
-  defaultZoomDelay: {
-    value: 400,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  defaultZoomValue: {
-    value: "",
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  disableHistory: {
-    value: false,
-    kind: OptionKind.VIEWER
-  },
-  disablePageLabels: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  enableAltText: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  enableAltTextModelDownload: {
-    value: true,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE + OptionKind.EVENT_DISPATCH
-  },
-  enableAutoLinking: {
-    value: true,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  enableComment: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  enableDetailCanvas: {
-    value: true,
-    kind: OptionKind.VIEWER
-  },
-  enableGuessAltText: {
-    value: true,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE + OptionKind.EVENT_DISPATCH
-  },
-  enableHighlightFloatingButton: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  enableMerge: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  enableNewAltTextWhenAddingImage: {
-    value: true,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  enableNewBadge: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  enableOptimizedPartialRendering: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  enablePermissions: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  enablePrintAutoRotate: {
-    value: true,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  enableScripting: {
-    value: true,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  enableSignatureEditor: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  enableSignatureVerification: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  enableSplitMerge: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  enableUpdatedAddImage: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  externalLinkRel: {
-    value: "noopener noreferrer nofollow",
-    kind: OptionKind.VIEWER
-  },
-  externalLinkTarget: {
-    value: 0,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  highlightEditorColors: {
-    value: "yellow=#FFFF98,green=#53FFBC,blue=#80EBFF,pink=#FFCBE6,red=#FF4F5F," + "yellow_HCM=#FFFFCC,green_HCM=#53FFBC,blue_HCM=#80EBFF,pink_HCM=#F6B8FF,red_HCM=#C50043",
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  historyUpdateUrl: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  ignoreDestinationZoom: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  imageResourcesPath: {
-    value: "./images/",
-    kind: OptionKind.VIEWER
-  },
-  enableSelectionRendering: {
-    value: true,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  imagesRightClickMinSize: {
-    value: -1,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  maxCanvasPixels: {
-    value: 2 ** 25,
-    kind: OptionKind.VIEWER
-  },
-  minDurationToUpdateCanvas: {
-    value: 500,
-    kind: OptionKind.VIEWER
-  },
-  forcePageColors: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  pageColorsBackground: {
-    value: "Canvas",
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  pageColorsForeground: {
-    value: "CanvasText",
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  pdfBugEnabled: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  postMessageAfterPrintCallback: {
-    value: false,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  printResolution: {
-    value: 150,
-    kind: OptionKind.VIEWER
-  },
-  sidebarViewOnLoad: {
-    value: -1,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  scrollModeOnLoad: {
-    value: -1,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  spreadModeOnLoad: {
-    value: -1,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  textLayerMode: {
-    value: 1,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  viewerCssTheme: {
-    value: 0,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  viewOnLoad: {
-    value: 0,
-    kind: OptionKind.VIEWER + OptionKind.PREFERENCE
-  },
-  cMapPacked: {
-    value: true,
-    kind: OptionKind.API
-  },
-  cMapUrl: {
-    value: "../web/cmaps/",
-    kind: OptionKind.API
-  },
-  disableAutoFetch: {
-    value: false,
-    kind: OptionKind.API + OptionKind.PREFERENCE
-  },
-  disableFontFace: {
-    value: false,
-    kind: OptionKind.API + OptionKind.PREFERENCE
-  },
-  disableRange: {
-    value: false,
-    kind: OptionKind.API + OptionKind.PREFERENCE
-  },
-  disableStream: {
-    value: false,
-    kind: OptionKind.API + OptionKind.PREFERENCE
-  },
-  docBaseUrl: {
-    value: "",
-    kind: OptionKind.API
-  },
-  enableHWA: {
-    value: true,
-    kind: OptionKind.API + OptionKind.PREFERENCE
-  },
-  enableWebGPU: {
-    value: true,
-    kind: OptionKind.API + OptionKind.PREFERENCE
-  },
-  enableXfa: {
-    value: true,
-    kind: OptionKind.API + OptionKind.PREFERENCE
-  },
-  fontExtraProperties: {
-    value: false,
-    kind: OptionKind.API
-  },
-  iccUrl: {
-    value: "../web/iccs/",
-    kind: OptionKind.API
-  },
-  isOffscreenCanvasSupported: {
-    value: true,
-    kind: OptionKind.API
-  },
-  maxImageSize: {
-    value: -1,
-    kind: OptionKind.API
-  },
-  pdfBug: {
-    value: false,
-    kind: OptionKind.API
-  },
-  standardFontDataUrl: {
-    value: "../web/standard_fonts/",
-    kind: OptionKind.API
-  },
-  useSystemFonts: {
-    value: undefined,
-    kind: OptionKind.API,
-    type: Type.BOOLEAN + Type.UNDEFINED
-  },
-  verbosity: {
-    value: 1,
-    kind: OptionKind.API
-  },
-  wasmUrl: {
-    value: "../web/wasm/",
-    kind: OptionKind.API
-  },
-  workerPort: {
-    value: null,
-    kind: OptionKind.WORKER
-  },
-  workerSrc: {
-    value: "../build/pdf.worker.mjs",
-    kind: OptionKind.WORKER
-  }
-};
-{
-  defaultOptions.defaultUrl = {
-    value: "compressed.tracemonkey-pldi-09.pdf",
-    kind: OptionKind.VIEWER
-  };
-  defaultOptions.sandboxBundleSrc = {
-    value: "../build/pdf.sandbox.mjs",
-    kind: OptionKind.VIEWER
-  };
-  defaultOptions.enableFakeMLManager = {
-    value: true,
-    kind: OptionKind.VIEWER
-  };
-}
-{
-  defaultOptions.disablePreferences = {
-    value: false,
-    kind: OptionKind.VIEWER
-  };
-}
+const defaultOptions = new Map([["allowedGlobalEvents", {
+  value: null,
+  kind: OptionKind.BROWSER
+}], ["canvasMaxAreaInBytes", {
+  value: -1,
+  kind: OptionKind.BROWSER + OptionKind.API
+}], ["isInAutomation", {
+  value: false,
+  kind: OptionKind.BROWSER
+}], ["localeProperties", {
+  value: {
+    lang: navigator.language || "en-US"
+  },
+  kind: OptionKind.BROWSER
+}], ["maxCanvasDim", {
+  value: 32767,
+  kind: OptionKind.BROWSER + OptionKind.VIEWER
+}], ["nimbusDataStr", {
+  value: "",
+  kind: OptionKind.BROWSER
+}], ["supportsCaretBrowsingMode", {
+  value: false,
+  kind: OptionKind.BROWSER
+}], ["supportsDocumentFonts", {
+  value: true,
+  kind: OptionKind.BROWSER
+}], ["supportsDownloading", {
+  value: true,
+  kind: OptionKind.BROWSER
+}], ["supportsIntegratedFind", {
+  value: false,
+  kind: OptionKind.BROWSER
+}], ["supportsMouseWheelZoomCtrlKey", {
+  value: true,
+  kind: OptionKind.BROWSER
+}], ["supportsMouseWheelZoomMetaKey", {
+  value: true,
+  kind: OptionKind.BROWSER
+}], ["supportsPinchToZoom", {
+  value: true,
+  kind: OptionKind.BROWSER
+}], ["supportsPrinting", {
+  value: true,
+  kind: OptionKind.BROWSER
+}], ["toolbarDensity", {
+  value: 0,
+  kind: OptionKind.BROWSER + OptionKind.EVENT_DISPATCH
+}], ["altTextLearnMoreUrl", {
+  value: "",
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["annotationEditorMode", {
+  value: 0,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["annotationMode", {
+  value: 2,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["capCanvasAreaFactor", {
+  value: 200,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["commentLearnMoreUrl", {
+  value: "",
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["cursorToolOnLoad", {
+  value: 0,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["debuggerSrc", {
+  value: "./debugger.mjs",
+  kind: OptionKind.VIEWER
+}], ...[["defaultUrl", {
+  value: "compressed.tracemonkey-pldi-09.pdf",
+  kind: OptionKind.VIEWER
+}]], ["defaultZoomDelay", {
+  value: 400,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["defaultZoomValue", {
+  value: "",
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["disableHistory", {
+  value: false,
+  kind: OptionKind.VIEWER
+}], ["disablePageLabels", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ...[["disablePreferences", {
+  value: false,
+  kind: OptionKind.VIEWER
+}]], ...[], ["enableAltText", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enableAltTextModelDownload", {
+  value: true,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE + OptionKind.EVENT_DISPATCH
+}], ["enableAutoLinking", {
+  value: true,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enableComment", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enableDetailCanvas", {
+  value: true,
+  kind: OptionKind.VIEWER
+}], ...[], ["enableGuessAltText", {
+  value: true,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE + OptionKind.EVENT_DISPATCH
+}], ["enableHighlightFloatingButton", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enableMerge", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enableNewAltTextWhenAddingImage", {
+  value: true,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enableNewBadge", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enableNova", {
+  value: true,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enableOptimizedPartialRendering", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enablePermissions", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enablePrintAutoRotate", {
+  value: true,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enableScripting", {
+  value: true,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enableSelectionRendering", {
+  value: true,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enableSignatureEditor", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enableSignatureVerification", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enableSplitMerge", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["enableUpdatedAddImage", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["externalLinkRel", {
+  value: "noopener noreferrer nofollow",
+  kind: OptionKind.VIEWER
+}], ["externalLinkTarget", {
+  value: 0,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ...[], ["highlightEditorColors", {
+  value: "yellow=#FFFF98,green=#53FFBC,blue=#80EBFF,pink=#FFCBE6,red=#FF4F5F," + "yellow_HCM=#FFFFCC,green_HCM=#53FFBC,blue_HCM=#80EBFF,pink_HCM=#F6B8FF,red_HCM=#C50043",
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["historyUpdateUrl", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["ignoreDestinationZoom", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["imageResourcesPath", {
+  value: "./images/",
+  kind: OptionKind.VIEWER
+}], ["imagesRightClickMinSize", {
+  value: -1,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["maxCanvasPixels", {
+  value: 2 ** 25,
+  kind: OptionKind.VIEWER
+}], ["minDurationToUpdateCanvas", {
+  value: 500,
+  kind: OptionKind.VIEWER
+}], ["forcePageColors", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["pageColorsBackground", {
+  value: "Canvas",
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["pageColorsForeground", {
+  value: "CanvasText",
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["pdfBugEnabled", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["postMessageAfterPrintCallback", {
+  value: false,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["printResolution", {
+  value: 150,
+  kind: OptionKind.VIEWER
+}], ...[["sandboxBundleSrc", {
+  value: "../build/pdf.sandbox.mjs",
+  kind: OptionKind.VIEWER
+}]], ["sidebarViewOnLoad", {
+  value: -1,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["scrollModeOnLoad", {
+  value: -1,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["spreadModeOnLoad", {
+  value: -1,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["textLayerMode", {
+  value: 1,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["viewerCssTheme", {
+  value: 0,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["viewOnLoad", {
+  value: 0,
+  kind: OptionKind.VIEWER + OptionKind.PREFERENCE
+}], ["cMapPacked", {
+  value: true,
+  kind: OptionKind.API
+}], ["cMapUrl", {
+  value: "../web/cmaps/",
+  kind: OptionKind.API
+}], ["disableAutoFetch", {
+  value: false,
+  kind: OptionKind.API + OptionKind.PREFERENCE
+}], ["disableFontFace", {
+  value: false,
+  kind: OptionKind.API + OptionKind.PREFERENCE
+}], ["disableRange", {
+  value: false,
+  kind: OptionKind.API + OptionKind.PREFERENCE
+}], ["disableStream", {
+  value: false,
+  kind: OptionKind.API + OptionKind.PREFERENCE
+}], ["docBaseUrl", {
+  value: "",
+  kind: OptionKind.API
+}], ["enableHWA", {
+  value: true,
+  kind: OptionKind.API + OptionKind.PREFERENCE
+}], ["enableWebGPU", {
+  value: true,
+  kind: OptionKind.API + OptionKind.PREFERENCE
+}], ["enableXfa", {
+  value: true,
+  kind: OptionKind.API + OptionKind.PREFERENCE
+}], ["fontExtraProperties", {
+  value: false,
+  kind: OptionKind.API
+}], ["iccUrl", {
+  value: "../web/iccs/",
+  kind: OptionKind.API
+}], ["isOffscreenCanvasSupported", {
+  value: true,
+  kind: OptionKind.API
+}], ["maxImageSize", {
+  value: -1,
+  kind: OptionKind.API
+}], ["pdfBug", {
+  value: false,
+  kind: OptionKind.API
+}], ["standardFontDataUrl", {
+  value: "../web/standard_fonts/",
+  kind: OptionKind.API
+}], ["useSystemFonts", {
+  value: undefined,
+  kind: OptionKind.API,
+  type: Type.BOOLEAN + Type.UNDEFINED
+}], ["verbosity", {
+  value: 1,
+  kind: OptionKind.API
+}], ["wasmUrl", {
+  value: "../web/wasm/",
+  kind: OptionKind.API
+}], ["workerPort", {
+  value: null,
+  kind: OptionKind.WORKER
+}], ["workerSrc", {
+  value: "../build/pdf.worker.mjs",
+  kind: OptionKind.WORKER
+}]]);
 class AppOptions {
   static eventBus;
   static #opts = new Map();
   static {
-    for (const name in defaultOptions) {
-      this.#opts.set(name, defaultOptions[name].value);
+    for (const [name, defaultOpt] of defaultOptions) {
+      this.#opts.set(name, defaultOpt.value);
     }
     for (const [name, value] of compatParams) {
       this.#opts.set(name, value);
@@ -934,8 +838,7 @@ class AppOptions {
   }
   static getAll(kind = null, defaultOnly = false) {
     const options = Object.create(null);
-    for (const name in defaultOptions) {
-      const defaultOpt = defaultOptions[name];
+    for (const [name, defaultOpt] of defaultOptions) {
       if (kind && !(kind & defaultOpt.kind)) {
         continue;
       }
@@ -952,7 +855,7 @@ class AppOptions {
     this._hasInvokedSet ||= true;
     let events;
     for (const name in options) {
-      const defaultOpt = defaultOptions[name],
+      const defaultOpt = defaultOptions.get(name),
         userOpt = options[name];
       if (!defaultOpt || !(typeof userOpt === typeof defaultOpt.value || Type[(typeof userOpt).toUpperCase()] & defaultOpt.type)) {
         continue;
@@ -1046,7 +949,7 @@ const {
 } = globalThis.pdfjsLib;
 
 ;// ./web/internal_evt.js
-const INTERNAL_EVT = "915d15d3-c2e5-4520-9304-469767d84fa0";
+const INTERNAL_EVT = "06fe716b-d8d8-4116-ab79-9897efa812f4";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });
@@ -1392,6 +1295,7 @@ class SimpleLinkService extends PDFLinkService {
 
 ;// ./web/event_utils.js
 
+
 const WaitOnType = {
   EVENT: "event",
   TIMEOUT: "timeout"
@@ -1426,7 +1330,7 @@ async function waitOnEventOrTimeout({
   return promise;
 }
 class EventBus {
-  #listeners = Object.create(null);
+  #listeners = new Map();
   constructor() {
     Object.seal(this);
   }
@@ -1444,8 +1348,7 @@ class EventBus {
       rmAbort = () => signal.removeEventListener("abort", onAbort);
       signal.addEventListener("abort", onAbort);
     }
-    const eventListeners = this.#listeners[eventName] ??= [];
-    eventListeners.push({
+    this.#listeners.getOrInsertComputed(eventName, makeSet).add({
       listener,
       internal: options?.internal === INTERNAL_EVT,
       once: options?.once === true,
@@ -1453,22 +1356,16 @@ class EventBus {
     });
   }
   off(eventName, listener, options = null) {
-    const eventListeners = this.#listeners[eventName];
-    if (!eventListeners) {
-      return;
-    }
-    for (let i = 0, ii = eventListeners.length; i < ii; i++) {
-      const evt = eventListeners[i];
-      if (evt.listener === listener) {
-        evt.rmAbort?.();
-        eventListeners.splice(i, 1);
-        return;
-      }
+    const eventListeners = this.#listeners.get(eventName);
+    const evt = eventListeners?.keys().find(e => e.listener === listener);
+    if (evt) {
+      evt.rmAbort?.();
+      eventListeners.delete(evt);
     }
   }
   dispatch(eventName, data) {
-    const eventListeners = this.#listeners[eventName];
-    if (!eventListeners?.length) {
+    const eventListeners = this.#listeners.get(eventName);
+    if (!eventListeners?.size) {
       return;
     }
     let extListeners;
@@ -1476,7 +1373,7 @@ class EventBus {
       listener,
       internal,
       once
-    } of eventListeners.slice(0)) {
+    } of new Set(eventListeners)) {
       if (once) {
         this.off(eventName, listener);
       }
@@ -9324,6 +9221,7 @@ class PDFScriptingManager {
   #eventAC = null;
   #eventBus = null;
   #externalServices = null;
+  #objectIds = null;
   #pdfDocument = null;
   #pdfViewer = null;
   #ready = false;
@@ -9356,6 +9254,16 @@ class PDFScriptingManager {
     }
     if (pdfDocument !== this.#pdfDocument) {
       return;
+    }
+    if (objects) {
+      this.#objectIds = new Set();
+      for (const fields of Object.values(objects)) {
+        for (const {
+          id
+        } of fields) {
+          this.#objectIds.add(id);
+        }
+      }
     }
     try {
       this.#scripting = this.#initScripting();
@@ -9572,6 +9480,9 @@ class PDFScriptingManager {
     delete detail.siblings;
     const ids = siblings ? [id, ...siblings] : [id];
     for (const elementId of ids) {
+      if (!this.#objectIds?.has(elementId)) {
+        continue;
+      }
       const element = document.querySelector(`[data-element-id="${elementId}"]`);
       if (element) {
         element.dispatchEvent(new CustomEvent("updatefromsandbox", {
@@ -9643,6 +9554,7 @@ class PDFScriptingManager {
     return this.#externalServices.createScripting();
   }
   async #destroyScripting() {
+    this.#objectIds = null;
     if (!this.#scripting) {
       this.#pdfDocument = null;
       this.#destroyCapability?.resolve();
@@ -14165,13 +14077,17 @@ class PDFPageView extends BasePDFPageView {
     if (this.structTreeLayer && !this.textLayer) {
       this.structTreeLayer = null;
     }
-    if (this.annotationEditorLayer && (!keepAnnotationEditorLayer || !this.annotationEditorLayer.div)) {
+    if (this.annotationEditorLayer && (!keepAnnotationEditorLayer || !this.annotationEditorLayer.div || !this.textLayer)) {
       if (this.drawLayer) {
         this.drawLayer.cancel();
         this.drawLayer = null;
       }
       this.annotationEditorLayer.cancel();
       this.annotationEditorLayer = null;
+    }
+    if (this.drawLayer && !this.textLayer) {
+      this.drawLayer.cancel();
+      this.drawLayer = null;
     }
     if (this.xfaLayer && (!keepXfaLayer || !this.xfaLayer.div)) {
       this.xfaLayer.cancel();
@@ -15468,10 +15384,7 @@ class PDFViewer {
     }
   }
   get #pageWidthScaleFactor() {
-    if (this._spreadMode !== SpreadMode.NONE && this._scrollMode !== ScrollMode.HORIZONTAL) {
-      return 2;
-    }
-    return 1;
+    return this._spreadMode !== SpreadMode.NONE && this._scrollMode !== ScrollMode.HORIZONTAL ? 2 : 1;
   }
   #setScale(value, options) {
     let scale = parseFloat(value);
@@ -15656,17 +15569,16 @@ class PDFViewer {
     const currentPageView = this._pages[pageNumber - 1];
     const container = this.container;
     const topLeft = currentPageView.getPagePoint(container.scrollLeft - firstPage.x, container.scrollTop - firstPage.y);
-    const intLeft = Math.round(topLeft[0]);
-    const intTop = Math.round(topLeft[1]);
+    const [left, top] = topLeft;
     let pdfOpenParams = `#page=${pageNumber}`;
     if (!this.isInPresentationMode) {
-      pdfOpenParams += `&zoom=${normalizedScaleValue},${intLeft},${intTop}`;
+      pdfOpenParams += `&zoom=${normalizedScaleValue},` + `${Math.round(left)},${Math.round(top)}`;
     }
     this._location = {
       pageNumber,
       scale: normalizedScaleValue,
-      top: intTop,
-      left: intLeft,
+      top,
+      left,
       rotation: this._pagesRotation,
       pdfOpenParams
     };
@@ -21199,6 +21111,7 @@ function getViewerConfiguration() {
       undoButton: document.getElementById("editorUndoBarUndoButton"),
       closeButton: document.getElementById("editorUndoBarCloseButton")
     },
+    ...{},
     editCommentDialog: {
       dialog: document.getElementById("commentManagerDialog"),
       toolbar: document.getElementById("commentManagerToolbar"),
