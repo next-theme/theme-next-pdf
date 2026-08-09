@@ -21,8 +21,8 @@
  */
 
 /**
- * pdfjsVersion = 6.2.0
- * pdfjsBuild = 7fc7072
+ * pdfjsVersion = 6.3.0
+ * pdfjsBuild = 022e958
  */
 
 ;// ./src/shared/util.js
@@ -1358,10 +1358,23 @@ function getPdfFilenameFromUrl(url, defaultFilename = "document.pdf") {
     }
   }
   if (newURL.hash) {
-    const reFilename = /[^/?#=]+\.pdf\b(?!.*\.pdf\b)/i;
-    const hashFilename = reFilename.exec(newURL.hash);
-    if (hashFilename) {
-      return decode(hashFilename[0]);
+    const {
+      hash
+    } = newURL;
+    let extensionStart = -1;
+    for (const {
+      index
+    } of hash.matchAll(/\.pdf\b/gi)) {
+      extensionStart = index;
+    }
+    if (extensionStart > 0) {
+      let filenameStart = extensionStart;
+      while (filenameStart > 0 && !"/?#=".includes(hash[filenameStart - 1])) {
+        filenameStart--;
+      }
+      if (filenameStart < extensionStart) {
+        return decode(hash.slice(filenameStart, extensionStart + 4));
+      }
     }
   }
   return defaultFilename;
@@ -2082,7 +2095,7 @@ class FloatingToolbar {
 }
 
 ;// ./src/shared/internal_evt.js
-const INTERNAL_EVT = "06fe716b-d8d8-4116-ab79-9897efa812f4";
+const INTERNAL_EVT = "cb02e232-69ee-41ea-a0c2-81ef74cda235";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });
@@ -2562,6 +2575,7 @@ class AnnotationEditorUIManager {
   #allEditors = new Map();
   #allLayers = new Map();
   #savedAllLayers = null;
+  #savedEditorsByPage = null;
   #altTextManager = null;
   #annotationStorage = null;
   #changedExistingAnnotations = null;
@@ -3434,7 +3448,7 @@ class AnnotationEditorUIManager {
     }
   }
   updatePageIndex(oldPageIndex, newPageIndex) {
-    for (const editor of this.getEditors(oldPageIndex)) {
+    for (const editor of this.#savedEditorsByPage.get(oldPageIndex) || []) {
       editor.pageIndex = newPageIndex;
     }
     const layer = this.#savedAllLayers.get(oldPageIndex);
@@ -3451,9 +3465,22 @@ class AnnotationEditorUIManager {
   startUpdatePages() {
     this.#savedAllLayers = new Map(this.#allLayers);
     this.#allLayers.clear();
+    const savedEditorsByPage = this.#savedEditorsByPage = new Map();
+    const saveEditor = editor => {
+      savedEditorsByPage.getOrInsertComputed(editor.pageIndex, makeArr).push(editor);
+    };
+    for (const editor of this.#allEditors.values()) {
+      saveEditor(editor);
+    }
+    for (const [id, editor] of this.#annotationStorage) {
+      if (id.startsWith(AnnotationEditorPrefix) && !this.#allEditors.has(id) && Number.isInteger(editor?.pageIndex)) {
+        saveEditor(editor);
+      }
+    }
   }
   endUpdatePages() {
     this.#savedAllLayers = null;
+    this.#savedEditorsByPage = null;
   }
   clonePage(pageIndex, newPageIndex) {
     for (const editor of this.getEditors(pageIndex)) {
@@ -4801,6 +4828,7 @@ class TouchManager {
   #onPinchEnd;
   #pointerDownAC = null;
   #signal;
+  #touchIds = new Set();
   #touchInfo = null;
   #touchManagerAC;
   #touchMoveAC = null;
@@ -4833,7 +4861,14 @@ class TouchManager {
     if (this.#isPinchingDisabled?.()) {
       return;
     }
-    if (evt.touches.length === 1) {
+    this.#pruneTouchIds(evt);
+    const touchIds = this.#touchIds;
+    for (const {
+      identifier
+    } of evt.changedTouches) {
+      touchIds.add(identifier);
+    }
+    if (touchIds.size === 1) {
       if (this.#pointerDownAC) {
         return;
       }
@@ -4882,14 +4917,40 @@ class TouchManager {
       this.#onPinchStart?.();
     }
     stopEvent(evt);
-    if (evt.touches.length !== 2 || this.#isPinchingStopped?.()) {
-      this.#touchInfo = null;
+    this.#setTouchInfo(evt);
+  }
+  #pruneTouchIds(evt) {
+    const previous = this.#touchIds;
+    if (previous.size === 0) {
       return;
     }
-    let [touch0, touch1] = evt.touches;
-    if (touch0.identifier > touch1.identifier) {
-      [touch0, touch1] = [touch1, touch0];
+    const touchIds = this.#touchIds = new Set();
+    for (const {
+      identifier
+    } of evt.touches) {
+      if (previous.has(identifier)) {
+        touchIds.add(identifier);
+      }
     }
+  }
+  #getTrackedTouches(evt) {
+    const touchIds = this.#touchIds;
+    const touches = [];
+    for (const touch of evt.touches) {
+      if (touchIds.has(touch.identifier)) {
+        touches.push(touch);
+      }
+    }
+    return touches;
+  }
+  #setTouchInfo(evt) {
+    const touches = this.#getTrackedTouches(evt);
+    if (touches.length !== 2 || this.#isPinchingStopped?.()) {
+      this.#touchInfo = null;
+      this.#isPinching = false;
+      return;
+    }
+    const [touch0, touch1] = touches;
     this.#touchInfo = {
       touch0X: touch0.screenX,
       touch0Y: touch0.screenY,
@@ -4898,14 +4959,15 @@ class TouchManager {
     };
   }
   #onTouchMove(evt) {
-    if (!this.#touchInfo || evt.touches.length !== 2) {
+    if (!this.#touchInfo) {
+      return;
+    }
+    const touches = this.#getTrackedTouches(evt);
+    if (touches.length !== 2) {
       return;
     }
     stopEvent(evt);
-    let [touch0, touch1] = evt.touches;
-    if (touch0.identifier > touch1.identifier) {
-      [touch0, touch1] = [touch1, touch0];
-    }
+    const [touch0, touch1] = touches;
     const {
       screenX: screen0X,
       screenY: screen0Y
@@ -4942,7 +5004,9 @@ class TouchManager {
     this.#onPinching?.(origin, pDistance, distance);
   }
   #onTouchEnd(evt) {
-    if (evt.touches.length >= 2) {
+    this.#pruneTouchIds(evt);
+    if (this.#touchIds.size >= 2) {
+      this.#setTouchInfo(evt);
       return;
     }
     if (this.#touchMoveAC) {
@@ -7751,7 +7815,37 @@ class CanvasImagesTracker {
   }
 }
 
+;// ./src/shared/css_utils.js
+const CONTROL_CHAR_REGEXP = /\p{Cc}/u;
+function isCSSString(str) {
+  const quote = str[0];
+  if (str.length < 2 || quote !== `"` && quote !== `'` || str.at(-1) !== quote) {
+    return false;
+  }
+  const end = str.length - 1;
+  for (let i = 1; i < end; i++) {
+    const char = str[i];
+    if (char === quote || CONTROL_CHAR_REGEXP.test(char)) {
+      return false;
+    }
+    if (char === "\\") {
+      if (++i >= end || CONTROL_CHAR_REGEXP.test(str[i])) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+function serializeFontFamily(fontFamily) {
+  if (isCSSString(fontFamily)) {
+    return fontFamily;
+  }
+  const escaped = fontFamily.replaceAll(/["\\\p{Cc}]/gu, char => char === `"` || char === "\\" ? `\\${char}` : `\\${char.codePointAt(0).toString(16)} `);
+  return `"${escaped}"`;
+}
+
 ;// ./src/display/font_loader.js
+
 
 
 class FontLoader {
@@ -8010,7 +8104,7 @@ class FontFaceObject {
       if (this.cssFontInfo.italicAngle) {
         css.style = `oblique ${this.cssFontInfo.italicAngle}deg`;
       }
-      nativeFontFace = new FontFace(this.cssFontInfo.fontFamily, this.data, css);
+      nativeFontFace = new FontFace(serializeFontFamily(this.cssFontInfo.fontFamily), this.data, css);
     }
     this._inspectFont?.(this);
     return nativeFontFace;
@@ -8028,7 +8122,8 @@ class FontFaceObject {
       if (this.cssFontInfo.italicAngle) {
         css += `font-style: oblique ${this.cssFontInfo.italicAngle}deg;`;
       }
-      rule = `@font-face {font-family:"${this.cssFontInfo.fontFamily}";${css}src:${url}}`;
+      const fontFamily = serializeFontFamily(this.cssFontInfo.fontFamily);
+      rule = `@font-face {font-family:${fontFamily};${css}src:${url}}`;
     }
     this._inspectFont?.(this, url);
     return rule;
@@ -10456,7 +10551,6 @@ const MAX_FONT_SIZE = 100;
 const EXECUTION_TIME = 15;
 const EXECUTION_STEPS = 10;
 const FULL_CHUNK_HEIGHT = 16;
-const SCALE_MATRIX = new DOMMatrix();
 const XY = new Float32Array(2);
 function mirrorContextOperations(ctx, destCtx) {
   if (ctx._removeMirroring) {
@@ -10719,6 +10813,7 @@ const LINE_JOIN_STYLES = ["miter", "round", "bevel"];
 const NORMAL_CLIP = {};
 const EO_CLIP = {};
 class CanvasGraphics {
+  static #SCALE_MATRIX = null;
   #knockoutGroupLevel = 0;
   #knockoutElementDepth = 0;
   #knockoutTempCanvasEntry = null;
@@ -12218,7 +12313,7 @@ class CanvasGraphics {
         continue;
       }
       const spacing = (glyph.isSpace ? wordSpacing : 0) + charSpacing;
-      const operatorList = font.charProcOperatorList[glyph.operatorListId];
+      const operatorList = font.charProcOperatorList.get(glyph.operatorListId);
       if (!operatorList) {
         warn(`Type3 character "${glyph.operatorListId}" is not available.`);
       } else if (this.contentVisible) {
@@ -13071,6 +13166,7 @@ class CanvasGraphics {
       ctx.stroke(path);
       return;
     }
+    const SCALE_MATRIX = CanvasGraphics.#SCALE_MATRIX ??= new DOMMatrix();
     const dashes = ctx.getLineDash();
     if (saveRestore) {
       ctx.save();
@@ -13341,6 +13437,13 @@ function createHeaders(isHttp, httpHeaders) {
     }
   }
   return headers;
+}
+function trimHeadersEnd(str) {
+  let end = str.length;
+  while (end > 0 && str[end - 1] !== " " && /\s/.test(str[end - 1])) {
+    end--;
+  }
+  return str.slice(0, end);
 }
 function getResponseOrigin(url) {
   return URL.parse(url)?.origin ?? null;
@@ -13890,7 +13993,7 @@ class PDFNetworkStreamReader extends BasePDFStreamReader {
     const fullRequestXhr = this._fullRequestXhr;
     stream._responseOrigin = getResponseOrigin(fullRequestXhr.responseURL);
     const rawResponseHeaders = fullRequestXhr.getAllResponseHeaders();
-    const responseHeaders = new Headers(rawResponseHeaders ? rawResponseHeaders.trimStart().replace(/[^\S ]+$/, "").split(/[\r\n]+/).map(x => {
+    const responseHeaders = new Headers(rawResponseHeaders ? trimHeadersEnd(rawResponseHeaders.trimStart()).split(/[\r\n]+/).map(x => {
       const [key, ...val] = x.split(": ");
       return [key, val.join(": ")];
     }) : []);
@@ -14569,7 +14672,6 @@ class PagesMapper {
   movePages(selectedPages, pagesToMove, index) {
     this.#ensureInit();
     const pageNumberToId = this.#pageNumberToId;
-    const prevIdToPageNumber = this.#buildIdToPageNumber();
     const movedCount = pagesToMove.length;
     const mappedPagesToMove = new Uint32Array(movedCount);
     let removedBeforeTarget = 0;
@@ -14582,15 +14684,19 @@ class PagesMapper {
     }
     const pagesNumber = this.#pagesNumber;
     const remainingLen = pagesNumber - movedCount;
+    const prevPageNumbers = new Int32Array(pagesNumber);
     const adjustedTarget = MathClamp(index - removedBeforeTarget, 0, remainingLen);
     for (let i = 0, r = 0; i < pagesNumber; i++) {
       if (!selectedPages.has(i + 1)) {
-        pageNumberToId[r++] = pageNumberToId[i];
+        pageNumberToId[r] = pageNumberToId[i];
+        prevPageNumbers[r++] = i + 1;
       }
     }
     pageNumberToId.copyWithin(adjustedTarget + movedCount, adjustedTarget, remainingLen);
     pageNumberToId.set(mappedPagesToMove, adjustedTarget);
-    this.#updatePrevPageNumbers(prevIdToPageNumber);
+    prevPageNumbers.copyWithin(adjustedTarget + movedCount, adjustedTarget, remainingLen);
+    prevPageNumbers.set(pagesToMove, adjustedTarget);
+    this.#prevPageNumbers = prevPageNumbers;
     if (pageNumberToId.every((id, i) => id === i + 1)) {
       this.#pageNumberToId = null;
     }
@@ -14687,7 +14793,30 @@ class PagesMapper {
   hasBeenAltered() {
     return this.#pageNumberToId !== null;
   }
-  getPageMappingForSaving(idToPageNumber = null) {
+  #buildCopyLevels(extractedPageNumbers = null) {
+    if (!this.#pageNumberToId) {
+      return null;
+    }
+    const copyLevels = new Int32Array(this.#pagesNumber).fill(-1);
+    const counts = new Map();
+    if (extractedPageNumbers) {
+      for (const pageNumber of extractedPageNumbers) {
+        const id = this.getPageId(pageNumber);
+        const level = counts.get(id) ?? 0;
+        counts.set(id, level + 1);
+        copyLevels[pageNumber - 1] = level;
+      }
+    } else {
+      for (let i = 0, ii = this.#pagesNumber; i < ii; i++) {
+        const id = this.#pageNumberToId[i];
+        const level = counts.get(id) ?? 0;
+        counts.set(id, level + 1);
+        copyLevels[i] = level;
+      }
+    }
+    return copyLevels;
+  }
+  getPageMappingForSaving(idToPageNumber = null, copyLevels = this.#buildCopyLevels()) {
     idToPageNumber ??= this.#buildIdToPageNumber();
     let nCopy = 0;
     for (const pageNumbers of idToPageNumber.values()) {
@@ -14716,7 +14845,10 @@ class PagesMapper {
         includePages[i] = includePages[i][0];
       }
     }
-    return extractParams;
+    return {
+      pageInfos: extractParams,
+      copyLevels
+    };
   }
   extractPages(extractedPageNumbers) {
     extractedPageNumbers = Array.from(extractedPageNumbers).sort((a, b) => a - b);
@@ -14726,7 +14858,7 @@ class PagesMapper {
       const usedPageNumbers = usedIds.getOrInsertComputed(id, makeArr);
       usedPageNumbers.push(i + 1);
     }
-    return this.getPageMappingForSaving(usedIds);
+    return this.getPageMappingForSaving(usedIds, this.#buildCopyLevels(extractedPageNumbers));
   }
   getPrevPageNumber(pageNumber) {
     return this.#prevPageNumbers?.[pageNumber - 1] ?? 0;
@@ -15268,7 +15400,7 @@ function getDocument(src = {}) {
   }
   const docParams = {
     docId,
-    apiVersion: "6.2.0",
+    apiVersion: "6.3.0",
     data,
     password,
     disableAutoFetch,
@@ -15515,8 +15647,8 @@ class PDFDocumentProxy {
   saveDocument() {
     return this._transport.saveDocument();
   }
-  extractPages(pageInfos) {
-    return this._transport.extractPages(pageInfos);
+  extractPages(pageInfos, copyLevels = null) {
+    return this._transport.extractPages(pageInfos, copyLevels);
   }
   getDownloadInfo() {
     return this._transport.downloadInfoCapability.promise;
@@ -16588,7 +16720,7 @@ class WorkerTransport {
       this.annotationStorage.resetModified();
     });
   }
-  extractPages(pageInfos) {
+  extractPages(pageInfos, copyLevels = null) {
     const params = {
       pageInfos
     };
@@ -16619,11 +16751,13 @@ class WorkerTransport {
         const remapped = new Map();
         for (const [k, v] of map) {
           if (v?.pageIndex !== undefined && v.pageIndex >= 0 && v.pageIndex < mapping.length) {
+            const copyLevel = copyLevels?.[v.pageIndex] ?? 0;
             const sourceIdx = mapping[v.pageIndex] - 1;
-            if (sourceIdx !== v.pageIndex) {
+            if (sourceIdx !== v.pageIndex || copyLevel !== 0) {
               remapped.set(k, {
                 ...v,
-                pageIndex: sourceIdx
+                pageIndex: sourceIdx,
+                copyLevel
               });
               continue;
             }
@@ -16993,8 +17127,8 @@ class InternalRenderTask {
     }
   }
 }
-const version = "6.2.0";
-const build = "7fc7072";
+const version = "6.3.0";
+const build = "022e958";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -18043,7 +18177,7 @@ class AnnotationElement {
   _getElementsByName(name, skipId = null) {
     const fields = [];
     if (this._fieldObjects) {
-      const fieldObj = this._fieldObjects[name] || [];
+      const fieldObj = this._fieldObjects.get(name) || [];
       for (const {
         page,
         id,
@@ -18364,14 +18498,14 @@ class LinkAnnotationElement extends AnnotationElement {
       if (resetFormFields.length !== 0 || resetFormRefs.length !== 0) {
         const fieldIds = new Set(resetFormRefs);
         for (const fieldName of resetFormFields) {
-          const fields = this._fieldObjects[fieldName] || [];
+          const fields = this._fieldObjects.get(fieldName) || [];
           for (const {
             id
           } of fields) {
             fieldIds.add(id);
           }
         }
-        for (const fields of Object.values(this._fieldObjects)) {
+        for (const fields of this._fieldObjects.values()) {
           for (const field of fields) {
             if (fieldIds.has(field.id) === include) {
               allFields.push(field);
@@ -18379,7 +18513,7 @@ class LinkAnnotationElement extends AnnotationElement {
           }
         }
       } else {
-        for (const fields of Object.values(this._fieldObjects)) {
+        for (const fields of this._fieldObjects.values()) {
           allFields.push(...fields);
         }
       }
@@ -18870,9 +19004,12 @@ class TextWidgetAnnotationElement extends WidgetAnnotationElement {
             switch (event.inputType) {
               case "deleteWordBackward":
                 {
-                  const match = value.substring(0, selectionStart).match(/\w*\W*$/);
-                  if (match) {
-                    selStart -= match[0].length;
+                  const wordCharPattern = /\w/;
+                  while (selStart > 0 && !wordCharPattern.test(value[selStart - 1])) {
+                    selStart--;
+                  }
+                  while (selStart > 0 && wordCharPattern.test(value[selStart - 1])) {
+                    selStart--;
                   }
                   break;
                 }
@@ -27976,11 +28113,11 @@ globalThis.pdfjsLib = {
   updateUrlHash: updateUrlHash,
   Util: Util,
   VerbosityLevel: VerbosityLevel,
-  version: (/* inlined export .version */"6.2.0"),
+  version: (/* inlined export .version */"6.3.0"),
   XfaLayer: XfaLayer
 };
 
-const __webpack_exports__version = (/* inlined export .version */"6.2.0");
+const __webpack_exports__version = (/* inlined export .version */"6.3.0");
 export { AbortException, AnnotationEditorLayer, AnnotationEditorParamsType, AnnotationEditorType, AnnotationEditorUIManager, AnnotationLayer, AnnotationMode, AnnotationType, CSSConstants, ColorPicker, DOMSVGFactory, DrawLayer, FeatureTest, GlobalWorkerOptions, ImageKind, InvalidPDFException, MathClamp, OPS, OutputScale, PDFDataRangeTransport, PDFDateString, PDFWorker, PasswordException, PasswordResponses, PermissionFlag, PixelsPerInch, RenderingCancelledException, ResponseException, SignatureExtractor, SupportedImageMimeTypes, TextLayer, TextLayerImages, TouchManager, Util, VerbosityLevel, XfaLayer, applyOpacity, build, createValidAbsoluteUrl, fetchData, findContrastColor, getDocument, getFilenameFromUrl, getPdfFilenameFromUrl, getRGB, getRGBA, getUuid, isDataScheme, isPdfFile, isValidExplicitDest, makeArr, makeMap, makeObj, makeSet, noContextMenu, normalizeUnicode, renderRichText, setLayerDimensions, shadow, stopEvent, updateUrlHash, __webpack_exports__version as version };
 
 //# sourceMappingURL=pdf.mjs.map
