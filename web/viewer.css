@@ -4918,7 +4918,7 @@ button.hasPopupMenu{
       position:absolute;
       inset-inline-start:var(--menuitem-gap);
       top:50%;
-      transform:translateY(-50%);
+      transform:translateY(-50%) scaleX(var(--dir-factor));
     }
 
     &:disabled{
@@ -5389,7 +5389,8 @@ button.hasPopupMenu{
       align-self:stretch;
       justify-content:space-between;
       width:auto;
-      padding:12px 16px 12px 8px;
+      padding-block:12px;
+      padding-inline:8px 16px;
 
       &:not(:has(#viewsManagerHeaderLabel ~ button:not([hidden])))::after{
 
@@ -5427,7 +5428,7 @@ button.hasPopupMenu{
             display:inline-block;
             width:12px;
             height:12px;
-            margin-left:8px;
+            margin-inline-start:8px;
             -webkit-mask-repeat:no-repeat;
                     mask-repeat:no-repeat;
             -webkit-mask-position:center;

@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 6.3.0
- * pdfjsBuild = 6694c0e
+ * pdfjsBuild = 0f26334
  */
 
 ;// ./src/shared/util.js
@@ -2019,6 +2019,7 @@ class FloatingToolbar {
     const editToolbar = this.#toolbar = document.createElement("div");
     editToolbar.className = "editToolbar";
     editToolbar.setAttribute("role", "toolbar");
+    editToolbar.dir = this.#uiManager.direction;
     const signal = this.#uiManager._signal;
     if (signal instanceof AbortSignal && !signal.aborted) {
       editToolbar.addEventListener("contextmenu", noContextMenu, {
@@ -2097,7 +2098,7 @@ class FloatingToolbar {
 }
 
 ;// ./src/shared/internal_evt.js
-const INTERNAL_EVT = "91432185-2a96-47a2-9011-af3e03244ea8";
+const INTERNAL_EVT = "646bea13-71fb-457e-ba60-0229a509dd85";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });
@@ -4845,6 +4846,7 @@ class TouchManager {
   #touchInfo = null;
   #touchManagerAC;
   #touchMoveAC = null;
+  #unconfirmedPinch = 0;
   constructor({
     container,
     isPinchingDisabled = null,
@@ -4871,6 +4873,9 @@ class TouchManager {
   }
   get MIN_TOUCH_DISTANCE_TO_PINCH() {
     return 35 / OutputScale.pixelRatio;
+  }
+  get MIN_TOUCH_DISTANCE_TO_SCALE() {
+    return 4 / OutputScale.pixelRatio;
   }
   #onTouchStart(evt) {
     if (this.#isPinchingDisabled?.()) {
@@ -4974,7 +4979,9 @@ class TouchManager {
       touch1X: touch1.screenX,
       touch1Y: touch1.screenY,
       panX: (touch0.clientX + touch1.clientX) / 2,
-      panY: (touch0.clientY + touch1.clientY) / 2
+      panY: (touch0.clientY + touch1.clientY) / 2,
+      screenPanX: (touch0.screenX + touch1.screenX) / 2,
+      screenPanY: (touch0.screenY + touch1.screenY) / 2
     };
   }
   #onTouchMove(evt) {
@@ -5022,9 +5029,15 @@ class TouchManager {
     touchInfo.panY = panY;
     const dx = panX - pPanX;
     const dy = panY - pPanY;
+    const screenPanX = (screen0X + screen1X) / 2;
+    const screenPanY = (screen0Y + screen1Y) / 2;
+    const translation = Math.hypot(screenPanX - touchInfo.screenPanX, screenPanY - touchInfo.screenPanY);
+    touchInfo.screenPanX = screenPanX;
+    touchInfo.screenPanY = screenPanY;
     const distance = Math.hypot(currGapX, currGapY);
     const pDistance = Math.hypot(prevGapX, prevGapY);
-    if (distance < MIN_TOUCH_SPAN || pDistance < MIN_TOUCH_SPAN || !this.#isPinching && Math.abs(pDistance - distance) <= this.MIN_TOUCH_DISTANCE_TO_PINCH) {
+    const minDistance = this.#isPinching ? this.MIN_TOUCH_DISTANCE_TO_SCALE : this.MIN_TOUCH_DISTANCE_TO_PINCH + 2 * translation;
+    if (distance < MIN_TOUCH_SPAN || pDistance < MIN_TOUCH_SPAN || Math.abs(pDistance - distance) <= minDistance) {
       if (dx || dy) {
         this.#onPanning?.(dx, dy);
       }
@@ -5034,12 +5047,25 @@ class TouchManager {
     touchInfo.touch0Y = screen0Y;
     touchInfo.touch1X = screen1X;
     touchInfo.touch1Y = screen1Y;
+    const direction = Math.sign(distance - pDistance);
     if (!this.#isPinching) {
       this.#isPinching = true;
+      this.#unconfirmedPinch = direction;
       if (dx || dy) {
         this.#onPanning?.(dx, dy);
       }
       return;
+    }
+    if (this.#unconfirmedPinch) {
+      const unconfirmed = this.#unconfirmedPinch;
+      this.#unconfirmedPinch = 0;
+      if (direction !== unconfirmed && Math.abs(distance - pDistance) <= 2 * translation) {
+        this.#isPinching = false;
+        if (dx || dy) {
+          this.#onPanning?.(dx, dy);
+        }
+        return;
+      }
     }
     this.#onPinching?.([pPanX, pPanY], pDistance, distance, dx, dy);
   }
@@ -5061,6 +5087,7 @@ class TouchManager {
   #endGesture() {
     this.#touchInfo = null;
     this.#isPinching = false;
+    this.#unconfirmedPinch = 0;
     this.#ownsGesture = false;
     if (this.#touchMoveAC) {
       this.#touchMoveAC.abort();
@@ -8272,6 +8299,7 @@ class FontFaceObject {
 }
 
 ;// ./src/shared/obj_bin_transform_utils.js
+
 class CSS_FONT_INFO {
   static strings = ["fontFamily", "fontWeight", "italicAngle"];
 }
@@ -8298,13 +8326,20 @@ class PATTERN_INFO {
   static N_STOP = 12;
   static N_FIGURES = 16;
 }
+class InfoUtils {
+  static get decoder() {
+    return shadow(this, "decoder", new TextDecoder());
+  }
+  static get encoder() {
+    return shadow(this, "encoder", new TextEncoder());
+  }
+}
 
 ;// ./src/display/obj_bin_transform_display.js
 
 
 class CssFontInfo {
   #buffer;
-  #decoder = new TextDecoder();
   #view;
   constructor(buffer) {
     this.#buffer = buffer;
@@ -8312,12 +8347,15 @@ class CssFontInfo {
   }
   #readString(index) {
     assert(index < CSS_FONT_INFO.strings.length, "Invalid string index");
+    const {
+      decoder
+    } = InfoUtils;
     let offset = 0;
     for (let i = 0; i < index; i++) {
       offset += this.#view.getUint32(offset) + 4;
     }
     const length = this.#view.getUint32(offset);
-    return this.#decoder.decode(new Uint8Array(this.#buffer, offset + 4, length));
+    return decoder.decode(new Uint8Array(this.#buffer, offset + 4, length));
   }
   get fontFamily() {
     return this.#readString(0);
@@ -8331,7 +8369,6 @@ class CssFontInfo {
 }
 class SystemFontInfo {
   #buffer;
-  #decoder = new TextDecoder();
   #view;
   constructor(buffer) {
     this.#buffer = buffer;
@@ -8342,12 +8379,15 @@ class SystemFontInfo {
   }
   #readString(index) {
     assert(index < SYSTEM_FONT_INFO.strings.length, "Invalid string index");
+    const {
+      decoder
+    } = InfoUtils;
     let offset = 5;
     for (let i = 0; i < index; i++) {
       offset += this.#view.getUint32(offset) + 4;
     }
     const length = this.#view.getUint32(offset);
-    return this.#decoder.decode(new Uint8Array(this.#buffer, offset + 4, length));
+    return decoder.decode(new Uint8Array(this.#buffer, offset + 4, length));
   }
   get css() {
     return this.#readString(0);
@@ -8362,13 +8402,16 @@ class SystemFontInfo {
     return this.#readString(3);
   }
   get style() {
+    const {
+      decoder
+    } = InfoUtils;
     let offset = 1;
     offset += 4 + this.#view.getUint32(offset);
     const styleLength = this.#view.getUint32(offset);
-    const style = this.#decoder.decode(new Uint8Array(this.#buffer, offset + 4, styleLength));
+    const style = decoder.decode(new Uint8Array(this.#buffer, offset + 4, styleLength));
     offset += 4 + styleLength;
     const weightLength = this.#view.getUint32(offset);
-    const weight = this.#decoder.decode(new Uint8Array(this.#buffer, offset + 4, weightLength));
+    const weight = decoder.decode(new Uint8Array(this.#buffer, offset + 4, weightLength));
     return {
       style,
       weight
@@ -8377,7 +8420,6 @@ class SystemFontInfo {
 }
 class FontInfo {
   #buffer;
-  #decoder = new TextDecoder();
   #view;
   constructor({
     buffer,
@@ -8464,12 +8506,15 @@ class FontInfo {
   }
   #readString(index) {
     assert(index < FONT_INFO.strings.length, "Invalid string index");
+    const {
+      decoder
+    } = InfoUtils;
     let offset = FONT_INFO.OFFSET_STRINGS + 4;
     for (let i = 0; i < index; i++) {
       offset += this.#view.getUint32(offset) + 4;
     }
     const length = this.#view.getUint32(offset);
-    return this.#decoder.decode(new Uint8Array(this.#buffer, offset + 4, length));
+    return decoder.decode(new Uint8Array(this.#buffer, offset + 4, length));
   }
   get fallbackName() {
     return this.#readString(0);
@@ -17167,7 +17212,7 @@ class InternalRenderTask {
   }
 }
 const version = "6.3.0";
-const build = "6694c0e";
+const build = "0f26334";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -20942,11 +20987,16 @@ class AnnotationLayer {
       for (const {
         contentElement,
         data: {
-          id
+          hidden,
+          id,
+          oc
         }
       } of this.#elements) {
         const annotationId = contentElement.id = `${AnnotationPrefix}${id}`;
-        promises.push(this.#structTreeLayer?.getAriaAttributes(annotationId).then(ariaAttributes => {
+        const enableLinkOwnership = contentElement.localName === "a" && !hidden && !oc;
+        promises.push(this.#structTreeLayer?.getAriaAttributes(annotationId, {
+          enableLinkOwnership
+        }).then(ariaAttributes => {
           if (ariaAttributes) {
             for (const [key, value] of ariaAttributes) {
               contentElement.setAttribute(key, value);
