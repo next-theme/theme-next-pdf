@@ -22,7 +22,7 @@
 
 /**
  * pdfjsVersion = 6.3.0
- * pdfjsBuild = 0f26334
+ * pdfjsBuild = abc6d41
  */
 
 ;// ./src/shared/util.js
@@ -2098,7 +2098,7 @@ class FloatingToolbar {
 }
 
 ;// ./src/shared/internal_evt.js
-const INTERNAL_EVT = "646bea13-71fb-457e-ba60-0229a509dd85";
+const INTERNAL_EVT = "cf8836a2-a432-49a0-a84b-d08204e6fd2e";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });
@@ -9440,11 +9440,9 @@ class DOMFilterFactory extends BaseFilterFactory {
     if (fgColor === "#000000" && bgColor === "#ffffff" || fgColor === bgColor) {
       return info.url;
     }
-    const map = new Array(256);
-    for (let i = 0; i <= 255; i++) {
-      const x = i / 255;
-      map[i] = x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
-    }
+    const map = Array.from({
+      length: 256
+    }, (_, i) => computeLuminance(i / 255));
     const table = map.join(",");
     const id = `g_${this.#docId}_hcm_filter`;
     const filter = info.filter = this.#createFilter(id);
@@ -17212,7 +17210,7 @@ class InternalRenderTask {
   }
 }
 const version = "6.3.0";
-const build = "0f26334";
+const build = "abc6d41";
 
 ;// ./src/display/editor/color_picker.js
 
