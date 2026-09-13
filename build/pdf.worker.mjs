@@ -20,8 +20,8 @@
  */
 
 /**
- * pdfjsVersion = 6.3.0
- * pdfjsBuild = 716aff9
+ * pdfjsVersion = 6.4.0
+ * pdfjsBuild = 94b6d21
  */
 
 ;// ./src/shared/util.js
@@ -794,20 +794,25 @@ if (typeof Iterator.prototype.join !== "function") {
 
 const CIRCULAR_REF = Symbol("CIRCULAR_REF");
 const EOF = Symbol("EOF");
-let CmdCache = Object.create(null);
-let NameCache = Object.create(null);
-let RefCache = Object.create(null);
+const CmdCache = new Map();
+const NameCache = new Map();
+const RefCache = new Map();
 function clearPrimitiveCaches() {
-  CmdCache = Object.create(null);
-  NameCache = Object.create(null);
-  RefCache = Object.create(null);
+  CmdCache.clear();
+  NameCache.clear();
+  RefCache.clear();
 }
 class Name {
   constructor(name) {
     this.name = name;
   }
   static get(name) {
-    return NameCache[name] ||= new Name(name);
+    let n = NameCache.get(name);
+    if (!n) {
+      n = new Name(name);
+      NameCache.set(name, n);
+    }
+    return n;
   }
 }
 class Cmd {
@@ -815,7 +820,12 @@ class Cmd {
     this.cmd = cmd;
   }
   static get(cmd) {
-    return CmdCache[cmd] ||= new Cmd(cmd);
+    let c = CmdCache.get(cmd);
+    if (!c) {
+      c = new Cmd(cmd);
+      CmdCache.set(cmd, c);
+    }
+    return c;
   }
 }
 const nonSerializable = () => nonSerializable;
@@ -983,21 +993,26 @@ class Ref {
     return this.#str;
   }
   static fromString(str) {
-    const ref = RefCache[str];
+    let ref = RefCache.get(str);
     if (ref) {
       return ref;
     }
-    const m = /^(\d+)R(\d*)$/.exec(str);
-    if (!m || m[1] === "0") {
+    const m = /^([1-9]\d*)R([1-9]\d*)?$/.exec(str);
+    if (!m) {
       return null;
     }
-    const num = parseInt(m[1], 10),
-      gen = !m[2] ? 0 : parseInt(m[2], 10);
-    return RefCache[str] = new Ref(str, num, gen);
+    ref = new Ref(str, parseInt(m[1], 10), !m[2] ? 0 : parseInt(m[2], 10));
+    RefCache.set(str, ref);
+    return ref;
   }
   static get(num, gen) {
     const str = gen === 0 ? `${num}R` : `${num}R${gen}`;
-    return RefCache[str] ||= new Ref(str, num, gen);
+    let ref = RefCache.get(str);
+    if (!ref) {
+      ref = new Ref(str, num, gen);
+      RefCache.set(str, ref);
+    }
+    return ref;
   }
 }
 class RefSet {
@@ -6115,20 +6130,10 @@ class RadialAxialShading extends BaseShading {
       localColorSpaceCache
     });
     this.bbox = lookupNormalRect(dict.getArray("BBox"), null);
-    let t0 = 0.0,
-      t1 = 1.0;
     const domainArr = dict.getArray("Domain");
-    if (isNumberArray(domainArr, 2)) {
-      [t0, t1] = domainArr;
-    }
-    let extendStart = false,
-      extendEnd = false;
+    const [t0, t1] = isNumberArray(domainArr, 2) ? domainArr : [0.0, 1.0];
     const extendArr = dict.getArray("Extend");
-    if (isBooleanArray(extendArr, 2)) {
-      [extendStart, extendEnd] = extendArr;
-    }
-    this.extendStart = extendStart;
-    this.extendEnd = extendEnd;
+    const [extendStart, extendEnd] = isBooleanArray(extendArr, 2) ? extendArr : [false, false];
     const fnObj = dict.getRaw("Function");
     const fn = pdfFunctionFactory.create(fnObj, true);
     const NUMBER_OF_SAMPLES = 840;
@@ -6210,7 +6215,6 @@ class RadialAxialShading extends BaseShading {
       colorStops.at(-1)[0] -= BaseShading.SMALL_NUMBER;
       colorStops.push([1, background]);
     }
-    this.colorStops = colorStops;
   }
   getIR() {
     const {
@@ -10856,14 +10860,13 @@ class LZWStream extends DecodeStream {
       codeLength: 9,
       nextCode: 258,
       dictionaryValues: new Uint8Array(maxLzwDictionarySize),
-      dictionaryLengths: new Uint16Array(maxLzwDictionarySize),
+      dictionaryLengths: new Uint16Array(maxLzwDictionarySize).fill(1, 0, 256),
       dictionaryPrevCodes: new Uint16Array(maxLzwDictionarySize),
       currentSequence: new Uint8Array(maxLzwDictionarySize),
       currentSequenceLength: 0
     };
     for (let i = 0; i < 256; ++i) {
       lzwState.dictionaryValues[i] = i;
-      lzwState.dictionaryLengths[i] = 1;
     }
     this.lzwState = lzwState;
   }
@@ -12318,7 +12321,7 @@ class CMap {
       }
     } else {
       for (const i in map) {
-        callback(i, map[i]);
+        callback(+i, map[i]);
       }
     }
   }
@@ -12421,11 +12424,9 @@ class IdentityCMap extends CMap {
     return Number.isInteger(value) && value <= 0xffff ? value : -1;
   }
   getMap() {
-    const map = new Array(0x10000);
-    for (let i = 0; i <= 0xffff; i++) {
-      map[i] = i;
-    }
-    return map;
+    return Array.from({
+      length: 0x10000
+    }, (_, i) => i);
   }
   get length() {
     return 0x10000;
@@ -12636,7 +12637,7 @@ async function extendCMap(cMap, fetchBuiltInCMap, useCMap) {
     }
     cMap.numCodespaceRanges = cMap.useCMap.numCodespaceRanges;
   }
-  cMap.useCMap.forEach(function (key, value) {
+  cMap.useCMap.forEach((key, value) => {
     if (!cMap.contains(key)) {
       cMap.mapOne(key, value);
     }
@@ -18296,7 +18297,7 @@ class CFFParser {
     fdArray,
     privateDict
   }) {
-    const seacs = [];
+    const seacs = new Map();
     const widths = [];
     const count = charStrings.count;
     for (let i = 0; i < count; i++) {
@@ -18340,7 +18341,7 @@ class CFFParser {
         widths[i] = defaultWidth;
       }
       if (state.seac !== null) {
-        seacs[i] = state.seac;
+        seacs.set(i, state.seac);
       }
       if (!valid) {
         charStrings.set(i, new Uint8Array([14]));
@@ -18782,27 +18783,27 @@ class CFFFDSelect {
   }
 }
 class CFFOffsetTracker {
-  offsets = Object.create(null);
+  #offsets = new Map();
   isTracking(key) {
-    return key in this.offsets;
+    return this.#offsets.has(key);
   }
   track(key, location) {
-    if (key in this.offsets) {
+    if (this.#offsets.has(key)) {
       throw new FormatError(`Already tracking location of ${key}`);
     }
-    this.offsets[key] = location;
+    this.#offsets.set(key, location);
   }
   offset(value) {
-    for (const key in this.offsets) {
-      this.offsets[key] += value;
+    for (const [key, val] of this.#offsets) {
+      this.#offsets.set(key, val + value);
     }
   }
   setEntryLocation(key, values, output) {
-    if (!(key in this.offsets)) {
+    if (!this.#offsets.has(key)) {
       throw new FormatError(`Not tracking location of ${key}`);
     }
     const data = output.data;
-    const dataOffset = this.offsets[key];
+    const dataOffset = this.#offsets.get(key);
     const size = 5;
     for (let i = 0, ii = values.length; i < ii; ++i) {
       const offset0 = i * size + dataOffset;
@@ -20859,7 +20860,7 @@ class ToUnicodeMap {
   }
   forEach(callback) {
     for (const charCode in this._map) {
-      callback(charCode, this._map[charCode].codePointAt(0));
+      callback(+charCode, this._map[charCode].codePointAt(0));
     }
   }
   has(i) {
@@ -26193,14 +26194,16 @@ class Type1Font {
     return glyph.charstring.length > 0;
   }
   getSeacs(charstrings) {
-    const seacMap = [];
+    const seacs = new Map();
     for (let i = 0, ii = charstrings.length; i < ii; i++) {
-      const charstring = charstrings[i];
-      if (charstring.seac) {
-        seacMap[i + 1] = charstring.seac;
+      const {
+        seac
+      } = charstrings[i];
+      if (seac) {
+        seacs.set(i + 1, seac);
       }
     }
-    return seacMap;
+    return seacs;
   }
   getType2Charstrings(type1Charstrings) {
     const type2Charstrings = [];
@@ -27227,17 +27230,17 @@ class Font {
           }
         }
         if (cidToGidMap.length !== this.toUnicode.length && properties.hasIncludedToUnicodeMap && this.toUnicode instanceof IdentityToUnicodeMap) {
-          this.toUnicode.forEach(function (charCode, unicodeCharCode) {
+          this.toUnicode.forEach((charCode, unicodeCharCode) => {
             const cid = map[charCode];
             if (cidToGidMap[cid] === undefined) {
-              map[+charCode] = unicodeCharCode;
+              map[charCode] = unicodeCharCode;
             }
           });
         }
       }
       if (!(this.toUnicode instanceof IdentityToUnicodeMap)) {
-        this.toUnicode.forEach(function (charCode, unicodeCharCode) {
-          map[+charCode] = unicodeCharCode;
+        this.toUnicode.forEach((charCode, unicodeCharCode) => {
+          map[charCode] = unicodeCharCode;
         });
       }
       this.toFontChar = map;
@@ -27250,8 +27253,8 @@ class Font {
     } else if (isStandardFont || isMappedToStandardFont) {
       const map = buildToFontChar(this.defaultEncoding, getGlyphsUnicode(), this.differences);
       if (type === "CIDFontType2" && !this.cidEncoding.startsWith("Identity-") && !(this.toUnicode instanceof IdentityToUnicodeMap)) {
-        this.toUnicode.forEach(function (charCode, unicodeCharCode) {
-          map[+charCode] = unicodeCharCode;
+        this.toUnicode.forEach((charCode, unicodeCharCode) => {
+          map[charCode] = unicodeCharCode;
         });
       }
       this.toFontChar = map;
@@ -27266,7 +27269,7 @@ class Font {
             unicodeCharCode = unicode;
           }
         }
-        map[+charCode] = unicodeCharCode;
+        map[charCode] = unicodeCharCode;
       });
       if (this.composite && this.toUnicode instanceof IdentityToUnicodeMap) {
         if (/Tahoma|Verdana/i.test(name)) {
@@ -27892,7 +27895,7 @@ class Font {
         last.endOffset = oldGlyfDataLength;
       }
       const droppedGlyphs = pruneCompositeGlyphCycles(oldGlyfData, locaEntries, numGlyphs);
-      const missingGlyphs = Object.create(null);
+      const missingGlyphs = new Set();
       let writeOffset = 0;
       itemEncode(locaData, 0, writeOffset);
       for (i = 0, j = itemSize; i < numGlyphs; i++, j += itemSize) {
@@ -27902,7 +27905,7 @@ class Font {
         } : sanitizeGlyph(oldGlyfData, locaEntries[i].offset, locaEntries[i].endOffset, newGlyfData, writeOffset, hintsValid);
         const newLength = glyphProfile.length;
         if (newLength === 0) {
-          missingGlyphs[i] = true;
+          missingGlyphs.add(i);
         }
         if (glyphProfile.sizeOfInstructions > maxSizeOfInstructions) {
           maxSizeOfInstructions = glyphProfile.sizeOfInstructions;
@@ -28457,7 +28460,7 @@ class Font {
       throw new FormatError('Required "head" table is not found');
     }
     sanitizeHead(tables.head, numGlyphs, isTrueType ? tables.loca.length : 0);
-    let missingGlyphs = Object.create(null);
+    let missingGlyphs = new Set();
     if (isTrueType) {
       const glyphsInfo = sanitizeGlyphLocations(tables.loca, tables.glyf, numGlyphs, isGlyphLocationsLong, hintsValid, dupFirstEntry, maxSizeOfInstructions);
       missingGlyphs = glyphsInfo.missingGlyphs;
@@ -28499,12 +28502,12 @@ class Font {
     };
     const charCodeToGlyphId = Object.create(null);
     function hasGlyph(glyphId) {
-      return !missingGlyphs[glyphId];
+      return !missingGlyphs.has(glyphId);
     }
     if (properties.composite) {
       const cidToGidMap = properties.cidToGidMap || [];
       const isCidToGidMapEmpty = cidToGidMap.length === 0;
-      properties.cMap.forEach(function (charCode, cid) {
+      properties.cMap.forEach((charCode, cid) => {
         if (typeof cid === "string") {
           cid = convertCidString(charCode, cid, true);
         }
@@ -28661,7 +28664,10 @@ class Font {
       newCharCodeToGlyphId = newMapping.charCodeToGlyphId;
       toUnicodeExtraMap = newMapping.toUnicodeExtraMap;
     }
-    const numGlyphs = font.numGlyphs;
+    const {
+      numGlyphs,
+      seacs
+    } = font;
     function getCharCodes(charCodeToGlyphId, glyphId) {
       let charCodes = null;
       for (const charCode in charCodeToGlyphId) {
@@ -28680,14 +28686,11 @@ class Font {
       newMapping.charCodeToGlyphId[newMapping.nextAvailableFontCharCode] = glyphId;
       return newMapping.nextAvailableFontCharCode++;
     }
-    const seacs = font.seacs;
-    if (newMapping && (/* inlined export .SEAC_ANALYSIS_ENABLED */true) && seacs?.length) {
+    if (newMapping && (/* inlined export .SEAC_ANALYSIS_ENABLED */true) && seacs?.size) {
       const matrix = properties.fontMatrix || FONT_IDENTITY_MATRIX;
       const charset = font.getCharset();
-      const seacMap = Object.create(null);
-      for (let glyphId in seacs) {
-        glyphId |= 0;
-        const seac = seacs[glyphId];
+      const seacMap = new Map();
+      for (const [glyphId, seac] of seacs) {
         const baseGlyphName = StandardEncoding[seac[2]];
         const accentGlyphName = StandardEncoding[seac[3]];
         const baseGlyphId = charset.indexOf(baseGlyphName);
@@ -28707,11 +28710,11 @@ class Font {
           const charCodeToGlyphId = newMapping.charCodeToGlyphId;
           const baseFontCharCode = createCharCode(charCodeToGlyphId, baseGlyphId);
           const accentFontCharCode = createCharCode(charCodeToGlyphId, accentGlyphId);
-          seacMap[charCode] = {
+          seacMap.set(charCode, {
             baseFontCharCode,
             accentFontCharCode,
             accentOffset
-          };
+          });
         }
       }
       properties.seacMap = seacMap;
@@ -28850,7 +28853,9 @@ class Font {
         fontCharCode = 0x20;
         if (glyphName === "") {
           width ||= this._spaceWidth;
-          unicode = String.fromCharCode(fontCharCode);
+          if (!this.toUnicode.has(charcode)) {
+            unicode = String.fromCharCode(fontCharCode);
+          }
         }
       }
       fontCharCode = mapSpecialUnicodeValues(fontCharCode);
@@ -28859,9 +28864,9 @@ class Font {
       operatorListId = fontCharCode;
     }
     let accent = null;
-    if (this.seacMap?.[charcode]) {
+    const seac = this.seacMap?.get(charcode);
+    if (seac) {
       isInFont = true;
-      const seac = this.seacMap[charcode];
       fontCharCode = seac.baseFontCharCode;
       accent = {
         fontChar: String.fromCodePoint(seac.accentFontCharCode),
@@ -32190,6 +32195,9 @@ function toNumberArray(arr) {
   }
   return arr;
 }
+function interpolate(x, xmin, xmax, ymin, ymax) {
+  return xmin === xmax ? ymin : ymin + (x - xmin) * ((ymax - ymin) / (xmax - xmin));
+}
 class PDFFunction {
   static getSampleArray(size, outputSize, bps, stream) {
     let length = outputSize;
@@ -32223,7 +32231,7 @@ class PDFFunction {
       case FunctionType.EXPONENTIAL_INTERPOLATION:
         return this.constructInterpolated(factory, dict);
       case FunctionType.STITCHING:
-        return this.constructStiched(factory, dict);
+        return this.constructStitched(factory, dict);
       case FunctionType.POSTSCRIPT_CALCULATOR:
         return this.constructPostScript(factory, fn, dict);
     }
@@ -32244,9 +32252,6 @@ class PDFFunction {
     };
   }
   static constructSampled(factory, fn, dict) {
-    function interpolate(x, xmin, xmax, ymin, ymax) {
-      return ymin + (x - xmin) * ((ymax - ymin) / (xmax - xmin));
-    }
     const domain = toNumberArray(dict.getArray("Domain"));
     const range = toNumberArray(dict.getArray("Range"));
     if (!domain || !range) {
@@ -32326,14 +32331,14 @@ class PDFFunction {
       }
     };
   }
-  static constructStiched(factory, dict) {
+  static constructStitched(factory, dict) {
     const domain = toNumberArray(dict.getArray("Domain"));
     if (!domain) {
       throw new FormatError("No domain");
     }
     const inputSize = domain.length / 2;
     if (inputSize !== 1) {
-      throw new FormatError("Bad domain for stiched function");
+      throw new FormatError("Bad domain for stitched function");
     }
     const {
       xref
@@ -32345,7 +32350,7 @@ class PDFFunction {
     const bounds = toNumberArray(dict.getArray("Bounds"));
     const encode = toNumberArray(dict.getArray("Encode"));
     const tmpBuf = new Float32Array(1);
-    return function constructStichedFn(src, srcOffset, dest, destOffset) {
+    return function constructStitchedFn(src, srcOffset, dest, destOffset) {
       const v = MathClamp(src[srcOffset], domain[0], domain[1]);
       const length = bounds.length;
       let i;
@@ -32356,9 +32361,7 @@ class PDFFunction {
       }
       const dmin = i > 0 ? bounds[i - 1] : domain[0];
       const dmax = i < length ? bounds[i] : domain[1];
-      const rmin = encode[2 * i];
-      const rmax = encode[2 * i + 1];
-      tmpBuf[0] = dmin === dmax ? rmin : rmin + (v - dmin) * (rmax - rmin) / (dmax - dmin);
+      tmpBuf[0] = interpolate(v, dmin, dmax, encode[2 * i], encode[2 * i + 1]);
       fns[i](tmpBuf, 0, dest, destOffset);
     };
   }
@@ -36824,7 +36827,7 @@ class PartialEvaluator {
       });
       const toUnicode = [],
         buf = [];
-      properties.cMap.forEach(function (charcode, cid) {
+      properties.cMap.forEach((charcode, cid) => {
         if (cid > 0xffff) {
           throw new FormatError("Max size of CID is 65,535");
         }
@@ -36867,7 +36870,7 @@ class PartialEvaluator {
           return new IdentityToUnicodeMap(0, 0xffff);
         }
         const map = new Array(cmap.length);
-        cmap.forEach(function (charCode, token) {
+        cmap.forEach((charCode, token) => {
           if (typeof token === "number") {
             map[charCode] = String.fromCodePoint(token);
             return;
@@ -53098,6 +53101,9 @@ class AnnotationFactory {
     }
     return imagePromises;
   }
+  static getPrintData(annotation) {
+    throw new Error("Not implemented: getPrintData");
+  }
   static async saveNewAnnotations(evaluator, xref, task, annotations, imagePromises, changes) {
     let baseFontRef;
     const promises = [];
@@ -53110,7 +53116,7 @@ class AnnotationFactory {
       }
       switch (annotation.annotationType) {
         case AnnotationEditorType.FREETEXT:
-          if (!baseFontRef) {
+          if (!annotation.appearanceRef && !baseFontRef) {
             const baseFont = new Dict(xref);
             baseFont.setIfName("BaseFont", "Helvetica");
             baseFont.setIfName("Type", "Font");
@@ -54025,18 +54031,15 @@ class MarkupAnnotation extends Annotation {
   static async createNewAnnotation(xref, annotation, changes, params) {
     const annotationRef = annotation.ref ||= xref.getNewTemporaryRef();
     const ap = await this.createNewAppearanceStream(annotation, xref, params);
-    let annotationDict;
+    let apRef = annotation.appearanceRef ?? null;
     if (ap) {
-      const apRef = xref.getNewTemporaryRef();
-      annotationDict = this.createNewDict(annotation, xref, {
-        apRef
-      });
-      changes.put(apRef, {
+      changes.put(apRef = xref.getNewTemporaryRef(), {
         data: ap
       });
-    } else {
-      annotationDict = this.createNewDict(annotation, xref, {});
     }
+    const annotationDict = this.createNewDict(annotation, xref, {
+      apRef
+    });
     if (Number.isInteger(annotation.parentTreeId)) {
       annotationDict.set("StructParent", annotation.parentTreeId);
     }
@@ -54219,6 +54222,11 @@ class WidgetAnnotation extends Annotation {
     if (!this._hasText) {
       return super.getOperatorList(evaluator, task, intent, annotationStorage);
     }
+    const isUsingOwnCanvas = !!(this.data.hasOwnCanvas && intent & RenderingIntentFlag.DISPLAY);
+    if (isUsingOwnCanvas && (this.width === 0 || this.height === 0)) {
+      this.data.hasOwnCanvas = false;
+      return this._getOperatorListNoAppearance();
+    }
     const content = await this._getAppearance(evaluator, task, intent, annotationStorage);
     if (this.appearance && content === null) {
       return super.getOperatorList(evaluator, task, intent, annotationStorage);
@@ -54231,7 +54239,6 @@ class WidgetAnnotation extends Annotation {
         separateCanvas: false
       };
     }
-    const isUsingOwnCanvas = !!(this.data.hasOwnCanvas && intent & RenderingIntentFlag.DISPLAY);
     const matrix = [1, 0, 0, 1, 0, 0];
     const bbox = [0, 0, this.width, this.height];
     const transform = getTransformMatrix(this.data.rect, bbox, matrix);
@@ -54433,6 +54440,9 @@ class WidgetAnnotation extends Annotation {
     if (!this._defaultAppearance) {
       this.data.defaultAppearanceData = parseDefaultAppearance(this._defaultAppearance = "/Helvetica 0 Tf 0 g");
     }
+    if (!this.data.defaultAppearanceData.fontSize && (totalWidth <= 2 * defaultHPadding || totalHeight <= 2 * defaultPadding)) {
+      return `/Tx BMC q ${colors}Q EMC`;
+    }
     let font = await WidgetAnnotation._getFontData(evaluator, task, this.data.defaultAppearanceData, this._fieldResources.mergedResources);
     let defaultAppearance, fontSize, lineHeight;
     const encodedLines = [];
@@ -54538,8 +54548,8 @@ class WidgetAnnotation extends Annotation {
     let {
       fontSize
     } = this.data.defaultAppearanceData;
-    let lineHeight = (fontSize || 12) * (/* inlined export .LINE_FACTOR */1.35),
-      numberOfLines = Math.round(height / lineHeight);
+    const lineHeight = (fontSize || 12) * (/* inlined export .LINE_FACTOR */1.35);
+    let numberOfLines = Math.round(height / lineHeight);
     if (!fontSize) {
       const roundWithTwoDigits = x => Math.floor(x * 100) / 100;
       if (lineCount === -1) {
@@ -54571,15 +54581,25 @@ class WidgetAnnotation extends Annotation {
           return false;
         };
         numberOfLines = Math.max(numberOfLines, lineCount);
-        while (true) {
-          lineHeight = height / numberOfLines;
-          fontSize = roundWithTwoDigits(lineHeight / (/* inlined export .LINE_FACTOR */1.35));
-          if (isTooBig(fontSize)) {
-            numberOfLines++;
-            continue;
+        const getFontSize = n => roundWithTwoDigits(height / n / (/* inlined export .LINE_FACTOR */1.35));
+        if (height > 0 && isTooBig(getFontSize(numberOfLines))) {
+          let low = numberOfLines,
+            high = 2 * numberOfLines;
+          while (isTooBig(getFontSize(high))) {
+            low = high;
+            high *= 2;
           }
-          break;
+          while (high - low > 1) {
+            const mid = Math.floor((low + high) / 2);
+            if (isTooBig(getFontSize(mid))) {
+              low = mid;
+            } else {
+              high = mid;
+            }
+          }
+          numberOfLines = high;
         }
+        fontSize = getFontSize(numberOfLines);
       }
       const {
         fontName,
@@ -54651,6 +54671,7 @@ class TextWidgetAnnotation extends WidgetAnnotation {
   constructor(params) {
     super(params);
     const {
+      annotationGlobals,
       dict
     } = params;
     if (dict.has("PMD")) {
@@ -54663,14 +54684,11 @@ class TextWidgetAnnotation extends WidgetAnnotation {
     if (typeof this.data.fieldValue !== "string") {
       this.data.fieldValue = "";
     }
-    let alignment = getInheritableProperty({
+    const getAlignment = q => Number.isInteger(q) && q >= 0 && q <= 2 ? q : null;
+    this.data.textAlignment = getAlignment(getInheritableProperty({
       dict,
       key: "Q"
-    });
-    if (!Number.isInteger(alignment) || alignment < 0 || alignment > 2) {
-      alignment = null;
-    }
-    this.data.textAlignment = alignment;
+    })) ?? getAlignment(annotationGlobals.acroForm.get("Q")) ?? null;
     let maximumLength = getInheritableProperty({
       dict,
       key: "MaxLen"
@@ -55755,6 +55773,15 @@ class FreeTextAnnotation extends MarkupAnnotation {
     }
     return freetext;
   }
+  static getPrintData({
+    color,
+    fontSize,
+    rect,
+    rotation,
+    value
+  }) {
+    throw new Error("Not implemented: getPrintData");
+  }
   static async createNewAppearanceStream(annotation, xref, params) {
     const {
       baseFontRef,
@@ -56604,7 +56631,8 @@ class MediaAnnotation extends Annotation {
     if (subtype instanceof Name && MediaAnnotation.#MEDIA_MIME_TYPE_RE.test(subtype.name)) {
       return subtype.name;
     }
-    const ext = filename.split(".").at(-1)?.toLowerCase();
+    const extPos = filename.lastIndexOf(".") + 1,
+      ext = extPos > 0 && filename.substring(extPos).toLowerCase();
     switch (ext) {
       case "mp4":
       case "m4v":
@@ -57554,11 +57582,10 @@ class ARCFourCipher {
   a = 0;
   b = 0;
   constructor(key) {
-    const s = new Uint8Array(256);
+    const s = Uint8Array.from({
+      length: 256
+    }, (_, i) => i);
     const keyLength = key.length;
-    for (let i = 0; i < 256; ++i) {
-      s[i] = i;
-    }
     for (let i = 0, j = 0; i < 256; ++i) {
       const tmp = s[i];
       j = j + tmp + key[i % keyLength] & 0xff;
@@ -60909,17 +60936,20 @@ function wrapReason(ex) {
   return new UnknownErrorException(ex.message, ex.toString());
 }
 class MessageHandler {
+  #actions = new Map();
+  #callbackCapabilities = new Map();
+  #callbackId = 1;
+  #comObj;
   #messageAC = new AbortController();
+  #sourceName;
+  #streamControllers = new Map();
+  #streamId = 1;
+  #streamSinks = new Map();
+  #targetName;
   constructor(sourceName, targetName, comObj) {
-    this.sourceName = sourceName;
-    this.targetName = targetName;
-    this.comObj = comObj;
-    this.callbackId = 1;
-    this.streamId = 1;
-    this.streamSinks = Object.create(null);
-    this.streamControllers = Object.create(null);
-    this.callbackCapabilities = Object.create(null);
-    this.actionHandler = Object.create(null);
+    this.#sourceName = sourceName;
+    this.#targetName = targetName;
+    this.#comObj = comObj;
     comObj.addEventListener("message", this.#onMessage.bind(this), {
       signal: this.#messageAC.signal
     });
@@ -60927,7 +60957,7 @@ class MessageHandler {
   #onMessage({
     data
   }) {
-    if (data.targetName !== this.sourceName) {
+    if (data.targetName !== this.#sourceName) {
       return;
     }
     if (data.stream) {
@@ -60935,30 +60965,33 @@ class MessageHandler {
       return;
     }
     if (data.callback) {
-      const callbackId = data.callbackId;
-      const capability = this.callbackCapabilities[callbackId];
+      const {
+        callbackId,
+        callback
+      } = data;
+      const capability = this.#callbackCapabilities.get(callbackId);
       if (!capability) {
         throw new Error(`Cannot resolve callback ${callbackId}`);
       }
-      delete this.callbackCapabilities[callbackId];
-      if (data.callback === CallbackKind.DATA) {
+      this.#callbackCapabilities.delete(callbackId);
+      if (callback === CallbackKind.DATA) {
         capability.resolve(data.data);
-      } else if (data.callback === CallbackKind.ERROR) {
+      } else if (callback === CallbackKind.ERROR) {
         capability.reject(wrapReason(data.reason));
       } else {
         throw new Error("Unexpected callback case");
       }
       return;
     }
-    const action = this.actionHandler[data.action];
+    const action = this.#actions.get(data.action);
     if (!action) {
       throw new Error(`Unknown action from worker: ${data.action}`);
     }
     if (data.callbackId) {
-      const sourceName = this.sourceName,
+      const sourceName = this.#sourceName,
         targetName = data.sourceName,
-        comObj = this.comObj;
-      Promise.try(action, data.data).then(function (result) {
+        comObj = this.#comObj;
+      Promise.try(action, data.data).then(result => {
         comObj.postMessage({
           sourceName,
           targetName,
@@ -60966,7 +60999,7 @@ class MessageHandler {
           callbackId: data.callbackId,
           data: result
         });
-      }, function (reason) {
+      }, reason => {
         comObj.postMessage({
           sourceName,
           targetName,
@@ -60984,28 +61017,28 @@ class MessageHandler {
     action(data.data);
   }
   on(actionName, handler) {
-    const ah = this.actionHandler;
-    if (ah[actionName]) {
-      throw new Error(`There is already an actionName called "${actionName}"`);
+    const ah = this.#actions;
+    if (ah.has(actionName)) {
+      throw new Error(`There is already a "${actionName}" handler.`);
     }
-    ah[actionName] = handler;
+    ah.set(actionName, handler);
   }
   send(actionName, data, transfers) {
-    this.comObj.postMessage({
-      sourceName: this.sourceName,
-      targetName: this.targetName,
+    this.#comObj.postMessage({
+      sourceName: this.#sourceName,
+      targetName: this.#targetName,
       action: actionName,
       data
     }, transfers);
   }
   sendWithPromise(actionName, data, transfers) {
-    const callbackId = this.callbackId++;
-    const capability = Promise.withResolvers();
-    this.callbackCapabilities[callbackId] = capability;
+    const callbackId = this.#callbackId++,
+      capability = Promise.withResolvers();
+    this.#callbackCapabilities.set(callbackId, capability);
     try {
-      this.comObj.postMessage({
-        sourceName: this.sourceName,
-        targetName: this.targetName,
+      this.#comObj.postMessage({
+        sourceName: this.#sourceName,
+        targetName: this.#targetName,
         action: actionName,
         callbackId,
         data
@@ -61016,20 +61049,20 @@ class MessageHandler {
     return capability.promise;
   }
   sendWithStream(actionName, data, queueingStrategy, transfers) {
-    const streamId = this.streamId++,
-      sourceName = this.sourceName,
-      targetName = this.targetName,
-      comObj = this.comObj;
+    const streamId = this.#streamId++,
+      sourceName = this.#sourceName,
+      targetName = this.#targetName,
+      comObj = this.#comObj;
     return new ReadableStream({
       start: controller => {
         const startCapability = Promise.withResolvers();
-        this.streamControllers[streamId] = {
+        this.#streamControllers.set(streamId, {
           controller,
           startCall: startCapability,
           pullCall: null,
           cancelCall: null,
           isClosed: false
-        };
+        });
         comObj.postMessage({
           sourceName,
           targetName,
@@ -61042,7 +61075,7 @@ class MessageHandler {
       },
       pull: controller => {
         const pullCapability = Promise.withResolvers();
-        this.streamControllers[streamId].pullCall = pullCapability;
+        this.#streamControllers.get(streamId).pullCall = pullCapability;
         comObj.postMessage({
           sourceName,
           targetName,
@@ -61055,8 +61088,8 @@ class MessageHandler {
       cancel: reason => {
         assert(reason instanceof Error, "cancel must have a valid reason");
         const cancelCapability = Promise.withResolvers();
-        this.streamControllers[streamId].cancelCall = cancelCapability;
-        this.streamControllers[streamId].isClosed = true;
+        this.#streamControllers.get(streamId).cancelCall = cancelCapability;
+        this.#streamControllers.get(streamId).isClosed = true;
         comObj.postMessage({
           sourceName,
           targetName,
@@ -61070,11 +61103,11 @@ class MessageHandler {
   }
   #createStreamSink(data) {
     const streamId = data.streamId,
-      sourceName = this.sourceName,
+      sourceName = this.#sourceName,
       targetName = data.sourceName,
-      comObj = this.comObj;
-    const self = this,
-      action = this.actionHandler[data.action];
+      comObj = this.#comObj;
+    const streamSinks = this.#streamSinks,
+      action = this.#actions.get(data.action);
     const streamSink = {
       enqueue(chunk, size = 1, transfers) {
         if (this.isCancelled) {
@@ -61105,7 +61138,7 @@ class MessageHandler {
           stream: StreamKind.CLOSE,
           streamId
         });
-        delete self.streamSinks[streamId];
+        streamSinks.delete(streamId);
       },
       error(reason) {
         assert(reason instanceof Error, "error must have a valid reason");
@@ -61130,8 +61163,8 @@ class MessageHandler {
     };
     streamSink.sinkCapability.resolve();
     streamSink.ready = streamSink.sinkCapability.promise;
-    this.streamSinks[streamId] = streamSink;
-    Promise.try(action, data.data, streamSink).then(function () {
+    streamSinks.set(streamId, streamSink);
+    Promise.try(action, data.data, streamSink).then(() => {
       comObj.postMessage({
         sourceName,
         targetName,
@@ -61139,7 +61172,7 @@ class MessageHandler {
         streamId,
         success: true
       });
-    }, function (reason) {
+    }, reason => {
       comObj.postMessage({
         sourceName,
         targetName,
@@ -61151,11 +61184,11 @@ class MessageHandler {
   }
   #processStreamMessage(data) {
     const streamId = data.streamId,
-      sourceName = this.sourceName,
+      sourceName = this.#sourceName,
       targetName = data.sourceName,
-      comObj = this.comObj;
-    const streamController = this.streamControllers[streamId],
-      streamSink = this.streamSinks[streamId];
+      comObj = this.#comObj;
+    const streamController = this.#streamControllers.get(streamId),
+      streamSink = this.#streamSinks.get(streamId);
     switch (data.stream) {
       case StreamKind.START_COMPLETE:
         if (data.success) {
@@ -61186,7 +61219,7 @@ class MessageHandler {
           streamSink.sinkCapability.resolve();
         }
         streamSink.desiredSize = data.desiredSize;
-        Promise.try(streamSink.onPull || onFn).then(function () {
+        Promise.try(streamSink.onPull || onFn).then(() => {
           comObj.postMessage({
             sourceName,
             targetName,
@@ -61194,7 +61227,7 @@ class MessageHandler {
             streamId,
             success: true
           });
-        }, function (reason) {
+        }, reason => {
           comObj.postMessage({
             sourceName,
             targetName,
@@ -61238,7 +61271,7 @@ class MessageHandler {
           break;
         }
         const dataReason = wrapReason(data.reason);
-        Promise.try(streamSink.onCancel || onFn, dataReason).then(function () {
+        Promise.try(streamSink.onCancel || onFn, dataReason).then(() => {
           comObj.postMessage({
             sourceName,
             targetName,
@@ -61246,7 +61279,7 @@ class MessageHandler {
             streamId,
             success: true
           });
-        }, function (reason) {
+        }, reason => {
           comObj.postMessage({
             sourceName,
             targetName,
@@ -61257,7 +61290,7 @@ class MessageHandler {
         });
         streamSink.sinkCapability.reject(dataReason);
         streamSink.isCancelled = true;
-        delete this.streamSinks[streamId];
+        this.#streamSinks.delete(streamId);
         break;
       default:
         throw new Error("Unexpected stream case");
@@ -61265,12 +61298,195 @@ class MessageHandler {
   }
   async #deleteStreamController(streamController, streamId) {
     await Promise.allSettled([streamController.startCall?.promise, streamController.pullCall?.promise, streamController.cancelCall?.promise]);
-    delete this.streamControllers[streamId];
+    this.#streamControllers.delete(streamId);
   }
   destroy() {
     this.#messageAC?.abort();
     this.#messageAC = null;
   }
+}
+
+;// ./src/core/editor/print_appearances.js
+/* unused harmony import specifier */ var print_appearances_Ref;
+/* unused harmony import specifier */ var print_appearances_Dict;
+/* unused harmony import specifier */ var print_appearances_EOF;
+/* unused harmony import specifier */ var print_appearances_Cmd;
+/* unused harmony import specifier */ var print_appearances_RefMap;
+/* unused harmony import specifier */ var print_appearances_stringToBytes;
+/* unused harmony import specifier */ var print_appearances_warn;
+/* unused harmony import specifier */ var print_appearances_BaseStream;
+/* unused harmony import specifier */ var print_appearances_EvaluatorPreprocessor;
+/* unused harmony import specifier */ var print_appearances_Lexer;
+/* unused harmony import specifier */ var print_appearances_LocalPdfManager;
+/* unused harmony import specifier */ var print_appearances_Stream;
+
+
+
+
+
+
+
+const MARKED_CONTENT_OPS = new Set(["BDC", "BMC", "DP", "EMC", "MP"]);
+class ChangesXRefWrapper {
+  #changes;
+  #xref;
+  constructor(changes, xref) {
+    this.#changes = changes;
+    this.#xref = xref;
+  }
+  getNewTemporaryRef() {
+    return this.#xref.getNewTemporaryRef();
+  }
+  fetch(ref) {
+    return this.#changes.has(ref) ? this.#changes.get(ref).data : this.#xref.fetch(ref);
+  }
+  fetchIfRef(obj) {
+    return obj instanceof print_appearances_Ref ? this.fetch(obj) : obj;
+  }
+  async fetchAsync(ref) {
+    return this.fetch(ref);
+  }
+  async fetchIfRefAsync(obj) {
+    return this.fetchIfRef(obj);
+  }
+}
+async function copyObject(obj, sourceXref, target) {
+  const {
+    changes,
+    refs,
+    xref,
+    xrefWrapper
+  } = target;
+  if (obj instanceof print_appearances_Ref) {
+    let newRef = refs.get(obj);
+    if (!newRef) {
+      refs.put(obj, newRef = xref.getNewTemporaryRef());
+      const value = await sourceXref.fetchAsync(obj);
+      changes.put(newRef, {
+        data: await copyObject(value, sourceXref, target)
+      });
+    }
+    return newRef;
+  }
+  if (Array.isArray(obj)) {
+    return Promise.all(obj.map(value => copyObject(value, sourceXref, target)));
+  }
+  let dict, stream;
+  if (obj instanceof print_appearances_BaseStream) {
+    ({
+      dict
+    } = stream = obj.getOriginalStream().clone());
+  } else if (obj instanceof print_appearances_Dict) {
+    dict = obj.clone();
+  } else {
+    return obj;
+  }
+  dict.xref = xrefWrapper;
+  const promises = [];
+  for (const [key, value] of dict.getRawEntries()) {
+    promises.push(copyObject(value, sourceXref, target).then(newValue => dict.set(key, newValue)));
+  }
+  await Promise.all(promises);
+  return stream ?? dict;
+}
+function filterContentStream(bytes, isWidget) {
+  const lexer = new print_appearances_Lexer(new print_appearances_Stream(bytes), print_appearances_EvaluatorPreprocessor.opMap);
+  const parts = isWidget ? [print_appearances_stringToBytes("/Tx BMC\n")] : [];
+  let start = 0;
+  let end = 0;
+  try {
+    while (true) {
+      const obj = lexer.getObj();
+      if (obj === print_appearances_EOF) {
+        break;
+      }
+      if (!(obj instanceof print_appearances_Cmd) || !print_appearances_EvaluatorPreprocessor.opMap[obj.cmd]) {
+        continue;
+      }
+      if (obj.cmd === "BI") {
+        print_appearances_warn("filterContentStream: inline images aren't supported.");
+        return null;
+      }
+      const cmdEnd = lexer.currentChar < 0 ? bytes.length : lexer.stream.pos - 1;
+      if (MARKED_CONTENT_OPS.has(obj.cmd)) {
+        parts.push(bytes.subarray(start, end));
+        start = cmdEnd;
+      }
+      end = cmdEnd;
+    }
+  } catch (reason) {
+    print_appearances_warn(`filterContentStream: "${reason}".`);
+    return null;
+  }
+  parts.push(bytes.subarray(start));
+  if (isWidget) {
+    parts.push(print_appearances_stringToBytes("\nEMC"));
+  }
+  const data = new Uint8Array(parts.reduce((length, part) => length + part.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    data.set(part, offset);
+    offset += part.length;
+  }
+  return data;
+}
+async function importPrintedAppearances({
+  buffer,
+  changes,
+  docId,
+  entries,
+  evaluatorOptions,
+  handler,
+  xref
+}) {
+  const pdfManager = new print_appearances_LocalPdfManager({
+    source: buffer,
+    docId: `${docId}_printToPDF`,
+    handler,
+    evaluatorOptions
+  });
+  await pdfManager.initDocument(false);
+  const {
+    pdfDocument
+  } = pdfManager;
+  if (pdfDocument.numPages !== entries.length) {
+    throw new Error("The generated PDF must have one page per appearance.");
+  }
+  const appearances = new Map();
+  const target = {
+    changes,
+    refs: new print_appearances_RefMap(),
+    xref,
+    xrefWrapper: new ChangesXRefWrapper(changes, xref)
+  };
+  for (let i = 0, ii = entries.length; i < ii; i++) {
+    const {
+      key,
+      isWidget,
+      matrix,
+      data
+    } = entries[i];
+    const page = await pdfDocument.getPage(i);
+    const contentStream = await page.getContentStream();
+    contentStream.reset();
+    const bytes = filterContentStream(contentStream.getBytes(), isWidget);
+    if (!bytes) {
+      continue;
+    }
+    const dict = new print_appearances_Dict(xref);
+    dict.setIfName("Type", "XObject");
+    dict.setIfName("Subtype", "Form");
+    dict.set("FormType", 1);
+    dict.set("BBox", [0, 0, data.width, data.height]);
+    dict.setIfArray("Matrix", matrix);
+    dict.set("Resources", await copyObject(page.resources, pdfDocument.xref, target));
+    const ref = xref.getNewTemporaryRef();
+    changes.put(ref, {
+      data: new print_appearances_Stream(bytes, 0, bytes.length, dict)
+    });
+    appearances.set(key, ref);
+  }
+  return appearances;
 }
 
 ;// ./src/core/writer.js
@@ -64318,6 +64534,7 @@ class PDFWorkerStreamRangeReader extends BasePDFStreamRangeReader {
 
 
 
+
 class WorkerTask {
   #capability = Promise.withResolvers();
   terminated = false;
@@ -64368,7 +64585,7 @@ class WorkerMessageHandler {
       docId,
       apiVersion
     } = docParams;
-    const workerVersion = "6.3.0";
+    const workerVersion = "6.4.0";
     if (apiVersion !== workerVersion) {
       throw new Error(`The API version "${apiVersion}" does not match ` + `the Worker version "${workerVersion}".`);
     }
@@ -64808,6 +65025,7 @@ class WorkerMessageHandler {
       isPureXfa,
       numPages,
       annotationStorage,
+      supportsPrintToPDF,
       filename
     }) {
       const globalPromises = [pdfManager.requestLoadedStream(), pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("acroFormRef"), pdfManager.ensureDoc("startXRef"), pdfManager.ensureDoc("xref"), pdfManager.ensureCatalog("structTreeRoot")];
