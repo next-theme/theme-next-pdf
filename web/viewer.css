@@ -7016,6 +7016,7 @@ body{
 }
 
 #viewerContainer:not(.pdfPresentationMode){
+  transition-property:inset-inline-start;
   transition-duration:var(--sidebar-transition-duration);
   transition-timing-function:var(--sidebar-transition-timing-function);
 }

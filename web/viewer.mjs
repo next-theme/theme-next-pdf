@@ -21,7 +21,7 @@
 
 /**
  * pdfjsVersion = 6.4.0
- * pdfjsBuild = 94b6d21
+ * pdfjsBuild = 545f520
  */
 
 ;// ./web/ui_utils.js
@@ -940,7 +940,7 @@ const {
 } = globalThis.pdfjsLib;
 
 ;// ./web/internal_evt.js
-const INTERNAL_EVT = "785ecd51-4914-4c32-a2a1-ae1492661624";
+const INTERNAL_EVT = "2b137dea-7591-48b5-900d-334f4244013c";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });

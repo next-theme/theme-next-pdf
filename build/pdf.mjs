@@ -21,7 +21,7 @@
 
 /**
  * pdfjsVersion = 6.4.0
- * pdfjsBuild = 94b6d21
+ * pdfjsBuild = 545f520
  */
 
 ;// ./src/shared/util.js
@@ -2100,7 +2100,7 @@ class FloatingToolbar {
 }
 
 ;// ./src/shared/internal_evt.js
-const INTERNAL_EVT = "785ecd51-4914-4c32-a2a1-ae1492661624";
+const INTERNAL_EVT = "2b137dea-7591-48b5-900d-334f4244013c";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });
@@ -8048,44 +8048,37 @@ class FontLoader {
       if (this.isSyncFontLoadingSupported) {
         return;
       }
-      await new Promise(resolve => {
-        const request = this._queueLoadingCallback(resolve);
-        this._prepareFontLoadEvent(font, request);
-      });
+      await this.#testFontLoaded(font);
     }
   }
   get isFontLoadingAPISupported() {
-    const hasFonts = !!this._document?.fonts;
-    return shadow(this, "isFontLoadingAPISupported", hasFonts);
+    return shadow(this, "isFontLoadingAPISupported", !!this._document?.fonts);
   }
   get isSyncFontLoadingSupported() {
     return shadow(this, "isSyncFontLoadingSupported", isNodeJS || FeatureTest.platform.isFirefox);
   }
-  _queueLoadingCallback(callback) {
+  #testFontLoaded(font) {
     function completeRequest() {
       assert(!request.done, "completeRequest() cannot be called twice.");
       request.done = true;
       while (loadingRequests.length > 0 && loadingRequests[0].done) {
         const otherRequest = loadingRequests.shift();
-        setTimeout(otherRequest.callback, 0);
+        setTimeout(otherRequest.resolve, 0);
       }
     }
     const {
       loadingRequests
     } = this;
+    const {
+      promise,
+      resolve
+    } = Promise.withResolvers();
     const request = {
       done: false,
-      complete: completeRequest,
-      callback
+      resolve
     };
     loadingRequests.push(request);
-    return request;
-  }
-  get _loadTestFont() {
-    const testFont = atob("T1RUTwALAIAAAwAwQ0ZGIDHtZg4AAAOYAAAAgUZGVE1lkzZwAAAEHAAAABxHREVGABQA" + "FQAABDgAAAAeT1MvMlYNYwkAAAEgAAAAYGNtYXABDQLUAAACNAAAAUJoZWFk/xVFDQAA" + "ALwAAAA2aGhlYQdkA+oAAAD0AAAAJGhtdHgD6AAAAAAEWAAAAAZtYXhwAAJQAAAAARgA" + "AAAGbmFtZVjmdH4AAAGAAAAAsXBvc3T/hgAzAAADeAAAACAAAQAAAAEAALZRFsRfDzz1" + "AAsD6AAAAADOBOTLAAAAAM4KHDwAAAAAA+gDIQAAAAgAAgAAAAAAAAABAAADIQAAAFoD" + "6AAAAAAD6AABAAAAAAAAAAAAAAAAAAAAAQAAUAAAAgAAAAQD6AH0AAUAAAKKArwAAACM" + "AooCvAAAAeAAMQECAAACAAYJAAAAAAAAAAAAAQAAAAAAAAAAAAAAAFBmRWQAwAAuAC4D" + "IP84AFoDIQAAAAAAAQAAAAAAAAAAACAAIAABAAAADgCuAAEAAAAAAAAAAQAAAAEAAAAA" + "AAEAAQAAAAEAAAAAAAIAAQAAAAEAAAAAAAMAAQAAAAEAAAAAAAQAAQAAAAEAAAAAAAUA" + "AQAAAAEAAAAAAAYAAQAAAAMAAQQJAAAAAgABAAMAAQQJAAEAAgABAAMAAQQJAAIAAgAB" + "AAMAAQQJAAMAAgABAAMAAQQJAAQAAgABAAMAAQQJAAUAAgABAAMAAQQJAAYAAgABWABY" + "AAAAAAAAAwAAAAMAAAAcAAEAAAAAADwAAwABAAAAHAAEACAAAAAEAAQAAQAAAC7//wAA" + "AC7////TAAEAAAAAAAABBgAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "AAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAAAAD/gwAyAAAAAQAAAAAAAAAAAAAAAAAA" + "AAABAAQEAAEBAQJYAAEBASH4DwD4GwHEAvgcA/gXBIwMAYuL+nz5tQXkD5j3CBLnEQAC" + "AQEBIVhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYAAABAQAADwACAQEEE/t3" + "Dov6fAH6fAT+fPp8+nwHDosMCvm1Cvm1DAz6fBQAAAAAAAABAAAAAMmJbzEAAAAAzgTj" + "FQAAAADOBOQpAAEAAAAAAAAADAAUAAQAAAABAAAAAgABAAAAAAAAAAAD6AAAAAAAAA==");
-    return shadow(this, "_loadTestFont", testFont);
-  }
-  _prepareFontLoadEvent(font, request) {
+    this._loadTestFont ??= atob("T1RUTwALAIAAAwAwQ0ZGIDHtZg4AAAOYAAAAgUZGVE1lkzZwAAAEHAAAABxHREVGABQA" + "FQAABDgAAAAeT1MvMlYNYwkAAAEgAAAAYGNtYXABDQLUAAACNAAAAUJoZWFk/xVFDQAA" + "ALwAAAA2aGhlYQdkA+oAAAD0AAAAJGhtdHgD6AAAAAAEWAAAAAZtYXhwAAJQAAAAARgA" + "AAAGbmFtZVjmdH4AAAGAAAAAsXBvc3T/hgAzAAADeAAAACAAAQAAAAEAALZRFsRfDzz1" + "AAsD6AAAAADOBOTLAAAAAM4KHDwAAAAAA+gDIQAAAAgAAgAAAAAAAAABAAADIQAAAFoD" + "6AAAAAAD6AABAAAAAAAAAAAAAAAAAAAAAQAAUAAAAgAAAAQD6AH0AAUAAAKKArwAAACM" + "AooCvAAAAeAAMQECAAACAAYJAAAAAAAAAAAAAQAAAAAAAAAAAAAAAFBmRWQAwAAuAC4D" + "IP84AFoDIQAAAAAAAQAAAAAAAAAAACAAIAABAAAADgCuAAEAAAAAAAAAAQAAAAEAAAAA" + "AAEAAQAAAAEAAAAAAAIAAQAAAAEAAAAAAAMAAQAAAAEAAAAAAAQAAQAAAAEAAAAAAAUA" + "AQAAAAEAAAAAAAYAAQAAAAMAAQQJAAAAAgABAAMAAQQJAAEAAgABAAMAAQQJAAIAAgAB" + "AAMAAQQJAAMAAgABAAMAAQQJAAQAAgABAAMAAQQJAAUAAgABAAMAAQQJAAYAAgABWABY" + "AAAAAAAAAwAAAAMAAAAcAAEAAAAAADwAAwABAAAAHAAEACAAAAAEAAQAAQAAAC7//wAA" + "AC7////TAAEAAAAAAAABBgAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "AAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" + "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMAAAAAAAD/gwAyAAAAAQAAAAAAAAAAAAAAAAAA" + "AAABAAQEAAEBAQJYAAEBASH4DwD4GwHEAvgcA/gXBIwMAYuL+nz5tQXkD5j3CBLnEQAC" + "AQEBIVhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYAAABAQAADwACAQEEE/t3" + "Dov6fAH6fAT+fPp8+nwHDosMCvm1Cvm1DAz6fBQAAAAAAAABAAAAAMmJbzEAAAAAzgTj" + "FQAAAADOBOQpAAEAAAAAAAAADAAUAAQAAAABAAAAAgABAAAAAAAAAAAD6AAAAAAAAA==");
     function int32(data, offset) {
       return data.charCodeAt(offset) << 24 | data.charCodeAt(offset + 1) << 16 | data.charCodeAt(offset + 2) << 8 | data.charCodeAt(offset + 3) & 0xff;
     }
@@ -8149,12 +8142,13 @@ class FontLoader {
     this._document.body.append(div);
     isFontReady(loadTestFontId, () => {
       div.remove();
-      request.complete();
+      completeRequest();
     });
+    return promise;
   }
 }
 class FontFaceObject {
-  compiledGlyphs = Object.create(null);
+  #compiledPaths = new Map();
   #fontData;
   constructor(translatedData, inspectFont = null, charProcOperatorList, extra) {
     this.#fontData = translatedData;
@@ -8205,21 +8199,23 @@ class FontFaceObject {
     return rule;
   }
   getPathGenerator(objs, character) {
-    if (this.compiledGlyphs[character] !== undefined) {
-      return this.compiledGlyphs[character];
+    let path = this.#compiledPaths.get(character);
+    if (path) {
+      return path;
     }
-    const objId = this.loadedName + "_path_" + character;
+    const objId = `${this.loadedName}_path_${character}`;
     let cmds;
     try {
       cmds = objs.get(objId);
     } catch (ex) {
       warn(`getPathGenerator - ignoring character: "${ex}".`);
     }
-    const path = makePathFromDrawOPS(cmds?.path);
+    path = makePathFromDrawOPS(cmds?.path);
     if (!this.fontExtraProperties) {
       objs.delete(objId);
     }
-    return this.compiledGlyphs[character] = path;
+    this.#compiledPaths.set(character, path);
+    return path;
   }
   get black() {
     return this.#fontData.black;
@@ -17287,7 +17283,7 @@ class InternalRenderTask {
   }
 }
 const version = "6.4.0";
-const build = "94b6d21";
+const build = "545f520";
 
 ;// ./src/display/editor/color_picker.js
 
@@ -20863,11 +20859,15 @@ class MediaAnnotationElement extends AnnotationElement {
     const {
       signal
     } = this.#abortController;
-    const url = URL.createObjectURL(new Blob([content], {
+    const blob = new Blob([content], {
       type: contentType
-    }));
+    });
+    if (!/^(?:video|audio)\//.test(blob.type)) {
+      return;
+    }
+    const url = URL.createObjectURL(blob);
     this.#contentUrl = url;
-    const isAudio = contentType.startsWith("audio/");
+    const isAudio = blob.type.startsWith("audio/");
     const media = document.createElement(isAudio ? "audio" : "video");
     this.#media = media;
     media.className = "mediaContent";

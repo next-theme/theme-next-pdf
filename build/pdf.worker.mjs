@@ -21,7 +21,7 @@
 
 /**
  * pdfjsVersion = 6.4.0
- * pdfjsBuild = 94b6d21
+ * pdfjsBuild = 545f520
  */
 
 ;// ./src/shared/util.js
@@ -9353,11 +9353,10 @@ class BrotliStream extends DecodeStream {
 
 ;// ./external/jbig2/jbig2.js
 async function JBig2(moduleArg = {}) {
-  var moduleRtn;
   var Module = moduleArg;
   var ENVIRONMENT_IS_WEB = true;
   var ENVIRONMENT_IS_WORKER = false;
-  var arguments_ = [];
+  var programArgs = [];
   var thisProgram = "./this.program";
   var quit_ = (status, toThrow) => {
     throw toThrow;
@@ -9384,29 +9383,23 @@ async function JBig2(moduleArg = {}) {
   var wasmBinary;
   var ABORT = false;
   var EXITSTATUS;
-  var readyPromiseResolve, readyPromiseReject;
-  var HEAP8, HEAPU8, HEAP16, HEAPU16, HEAP32, HEAPU32, HEAPF32, HEAPF64;
-  var HEAP64, HEAPU64;
+  class EmscriptenEH {}
+  class EmscriptenSjLj extends EmscriptenEH {}
   var runtimeInitialized = false;
+  function getMemoryBuffer() {
+    return wasmMemory.buffer;
+  }
   function updateMemoryViews() {
-    var b = wasmMemory.buffer;
+    if (HEAP8?.buffer?.resizable) return;
+    var b = getMemoryBuffer();
     HEAP8 = new Int8Array(b);
-    HEAP16 = new Int16Array(b);
     HEAPU8 = new Uint8Array(b);
-    HEAPU16 = new Uint16Array(b);
-    HEAP32 = new Int32Array(b);
-    HEAPU32 = new Uint32Array(b);
-    HEAPF32 = new Float32Array(b);
-    HEAPF64 = new Float64Array(b);
-    HEAP64 = new BigInt64Array(b);
-    HEAPU64 = new BigUint64Array(b);
   }
   function preRun() {
-    if (Module["preRun"]) {
-      if (typeof Module["preRun"] == "function") Module["preRun"] = [Module["preRun"]];
-      while (Module["preRun"].length) {
-        addOnPreRun(Module["preRun"].shift());
-      }
+    var preRun = Module["preRun"];
+    if (preRun) {
+      if (typeof preRun == "function") preRun = [preRun];
+      onPreRuns.push(...preRun);
     }
     callRuntimeCallbacks(onPreRuns);
   }
@@ -9415,22 +9408,20 @@ async function JBig2(moduleArg = {}) {
     wasmExports["j"]();
   }
   function postRun() {
-    if (Module["postRun"]) {
-      if (typeof Module["postRun"] == "function") Module["postRun"] = [Module["postRun"]];
-      while (Module["postRun"].length) {
-        addOnPostRun(Module["postRun"].shift());
-      }
+    var postRun = Module["postRun"];
+    if (postRun) {
+      if (typeof postRun == "function") postRun = [postRun];
+      onPostRuns.push(...postRun);
     }
     callRuntimeCallbacks(onPostRuns);
   }
   function abort(what) {
     Module["onAbort"]?.(what);
-    what = "Aborted(" + what + ")";
+    what = `Aborted(${what})`;
     err(what);
     ABORT = true;
     what += ". Build with -sASSERTIONS for more info.";
     var e = new WebAssembly.RuntimeError(what);
-    readyPromiseReject?.(e);
     throw e;
   }
   var wasmBinaryFile;
@@ -9441,17 +9432,16 @@ async function JBig2(moduleArg = {}) {
     return imports;
   }
   async function createWasm() {
-    function receiveInstance(instance, module) {
+    function receiveInstance(instance) {
       wasmExports = instance.exports;
       assignWasmExports(wasmExports);
       updateMemoryViews();
       return wasmExports;
     }
     var info = getWasmImports();
-    return new Promise((resolve, reject) => {
-      Module["instantiateWasm"](info, (inst, mod) => {
-        resolve(receiveInstance(inst, mod));
-      });
+    var instantiateWasm = Module["instantiateWasm"];
+    return new Promise(resolve => {
+      instantiateWasm(info, inst => resolve(receiveInstance(inst)));
     });
   }
   class ExitStatus {
@@ -9461,15 +9451,14 @@ async function JBig2(moduleArg = {}) {
       this.status = status;
     }
   }
+  var HEAP8;
   var callRuntimeCallbacks = callbacks => {
     while (callbacks.length > 0) {
       callbacks.shift()(Module);
     }
   };
   var onPostRuns = [];
-  var addOnPostRun = cb => onPostRuns.push(cb);
   var onPreRuns = [];
-  var addOnPreRun = cb => onPreRuns.push(cb);
   var noExitRuntime = true;
   var __abort_js = () => abort("");
   var runtimeKeepaliveCounter = 0;
@@ -9550,6 +9539,7 @@ async function JBig2(moduleArg = {}) {
       return 1;
     } catch (e) {}
   };
+  var HEAPU8;
   var _emscripten_resize_heap = requestedSize => {
     var oldSize = HEAPU8.length;
     requestedSize >>>= 0;
@@ -9588,13 +9578,13 @@ async function JBig2(moduleArg = {}) {
   if (Module["noExitRuntime"]) noExitRuntime = Module["noExitRuntime"];
   if (Module["print"]) out = Module["print"];
   if (Module["printErr"]) err = Module["printErr"];
-  if (Module["wasmBinary"]) wasmBinary = Module["wasmBinary"];
-  if (Module["arguments"]) arguments_ = Module["arguments"];
+  if (Module["arguments"]) programArgs = Module["arguments"];
   if (Module["thisProgram"]) thisProgram = Module["thisProgram"];
-  if (Module["preInit"]) {
-    if (typeof Module["preInit"] == "function") Module["preInit"] = [Module["preInit"]];
-    while (Module["preInit"].length > 0) {
-      Module["preInit"].shift()();
+  var preInit = Module["preInit"];
+  if (preInit) {
+    if (typeof preInit == "function") Module["preInit"] = preInit = [preInit];
+    while (preInit.length > 0) {
+      preInit.shift()();
     }
   }
   Module["writeArrayToMemory"] = writeArrayToMemory;
@@ -9610,46 +9600,31 @@ async function JBig2(moduleArg = {}) {
   }
   var wasmImports = {
     e: __abort_js,
-    b: __emscripten_runtime_keepalive_clear,
-    c: __setitimer_js,
+    d: __emscripten_runtime_keepalive_clear,
+    a: __setitimer_js,
     g: _createImageData,
-    d: _emscripten_resize_heap,
-    a: _proc_exit,
+    b: _emscripten_resize_heap,
+    c: _proc_exit,
     h: _setImageData,
     f: _setLineData
   };
-  function run() {
+  async function run() {
     preRun();
-    function doRun() {
-      Module["calledRun"] = true;
-      if (ABORT) return;
-      initRuntime();
-      readyPromiseResolve?.(Module);
-      Module["onRuntimeInitialized"]?.();
-      postRun();
+    var setStatus = Module["setStatus"];
+    if (setStatus) {
+      setStatus("Running...");
+      await new Promise(resolve => setTimeout(resolve, 1));
+      setTimeout(setStatus, 1, "");
     }
-    if (Module["setStatus"]) {
-      Module["setStatus"]("Running...");
-      setTimeout(() => {
-        setTimeout(() => Module["setStatus"](""), 1);
-        doRun();
-      }, 1);
-    } else {
-      doRun();
-    }
+    if (ABORT) return;
+    initRuntime();
+    Module["onRuntimeInitialized"]?.();
+    postRun();
   }
   var wasmExports;
   wasmExports = await createWasm();
-  run();
-  if (runtimeInitialized) {
-    moduleRtn = Module;
-  } else {
-    moduleRtn = new Promise((resolve, reject) => {
-      readyPromiseResolve = resolve;
-      readyPromiseReject = reject;
-    });
-  }
-  return moduleRtn;
+  await run();
+  return Module;
 }
 /* harmony default export */ const jbig2 = (JBig2);
 ;// ./src/core/wasm_image.js
@@ -12424,9 +12399,7 @@ class IdentityCMap extends CMap {
     return Number.isInteger(value) && value <= 0xffff ? value : -1;
   }
   getMap() {
-    return Array.from({
-      length: 0x10000
-    }, (_, i) => i);
+    unreachable("should not call getMap");
   }
   get length() {
     return 0x10000;
@@ -17402,37 +17375,35 @@ function recoverGlyphName(name, glyphsUnicodeMap) {
   return name;
 }
 function type1FontGlyphMapping(properties, builtInEncoding, glyphNames) {
-  const charCodeToGlyphId = Object.create(null);
-  let glyphId, charCode, baseEncoding;
+  const charCodeToGlyphId = new Map();
+  let glyphId, baseEncoding;
   const isSymbolicFont = !!(properties.flags & FontFlags.Symbolic);
   if (properties.isInternalFont) {
     baseEncoding = builtInEncoding;
-    for (charCode = 0; charCode < baseEncoding.length; charCode++) {
+    for (let charCode = 0; charCode < baseEncoding.length; charCode++) {
       glyphId = glyphNames.indexOf(baseEncoding[charCode]);
-      charCodeToGlyphId[charCode] = glyphId >= 0 ? glyphId : 0;
+      charCodeToGlyphId.set(charCode, glyphId >= 0 ? glyphId : 0);
     }
   } else if (properties.baseEncodingName) {
     baseEncoding = getEncoding(properties.baseEncodingName);
-    for (charCode = 0; charCode < baseEncoding.length; charCode++) {
+    for (let charCode = 0; charCode < baseEncoding.length; charCode++) {
       glyphId = glyphNames.indexOf(baseEncoding[charCode]);
-      charCodeToGlyphId[charCode] = glyphId >= 0 ? glyphId : 0;
+      charCodeToGlyphId.set(charCode, glyphId >= 0 ? glyphId : 0);
     }
   } else if (isSymbolicFont) {
-    for (charCode in builtInEncoding) {
-      charCodeToGlyphId[charCode] = builtInEncoding[charCode];
+    for (const charCode in builtInEncoding) {
+      charCodeToGlyphId.set(+charCode, builtInEncoding[charCode]);
     }
   } else {
     baseEncoding = StandardEncoding;
-    for (charCode = 0; charCode < baseEncoding.length; charCode++) {
+    for (let charCode = 0; charCode < baseEncoding.length; charCode++) {
       glyphId = glyphNames.indexOf(baseEncoding[charCode]);
-      charCodeToGlyphId[charCode] = glyphId >= 0 ? glyphId : 0;
+      charCodeToGlyphId.set(charCode, glyphId >= 0 ? glyphId : 0);
     }
   }
-  const differences = properties.differences;
   let glyphsUnicodeMap;
-  if (differences) {
-    for (charCode in differences) {
-      const glyphName = differences[charCode];
+  if (properties.differences) {
+    for (const [charCode, glyphName] of properties.differences) {
       glyphId = glyphNames.indexOf(glyphName);
       if (glyphId === -1) {
         glyphsUnicodeMap ??= getGlyphsUnicode();
@@ -17441,7 +17412,7 @@ function type1FontGlyphMapping(properties, builtInEncoding, glyphNames) {
           glyphId = glyphNames.indexOf(standardGlyphName);
         }
       }
-      charCodeToGlyphId[charCode] = glyphId >= 0 ? glyphId : 0;
+      charCodeToGlyphId.set(charCode, glyphId >= 0 ? glyphId : 0);
     }
   }
   return charCodeToGlyphId;
@@ -18660,6 +18631,7 @@ class CFFIndex {
   }
 }
 class CFFDict {
+  values = new Map();
   constructor(tables, strings) {
     this.keyToNameMap = tables.keyToNameMap;
     this.nameToKeyMap = tables.nameToKeyMap;
@@ -18668,10 +18640,9 @@ class CFFDict {
     this.opcodes = tables.opcodes;
     this.order = tables.order;
     this.strings = strings;
-    this.values = Object.create(null);
   }
   setByKey(key, value) {
-    if (!(key in this.keyToNameMap)) {
+    if (!this.keyToNameMap.has(key)) {
       return false;
     }
     if (value.length === 0) {
@@ -18683,51 +18654,51 @@ class CFFDict {
         return true;
       }
     }
-    const type = this.types[key];
+    const type = this.types.get(key);
     if (type === "num" || type === "sid" || type === "offset") {
       value = value[0];
     }
-    this.values[key] = value;
+    this.values.set(key, value);
     return true;
   }
   setByName(name, value) {
-    if (!(name in this.nameToKeyMap)) {
+    if (!this.nameToKeyMap.has(name)) {
       throw new FormatError(`Invalid dictionary name "${name}"`);
     }
-    this.values[this.nameToKeyMap[name]] = value;
+    const key = this.nameToKeyMap.get(name);
+    this.values.set(key, value);
   }
   hasName(name) {
-    return this.nameToKeyMap[name] in this.values;
+    const key = this.nameToKeyMap.get(name);
+    return this.values.has(key);
   }
   getByName(name) {
-    if (!(name in this.nameToKeyMap)) {
+    if (!this.nameToKeyMap.has(name)) {
       throw new FormatError(`Invalid dictionary name ${name}"`);
     }
-    const key = this.nameToKeyMap[name];
-    if (!(key in this.values)) {
-      return this.defaults[key];
-    }
-    return this.values[key];
+    const key = this.nameToKeyMap.get(name);
+    return this.values.has(key) ? this.values.get(key) : this.defaults.get(key);
   }
   removeByName(name) {
-    delete this.values[this.nameToKeyMap[name]];
+    const key = this.nameToKeyMap.get(name);
+    this.values.delete(key);
   }
   static createTables(layout) {
     const tables = {
-      keyToNameMap: {},
-      nameToKeyMap: {},
-      defaults: {},
-      types: {},
-      opcodes: {},
+      keyToNameMap: new Map(),
+      nameToKeyMap: new Map(),
+      defaults: new Map(),
+      types: new Map(),
+      opcodes: new Map(),
       order: []
     };
     for (const entry of layout) {
       const key = Array.isArray(entry[0]) ? (entry[0][0] << 8) + entry[0][1] : entry[0];
-      tables.keyToNameMap[key] = entry[1];
-      tables.nameToKeyMap[entry[1]] = key;
-      tables.types[key] = entry[2];
-      tables.defaults[key] = entry[3];
-      tables.opcodes[key] = Array.isArray(entry[0]) ? entry[0] : [entry[0]];
+      tables.keyToNameMap.set(key, entry[1]);
+      tables.nameToKeyMap.set(entry[1], key);
+      tables.types.set(key, entry[2]);
+      tables.defaults.set(key, entry[3]);
+      tables.opcodes.set(key, Array.isArray(entry[0]) ? entry[0] : [entry[0]]);
       tables.order.push(key);
     }
     return tables;
@@ -18738,9 +18709,9 @@ class CFFTopDict extends CFFDict {
   static get tables() {
     return shadow(this, "tables", this.createTables(CFFTopDictLayout));
   }
+  privateDict = null;
   constructor(strings) {
     super(CFFTopDict.tables, strings);
-    this.privateDict = null;
   }
 }
 const CFFPrivateDictLayout = [[6, "BlueValues", "delta", null], [7, "OtherBlues", "delta", null], [8, "FamilyBlues", "delta", null], [9, "FamilyOtherBlues", "delta", null], [[12, 9], "BlueScale", "num", DEFAULT_BLUE_SCALE], [[12, 10], "BlueShift", "num", DEFAULT_BLUE_SHIFT], [[12, 11], "BlueFuzz", "num", DEFAULT_BLUE_FUZZ], [10, "StdHW", "num", null], [11, "StdVW", "num", null], [[12, 12], "StemSnapH", "delta", null], [[12, 13], "StemSnapV", "delta", null], [[12, 14], "ForceBold", "num", 0], [[12, 17], "LanguageGroup", "num", 0], [[12, 18], "ExpansionFactor", "num", DEFAULT_EXPANSION_FACTOR], [[12, 19], "initialRandomSeed", "num", 0], [20, "defaultWidthX", "num", 0], [21, "nominalWidthX", "num", 0], [19, "Subrs", "offset", null]];
@@ -18748,9 +18719,9 @@ class CFFPrivateDict extends CFFDict {
   static get tables() {
     return shadow(this, "tables", this.createTables(CFFPrivateDictLayout));
   }
+  subrsIndex = null;
   constructor(strings) {
     super(CFFPrivateDict.tables, strings);
-    this.subrsIndex = null;
   }
 }
 const CFFCharsetPredefinedTypes = {
@@ -19016,11 +18987,11 @@ class CFFCompiler {
   compileDict(dict, offsetTracker) {
     const out = [];
     for (const key of dict.order) {
-      if (!(key in dict.values)) {
+      if (!dict.values.has(key)) {
         continue;
       }
-      let values = dict.values[key];
-      let types = dict.types[key];
+      let values = dict.values.get(key);
+      let types = dict.types.get(key);
       if (!Array.isArray(types)) {
         types = [types];
       }
@@ -19039,7 +19010,7 @@ class CFFCompiler {
             out.push(...this.encodeNumber(value));
             break;
           case "offset":
-            const name = dict.keyToNameMap[key];
+            const name = dict.keyToNameMap.get(key);
             if (!offsetTracker.isTracking(name)) {
               offsetTracker.track(name, out.length);
             }
@@ -19056,7 +19027,7 @@ class CFFCompiler {
             throw new FormatError(`Unknown data type of ${type}`);
         }
       }
-      out.push(...dict.opcodes[key]);
+      out.push(...dict.opcodes.get(key));
     }
     return out;
   }
@@ -20949,34 +20920,32 @@ class CFFFont {
       cMap
     } = properties;
     const charsets = cff.charset.charset;
-    let charCodeToGlyphId;
-    let glyphId;
     if (properties.composite) {
       let invCidToGidMap;
       if (cidToGidMap?.length > 0) {
-        invCidToGidMap = Object.create(null);
+        invCidToGidMap = new Map();
         for (let i = 0, ii = cidToGidMap.length; i < ii; i++) {
           const gid = cidToGidMap[i];
           if (gid !== undefined) {
-            invCidToGidMap[gid] = i;
+            invCidToGidMap.set(gid, i);
           }
         }
       }
-      charCodeToGlyphId = Object.create(null);
-      let charCode;
+      const charCodeToGlyphId = new Map();
+      let charCode, glyphId;
       if (cff.isCIDFont) {
         for (glyphId = 0; glyphId < charsets.length; glyphId++) {
           const cid = charsets[glyphId];
           charCode = cMap.charCodeOf(cid);
-          if (invCidToGidMap?.[charCode] !== undefined) {
-            charCode = invCidToGidMap[charCode];
+          if (invCidToGidMap?.has(charCode)) {
+            charCode = invCidToGidMap.get(charCode);
           }
-          charCodeToGlyphId[charCode] = glyphId;
+          charCodeToGlyphId.set(charCode, glyphId);
         }
       } else {
         for (glyphId = 0; glyphId < cff.charStrings.count; glyphId++) {
           charCode = cMap.charCodeOf(glyphId);
-          charCodeToGlyphId[charCode] = glyphId;
+          charCodeToGlyphId.set(charCode, glyphId);
         }
       }
       return charCodeToGlyphId;
@@ -20985,8 +20954,7 @@ class CFFFont {
     if (properties.isInternalFont) {
       encoding = properties.defaultEncoding;
     }
-    charCodeToGlyphId = type1FontGlyphMapping(properties, encoding, charsets);
-    return charCodeToGlyphId;
+    return type1FontGlyphMapping(properties, encoding, charsets);
   }
   hasGlyphId(id) {
     return this.cff.hasGlyphId(id);
@@ -21131,6 +21099,18 @@ function compileSystemFontInfo(info) {
   return buffer.transferToFixedLength(offset);
 }
 function compileFontInfo(font) {
+  function writeArray(arr, arrLen, writerName, increment) {
+    if (arr) {
+      view.setUint8(offset++, arrLen);
+      for (const val of arr) {
+        view[writerName](offset, val, true);
+        offset += increment;
+      }
+    } else {
+      view.setUint8(offset++, 0);
+      offset += increment * arrLen;
+    }
+  }
   const systemFontInfoBuffer = font.systemFontInfo ? compileSystemFontInfo(font.systemFontInfo) : null;
   const cssFontInfoBuffer = font.cssFontInfo ? compileCssFontInfo(font.cssFontInfo) : null;
   const {
@@ -21167,38 +21147,11 @@ function compileFontInfo(font) {
     offset += 8;
   }
   assert(offset === FONT_INFO.OFFSET_BBOX, "compileFontInfo: Number properties offset mismatch");
-  if (font.bbox) {
-    view.setUint8(offset++, 4);
-    for (const coord of font.bbox) {
-      view.setInt16(offset, coord, true);
-      offset += 2;
-    }
-  } else {
-    view.setUint8(offset++, 0);
-    offset += 2 * 4;
-  }
+  writeArray(font.bbox, 4, "setInt16", 2);
   assert(offset === FONT_INFO.OFFSET_FONT_MATRIX, "compileFontInfo: BBox properties offset mismatch");
-  if (font.fontMatrix) {
-    view.setUint8(offset++, 6);
-    for (const point of font.fontMatrix) {
-      view.setFloat64(offset, point, true);
-      offset += 8;
-    }
-  } else {
-    view.setUint8(offset++, 0);
-    offset += 8 * 6;
-  }
+  writeArray(font.fontMatrix, 6, "setFloat64", 8);
   assert(offset === FONT_INFO.OFFSET_DEFAULT_VMETRICS, "compileFontInfo: FontMatrix properties offset mismatch");
-  if (font.defaultVMetrics) {
-    view.setUint8(offset++, 3);
-    for (const metric of font.defaultVMetrics) {
-      view.setInt16(offset, metric, true);
-      offset += 2;
-    }
-  } else {
-    view.setUint8(offset++, 0);
-    offset += 3 * 2;
-  }
+  writeArray(font.defaultVMetrics, 3, "setInt16", 2);
   assert(offset === FONT_INFO.OFFSET_STRINGS, "compileFontInfo: DefaultVMetrics properties offset mismatch");
   view.setUint32(FONT_INFO.OFFSET_STRINGS, 0);
   offset += 4;
@@ -26159,10 +26112,10 @@ class Type1Font {
   getGlyphMapping(properties) {
     const charstrings = this.charstrings;
     if (properties.composite) {
-      const charCodeToGlyphId = Object.create(null);
+      const charCodeToGlyphId = new Map();
       for (let glyphId = 0, charstringsLen = charstrings.length; glyphId < charstringsLen; glyphId++) {
         const charCode = properties.cMap.charCodeOf(glyphId);
-        charCodeToGlyphId[charCode] = glyphId + 1;
+        charCodeToGlyphId.set(charCode, glyphId + 1);
       }
       return charCodeToGlyphId;
     }
@@ -26401,7 +26354,7 @@ function adjustType1ToUnicode(properties, builtInEncoding) {
     glyphsUnicodeMap = getGlyphsUnicode();
   for (const charCode in builtInEncoding) {
     if (properties.hasEncoding) {
-      if (properties.baseEncodingName || properties.differences[charCode] !== undefined) {
+      if (properties.baseEncodingName || properties.differences.has(+charCode)) {
         continue;
       }
     }
@@ -26529,7 +26482,7 @@ function getFontFileType(file, {
 }
 function applyStandardFontGlyphMap(map, glyphMap) {
   for (const charCode in glyphMap) {
-    map[+charCode] = glyphMap[charCode];
+    map.set(+charCode, glyphMap[charCode]);
   }
 }
 const getSymbolGlyphIdEncoding = getLookupTableFactory(t => {
@@ -26541,18 +26494,18 @@ const getSymbolGlyphIdEncoding = getLookupTableFactory(t => {
   }
 }, true);
 function buildToFontChar(encoding, glyphsUnicodeMap, differences) {
-  const toFontChar = [];
+  const toFontChar = new Map();
   let unicode;
   for (let i = 0, ii = encoding.length; i < ii; i++) {
     unicode = getUnicodeForGlyph(encoding[i], glyphsUnicodeMap);
     if (unicode !== -1) {
-      toFontChar[i] = unicode;
+      toFontChar.set(i, unicode);
     }
   }
-  for (const charCode in differences) {
-    unicode = getUnicodeForGlyph(differences[charCode], glyphsUnicodeMap);
+  for (const [charCode, glyphName] of differences) {
+    unicode = getUnicodeForGlyph(glyphName, glyphsUnicodeMap);
     if (unicode !== -1) {
-      toFontChar[+charCode] = unicode;
+      toFontChar.set(charCode, unicode);
     }
   }
   return toFontChar;
@@ -26578,9 +26531,9 @@ function convertCidString(charCode, cid, shouldThrow = false) {
   return cid;
 }
 function adjustMapping(charCodeToGlyphId, hasGlyph, newGlyphZeroId, toUnicode) {
-  const newMap = Object.create(null);
+  const newMap = new Map();
   const toUnicodeExtraMap = new Map();
-  const toFontChar = [];
+  const toFontChar = new Map();
   const usedGlyphIds = new Set();
   let privateUseAreaIndex = 0;
   const privateUseOffetStart = PRIVATE_USE_AREAS[privateUseAreaIndex][0];
@@ -26588,9 +26541,8 @@ function adjustMapping(charCodeToGlyphId, hasGlyph, newGlyphZeroId, toUnicode) {
   let privateUseOffetEnd = PRIVATE_USE_AREAS[privateUseAreaIndex][1];
   const isInPrivateArea = code => PRIVATE_USE_AREAS[0][0] <= code && code <= PRIVATE_USE_AREAS[0][1] || PRIVATE_USE_AREAS[1][0] <= code && code <= PRIVATE_USE_AREAS[1][1];
   let LIGATURE_TO_UNICODE = null;
-  for (const originalCharCode in charCodeToGlyphId) {
-    let glyphId = charCodeToGlyphId[originalCharCode];
-    if (!hasGlyph(glyphId)) {
+  for (const [charCode, gid] of charCodeToGlyphId) {
+    if (!hasGlyph(gid)) {
       continue;
     }
     if (nextAvailableFontCharCode > privateUseOffetEnd) {
@@ -26603,10 +26555,8 @@ function adjustMapping(charCodeToGlyphId, hasGlyph, newGlyphZeroId, toUnicode) {
       privateUseOffetEnd = PRIVATE_USE_AREAS[privateUseAreaIndex][1];
     }
     const fontCharCode = nextAvailableFontCharCode++;
-    if (glyphId === 0) {
-      glyphId = newGlyphZeroId;
-    }
-    let unicode = toUnicode.get(originalCharCode);
+    const glyphId = gid === 0 ? newGlyphZeroId : gid;
+    let unicode = toUnicode.get(charCode);
     if (typeof unicode === "string") {
       if (unicode.length === 1) {
         unicode = unicode.codePointAt(0);
@@ -26627,8 +26577,8 @@ function adjustMapping(charCodeToGlyphId, hasGlyph, newGlyphZeroId, toUnicode) {
       toUnicodeExtraMap.set(unicode, glyphId);
       usedGlyphIds.add(glyphId);
     }
-    newMap[fontCharCode] = glyphId;
-    toFontChar[originalCharCode] = fontCharCode;
+    newMap.set(fontCharCode, glyphId);
+    toFontChar.set(charCode, fontCharCode);
   }
   return {
     toFontChar,
@@ -26637,15 +26587,15 @@ function adjustMapping(charCodeToGlyphId, hasGlyph, newGlyphZeroId, toUnicode) {
     nextAvailableFontCharCode
   };
 }
-function getRanges(glyphs, toUnicodeExtraMap, numGlyphs) {
+function getRanges(charCodeToGlyphId, toUnicodeExtraMap, numGlyphs) {
   const codes = [];
-  for (const charCode in glyphs) {
-    if (glyphs[charCode] >= numGlyphs) {
+  for (const [charCode, glyphId] of charCodeToGlyphId) {
+    if (glyphId >= numGlyphs) {
       continue;
     }
     codes.push({
-      fontCharCode: charCode | 0,
-      glyphId: glyphs[charCode]
+      fontCharCode: charCode,
+      glyphId
     });
   }
   if (toUnicodeExtraMap) {
@@ -26685,8 +26635,8 @@ function getRanges(glyphs, toUnicodeExtraMap, numGlyphs) {
   }
   return ranges;
 }
-function createCmapTable(glyphs, toUnicodeExtraMap, numGlyphs) {
-  const ranges = getRanges(glyphs, toUnicodeExtraMap, numGlyphs);
+function createCmapTable(charCodeToGlyphId, toUnicodeExtraMap, numGlyphs) {
+  const ranges = getRanges(charCodeToGlyphId, toUnicodeExtraMap, numGlyphs);
   const hasNonBmp = ranges.at(-1)[1] > 0xffff;
   let i, ii, j, jj;
   for (i = ranges.length - 1; i >= 0; --i) {
@@ -26860,7 +26810,7 @@ function validateOS2Table(os2, file) {
   os2.data[8] = os2.data[9] = 0;
   return true;
 }
-function createOS2Table(properties, charstrings, override) {
+function createOS2Table(properties, charCodeToGlyphId, override) {
   override ||= {
     unitsPerEm: 0,
     yMax: 0,
@@ -26875,9 +26825,8 @@ function createOS2Table(properties, charstrings, override) {
   let firstCharIndex = null;
   let lastCharIndex = 0;
   let position = -1;
-  if (charstrings) {
-    for (let code in charstrings) {
-      code |= 0;
+  if (charCodeToGlyphId) {
+    for (const code of charCodeToGlyphId.keys()) {
       if (firstCharIndex > code || !firstCharIndex) {
         firstCharIndex = code;
       }
@@ -27030,6 +26979,7 @@ class Font {
   #charsCache = new Map();
   #glyphCache = new Map();
   charProcOperatorList;
+  toFontChar = new Map();
   constructor(name, file, properties, evaluatorOptions) {
     this.name = name;
     this.psName = null;
@@ -27093,10 +27043,9 @@ class Font {
     this.bbox = properties.bbox;
     this.defaultEncoding = properties.defaultEncoding;
     this.toUnicode = properties.toUnicode;
-    this.toFontChar = [];
     if (properties.type === "Type3") {
       for (let charCode = 0; charCode < 256; charCode++) {
-        this.toFontChar[charCode] = this.differences[charCode] || properties.defaultEncoding[charCode];
+        this.toFontChar.set(charCode, this.differences.get(charCode) || properties.defaultEncoding[charCode]);
       }
       return;
     }
@@ -27210,7 +27159,7 @@ class Font {
     this.remeasure = (!isStandardFont || isNarrow) && Object.keys(this.widths).length > 0;
     if ((isStandardFont || isMappedToStandardFont) && type === "CIDFontType2" && this.cidEncoding.startsWith("Identity-")) {
       const cidToGidMap = properties.cidToGidMap;
-      const map = [];
+      const map = new Map();
       if (/Trebuchet/i.test(name)) {
         applyStandardFontGlyphMap(map, getGlyphMapForMacOrderedFonts());
         applyStandardFontGlyphMap(map, getSupplementalGlyphMapForTrebuchetMS());
@@ -27223,28 +27172,31 @@ class Font {
         }
       }
       if (cidToGidMap) {
-        for (const charCode in map) {
-          const cid = map[charCode];
+        for (const [charCode, cid] of map) {
           if (cidToGidMap[cid] !== undefined) {
-            map[+charCode] = cidToGidMap[cid];
+            map.set(charCode, cidToGidMap[cid]);
           }
         }
         if (cidToGidMap.length !== this.toUnicode.length && properties.hasIncludedToUnicodeMap && this.toUnicode instanceof IdentityToUnicodeMap) {
           this.toUnicode.forEach((charCode, unicodeCharCode) => {
-            const cid = map[charCode];
+            const cid = map.get(charCode);
             if (cidToGidMap[cid] === undefined) {
-              map[charCode] = unicodeCharCode;
+              map.set(charCode, unicodeCharCode);
             }
           });
         }
       }
       if (!(this.toUnicode instanceof IdentityToUnicodeMap)) {
         this.toUnicode.forEach((charCode, unicodeCharCode) => {
-          map[charCode] = unicodeCharCode;
+          map.set(charCode, unicodeCharCode);
         });
       }
       this.toFontChar = map;
-      this.toUnicode = new ToUnicodeMap(map);
+      const arr = [];
+      for (const [charCode, cid] of map) {
+        arr[charCode] = cid;
+      }
+      this.toUnicode = new ToUnicodeMap(arr);
     } else if (/Symbol/i.test(fontName)) {
       const isCidKeyed = this.composite && this.cidEncoding.startsWith("Identity-");
       this.toFontChar = buildToFontChar(isCidKeyed ? getSymbolGlyphIdEncoding() : SymbolSetEncoding, getGlyphsUnicode(), this.differences);
@@ -27254,22 +27206,22 @@ class Font {
       const map = buildToFontChar(this.defaultEncoding, getGlyphsUnicode(), this.differences);
       if (type === "CIDFontType2" && !this.cidEncoding.startsWith("Identity-") && !(this.toUnicode instanceof IdentityToUnicodeMap)) {
         this.toUnicode.forEach((charCode, unicodeCharCode) => {
-          map[charCode] = unicodeCharCode;
+          map.set(charCode, unicodeCharCode);
         });
       }
       this.toFontChar = map;
     } else {
       const glyphsUnicodeMap = getGlyphsUnicode();
-      const map = [];
+      const map = new Map();
       this.toUnicode.forEach((charCode, unicodeCharCode) => {
         if (!this.composite) {
-          const glyphName = this.differences[charCode] || this.defaultEncoding[charCode];
+          const glyphName = this.differences.get(charCode) || this.defaultEncoding[charCode];
           const unicode = getUnicodeForGlyph(glyphName, glyphsUnicodeMap);
           if (unicode !== -1) {
             unicodeCharCode = unicode;
           }
         }
-        map[charCode] = unicodeCharCode;
+        map.set(charCode, unicodeCharCode);
       });
       if (this.composite && this.toUnicode instanceof IdentityToUnicodeMap) {
         if (/Tahoma|Verdana/i.test(name)) {
@@ -28500,7 +28452,7 @@ class Font {
       tag: "post",
       data: createPostTable(properties)
     };
-    const charCodeToGlyphId = Object.create(null);
+    const charCodeToGlyphId = new Map();
     function hasGlyph(glyphId) {
       return !missingGlyphs.has(glyphId);
     }
@@ -28521,7 +28473,7 @@ class Font {
           glyphId = cidToGidMap[cid];
         }
         if (glyphId >= 0 && glyphId < numGlyphs && hasGlyph(glyphId)) {
-          charCodeToGlyphId[charCode] = glyphId;
+          charCodeToGlyphId.set(charCode, glyphId);
         }
       });
     } else {
@@ -28538,8 +28490,8 @@ class Font {
         const glyphsUnicodeMap = getGlyphsUnicode();
         for (let charCode = 0; charCode < 256; charCode++) {
           let glyphName;
-          if (this.differences[charCode] !== undefined) {
-            glyphName = this.differences[charCode];
+          if (this.differences.has(charCode)) {
+            glyphName = this.differences.get(charCode);
           } else if (baseEncoding.length && baseEncoding[charCode] !== "") {
             glyphName = baseEncoding[charCode];
           } else {
@@ -28570,13 +28522,13 @@ class Font {
             if (mapping.charCode !== unicodeOrCharCode) {
               continue;
             }
-            charCodeToGlyphId[charCode] = mapping.glyphId;
+            charCodeToGlyphId.set(charCode, mapping.glyphId);
             break;
           }
         }
       } else if (cmapPlatformId === 0) {
         for (const mapping of cmapMappings) {
-          charCodeToGlyphId[mapping.charCode] = mapping.glyphId;
+          charCodeToGlyphId.set(mapping.charCode, mapping.glyphId);
         }
         forcePostTable = true;
       } else if (cmapPlatformId === 3 && cmapEncodingId === 0) {
@@ -28585,34 +28537,34 @@ class Font {
           if (charCode >= 0xf000 && charCode <= 0xf0ff) {
             charCode &= 0xff;
           }
-          charCodeToGlyphId[charCode] = mapping.glyphId;
+          charCodeToGlyphId.set(charCode, mapping.glyphId);
         }
       } else {
         for (const mapping of cmapMappings) {
-          charCodeToGlyphId[mapping.charCode] = mapping.glyphId;
+          charCodeToGlyphId.set(mapping.charCode, mapping.glyphId);
         }
       }
-      if (properties.glyphNames && (baseEncoding.length || this.differences.length)) {
+      if (properties.glyphNames && (baseEncoding.length || this.differences.size)) {
         for (let i = 0; i < 256; ++i) {
-          if (!forcePostTable && charCodeToGlyphId[i] !== undefined) {
+          if (!forcePostTable && charCodeToGlyphId.has(i)) {
             continue;
           }
-          const glyphName = this.differences[i] || baseEncoding[i];
+          const glyphName = this.differences.get(i) || baseEncoding[i];
           if (!glyphName) {
             continue;
           }
           const glyphId = properties.glyphNames.indexOf(glyphName);
           if (glyphId > 0 && hasGlyph(glyphId)) {
-            charCodeToGlyphId[i] = glyphId;
+            charCodeToGlyphId.set(i, glyphId);
           }
         }
       }
-      if (!properties.isInternalFont && charCodeToGlyphId[0] === undefined && hasGlyph(0)) {
-        charCodeToGlyphId[0] = 0;
+      if (!properties.isInternalFont && !charCodeToGlyphId.has(0) && hasGlyph(0)) {
+        charCodeToGlyphId.set(0, 0);
       }
     }
-    if (charCodeToGlyphId.length === 0) {
-      charCodeToGlyphId[0] = 0;
+    if (!charCodeToGlyphId.size) {
+      charCodeToGlyphId.set(0, 0);
     }
     const glyphZeroId = dupFirstEntry ? numGlyphsOut - 1 : 0;
     if (!properties.cssFontInfo) {
@@ -28670,20 +28622,20 @@ class Font {
     } = font;
     function getCharCodes(charCodeToGlyphId, glyphId) {
       let charCodes = null;
-      for (const charCode in charCodeToGlyphId) {
-        if (glyphId === charCodeToGlyphId[charCode]) {
-          (charCodes ||= []).push(charCode | 0);
+      for (const [charCode, gid] of charCodeToGlyphId) {
+        if (glyphId === gid) {
+          (charCodes ??= []).push(charCode);
         }
       }
       return charCodes;
     }
     function createCharCode(charCodeToGlyphId, glyphId) {
-      for (const charCode in charCodeToGlyphId) {
-        if (glyphId === charCodeToGlyphId[charCode]) {
-          return charCode | 0;
+      for (const [charCode, gid] of charCodeToGlyphId) {
+        if (glyphId === gid) {
+          return charCode;
         }
       }
-      newMapping.charCodeToGlyphId[newMapping.nextAvailableFontCharCode] = glyphId;
+      newMapping.charCodeToGlyphId.set(newMapping.nextAvailableFontCharCode, glyphId);
       return newMapping.nextAvailableFontCharCode++;
     }
     if (newMapping && (/* inlined export .SEAC_ANALYSIS_ENABLED */true) && seacs?.size) {
@@ -28707,7 +28659,9 @@ class Font {
           continue;
         }
         for (const charCode of charCodes) {
-          const charCodeToGlyphId = newMapping.charCodeToGlyphId;
+          const {
+            charCodeToGlyphId
+          } = newMapping;
           const baseFontCharCode = createCharCode(charCodeToGlyphId, baseGlyphId);
           const accentFontCharCode = createCharCode(charCodeToGlyphId, accentGlyphId);
           seacMap.set(charCode, {
@@ -28845,10 +28799,10 @@ class Font {
     if (typeof unicode === "number") {
       unicode = String.fromCharCode(unicode);
     }
-    let isInFont = this.toFontChar[charcode] !== undefined;
-    fontCharCode = this.toFontChar[charcode] || charcode;
+    let isInFont = this.toFontChar.has(charcode);
+    fontCharCode = this.toFontChar.get(charcode) || charcode;
     if (this.missingFile) {
-      const glyphName = this.differences[charcode] || this.defaultEncoding[charcode];
+      const glyphName = this.differences.get(charcode) || this.defaultEncoding[charcode];
       if ((glyphName === ".notdef" || glyphName === "") && this.type === "Type1") {
         fontCharCode = 0x20;
         if (glyphName === "") {
@@ -34107,6 +34061,7 @@ const PatternType = {
 };
 const TEXT_CHUNK_BATCH_SIZE = 10;
 const deferred = Promise.resolve();
+const argIsDict = arg => arg instanceof Dict;
 function normalizeBlendMode(value, parsingArray = false) {
   if (Array.isArray(value)) {
     for (const val of value) {
@@ -35708,14 +35663,14 @@ class PartialEvaluator {
             args = [args[0].name, args[1] instanceof Dict ? args[1].get("MCID") : null];
             break;
           case OPS.beginMarkedContent:
-            if (args?.some(arg => arg instanceof Dict)) {
+            if (args?.some(argIsDict)) {
               warn(`getOperatorList - ignoring operator: ${fn}`);
               continue;
             }
             markedContentLevel++;
             break;
           case OPS.endMarkedContent:
-            if (args?.some(arg => arg instanceof Dict)) {
+            if (args?.some(argIsDict)) {
               warn(`getOperatorList - ignoring operator: ${fn}`);
               continue;
             }
@@ -35725,7 +35680,7 @@ class PartialEvaluator {
             markedContentLevel--;
             break;
           default:
-            if (args?.some(arg => arg instanceof Dict)) {
+            if (args?.some(argIsDict)) {
               warn(`getOperatorList - ignoring operator: ${fn}`);
               continue;
             }
@@ -36623,7 +36578,7 @@ class PartialEvaluator {
         warn(`extractDataStructures - ignoring CIDToGIDMap data: "${ex}".`);
       }
     }
-    const differences = [];
+    const differences = new Map();
     let baseEncodingName = null;
     let encoding;
     if (dict.has("Encoding")) {
@@ -36639,7 +36594,7 @@ class PartialEvaluator {
             if (typeof data === "number") {
               index = data;
             } else if (data instanceof Name) {
-              differences[index++] = data.name;
+              differences.set(index++, data.name);
             } else {
               throw new FormatError(`Invalid entry in 'Differences' array: ${data}`);
             }
@@ -36690,7 +36645,7 @@ class PartialEvaluator {
     } else {
       let isSymbolicFont = !!(properties.flags & FontFlags.Symbolic);
       const isNonsymbolicFont = !!(properties.flags & FontFlags.Nonsymbolic);
-      if (properties.type === "TrueType" && isSymbolicFont && isNonsymbolicFont && differences.length !== 0) {
+      if (properties.type === "TrueType" && isSymbolicFont && isNonsymbolicFont && differences.size) {
         properties.flags &= ~FontFlags.Symbolic;
         isSymbolicFont = false;
       }
@@ -36714,7 +36669,7 @@ class PartialEvaluator {
     }
     properties.differences = differences;
     properties.baseEncodingName = baseEncodingName;
-    properties.hasEncoding = !!baseEncodingName || differences.length > 0;
+    properties.hasEncoding = !!baseEncodingName || !!differences.size;
     properties.dict = dict;
     properties.toUnicode = await toUnicodePromise;
     const builtToUnicode = await this.buildToUnicode(properties);
@@ -36729,13 +36684,11 @@ class PartialEvaluator {
     const toUnicode = [];
     const encoding = properties.defaultEncoding.slice();
     const baseEncodingName = properties.baseEncodingName;
-    const differences = properties.differences;
-    for (const charcode in differences) {
-      const glyphName = differences[charcode];
+    for (const [charCode, glyphName] of properties.differences) {
       if (glyphName === ".notdef") {
         continue;
       }
-      encoding[charcode] = glyphName;
+      encoding[charCode] = glyphName;
     }
     const glyphsUnicodeMap = getGlyphsUnicode();
     for (const charcode in encoding) {
@@ -37064,16 +37017,12 @@ class PartialEvaluator {
   }
   buildCharCodeToWidth(widthsByGlyphName, properties) {
     const widths = Object.create(null);
-    const differences = properties.differences;
-    const encoding = properties.defaultEncoding;
+    const diffs = properties.differences,
+      encoding = properties.defaultEncoding;
     for (let charCode = 0; charCode < 256; charCode++) {
-      if (charCode in differences && widthsByGlyphName[differences[charCode]]) {
-        widths[charCode] = widthsByGlyphName[differences[charCode]];
-        continue;
-      }
-      if (charCode in encoding && widthsByGlyphName[encoding[charCode]]) {
-        widths[charCode] = widthsByGlyphName[encoding[charCode]];
-        continue;
+      const width = diffs.has(charCode) && widthsByGlyphName[diffs.get(charCode)] || charCode in encoding && widthsByGlyphName[encoding[charCode]];
+      if (width) {
+        widths[charCode] = width;
       }
     }
     return widths;
@@ -56603,7 +56552,8 @@ class FileAttachmentAnnotation extends MarkupAnnotation {
   }
 }
 class MediaAnnotation extends Annotation {
-  static #MEDIA_MIME_TYPE_RE = /^(?:video|audio)\//;
+  static #MEDIA_MIME_TYPE_RE = /^(?:video|audio)\/[a-z0-9][\w!#$&^.+-]{0,126}$/i;
+  static #MEDIA_CONTENT_TYPE_RE = /^(?:video|audio)\/[a-z0-9][\w!#$&^.+-]{0,126}(?: *; *[a-z0-9][\w!#$&^.+-]{0,126} *= *(?:[-!#$%&'*+.^\x60{|}~\w]+|"(?:[\x20\x21\x23-\x5b\x5d-\x7e]|\\[\x20-\x7e])*"))* *$/i;
   constructor(params) {
     super(params);
     this.data.noHTML = true;
@@ -56622,8 +56572,8 @@ class MediaAnnotation extends Annotation {
       contentType
     };
   }
-  static _getContentType(assetDict, filename, contentType = null) {
-    if (typeof contentType === "string" && MediaAnnotation.#MEDIA_MIME_TYPE_RE.test(contentType)) {
+  static _getContentType(assetDict, filename, contentType = null, contentTypeIsName = false) {
+    if (typeof contentType === "string" && (contentTypeIsName ? MediaAnnotation.#MEDIA_MIME_TYPE_RE : MediaAnnotation.#MEDIA_CONTENT_TYPE_RE).test(contentType)) {
       return contentType;
     }
     const stream = FileSpec.pickPlatformItem(assetDict.get("EF"));
@@ -56803,6 +56753,7 @@ class ScreenAnnotation extends MediaAnnotation {
     const data = xref.fetchIfRef(rawData);
     const contentTypeHint = clip.get("CT");
     let explicitType = typeof contentTypeHint === "string" ? contentTypeHint : null;
+    let explicitTypeIsName = false;
     let assetDict, filename;
     if (data instanceof BaseStream) {
       assetDict = data.dict;
@@ -56812,6 +56763,7 @@ class ScreenAnnotation extends MediaAnnotation {
         const subtype = data.dict.get("Subtype");
         if (subtype instanceof Name) {
           explicitType = subtype.name;
+          explicitTypeIsName = true;
         }
       }
     } else if (data instanceof Dict) {
@@ -56825,7 +56777,7 @@ class ScreenAnnotation extends MediaAnnotation {
     } else {
       return null;
     }
-    const contentType = MediaAnnotation._getContentType(assetDict, filename, explicitType);
+    const contentType = MediaAnnotation._getContentType(assetDict, filename, explicitType, explicitTypeIsName);
     if (!contentType) {
       return null;
     }
@@ -58613,7 +58565,7 @@ class XRef {
       if (!Number.isInteger(first) || !Number.isInteger(n)) {
         throw new FormatError(`Invalid XRef range fields: ${first}, ${n}`);
       }
-      if (!Number.isInteger(typeFieldWidth) || !Number.isInteger(offsetFieldWidth) || !Number.isInteger(generationFieldWidth)) {
+      if (![typeFieldWidth, offsetFieldWidth, generationFieldWidth].every(width => Number.isInteger(width) && width >= 0) || typeFieldWidth + offsetFieldWidth + generationFieldWidth === 0) {
         throw new FormatError(`Invalid XRef entry fields length: ${first}, ${n}`);
       }
       for (let i = streamState.entryNum; i < n; ++i) {
