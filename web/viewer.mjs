@@ -21,7 +21,7 @@
 
 /**
  * pdfjsVersion = 6.4.0
- * pdfjsBuild = d52fdf4
+ * pdfjsBuild = 2581d8f
  */
 
 ;// ./web/ui_utils.js
@@ -937,7 +937,7 @@ const {
 } = globalThis.pdfjsLib;
 
 ;// ./web/internal_evt.js
-const INTERNAL_EVT = "afe6cbcf-01e5-4cf2-9838-ee346352c11c";
+const INTERNAL_EVT = "8ca3c318-3862-4637-ac73-da742a982f88";
 const internalOpt = Object.freeze({
   internal: INTERNAL_EVT
 });
@@ -16815,7 +16815,7 @@ class SignatureManager {
       passive: true
     });
     this.#initTabButtons(typeButton, drawButton, imageButton, panels);
-    imagePicker.accept = SupportedImageMimeTypes.join(",");
+    imagePicker.accept = SupportedImageMimeTypes.keys().join(",");
     eventBus.on("storedsignatureschanged", this.#signaturesChanged.bind(this), internalOpt);
     overlayManager.register(dialog);
   }
@@ -17103,7 +17103,7 @@ class SignatureManager {
     }, passiveOptions);
     this.#imagePicker.addEventListener("change", async () => {
       const file = this.#imagePicker.files?.[0];
-      if (!file || !SupportedImageMimeTypes.includes(file.type)) {
+      if (!file || !SupportedImageMimeTypes.has(file.type)) {
         this.#showError("Upload");
         this.#dialog.classList.toggle("waiting", false);
         return;
@@ -17120,7 +17120,7 @@ class SignatureManager {
       for (const {
         type
       } of dataTransfer.items) {
-        if (!SupportedImageMimeTypes.includes(type)) {
+        if (!SupportedImageMimeTypes.has(type)) {
           continue;
         }
         dataTransfer.dropEffect = dataTransfer.effectAllowed === "copy" ? "copy" : "move";
@@ -17139,7 +17139,7 @@ class SignatureManager {
         return;
       }
       for (const file of files) {
-        if (SupportedImageMimeTypes.includes(file.type)) {
+        if (SupportedImageMimeTypes.has(file.type)) {
           this.#extractSignature(file);
           break;
         }
